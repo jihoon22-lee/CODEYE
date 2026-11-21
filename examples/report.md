@@ -12,24 +12,24 @@ CODEYE 분석 보고서
 
 > 일부 검사를 마치지 못했습니다\. 분석 범위에서 해당 항목을 확인할 수 있습니다\.
 
+<a id="overview"></a>
+
 ## 종합
 
-주요 코드 조치 1건
+### 주요 분석 결과
 
-모델 조사 · 발췌를 수락한 대상 파일 2/3개
+| 영역 | 결과 | 상세 |
+|---|---|---|
+| 환경 분석 · 요구 불일치 | 모듈 3개 탐색 · 환경 요구 불일치 1건 | [보기](#environment) |
+| 문서 분석 · 대조 보류 | 4개 읽음 · 구현 대조 2건 · 구현 미확인 1건 | [보기](#documents) |
+| 정적 분석 · △ 일부 수행 | 결과 확보 4/6개 작업 · 주요 코드 진단 2건 | [보기](#static_analysis) |
+| 구조·중복 지표 · △ 일부 수행 | 복잡도 기준 초과 함수 1개 | [보기](#metrics) |
+| 비밀정보 · ✓ 성공 | 검사에서 보고한 탐지 1건 | [보기](#secrets) |
+| 코드 분석 · ✓ 성공 | 주요 코드 조치 1건 | [보기](#code_review) |
+| 모델 조사 | 발췌 포함 2/3파일 · 26/26줄 | [보기](#code_review) |
+| 필수 분석 작업 | ✕ 실패 1 | [보기](#gaps) |
 
-필수 분석 작업 · ✕ 실패 1
-
-### 프로젝트 사용 흐름
-
-**결제 호출은 요청마다 정확히 한 번만 한다\.**
-
-사용 설명 · 구현 미확인
-
-`svc/b/README.md:1-5`
-
-**대조 내용** 이 문서 계약에 대한 코드 대조 결과가 기록되지 않았습니다\.
-[대조 근거와 범위 보기](#document-comparison-2)
+<details><summary>문서 대조와 판단 근거</summary>
 
 ### 게이트웨이에서 하위 호출이 실패하면 최대 3번 재시도한다\.
 
@@ -68,6 +68,19 @@ const MaxRetries = 3
 **문서 동작 대조 3개** · 일치 2개 · 구현 대조 미확인 1개
 
 [문서 분석에서 보기](#document-comparison-1)
+
+### 프로젝트 사용 흐름
+
+**결제 호출은 요청마다 정확히 한 번만 한다\.**
+
+사용 설명 · 구현 미확인
+
+`svc/b/README.md:1-5`
+
+**대조 내용** 이 문서 계약에 대한 코드 대조 결과가 기록되지 않았습니다\.
+[대조 근거와 범위 보기](#document-comparison-2)
+
+</details>
 
 ### 검토 범위와 집계
 
@@ -127,6 +140,8 @@ AI가 검토한 문제 2건 중 코드 근거를 확인한 항목 1건 \(기각 
 - go\.staticcheck SA4006\: this value of err is overwritten before the previous attempt\'s error is logged \(synthetic example\) — unreviewed / low `fnd_e67a73d834b3bddb35e6`
 - go\.staticcheck SA6005\: should use strings\.EqualFold instead \(synthetic example\) — unreviewed / low `fnd_4bc80f2ae454c254fb78`
 - any\.gitleaks generic\-api\-key\: secret detected by gitleaks rule generic\-api\-key \(value withheld\) — unreviewed / low `fnd_ad49092ef174f1d0949c`
+
+<a id="environment"></a>
 
 ## 환경 분석
 
@@ -411,7 +426,7 @@ that every tool, including bash and webfetch, is set to "allow".
 
 탐색 산출물을 검증해 사용했다\.
 
-읽기 예산\: 문서당 65536바이트, 전체 262144바이트, 최대 1000개\. 이번에 읽은 양은 42538바이트다\.
+읽기 예산\: 문서당 524288바이트, 전체 4194304바이트, 최대 1000개\. 이번에 읽은 양은 42538바이트다\.
 
 | 항목 | 수 |
 |---|---|
@@ -428,10 +443,10 @@ that every tool, including bash and webfetch, is set to "allow".
 
 | 경로 | 종류 | 적용 범위 | 상태 | 이유 | 바이트 | 줄 |
 |---|---|---|---|---|---|---|
-| `AGENTS.md` | `agent_instructions` |  | ✓ 읽음 | `-` | 640 | 11 |
-| `README.md` | `readme` |  | ✓ 읽음 | `-` | 288 | 9 |
-| `docs/design.md` | `design` |  | ✓ 읽음 | `-` | 41426 | 731 |
-| `svc/b/README.md` | `readme` | svc/b | ✓ 읽음 | `-` | 184 | 5 |
+| `AGENTS.md` | `agent_instructions` |  | ✓ 읽음 | \- | 640 | 11 |
+| `README.md` | `readme` |  | ✓ 읽음 | \- | 288 | 9 |
+| `docs/design.md` | `design` |  | ✓ 읽음 | \- | 41426 | 731 |
+| `svc/b/README.md` | `readme` | svc/b | ✓ 읽음 | \- | 184 | 5 |
 
 ### 모듈별 문서
 
@@ -455,6 +470,8 @@ that every tool, including bash and webfetch, is set to "allow".
 > 모델 해석 — review\.documents 역할의 수락된 기록이다\. 인용한 파일과 줄 범위는 각 항목에서 확인할 수 있다\.
 
 </details>
+
+<a id="static_analysis"></a>
 
 ## 정적 분석
 
@@ -547,6 +564,8 @@ that every tool, including bash and webfetch, is set to "allow".
 
 개별 진단과 도구 발견 3건은 전체 보기\(detail\=full\)와 JSON에 있다\.
 
+<a id="metrics"></a>
+
 ## 구조·중복 지표
 
 상태\: △ 일부 수행 · 작업 2개 중 1개 성공
@@ -573,10 +592,11 @@ CCN은 함수의 제어 흐름에서 가능한 독립 경로를 나타내는 값
 
 함수 1개\. 값이 큰 함수는 분기별 입력과 예외 경로를 테스트했는지 확인한다\.
 
-- **CCN 17** `Forward(...)`
+| 측정값 | 위치 |
+|---|---|
+| CCN 17 Forward\(\.\.\.\) | `gateway.go:10-16` |
 
-  `gateway.go:10-16`
-
+<a id="secrets"></a>
 
 ## 비밀정보
 
@@ -603,6 +623,8 @@ CCN은 함수의 제어 흐름에서 가능한 독립 경로를 나타내는 값
 | 규칙 | 위치 | 위치 확인 | 발견 |
 |---|---|---|---|
 | `generic-api-key` | `svc/b/charge.go:6-6` | `verified_against_source_manifest` | `fnd_ad49092ef174f1d0949c` |
+
+<a id="code_review"></a>
 
 ## 코드 분석\(모델 검토\)
 
@@ -749,6 +771,8 @@ const MaxRetries = 3
 
 </details>
 
+<a id="gaps"></a>
+
 ## 분석 공백
 
 분석하지 못했거나 일부만 분석한 범위를 모은 목록이다\. 이 범위의 결과는 0건이 아니라 미확인이다\.
@@ -794,7 +818,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 실행 기록 31개\(exited 31\)\.
 
-산출물 85개, 합계 80613바이트\.
+산출물 85개, 합계 80615바이트\.
 
 작업·실행·산출물의 전체 목록과 개별 진단은 전체 보기\(detail\=full\)와 JSON 내보내기에 있다\.
 
@@ -825,7 +849,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 | 항목 | 값 |
 |---|---|
 | report | `0195f3a0-0000-7000-8000-000000000504` rev `1` |
-| digest | `e77bdfdecbb5` |
+| digest | `691408ef012f` |
 | status | `partial` |
 | quality\_verdict | `attention_required` |
 | run | `0195f3a0-0000-7000-8000-000000000501` |
@@ -835,4 +859,4 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 | created\_at | `2026-11-18T00:10:00Z` |
 | export | 코드 포함 내보내기\(권한 있는 사용자 전용\) |
 
-digest sha256: `e77bdfdecbb56dbc77f9a2ffa29403b3c0bb135477779390192c962253508a5c`
+digest sha256: `691408ef012f24dff8df0ba8fc718c575eaa3861f9615d577de0b9ff392d8e41`

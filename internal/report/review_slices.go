@@ -243,6 +243,7 @@ func (c sectionContext) ledger() *ReviewLedger {
 		calls += doc.Budget.CallsBeforeSlices
 		mc, mb := doc.Budget.MaxCalls, doc.Budget.MaxRequestBytes
 		l.MaxCalls, l.MaxRequestBytes = &mc, &mb
+		l.ExtendedCoverage = doc.LineCoverage() && doc.Limits.MaxSlices == record.MaxSlices
 	}
 	if callsKnown {
 		l.CallsUsed = &calls
@@ -527,6 +528,10 @@ func validateLedger(r Report) error {
 	if l.Files != nil && (n < LineCoverageSince || l.Scope.Result != "accepted") {
 		return invalidf("line coverage ledger lacks a compatible builder or accepted scope")
 	}
+	if (l.ExtendedCoverage && (n < LineCoverageSince || l.Scope.Result != "accepted")) ||
+		(l.MaxCalls != nil && *l.MaxCalls > record.LegacyMaxCalls && !l.ExtendedCoverage) {
+		return invalidf("extended review ledger lacks a compatible bound scope")
+	}
 	if !slices.Contains(ledgerStatuses, l.Status) || l.Modules == nil {
 		return invalidf("ledger status is invalid")
 	}
@@ -544,6 +549,9 @@ func validateLedger(r Report) error {
 	}
 	if l.CallsUsed != nil && *l.CallsUsed < sent {
 		return invalidf("ledger counts fewer calls than the report lists")
+	}
+	if l.CallsUsed != nil && l.MaxCalls != nil && *l.CallsUsed > *l.MaxCalls {
+		return invalidf("ledger calls exceed the recorded attempt ceiling")
 	}
 	if l.RequestBytesSent != nil && (r.CodeReview.RequestBytes == nil || *l.RequestBytesSent != *r.CodeReview.RequestBytes) {
 		return invalidf("ledger request bytes differ from the code review section")

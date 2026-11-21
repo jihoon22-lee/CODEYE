@@ -60,7 +60,7 @@ const SEVERITY: Record<string, number> = { critical: 5, high: 4, medium: 3, low:
 export const sevRank = (s: string) => SEVERITY[s] ?? 0;
 
 // RuleGroup is the diagnostics of one rule of one analyzer in one language.
-export type RuleGroup = { analyzer: string; rule: string; count: number; severity: string; message: string | null; primary: string[]; secondary: string[] };
+export type RuleGroup = { analyzer: string; rule: string; count: number; severity: string; message: string | null; primary: string[]; secondary: string[]; observations: string[] };
 
 // ruleGroups groups a language's diagnostics (not suppressed, not metrics)
 // by analyzer and rule, the .mNN tasks of an analyzer together: by analyzer,
@@ -78,10 +78,11 @@ export function ruleGroups(tools: StaticTool[], byID: Map<string, Observation>, 
       const key = analyzer + '\u0000' + o.rule;
       let g = groups.get(key);
       if (!g) {
-        g = { analyzer, rule: o.rule, count: 0, severity: '', sev: -1, message: o.message, primary: [], secondary: [], order: order.get(analyzer)! };
+        g = { analyzer, rule: o.rule, count: 0, severity: '', sev: -1, message: o.message, primary: [], secondary: [], observations: [], order: order.get(analyzer)! };
         groups.set(key, g);
       }
       g.count++;
+      g.observations.push(id);
       const sev = severityOf.get(id) ?? o.severity ?? '';
       if (sevRank(sev) > g.sev) {
         g.severity = sev;
@@ -94,7 +95,7 @@ export function ruleGroups(tools: StaticTool[], byID: Map<string, Observation>, 
   }
   return [...groups.values()]
     .sort((a, b) => a.order - b.order || Number(b.primary.length > 0) - Number(a.primary.length > 0) || b.sev - a.sev || b.count - a.count || (a.rule < b.rule ? -1 : a.rule > b.rule ? 1 : 0))
-    .map(({ analyzer, rule, count, severity, message, primary, secondary }) => ({ analyzer, rule, count, severity, message, primary, secondary }));
+    .map(({ analyzer, rule, count, severity, message, primary, secondary, observations }) => ({ analyzer, rule, count, severity, message, primary, secondary, observations }));
 }
 
 // severityOf maps each observation of a static finding to the finding's severity.
@@ -175,9 +176,56 @@ export function primaryCitation(citation: Citation, kind: 'document' | 'code'): 
 export type Decision = { finding: Finding; source: LocatedEvidence; condition?: string; limitation?: string; next?: string };
 const hiddenDispositions = new Set(['accepted_risk', 'false_positive', 'suppressed', 'fixed_by_user']);
 
-export function readingSummary(report: AnalysisReport): string[] {
-  const actionable = report.findings.filter(f => !hiddenDispositions.has(f.disposition) &&
+function findingIssueContext(finding: Finding) {
+  return JSON.stringify([finding.category, finding.validation, finding.disposition]);
+}
+
+function findingCodeRefs(finding: Finding) {
+  if (!finding.evidence.length || finding.evidence.some(e => e.kind !== 'code' || !e.path || !e.lines)) return '';
+  return JSON.stringify([findingIssueContext(finding), [...finding.locations].sort(), finding.evidence.map(e =>
+    JSON.stringify([e.id, e.path, e.lines?.start, e.lines?.end])).sort()]);
+}
+
+// Matching locations alone cannot identify an issue. A model-only sibling can
+// be linked to one observed rule when exact code evidence and title agree.
+export function duplicateReadingFindings(findings: Finding[], observations: Observation[]): Set<string> {
+  const rules = new Map(observations.map(o => [o.id, o.rule.trim().toLowerCase()]));
+  const observed = new Map<string, Finding[]>();
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const finding of findings) {
+    if (!finding.observations.length) continue;
+    const ids = [...new Set(finding.observations)].sort();
+    const key = JSON.stringify([findingIssueContext(finding), ids]);
+    if (seen.has(key)) { duplicates.add(finding.id); continue; }
+    seen.add(key);
+    const evidence = findingCodeRefs(finding);
+    if (!evidence || ids.length !== 1 || !rules.get(ids[0])) continue;
+    const related = observed.get(evidence) ?? [];
+    related.push(finding);
+    observed.set(evidence, related);
+  }
+  const words = (title: string) => new Set(title.toLowerCase().split(/[^\p{L}\p{N}_]+/u).filter(Boolean));
+  for (const finding of findings) {
+    if (finding.observations.length) continue;
+    const sources = observed.get(findingCodeRefs(finding));
+    if (!sources || sources.length !== 1) continue;
+    const own = words(finding.title);
+    const prior = words(sources[0].title);
+    const rule = rules.get(sources[0].observations[0]);
+    const shared = [...own].filter(word => prior.has(word)).length;
+    if (rule && own.has(rule) && prior.has(rule) && shared >= 3 && shared * 2 >= Math.max(own.size, prior.size)) duplicates.add(finding.id);
+  }
+  return duplicates;
+}
+
+export type ReadingSummaryRow = { section: string; label: string; value: string; status?: string };
+
+export function readingSummary(report: AnalysisReport): ReadingSummaryRow[] {
+  const recorded = report.findings.filter(f => !hiddenDispositions.has(f.disposition) &&
     (f.validation === 'supported' || f.validation === 'reproduced'));
+  const duplicates = duplicateReadingFindings(recorded, report.observations);
+  const actionable = recorded.filter(f => !duplicates.has(f.id));
   const secondary = actionable.filter(secondaryReviewFinding).length;
   const modules = report.sections?.codeReview.ledger?.modules ?? [];
   const eligible = modules.reduce((count, mod) => count + mod.eligible, 0);
@@ -185,13 +233,60 @@ export function readingSummary(report: AnalysisReport): string[] {
   const accepted = eligible > 0 && modules.every(mod => typeof mod.accepted === 'number')
     ? modules.reduce((count, mod) => count + (mod.accepted ?? 0), 0) : null;
   const required = report.tasks.filter(task => task.required && !task.key.startsWith('test.'));
-  const action = actionable.length > 0 || accepted !== null && accepted > 0 ? [t.reading.actionCounts(actionable.length - secondary, secondary)] : [];
-  const scope = eligible > 0 ? [accepted !== null ? t.reading.modelScope(accepted, eligible) : t.reading.modelSent(requested, eligible)] : [];
+  const rows: ReadingSummaryRow[] = [];
+  const sections = report.sections;
+  const stage = (value: string | undefined) => value === undefined ? undefined : t.sections.states[value] ?? value;
+  if (actionable.length > 0 || accepted !== null && accepted > 0) {
+    rows.push({ section: 'code_review', label: t.reading.codeOutcome, status: stage(sections?.codeReview.stage.state), value: t.reading.actionCounts(actionable.length - secondary, secondary) });
+  }
+  if (eligible > 0) {
+    const lines = sections?.codeReview.ledger?.files?.reduce((sum, file) => ({ accepted: sum.accepted + file.accepted, total: sum.total + file.total }), { accepted: 0, total: 0 });
+    rows.push({ section: 'code_review', label: t.reading.modelScopeLabel, value: accepted !== null ? t.reading.modelScope(accepted, eligible, lines) : t.reading.modelSent(requested, eligible) });
+  }
+  const staticTools = report.sections?.staticAnalysis.languages.flatMap(language => language.tools)
+    .filter(tool => tool.purpose !== 'metrics' && tool.purpose !== 'secrets') ?? [];
+  if (staticTools.length > 0) {
+    const successful = staticTools.filter(tool => tool.status === 'succeeded' && tool.result === 'accepted');
+    const observed = new Set(successful.flatMap(tool => tool.observations));
+    const primary = report.observations.filter(o => observed.has(o.id) && !o.suppressed && !o.metric && o.location &&
+      o.evidenceState === 'verified_against_source_manifest' && !secondaryReviewPath(o.location.path));
+    rows.push({ section: 'static_analysis', label: t.sections.titles.static_analysis, status: stage(sections?.staticAnalysis.stage.state),
+      value: t.reading.staticOutcome(successful.length, staticTools.length, primary.length) });
+  }
+  if (report.testResults) {
+    const results = report.testResults;
+    rows.push({ section: 'tests', label: t.reading.testsOutcome, value: results.status === 'not_run' && results.tasks.every(task =>
+      !task.attempted && !['succeeded', 'failed', 'timed_out', 'cancelled'].includes(task.status)) ? t.tests.notStarted : (t.tests.summary[results.status] ?? results.status) });
+  }
   const incomplete = ['failed', 'timed_out', 'unsupported', 'skipped_policy'].flatMap(status => {
     const count = required.filter(task => task.status === status).length;
-    return count ? [`${t.sections.taskStatus[status]} ${count}`] : [];
+    return count ? [`${t.reading.outcomeStatus[status]} ${count}건`] : [];
   });
-  return [...action, ...scope, ...(incomplete.length ? [t.reading.incompleteTasks(incomplete.join(' · '))] : [])];
+  if (incomplete.length > 0) rows.push({ section: 'gaps', label: t.reading.requiredOutcome, value: incomplete.join(' · ') });
+  if (sections) {
+    const d = sections.documents;
+    const considered = d.comparisons.filter(c => c.status !== 'unknown').length;
+    const unknown = d.comparisons.length - considered;
+    const read = d.items.filter(item => item.status === 'selected').length;
+    if (d.items.length || d.comparisons.length) rows.push({ section: 'documents', label: t.sections.titles.documents,
+      status: unknown > 0 ? t.reading.documentsPending : read > 0 ? t.reading.documentsRead : stage(d.stage.state),
+      value: t.reading.documentsOutcome(read, considered, unknown) });
+    const mismatch = sections.environment.verdicts.filter(v => v.status === 'mismatch').length;
+    if (sections.environment.modules.length) rows.push({ section: 'environment', label: t.sections.titles.environment,
+      status: mismatch > 0 ? t.reading.environmentMismatch : stage(sections.environment.stage.state),
+      value: t.reading.environmentOutcome(sections.environment.modules.length, mismatch) });
+    if (sections.metrics.tasks.length) {
+      const measures = sections.metrics.groups.map(({ name, observations }) => name === 'cyclomatic_complexity'
+        ? t.reading.complexityOutcome(observations.length) : name === 'duplicated_lines'
+          ? t.reading.duplicationOutcome(observations.length) : t.reading.metricOutcome(name, observations.length));
+      rows.push({ section: 'metrics', label: t.sections.titles.metrics, status: stage(sections.metrics.stage.state),
+        value: measures.join(' · ') || t.reading.metricsEmpty });
+    }
+    if (sections.secrets.tasks.length) rows.push({ section: 'secrets', label: t.sections.titles.secrets, status: stage(sections.secrets.stage.state),
+      value: t.reading.secretsOutcome(sections.secrets.detections.length) });
+  }
+  const flow = ['environment', 'documents', 'static_analysis', 'metrics', 'secrets', 'code_review', 'tests', 'gaps'];
+  return rows.sort((a, b) => flow.indexOf(a.section) - flow.indexOf(b.section));
 }
 
 const genericTitleWords = new Set([

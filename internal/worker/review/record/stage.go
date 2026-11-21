@@ -401,9 +401,9 @@ const (
 	MaxSliceModules = 8
 )
 
-var sliceKey = regexp.MustCompile(`^s(00[1-9]|0[1-8][0-9]|09[0-6])$`)
+var sliceKey = regexp.MustCompile(`^s(00[1-9]|0[1-9][0-9]|[1-9][0-9]{2})$`)
 
-// ValidSliceKey accepts s001..s096 (MaxSlices slots).
+// ValidSliceKey accepts s001 through s999.
 func ValidSliceKey(k string) bool { return sliceKey.MatchString(k) }
 
 // SliceTask splits a slice task key (review.investigate.s001,

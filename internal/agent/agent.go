@@ -247,7 +247,7 @@ func New(cfg Config) (*Agent, error) {
 	if cfg.ReviewMaxCalls == 0 {
 		cfg.ReviewMaxCalls = record.DefaultMaxCalls
 	} else if !record.ValidMaxCalls(cfg.ReviewMaxCalls) {
-		return nil, &ExitError{ExitUsage, "--review-max-calls must be between 15 and 207"}
+		return nil, &ExitError{ExitUsage, "--review-max-calls must be between 15 and 2013"}
 	}
 	if cfg.ModelRelayFile != "" && cfg.ModelCredentialFile != "" {
 		return nil, &ExitError{ExitUsage, "--model-relay-file and --model-credential-file are alternatives"}

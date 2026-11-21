@@ -80,10 +80,10 @@ func TestReviewUsesLongPrimaryReadmeUnderDefaultBudget(t *testing.T) {
 	const oversized = "docs/archive.md"
 	const behavior = "The current notebook remains selected after the display is closed."
 	readme := "# Field notebooks\n\n[Display options](docs/options.md)\n\n" +
-		strings.Repeat("Each field notebook has a separate home view.\n", 975) +
+		strings.Repeat("Each field notebook has a separate home view.\n", 1750) +
 		"\n## User workflows\n\n" + behavior + "\nOpening another notebook changes which one is selected.\n"
-	if len(readme) < 40<<10 || len(readme) > 50<<10 {
-		t.Fatalf("expected a 40–50 KiB README, got %d bytes", len(readme))
+	if len(readme) <= 64<<10 || len(readme) > 90<<10 {
+		t.Fatalf("expected a README over 64 KiB, got %d bytes", len(readme))
 	}
 	help := "The display offers a compact view.\n"
 	in, stored, inventory := collectDocumentSelection(t, map[string]string{
@@ -91,7 +91,7 @@ func TestReviewUsesLongPrimaryReadmeUnderDefaultBudget(t *testing.T) {
 		guide:       help,
 		oversized:   strings.Repeat(help, int(discovery.DefaultBudget.PerDocumentBytes)/len(help)+1),
 	})
-	if inventory.Budget.PerDocumentBytes != 64<<10 || inventory.Budget.TotalBytes != 256<<10 ||
+	if inventory.Budget.PerDocumentBytes != 512<<10 || inventory.Budget.TotalBytes != 4<<20 ||
 		inventory.Budget.ReadBytes != int64(len(readme)+len(help)) {
 		t.Fatalf("unexpected discovery budget: %+v", inventory.Budget)
 	}
@@ -113,6 +113,35 @@ func TestReviewUsesLongPrimaryReadmeUnderDefaultBudget(t *testing.T) {
 		slices.ContainsFunc(in.Documents, func(d docInput) bool { return d.Path == oversized }) ||
 		!slices.Contains(stored.Limitations, "document_excerpt_only") {
 		t.Fatalf("primary README or guide lost from actual review request: %+v", in.Documents)
+	}
+	var sentBytes int
+	for _, excerpt := range in.Documents {
+		sentBytes += record.JSONLen(excerpt.Text)
+	}
+	if sentBytes > roleMaxDocsBytes || stored.Calls[0].RequestBytes > PromptBudget {
+		t.Fatalf("local discovery budget enlarged model input: %d excerpt bytes, %d request bytes", sentBytes, stored.Calls[0].RequestBytes)
+	}
+}
+
+func TestReviewUsesExplicitLongEngineeringDocument(t *testing.T) {
+	const guide = "docs/EXECUTION.md"
+	const selected = "The local queue starts approved jobs in a separate working copy."
+	long := "# Execution\n\n" + selected + "\n\n" + strings.Repeat("The test runner reports its progress while the local copy remains available.\n", 960)
+	if len(long) <= 64<<10 {
+		t.Fatalf("long engineering document fixture is only %d bytes", len(long))
+	}
+	in, stored, inv := collectDocumentSelectionInScope(t, map[string]string{
+		guide:                long,
+		"docs/operations.md": "An unrelated overview describes build prerequisites.\n",
+	}, domain.Scope{Kind: "paths", Paths: []string{guide}})
+	if inv.Budget.ReadBytes != int64(len(long)) || len(in.Documents) == 0 ||
+		!slices.ContainsFunc(in.Documents, func(d docInput) bool { return d.Path == guide && strings.Contains(d.Text, selected) }) ||
+		slices.ContainsFunc(in.Documents, func(d docInput) bool { return d.Path != guide }) ||
+		!slices.Contains(stored.Limitations, "document_excerpt_only") {
+		t.Fatalf("scoped review did not receive the bounded engineering document: %+v, %v", inv.Budget, stored.Limitations)
+	}
+	if len(in.Documents) > roleMaxDocs || stored.Calls[0].RequestBytes > PromptBudget {
+		t.Fatalf("scoped document exceeded request bounds: %d excerpts, %d bytes", len(in.Documents), stored.Calls[0].RequestBytes)
 	}
 }
 
@@ -413,8 +442,13 @@ func TestDocumentCoverageResumesAfterOversizedLine(t *testing.T) {
 }
 
 func collectDocumentSelection(t *testing.T, files map[string]string) (docsInput, record.Record, *envdoc.Documents) {
+	return collectDocumentSelectionInScope(t, files, domain.Scope{Kind: "full"})
+}
+
+func collectDocumentSelectionInScope(t *testing.T, files map[string]string, scope domain.Scope) (docsInput, record.Record, *envdoc.Documents) {
 	t.Helper()
 	j := treeJob(t, files)
+	j.Scope = scope
 	var in docsInput
 	caller := &scriptedCaller{script: map[string]func(int, opencode.Request) opencode.Reply{
 		"documents": func(_ int, q opencode.Request) opencode.Reply {

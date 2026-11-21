@@ -44,8 +44,10 @@ const (
 	// verify) for every slot, the usual cost of a slot whose replies need no
 	// repair. A slot needing repairs costs up to SliceReserveCalls, so at
 	// the largest ceiling fewer slots may be admitted.
-	MaxSlices   = 96
-	MaxMaxCalls = WholeRunMaxCalls + MaxSlices*2
+	LegacyMaxSlices = 96
+	LegacyMaxCalls  = WholeRunMaxCalls + LegacyMaxSlices*2
+	MaxSlices       = 999
+	MaxMaxCalls     = WholeRunMaxCalls + MaxSlices*2
 	// planSlices bounds the slices of a schema 0.1 artifact.
 	planSlices = 32
 
@@ -402,17 +404,21 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 	}
 	// A schema 0.1 artifact came from a worker whose largest ceiling was 207
 	// as well.
-	if !ValidMaxCalls(b.MaxCalls) || b.WholeRunMaxCalls != WholeRunMaxCalls || b.SliceReserveCalls != reserve || b.Admission != admission ||
+	if !ValidMaxCalls(b.MaxCalls) || (!coverage && b.MaxCalls > LegacyMaxCalls) ||
+		b.WholeRunMaxCalls != WholeRunMaxCalls || b.SliceReserveCalls != reserve || b.Admission != admission ||
 		b.MaxRequestBytes <= 0 || b.CallsBeforeSlices < 0 || b.CallsBeforeSlices > WholeRunMaxCalls {
 		return invalid("budget")
 	}
 	l := d.Limits
-	maxSlices := MaxSlices
+	maxSlices := LegacyMaxSlices
 	if planned {
 		maxSlices = planSlices
+	} else if coverage && l.MaxSlices == MaxSlices {
+		maxSlices = MaxSlices
 	}
 	if l.MaxFiles <= 0 || l.MaxBytes <= 0 || l.MaxFileBytes <= 0 || l.MaxFileBytes > l.MaxBytes || l.MaxFileLines <= 0 || l.MaxSlices != maxSlices ||
-		(!planned && (l.Slots < 0 || l.Slots > MaxSlices)) || (!coverage && !planned && l.Slots == 0) {
+		(!planned && (l.Slots < 0 || l.Slots > maxSlices)) || (!coverage && !planned && l.Slots == 0) ||
+		(l.MaxSlices != MaxSlices && b.MaxCalls > LegacyMaxCalls) {
 		return invalid("limits")
 	}
 	pullRequest := d.Priority.Order == PriorityPullRequestFirst

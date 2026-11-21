@@ -296,7 +296,7 @@ func TestDocumentQuestionBreaksOnlyAnUnambiguousUnknownTie(t *testing.T) {
 		if include {
 			wantTitle = published.Documents.Comparisons[1].Statement
 		}
-		if !strings.Contains(contents, `href="#`+wantAnchor+`"`) || !strings.Contains(contents, `id="`+wantAnchor+`" tabindex="-1">`+wantTitle) ||
+		if !strings.Contains(contents, `href="#`+wantAnchor+`"`) || !strings.Contains(contents, `id="`+wantAnchor+`" tabindex="-1"><strong>`+wantTitle+`</strong>`) ||
 			!strings.Contains(contents, `class="badge report-reading-status">`+Korean.Label("decision.comparison.unknown")) {
 			t.Fatal("the overview is missing the exact comparison route or matching status")
 		}

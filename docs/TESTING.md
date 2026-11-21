@@ -265,7 +265,7 @@ TC-270은 README 링크와 번역·기여 문서가 있는 제품, 여러 모듈
 
 TC-270의 긴 문서 시험은 첫 발췌와 뒤쪽 API 절 사이의 본문, 전체가 기존 예산에 들어가는 170줄짜리 안내, 여러 긴 안내의 발췌 순서, 개수나 바이트 상한 초과, 운영 절과 다른 문서가 발췌 자리를 모두 쓰는 경우를 다룬다. 기존 발췌를 유지하고 남은 자리에 추가한 본문의 원래 줄과 근거 ID가 요청과 보고서에서 일치하는지 확인한다. 실제 요청에서 본문이 빠졌으면 `document_excerpt_only`를 기록한다(`TestDocumentContinuationReachesReport`, `TestDocumentCoverage`로 시작하는 시험).
 
-TC-270의 기본 읽기 한도 시험은 40–50 KiB 대표 README와 연결된 짧은 안내를 탐색에서 선택하고, README의 앞부분과 뒤쪽 사용 조건을 실제 문서 검토 요청에 보낸다. 64 KiB를 넘은 문서는 `document_too_large`로 남으며, 합계 256 KiB와 별도 예산을 적용한다(`TestReviewUsesLongPrimaryReadmeUnderDefaultBudget`, `TestDocumentsBudget`).
+TC-270의 기본 읽기 한도 시험은 64 KiB를 넘는 대표 README와 연결된 짧은 안내를 탐색하고, 두 문서의 발췌를 기존 요청 상한 안에서 검토에 보낸다. 64 KiB를 넘는 설계 문서 하나를 경로로 지정해도 필요한 발췌를 보내며 무관한 문서는 빠진다. 문서당 512 KiB와 합계 4 MiB는 로컬 읽기 상한이다. 512 KiB를 넘은 문서는 `document_too_large`로 남으며 별도 지정한 예산은 계속 적용한다(`TestReviewUsesLongPrimaryReadmeUnderDefaultBudget`, `TestReviewUsesExplicitLongEngineeringDocument`, `TestDocumentsBudget`).
 
 TC-270은 여러 모듈의 부가 목록으로 요청 한도가 부족한 프로젝트에서도 대표 README, 긴 제품 요구사항의 뒤쪽 사용자 흐름과 별도 안내의 원문을 함께 보내는지 확인한다. 지역 안내의 적용 디렉터리와 발췌 줄을 보존하고, 상한을 넘는 파일의 사유와 발췌·부가 목록의 제한을 기록한다. 문서 탐색 예산과 원래 모듈 연결은 유지한다(`TestDocumentRequestPreservesDistinctProductEvidenceUnderMetadataPressure`). 예제와 합성 입력이 많을 때는 대표 README에서 링크한 예제와 남은 제품 본문을 미연결 합성 입력보다 먼저 보낸다. 부차 경로만 범위에 든 경우에도 실제 안내를 보낸다(`TestDocumentSelectionFavorsProductTextOverUnlinkedFixtures`).
 
@@ -317,6 +317,8 @@ TC-267의 위치 시험은 같은 이름이 앞선 조사에 들어간 설정 �
 | TC-169 | 호출 상한 15의 coverage fixture, 구버전 장부, 잘못된 장부·slice 기록, 미선별과 계획 한도 | `examples/report-slices.json`에서 39개 파일의 조사 입력을 요청하지만 호출 14회 뒤 일부 줄이 남는다. 파일별 요청·수락 줄 수와 남은 줄·이유, 모듈과 후보 검증 상태를 대조한다. 구버전은 원래 집계 의미로 읽고, 검증기는 잘못된 참조와 줄 합계를 거부한다. 조회·코드 제외 내보내기에서도 범위를 유지한다(`TestReportSlicesExample`, `TestReportSlicesUnscreened`, `TestReportSlicesNotPlanned`, `TestLedgerValidation`). | REQ-012,013,027 |
 
 TC-167·169는 67개 모듈의 실제 함수 원문이 적격 모듈마다 요청에 포함되고, 후보가 없는 검토에서 후보 검증을 0으로 세는지 확인한다. 12개 모듈의 67개 파일 시험은 파일 끝의 후보와 근거 범위, 한도를 넘은 긴 줄 다음의 소스, 기각된 요청을 다시 배정하는 경우도 확인한다. 합성 응답을 사용하는 전송·집계 시험이다(`TestCoverageVisitsSixtySevenModulesWithoutInventingCandidateVerification`, `TestReportLineCoverageAcrossModules`, `TestCoverageRecordsRejectedRequestAndReschedulesItsLines`).
+
+TC-165·167·169는 확장 범위와 고정한 스냅샷을 재시도하면서 노드의 호출 상한을 207회에서 600회로 바꿔도 같은 작업 키를 쓰는지 확인한다. 일반 한도에서 남은 파일 끝 원문이 후속 조사 96개 이후 수락되고, 일반 계획은 모델 없이도 기존 작업 수 상한을 지킨다(`TestExtendedCoverageReadsPastOrdinarySlotLimitOnRetry`, REQ-018,027, NFR-007). 12개 코드 파일의 기존 일반 계획에 기록된 64쌍의 작업 키는 호출 상한이 더 높은 노드에서도 그대로 재생성한다(`TestOrdinaryCoverageKeepsPinnedRetryTasks`).
 | TC-190 | 비밀값 작업이 실행됐지만 결과를 쓸 수 없음(실패 envelope, 탐지 하나를 담은 부분 결과), 두 검토 팩 | 검토를 건너뛰지 않는다. 모델 입력은 기본 읽기 필터만 거치고 기록은 `model_input_not_secret_screened`를 싣는다. 부분 결과가 보고한 파일은 어떤 요청에도 없고(`secret_files_withheld`) 나머지 파일은 보낸다. 보고서(JSON·Markdown·웹)의 모델 입력 선별은 `not_screened`이고 쓸 수 없던 작업과 사유를 적는다(`TestReportSlicesSecretScreenUnusable`, `TestPartialSecretScanStillWithholdsFlaggedFiles`, `internal/report/testdata/report-screen-unusable.json`) | REQ-009,031; NFR-006,008; TC-118,166 |
 
 `TestReportLineCoverageAcrossModules`는 12개 Go 모듈·67개 파일을 상한 22에서 워커와 보고서 생성기로 검증한다. 같은 합성 입력과 미리 정한 응답으로 바꾸기 전은 17회 호출 기록에 43개 파일의 발췌와 파일 41개의 전 줄이 있었고, 24개는 호출 상한 때문에 보내지 못했다. 현재 시험은 19회에 67개 파일의 발췌가 수락되며 그중 66개는 전 줄이 수락된다. 110줄 파일의 끝까지 보내고, 입력 한도를 넘는 한 줄은 해당 줄에 이유를 기록한 뒤 다음 줄을 보낸다. 제출 범위와 보고서 집계를 검증한 합성 시험이며 실제 모델 응답과 결함 탐지 품질은 평가하지 않았다.

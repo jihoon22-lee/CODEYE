@@ -48,3 +48,44 @@ func TestModelReferencesSharingAStartUseTheirOwnCitationEnd(t *testing.T) {
 		t.Fatal("a long model excerpt was accepted as a diagnostic or beyond a citation")
 	}
 }
+
+func TestMetricEvidenceExcerptsAppearOnlyInCodeDetail(t *testing.T) {
+	r := metricsReport(t)
+	name := "var snapshotMetricExample = true"
+	windows := map[sourceexcerpt.Key][]sourceexcerpt.Excerpt{}
+	for _, o := range r.Observations {
+		if o.Metric == nil || o.Metric.Counterpart == nil {
+			continue
+		}
+		for _, loc := range []*ObservationLocation{o.Location, o.Metric.Counterpart} {
+			key := sourceexcerpt.Key{Path: loc.Path, SHA256: loc.BlobSHA256, Line: loc.StartLine}
+			windows[key] = []sourceexcerpt.Excerpt{{StartLine: loc.StartLine, EndLine: loc.StartLine, Text: name}}
+		}
+	}
+	attachExcerpts(&r, windows, false)
+	if err := ValidateReport(r); err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range r.Observations {
+		if o.Metric != nil && o.Metric.Counterpart != nil && (o.Metric.Excerpt == nil || o.Metric.CounterpartExcerpt == nil) {
+			t.Fatalf("both verified locations should have snippets: %+v", o.Metric)
+		}
+	}
+	free := Project(r, false)
+	if err := ValidateReport(free); err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range free.Observations {
+		if o.Metric != nil && (o.Metric.Excerpt != nil || o.Metric.CounterpartExcerpt != nil) {
+			t.Fatal("metric excerpt leaked into a code-free report")
+		}
+	}
+	full, err := RenderHTML(r, strings.Repeat("a", 64), Korean)
+	if err != nil || !strings.Contains(string(full), name) || !strings.Contains(string(full), "metrics-detail") {
+		t.Fatalf("expected source inside inspectable details, got %v", err)
+	}
+	summary, err := RenderHTMLAt(r, strings.Repeat("a", 64), Korean, DetailSummary)
+	if err != nil || strings.Contains(string(summary), name) {
+		t.Fatalf("source appeared in the summary, render error %v", err)
+	}
+}

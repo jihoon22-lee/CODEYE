@@ -39,10 +39,10 @@ export function ReportLayout({ report, rail, children, className = '', purpose }
           <header className="report-hero">
             <p className="report-kicker">{name ? t.title : t.revision(report.revision)}</p>
             <h4 className="report-name">{name || t.title}</h4>
-            {purpose?.excerpt && <p className="report-purpose">
+            {purpose?.excerpt && <details className="report-purpose"><summary>{t.projectIntro}</summary><p>
               {purpose.excerpt.text.trim()}{' '}
               {purposeLink ? <a href={purposeLink} target="_blank" rel="noopener noreferrer">{purposeLocation}</a> : purposeLocation}
-            </p>}
+            </p></details>}
             {report.project?.source && <div className="report-hero-source"><span>{t.target}</span><code>
               {report.project.source.split(/(?<=\/)/).map((part, i) => <Fragment key={i}>{i > 0 && <wbr />}{part}</Fragment>)}
             </code></div>}

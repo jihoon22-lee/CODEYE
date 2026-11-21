@@ -88,9 +88,12 @@ func modelSkipReason(j analysis.Job) string {
 	return domain.ReasonModelSourceNotApproved
 }
 
-func (h Handler) maxCalls() int {
+func (h Handler) maxCalls(scope domain.Scope) int {
 	if h.MaxCalls == 0 {
 		return record.DefaultMaxCalls
+	}
+	if scope.ReviewCoverage != domain.ReviewCoverageExtended {
+		return min(h.MaxCalls, record.LegacyMaxCalls)
 	}
 	return h.MaxCalls
 }
@@ -112,9 +115,17 @@ func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec,
 		analysis.TaskSpec{Key: "review.interpret", Required: false, Title: "정적 진단 해석", Stage: domain.StageCodeReview},
 		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증", Stage: domain.StageCodeReview})
 	sp := planSlicesFor(j.Snapshot.Manifest, j.Scope, h.secondary(), changedPaths(j))
-	if len(sp.Groups) > 0 || hasCoverageSources(j, h.secondary()) {
+	groups := codeGroupsFor(j.Snapshot.Manifest, j.Scope, h.secondary(), changedPaths(j), true)
+	if groups.eligible > 0 {
 		plan = append(plan, analysis.TaskSpec{Key: record.TaskScope, Required: false, Title: "모듈별 검토 범위", Stage: domain.StageCodeReview})
-		for i := range coverageSlots(sp) {
+		slots := coverageSlots(sp)
+		if j.Scope.ReviewCoverage == domain.ReviewCoverageExtended {
+			planner := roleStage{ctx: ctx, j: j}
+			if n, err := planner.coverageSlotPlan(groups); err == nil {
+				slots = n
+			}
+		}
+		for i := range slots {
 			inv, ver := slotTaskKeys(sliceKey(i))
 			plan = append(plan,
 				analysis.TaskSpec{Key: inv, Required: false, Title: "모듈별 코드 검토 " + sliceKey(i), Stage: domain.StageCodeReview},
@@ -372,7 +383,7 @@ func (s *roleStage) reserveCall() *analysis.TaskResult {
 		if s.slice != nil && s.role == record.StageInvestigate && s.sliceReserve == record.SliceMinCalls {
 			reserve = 1
 		}
-		if used >= s.h.maxCalls()-reserve {
+		if used >= s.h.maxCalls(s.j.Scope)-reserve {
 			r := result(domain.TaskBudgetExhausted, reasonBudgetExhausted)
 			return &r
 		}

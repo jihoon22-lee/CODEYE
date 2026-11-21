@@ -2,6 +2,7 @@ package report
 
 import (
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -103,13 +104,77 @@ func comparisonAnchor(i int) string { return "document-comparison-" + strconv.It
 func strengthAnchor(i int) string   { return "code-strength-" + strconv.Itoa(i+1) }
 
 type sourceCitation struct {
-	File, Range, Location    string
-	ID, Anchor, Jump         string
-	ExcerptLocation, Text    string
-	URL, LinkLabel           string
-	ActionLabel, StoredLabel string
-	Example                  *documentExample
-	ExampleLabel             string
+	File, Range, Location            string
+	ID, Anchor, Jump                 string
+	ExcerptLocation, Text            string
+	URL, LinkLabel                   string
+	ActionLabel, StoredLabel         string
+	Example                          *documentExample
+	ExampleLabel                     string
+	StartLine, EndLine, ExcerptStart int
+}
+
+type sourcePreview struct {
+	Location string
+	Lines    []sourcePreviewLine
+}
+
+type sourcePreviewLine struct {
+	Number int
+	Text   string
+	Focus  bool
+}
+
+func (s sourceCitation) Preview() *sourcePreview {
+	return s.previewFor("")
+}
+
+var previewIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z_0-9]*$`)
+
+func (s sourceCitation) previewFor(title string) *sourcePreview {
+	if s.Text == "" || s.ExcerptStart < 1 {
+		return nil
+	}
+	lines := strings.Split(s.Text, "\n")
+	focus := previewSymbolLine(lines, title)
+	if focus < 0 && s.StartLine >= s.ExcerptStart && s.EndLine < s.ExcerptStart+len(lines) && s.EndLine-s.StartLine < 5 {
+		focus = s.StartLine - s.ExcerptStart
+	}
+	first, last := 0, len(lines)
+	if focus >= 0 {
+		first = max(0, min(focus-1, len(lines)-5))
+		last = min(first+5, len(lines))
+	}
+	preview := &sourcePreview{Location: sourceRange(s.File, s.ExcerptStart+first, s.ExcerptStart+last-1)}
+	for index := first; index < last; index++ {
+		preview.Lines = append(preview.Lines, sourcePreviewLine{s.ExcerptStart + index, lines[index], index == focus})
+	}
+	return preview
+}
+
+func previewSymbolLine(lines []string, title string) int {
+	for _, part := range inlineCodeParts(title) {
+		if !part.Code || !previewIdentifier.MatchString(part.Text) {
+			continue
+		}
+		token := regexp.MustCompile(`\b` + part.Text + `\b`)
+		found := -1
+		for i, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "//") || strings.HasPrefix(line, "/*") || strings.HasPrefix(line, "* ") || strings.HasPrefix(line, "# ") || !token.MatchString(line) {
+				continue
+			}
+			if found >= 0 {
+				found = -1
+				break
+			}
+			found = i
+		}
+		if found >= 0 {
+			return found
+		}
+	}
+	return -1
 }
 
 func (s sourceCitation) Brief() sourceCitation {
@@ -198,8 +263,9 @@ func sourceRange(path string, start, end int) string {
 }
 
 func citeSource(path string, start, end int, excerpt *sourceexcerpt.Excerpt) sourceCitation {
-	s := sourceCitation{File: path, Range: strconv.Itoa(start) + "-" + strconv.Itoa(end), Location: sourceRange(path, start, end)}
+	s := sourceCitation{File: path, Range: strconv.Itoa(start) + "-" + strconv.Itoa(end), Location: sourceRange(path, start, end), StartLine: start, EndLine: end}
 	if excerpt != nil {
+		s.ExcerptStart = excerpt.StartLine
 		s.ExcerptLocation = sourceRange(path, excerpt.StartLine, excerpt.EndLine)
 		s.Text = excerpt.Text
 	}

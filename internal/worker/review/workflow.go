@@ -386,7 +386,7 @@ func (s *roleStage) supplementWorkflowChoices(routes []workflowRoute, contracts 
 	}
 	const remainingCoreCalls = 3 * record.RoleMaxCalls
 	used, err := callsUsed(s.j)
-	if err != nil || s.h.maxCalls()-used <= remainingCoreCalls {
+	if err != nil || s.h.maxCalls(s.j.Scope)-used <= remainingCoreCalls {
 		return nil
 	}
 	instructions := s.instructions(workflowSelectionContract)

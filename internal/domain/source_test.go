@@ -87,6 +87,7 @@ func TestRepositoryHostAndName(t *testing.T) {
 func TestParseRunRequest(t *testing.T) {
 	ok := []string{
 		`{"profile":"deep-review","source_policy":"latest_at_acquire","scope":{"kind":"full"}}`,
+		`{"profile":"deep-review","source_policy":"latest_at_acquire","scope":{"kind":"full","review_coverage":"extended"}}`,
 		`{"profile":"focused","source_policy":"latest_at_acquire","scope":{"kind":"paths","paths":["src","docs/a.md"]}}`,
 	}
 	for _, raw := range ok {
@@ -100,6 +101,7 @@ func TestParseRunRequest(t *testing.T) {
 		`{"profile":"fast","source_policy":"latest_at_acquire","scope":{"kind":"full"}}`,
 		`{"profile":"deep-review","source_policy":"pinned","scope":{"kind":"full"}}`,
 		`{"profile":"deep-review","source_policy":"latest_at_acquire","scope":{"kind":"full","paths":[]}}`,
+		`{"profile":"deep-review","source_policy":"latest_at_acquire","scope":{"kind":"full","review_coverage":"unbounded"}}`,
 		`{"profile":"deep-review","source_policy":"latest_at_acquire","scope":{"kind":"paths","paths":[]}}`,
 		`{"profile":"deep-review","source_policy":"latest_at_acquire","scope":{"kind":"paths","paths":["../x"]}}`,
 		`{"profile":"deep-review","source_policy":"latest_at_acquire","scope":{"kind":"paths","paths":["a","a"]}}`,

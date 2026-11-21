@@ -109,13 +109,13 @@ export const ko = {
     after: '설치한 뒤 터미널에서 codeye up을 다시 실행하고 "다시 시도"를 누르세요.',
     model: '관리 화면의 OpenCode 연결에서 모델을 설정하고 연결을 확인한 뒤 다시 분석하세요.',
     modelOperator: '서비스 노드의 OpenCode와 모델 설정을 확인한 뒤 다시 분석하세요.',
-    budget: '모델 호출 상한 때문에 검토하지 못한 파일이 있습니다. 설정의 agent.model.review_max_calls(15~207, 기본 99)를 올리고 codeye up을 다시 실행한 뒤 다시 시도하세요.',
+    budget: '모델 호출 상한 때문에 조사하지 못한 소스가 있습니다. 일반 검토의 상한을 넘겨 조사하려면 노드의 agent.model.review_max_calls를 높이고 실행 설정에서 확장 코드 검토를 선택하세요.',
     // From the ledger: the calls this run used and the ceiling that admits every refused slot
     // (each slot one investigate and one verify call, without format repair).
     budgetCalls: (used: number, slots: number, needed: number) =>
       `모델 호출 상한 때문에 주요 파일의 slot ${slots}개를 검토하지 못했습니다. 이번 실행은 호출 ${used}회를 썼고, 남은 slot을 모두 검토하려면 상한이 ${needed}회 이상이어야 합니다(형식 복구가 없을 때). 설정의 agent.model.review_max_calls를 ${needed} 이상으로 올리고 codeye up을 다시 실행한 뒤 다시 시도하세요.`,
-    budgetCallsMax: (used: number, slots: number, needed: number) =>
-      `모델 호출 상한 때문에 주요 파일의 slot ${slots}개를 검토하지 못했습니다. 이번 실행은 호출 ${used}회를 썼고, 남은 slot을 모두 검토하려면 약 ${needed}회가 필요해 최댓값 207로도 다 검토하지 못합니다. 설정의 agent.model.review_max_calls를 207로 올리고 codeye up을 다시 실행한 뒤 다시 시도하세요.`,
+    budgetCallsMax: (used: number, slots: number, needed: number, ceiling = 207) =>
+      `이번 실행은 모델을 ${used}회 호출했고, 주요 파일의 후속 조사 ${slots}개가 남았습니다. 남은 조사에는 약 ${needed}회가 필요하며 현재 방식의 상한은 ${ceiling}회입니다. 실행 설정과 보고서에서 남은 범위를 확인할 수 있습니다.`,
     notPlanned: (n: number) => `slot 상한(96개) 밖이라 계획하지 않은 주요 파일 ${n}개는 호출 상한을 올려도 검토되지 않습니다.`,
     buildScripts: (tasks: string) => `이 프로젝트에서 "저장소의 빌드 스크립트 실행"을 켜면 ${tasks}도 실행합니다.`,
     buildScriptsCrates: (tasks: string) => `이 프로젝트에서 "저장소의 빌드 스크립트 실행"을 켜면 분석 전에 Rust crate를 받아 두고 ${tasks}도 실행합니다.`,
@@ -260,6 +260,8 @@ export const ko = {
     title: '분석 실행',
     settings: '분석 설정',
     profile: '분석 방식: 심층 검토(deep-review)',
+    extendedReview: '확장 코드 검토',
+    extendedReviewNote: '노드의 모델 호출 상한이 207회를 넘는 경우 더 많은 원문을 조사합니다. 실행 시간과 모델 비용이 늘 수 있습니다.',
     policy: '소스: 분석을 시작할 때의 최신 내용을 고정해 씁니다',
     scope: '범위: 프로젝트 전체',
     start: '새로 분석',

@@ -26,11 +26,12 @@ type readingCategory struct {
 }
 
 type readingRow struct {
-	ID, Title, Type, Status, SharedPath string
-	Aliases                             []string
-	Details                             []secItem
-	Sources                             []sourceCitation
-	Workflow                            *workflowReadingView
+	ID, Title, Type, Status, SharedPath, Location string
+	Aliases                                       []string
+	Details                                       []secItem
+	Sources                                       []sourceCitation
+	Workflow                                      *workflowReadingView
+	Preview                                       *sourcePreview
 }
 
 type readingDocumentSource struct {
@@ -81,6 +82,12 @@ func (v secView) documentReading(doc *DocumentsSection) *sectionReading {
 				continue
 			}
 			used[id] = true
+			if row.Location == "" {
+				row.Location = tf(l, "docs.reading_line_range", e.StartLine, e.EndLine)
+			}
+			if row.Preview == nil && v.R.Export.IncludeCode {
+				row.Preview = v.citeSectionEvidence(e).Preview()
+			}
 			if !slices.Contains(paths, e.Path) {
 				paths = append(paths, e.Path)
 			}
@@ -101,8 +108,19 @@ func (v secView) documentReading(doc *DocumentsSection) *sectionReading {
 			}
 			title := openingText(c.Statement, tf(l, "docs.withheld_behavior", i+1))
 			continueAt := v.comparisonDetails(c, doc.Evidence)
+			var preview *sourcePreview
+			if status != "unknown" && v.R.Export.IncludeCode {
+				for _, id := range c.CodeEvidenceIDs {
+					if evidence := evidenceByID[id]; evidence.Kind == "code" {
+						preview = v.citeSectionEvidence(evidence).Preview()
+						if preview != nil {
+							break
+						}
+					}
+				}
+			}
 			add(readingRow{ID: comparisonAnchor(i), Title: title, Status: l.Label("decision.comparison." + c.Status), Details: continueAt,
-				Workflow: v.workflowCitations(c.RelatedWorkflow, doc.Evidence)}, l.Label("docs.reading_comparisons"), c.DocumentEvidenceIDs)
+				Workflow: v.workflowCitations(c.RelatedWorkflow, doc.Evidence), Preview: preview}, l.Label("docs.reading_comparisons"), c.DocumentEvidenceIDs)
 		}
 	}
 	for i, q := range doc.Quality {
@@ -296,12 +314,16 @@ func (v secView) codeReviewReadingOrder(parts []secPart) []secPart {
 		switch part.Heading {
 		case l.Label("review.findings"):
 			groups := v.reviewFindingParts(part.Findings)
-			outcomes = append(outcomes, groups[0])
-			additional = append(additional, groups[1:]...)
-		case l.Label("review.reading_actions"):
+			for i, group := range groups {
+				if i == 0 || len(group.Cards) > 0 {
+					outcomes = append(outcomes, group)
+				} else {
+					additional = append(additional, group)
+				}
+			}
+		case l.Label("review.reading_actions"), l.Label("review.reading_limited"), l.Label("review.reading_secondary_findings"):
 			outcomes = append(outcomes, part)
-		case l.Label("review.reading_secondary_findings"), l.Label("review.reading_limited"),
-			l.Label("review.reading_refuted"), l.Label("review.reading_disposition"):
+		case l.Label("review.reading_refuted"), l.Label("review.reading_disposition"), l.Label("review.reading_related_records"):
 			additional = append(additional, part)
 		case l.Label("review.limits"):
 			details = append(details, part)
@@ -327,7 +349,11 @@ func (v secView) reviewFindingParts(findings []Finding) []secPart {
 		return cmp.Compare(sevRank(b.Severity), sevRank(a.Severity))
 	})
 	headings := []string{"review.reading_actions", "review.reading_limited", "review.reading_secondary_findings",
-		"review.reading_refuted", "review.reading_disposition"}
+		"review.reading_refuted", "review.reading_disposition", "review.reading_related_records"}
+	var duplicates map[string]bool
+	if v.Summary {
+		duplicates = duplicateReadingFindings(sorted, v.R.Observations)
+	}
 	groups := make([]secPart, len(headings))
 	for i, heading := range headings {
 		groups[i].Heading = l.Label(heading)
@@ -335,6 +361,8 @@ func (v secView) reviewFindingParts(findings []Finding) []secPart {
 	for _, f := range sorted {
 		group := 0
 		switch {
+		case duplicates[f.ID]:
+			group = 5
 		case f.Validation == ValidationRefuted:
 			group = 3
 		case hiddenDisposition[f.Disposition]:
@@ -349,7 +377,7 @@ func (v secView) reviewFindingParts(findings []Finding) []secPart {
 			part.Findings = append(part.Findings, f)
 			continue
 		}
-		if group == 0 {
+		if group <= 2 {
 			part.Cards = append(part.Cards, v.findingCard(f))
 			continue
 		}
@@ -445,11 +473,39 @@ func mdReadingAnchor(p func(...string), id string) {
 	}
 }
 
-func (v secView) ReadingSignals() []string {
-	var signals []string
+type overviewReadingRow struct{ Section, Label, Value, Status string }
+
+func groupedCount(value int) string {
+	digits := strconv.Itoa(value)
+	for i := len(digits) - 3; i > 0; i -= 3 {
+		digits = digits[:i] + "," + digits[i:]
+	}
+	return digits
+}
+
+func (v secView) ReadingOverview() []overviewReadingRow {
+	var rows []overviewReadingRow
+	add := func(section, label, value string) {
+		status := ""
+		for _, block := range v.Sections {
+			if block.ID == section {
+				status = block.State
+				break
+			}
+		}
+		rows = append(rows, overviewReadingRow{section, v.L.Label(label), value, status})
+	}
 	primary, secondary := 0, 0
+	var actionable []Finding
 	for _, finding := range v.R.Findings {
 		if hiddenDisposition[finding.Disposition] || finding.Validation != ValidationSupported && finding.Validation != ValidationReproduced {
+			continue
+		}
+		actionable = append(actionable, finding)
+	}
+	duplicates := duplicateReadingFindings(actionable, v.R.Observations)
+	for _, finding := range actionable {
+		if duplicates[finding.ID] {
 			continue
 		}
 		if findingSecondary(finding) {
@@ -459,8 +515,13 @@ func (v secView) ReadingSignals() []string {
 		}
 	}
 	eligible, sent, accepted := 0, 0, 0
+	reviewedLines, totalLines := 0, 0
 	knownAccepted := true
 	if ledger := v.R.CodeReview.Ledger; ledger != nil {
+		for _, file := range ledger.Files {
+			reviewedLines += file.ReviewedLines
+			totalLines += file.TotalLines
+		}
 		for _, module := range ledger.Modules {
 			eligible += module.FilesEligible
 			sent += module.FilesSentToModel
@@ -472,16 +533,51 @@ func (v secView) ReadingSignals() []string {
 		}
 	}
 	if secondary > 0 {
-		signals = append(signals, tf(v.L, "reading.action_counts", primary, secondary))
+		add(SectionCodeReview, "reading.code_outcome", tf(v.L, "reading.action_counts", primary, secondary))
 	} else if primary > 0 || knownAccepted && accepted > 0 {
-		signals = append(signals, tf(v.L, "reading.action_primary", primary))
+		add(SectionCodeReview, "reading.code_outcome", tf(v.L, "reading.action_primary", primary))
 	}
 	if eligible > 0 {
 		if knownAccepted {
-			signals = append(signals, tf(v.L, "reading.model_scope", accepted, eligible))
+			value := tf(v.L, "reading.model_scope", groupedCount(accepted), groupedCount(eligible))
+			if totalLines > 0 {
+				value += " · " + tf(v.L, "reading.model_lines", groupedCount(reviewedLines), groupedCount(totalLines))
+			}
+			add(SectionCodeReview, "reading.model_scope_label", value)
 		} else {
-			signals = append(signals, tf(v.L, "reading.model_sent", sent, eligible))
+			add(SectionCodeReview, "reading.model_scope_label", tf(v.L, "reading.model_sent", groupedCount(sent), groupedCount(eligible)))
 		}
+		rows[len(rows)-1].Status = ""
+	}
+	planned, successful := 0, 0
+	observed := map[string]bool{}
+	for _, language := range v.R.StaticAnalysis.Languages {
+		for _, tool := range language.Tools {
+			if optText(tool.Purpose, "diagnostics") != "diagnostics" {
+				continue
+			}
+			planned++
+			if tool.TaskStatus == "succeeded" && tool.Result == DiscoveryAccepted {
+				successful++
+				for _, id := range tool.ObservationIDs {
+					observed[id] = true
+				}
+			}
+		}
+	}
+	if planned > 0 {
+		primary := 0
+		for _, observation := range v.R.Observations {
+			if loc := observation.Location; observed[observation.ID] && !observation.Suppressed && observation.Metric == nil &&
+				observation.EvidenceState == EvidenceVerified && loc != nil && productLocation(loc.Path, loc.StartLine, loc.EndLine) {
+				primary++
+			}
+		}
+		add(SectionStaticAnalysis, "section.static_analysis", tf(v.L, "reading.static_outcome", successful, planned, primary))
+	}
+	if test := v.TestRunPart(); test.Fold != "" {
+		status, _, _ := strings.Cut(test.Fold, " · ")
+		add("test-results", "reading.tests_outcome", status)
 	}
 	statusCounts := map[string]int{}
 	for _, task := range v.R.Tasks {
@@ -496,7 +592,99 @@ func (v secView) ReadingSignals() []string {
 		}
 	}
 	if len(states) > 0 {
-		signals = append(signals, tf(v.L, "reading.incomplete_tasks", strings.Join(states, " · ")))
+		add(SectionGaps, "reading.required_outcome", strings.Join(states, " · "))
 	}
-	return signals
+	if d := v.R.Documents; len(d.Items)+len(d.Comparisons) > 0 {
+		read, assessed := 0, 0
+		for _, item := range d.Items {
+			if item.Status == "selected" {
+				read++
+			}
+		}
+		for _, comparison := range d.Comparisons {
+			if comparison.Status != "unknown" {
+				assessed++
+			}
+		}
+		unknown := len(d.Comparisons) - assessed
+		values := []string{tf(v.L, "reading.documents_count", read)}
+		if assessed > 0 {
+			values = append(values, tf(v.L, "reading.documents_assessed", assessed))
+		}
+		if unknown > 0 {
+			values = append(values, tf(v.L, "reading.documents_unknown", unknown))
+		}
+		add(SectionDocuments, "section.documents", strings.Join(values, " · "))
+		if unknown > 0 {
+			rows[len(rows)-1].Status = v.L.Label("reading.documents_pending")
+		} else if read > 0 {
+			rows[len(rows)-1].Status = v.L.Label("reading.documents_read")
+		}
+	}
+	if environment := v.R.Environment; len(environment.Modules) > 0 {
+		mismatches := 0
+		for _, verdict := range environment.Verdicts {
+			if verdict.Status == "mismatch" {
+				mismatches++
+			}
+		}
+		add(SectionEnvironment, "section.environment", tf(v.L, "reading.environment_outcome", len(environment.Modules), mismatches))
+		if mismatches > 0 {
+			rows[len(rows)-1].Status = v.L.Label("reading.environment_mismatch")
+		}
+	}
+	if metrics := v.R.Metrics; len(metrics.TaskKeys) > 0 {
+		var values []string
+		for _, metric := range metrics.Metrics {
+			count := groupedCount(len(metric.ObservationIDs))
+			switch metric.Name {
+			case "cyclomatic_complexity":
+				values = append(values, tf(v.L, "reading.complexity_outcome", count))
+			case "duplicated_lines":
+				values = append(values, tf(v.L, "reading.duplication_outcome", count))
+			default:
+				values = append(values, tf(v.L, "reading.metric_outcome", metric.Name, count))
+			}
+		}
+		if len(values) == 0 {
+			values = append(values, v.L.Label("reading.metrics_empty"))
+		}
+		add(SectionMetrics, "section.metrics", strings.Join(values, " · "))
+	}
+	if secrets := v.R.Secrets; len(secrets.TaskKeys) > 0 {
+		add(SectionSecrets, "section.secrets", tf(v.L, "reading.secrets_outcome", len(secrets.Detections)))
+	}
+	flow := []string{SectionEnvironment, SectionDocuments, SectionStaticAnalysis, SectionMetrics, SectionSecrets, SectionCodeReview, "test-results", SectionGaps}
+	slices.SortStableFunc(rows, func(a, b overviewReadingRow) int {
+		return cmp.Compare(slices.Index(flow, a.Section), slices.Index(flow, b.Section))
+	})
+	return rows
+}
+
+func mdReadingOverview(p func(...string), v secView) {
+	l := v.L
+	if rows := v.ReadingOverview(); len(rows) > 0 {
+		p("### ", mdText(l.Label("reading.outcome")))
+		p()
+		p("| ", mdText(l.Label("reading.area")), " | ", mdText(l.Label("reading.result")), " | ", mdText(l.Label("reading.details")), " |")
+		p("|---|---|---|")
+		for _, row := range rows {
+			label := row.Label
+			if row.Status != "" {
+				label += " · " + row.Status
+			}
+			p("| ", mdText(label), " | ", mdText(row.Value), " | [", mdText(l.Label("reading.view")), "](#", row.Section, ") |")
+		}
+		p()
+	}
+	if v.R.Inputs.Profile == "with-tests" {
+		mdReadingAnchor(p, "test-results")
+		mdPart(p, v.TestRunPart(), l)
+	}
+	p("<details><summary>", mdText(l.Label("reading.context_details")), "</summary>")
+	p()
+	mdDecision(p, v.Decision, l)
+	mdBehaviors(p, v.Behaviors, l)
+	p("</details>")
+	p()
 }

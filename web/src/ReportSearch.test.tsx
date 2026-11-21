@@ -96,7 +96,10 @@ describe('published report search', () => {
     fireEvent.click(within(documentTab).getByRole('link', { name: first.statement }));
     expect(document.activeElement).toBe(heading);
     const guide = heading.closest('.report-reading-group') as HTMLElement;
-    expect(within(guide).getByRole('heading', { name: t.qualityTitle })).toBeTruthy();
+    expect(within(guide).getAllByRole('table')).toHaveLength(1);
+    expect(within(guide).getByText(t.qualityTitle)).toBeTruthy();
+    expect(heading.closest('details')?.open).toBe(true);
+    expect(heading.closest('details')?.querySelector('pre')?.textContent).toContain('canonical marker');
     const sources = within(guide).getByText(t.documentReading.sources).closest('details')!;
     expect(sources.open).toBe(false);
     const exact = within(guide).getAllByRole('link', { name: 'GUIDE.md:2' })[0];

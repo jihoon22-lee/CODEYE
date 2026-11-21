@@ -28,13 +28,16 @@ export function RunPanel({ api, userId, project, idempotency, openRunId = null, 
   const [pending, setPending] = useState(false);
   const [lastBody, setLastBody] = useState<ManualRunBody>(RUN_BODY);
   const [pathsInput, setPathsInput] = useState('');
+  const [extended, setExtended] = useState(false);
   const [error, setError] = useState<ErrorText | null>(null);
   const [accepted, setAccepted] = useState<RunAck | null>(null);
   const activeId = runId ?? openRunId;
   // The server decides; this only keeps a viewer from offering an action it will refuse.
   const canRun = project.can_run;
   const canTest = project.analysis?.run_build_scripts === true && setup?.available.build_scripts?.available !== false;
-  const scope = requestedRunScope(pathsInput);
+  const canExtend = project.analysis?.send_source_to_model !== false && setup?.available.model_review?.available !== false;
+  const requested = requestedRunScope(pathsInput);
+  const scope: ManualRunBody['scope'] | null = requested && (extended && canExtend ? { ...requested, review_coverage: 'extended' } : requested);
   const retrying = error !== null && JSON.stringify(scope) === JSON.stringify(lastBody.scope) && idempotency.pending(userId, project.id, lastBody);
   const scoped = scope?.kind === 'paths' ? scope.paths.length : null;
 
@@ -79,6 +82,11 @@ export function RunPanel({ api, userId, project, idempotency, openRunId = null, 
       <summary>{t.runs.settings}</summary>
       <ul className="plain small"><li>{t.runs.profile}</li><li>{t.runs.policy}</li></ul>
       {canRun && <RunScopeField value={pathsInput} onChange={setPathsInput} scope={scope} kind={project.source.kind} disabled={pending} />}
+      {canRun && canExtend && <>
+        <label><input type="checkbox" checked={extended} disabled={pending} onChange={e => setExtended(e.target.checked)}
+          aria-describedby="run-extended-note" /> {t.runs.extendedReview}</label>
+        <p id="run-extended-note" className="small">{t.runs.extendedReviewNote}</p>
+      </>}
       <p className="small">{t.runs.startNote}</p>
     </details>
     {error && <><ErrorNote error={error} />{retrying && <p className="small">{t.runs.retryNote}</p>}</>}

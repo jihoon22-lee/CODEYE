@@ -74,6 +74,9 @@ export function focusReportFinding(container: HTMLElement | null | undefined, id
 }
 
 export function focusReportSearchLocation(target: HTMLElement | null | undefined) {
+  for (let parent = target?.parentElement; parent; parent = parent.parentElement) {
+    if (parent instanceof HTMLDetailsElement) parent.open = true;
+  }
   target?.focus({ preventScroll: true });
   target?.scrollIntoView?.({ block: 'start' });
 }

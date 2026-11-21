@@ -308,11 +308,13 @@ type Observation struct {
 // ObservationMetric is the measured value of a metric observation (the
 // envelope's metric, docs/ANALYZERS.md).
 type ObservationMetric struct {
-	Name        string               `json:"name"`
-	Value       int                  `json:"value"`
-	Threshold   int                  `json:"threshold"`
-	Unit        string               `json:"unit"`
-	Counterpart *ObservationLocation `json:"counterpart,omitempty"`
+	Name               string                 `json:"name"`
+	Value              int                    `json:"value"`
+	Threshold          int                    `json:"threshold"`
+	Unit               string                 `json:"unit"`
+	Counterpart        *ObservationLocation   `json:"counterpart,omitempty"`
+	Excerpt            *sourceexcerpt.Excerpt `json:"excerpt,omitempty"`
+	CounterpartExcerpt *sourceexcerpt.Excerpt `json:"counterpart_excerpt,omitempty"`
 }
 
 // Evidence states of an observation location (report-level check).

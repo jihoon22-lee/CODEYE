@@ -8,6 +8,27 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
 
+func TestFindingPreviewUsesUniqueStoredSymbol(t *testing.T) {
+	lines := []string{"// danger first appears in a comment", "use std::collections::HashMap;", "", "fn unrelated() {}", "", "pub unsafe fn danger(p: *const i32) -> i32 {", "    *p", "}", "", "fn another() {}"}
+	preview := func() *sourcePreview {
+		return citeSource("src/lib.rs", 1, 10, &sourceexcerpt.Excerpt{StartLine: 1, EndLine: 10, Text: strings.Join(lines, "\n")}).previewFor("`danger` 검토")
+	}
+	selected := preview()
+	if selected.Location != "src/lib.rs:5-9" || len(selected.Lines) != 5 || selected.Lines[1] != (sourcePreviewLine{6, lines[5], true}) || selected.Lines[2].Text != lines[6] {
+		t.Fatalf("wrong excerpt or highlight: %+v", selected)
+	}
+	lines[9] = "fn another() { danger(); }"
+	ambiguous := preview()
+	if len(ambiguous.Lines) != 10 {
+		t.Fatalf("lost part of the stored excerpt: %+v", ambiguous)
+	}
+	for _, line := range ambiguous.Lines {
+		if line.Focus {
+			t.Fatalf("ambiguous symbol highlighted: %+v", line)
+		}
+	}
+}
+
 func TestDocumentReadingUsesOneStoredWindowAndKeepsExactRoutes(t *testing.T) {
 	r := exampleReport(t)
 	d := r.Documents
@@ -50,6 +71,10 @@ func TestDocumentReadingUsesOneStoredWindowAndKeepsExactRoutes(t *testing.T) {
 				count := 0
 				if include {
 					count = 1
+					if body == html {
+						// Each opened row can show its exact preview. The full file excerpt is shared.
+						count += 3
+					}
 				}
 				if strings.Count(body, "canonical marker") != count || strings.Contains(body, "파일을 읽는다") != include {
 					t.Fatalf("level %s, includes code %t: wrong canonical excerpt or model statement", level, include)
@@ -69,6 +94,7 @@ func TestCodeReadingKeepsSupportedActionsBeforeFoldedObservations(t *testing.T) 
 		}
 	}
 	low, high, pending := sampled, sampled, sampled
+	low.ObservationIDs, high.ObservationIDs = nil, nil
 	low.ID, low.Title, low.Severity = "reading-low", "낮은 우선순위 발견", "low"
 	high.ID, high.Title, high.Severity = "reading-high", "높은 우선순위 발견", "high"
 	pending.ID, pending.Title, pending.Severity, pending.Validation = "reading-pending", "추가 확인이 필요한 발견", "critical", ValidationInconclusive
@@ -88,7 +114,11 @@ func TestCodeReadingKeepsSupportedActionsBeforeFoldedObservations(t *testing.T) 
 		codeMD, _, _ = strings.Cut(codeMD, "\n## 분석 공백")
 		for _, content := range []string{codeHTML, codeMD} {
 			previous := -1
-			for _, want := range []string{high.Title, low.Title, Korean.Label("review.reading_strengths"), strength.Title, pending.Title} {
+			wantOrder := []string{high.Title, low.Title, Korean.Label("review.reading_strengths"), strength.Title, pending.Title}
+			if level == DetailSummary {
+				wantOrder = []string{high.Title, low.Title, pending.Title, Korean.Label("review.reading_strengths"), strength.Title}
+			}
+			for _, want := range wantOrder {
 				index := strings.Index(content, want)
 				if index <= previous {
 					t.Fatalf("level %s: observations or findings are out of order around %q", level, want)

@@ -2,7 +2,7 @@ import { useContext, useMemo, type MouseEvent } from 'react';
 import { sourceEvidenceURL } from './analysisReport';
 import type { Sections } from './parseReportSections';
 import { reportKo as t } from './locales/report-ko';
-import { Citations, CodeWindow, PinnedSourceLink, ReportSourceContext, WorkflowReading, label, sourceLocation } from './ReportParts';
+import { Citations, CodeWindow, PinnedSourceLink, ReportPreview, ReportSourceContext, WorkflowReading, label, sourceLocation } from './ReportParts';
 import { ReportIcon } from './ReportLayout';
 import { focusReportSearchLocation } from './ReportSearch';
 import { documentComparisonHeading, documentReadingGroups, type DocumentReading } from './reportDocumentGroups';
@@ -86,29 +86,23 @@ export function ReportDocumentReading({ documents, includesCode, id, comparisonI
   };
   if (!groups.length) return null;
   return <div className="report-reading-groups">
-    <p className="model-note" role="note">{documents.model.performed ? s.model(documents.model.task) : t.modelReading}</p>
     {groups.length > 1 && <nav aria-label={r.files}><ul className="report-reading-index">
-      {groups.map(({ path }, i) => <li key={path}><a href={'#' + groupId(i)} onClick={e => jumpToReading(e, groupId(i))}><code>{groupTitle(path)}</code></a></li>)}
+      {groups.map(({ path }, i) => <li key={path}><a className="btn btn-sm btn-ghost-primary report-file-chip" href={'#' + groupId(i)} onClick={e => jumpToReading(e, groupId(i))}><code>{groupTitle(path)}</code></a></li>)}
     </ul></nav>}
     {groups.map(({ path, rows, sources }, i) => {
-      const sections = [
-        { title: t.comparisonsTitle, rows: rows.filter(({ reading }) => reading.kind === 'comparison') },
-        { title: t.qualityTitle, rows: rows.filter(({ reading }) => reading.kind === 'quality') },
-        { title: r.otherNotes, rows: rows.filter(({ reading }) => reading.kind !== 'comparison' && reading.kind !== 'quality') },
-      ];
       return <section className="report-reading-group" key={path} aria-labelledby={groupId(i)}>
         <h6 id={groupId(i)} tabIndex={-1}>{path ? <code>{path}</code> : r.unlocated}</h6>
-        {sections.filter(section => section.rows.length > 0).map(section => <div className="report-reading-category" key={section.title}>
-          <h6>{section.title}</h6>
-          <ul className="report-reading-list">
-            {section.rows.map(({ reading, primary }) => {
+          <div className="table report-detail-index"><table>
+            <thead><tr><th scope="col">{t.reading.detailItem}</th><th scope="col">{s.col.status}</th><th scope="col">{s.col.location}</th></tr></thead>
+            <tbody>
+            {rows.map(({ reading, primary }) => {
               const anchor = readingId(reading);
               const heading = readingHeading(reading, includesCode);
               const value = reading.value;
-              if (!primary) return <li key={anchor}>
+              if (!primary) return <tr key={anchor}><td colSpan={3}>
                 <a href={'#' + anchor} onClick={e => jumpToReading(e, anchor)}>{heading}</a>
                 {' '}<small>{r.sharedWith(reading.paths[0])}</small>
-              </li>;
+              </td></tr>;
               const scope = 'scope' in value ? value.scope : 'appliesTo' in value ? value.appliesTo : undefined;
               const status = reading.kind === 'comparison' ? label(t.reading.comparisonStatus, reading.value.status) :
                 reading.kind === 'quality' ? label(t.assessment, reading.value.assessment) : undefined;
@@ -119,11 +113,20 @@ export function ReportDocumentReading({ documents, includesCode, id, comparisonI
                   return !citation || !primaryCitation(citation, 'code');
                 })
                 : secondaryReviewScope(reading.value.scope));
-              return <li key={anchor} className="report-reading-row">
-                <h6 id={anchor} tabIndex={-1}>{heading}</h6>
-                {status && <span className="badge report-reading-status">{status}</span>}
-                {type && includesCode && <span className="badge report-reading-status">{type}</span>}
-                {secondary && <span className="badge report-reading-status">{t.reading.secondary}</span>}
+              const codePreview = includesCode && reading.kind === 'comparison' && reading.value.status !== 'unknown' ?
+                reading.value.codeRefs.map(ref => citations.get(ref)).find(c => c?.kind === 'code' && c.excerpt) : undefined;
+              const location = reading.refs.map(ref => citations.get(ref)).find(c => c?.path === path);
+              const preview = codePreview ?? (includesCode ? location : undefined);
+              const category = reading.kind === 'comparison' ? t.comparisonsTitle : reading.kind === 'quality' ? t.qualityTitle : type;
+              return <tr key={anchor} className="report-reading-row"><td colSpan={3}>
+                <details name={`${id}-document-reading`} className="report-result-details">
+                  <summary><h6 id={anchor} tabIndex={-1}>{heading}</h6>
+                    <span className="report-index-status">{(status || type && includesCode) && <span className="badge report-reading-status">{status || type}</span>}
+                      {category && category !== type && <small className="report-item-category">{category}</small>}
+                      {secondary && <span className="badge report-reading-status">{t.reading.secondary}</span>}</span>
+                    <span className="report-index-location">{location ? t.documentReading.lineRange(location.line, location.end) : '—'}</span>
+                  </summary>
+                {preview?.excerpt && <ReportPreview path={preview.path} start={preview.line} end={preview.end} excerpt={preview.excerpt} />}
                 {(scope && scope !== '.') && <p className="report-card-meta">{t.scopeTitle} <code>{scope}</code></p>}
                 {reading.kind === 'comparison' && <>
                   {reading.value.followup && <small>{t.reading.followedContract}</small>}
@@ -143,10 +146,9 @@ export function ReportDocumentReading({ documents, includesCode, id, comparisonI
                   {includesCode && reading.kind === 'conflict' && <p>{reading.value.impact}</p>}
                   {citationsByRef(reading.refs)}
                 </>}
-              </li>;
+                </details></td></tr>;
             })}
-          </ul>
-        </div>)}
+            </tbody></table></div>
         {sources.length > 0 && <details className="report-reading-sources">
           <summary>{r.sources}</summary>
           {sources.map(({ citation, index }) => {

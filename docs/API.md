@@ -176,6 +176,7 @@
 
 - `profile`은 `deep-review`, `with-tests`, `focused`다. `scope.kind`는 `full` 또는 `paths`다. 형식은 OpenAPI가 정한다.
 - `scope.kind=paths`에는 다음 실행이 확보할 스냅샷의 파일이나 폴더를 `scope.paths`에 최대 100개까지 적는다. 경로는 프로젝트 기준이며 고정한 시점의 로컬 사본 또는 등록 브랜치의 Git 커밋에서 찾는다. 기존 보고서 리비전은 이전 실행의 스냅샷과 범위를 보존한다.
+- `scope.review_coverage: "extended"`는 선택한 범위의 확장 코드 검토를 요청한다. 생략하면 일반 검토다. 이 선택은 고정하며, 실제 호출 상한은 실행하는 노드의 설정이 정한다. 기존 프로필과 경로 범위를 사용할 수 있다.
 - `with-tests`는 코드 실행 권한과 도구를 확인한 뒤 작업 사본에서 지원하는 기존 테스트를 실행한다. 게시 결과의 `coverage.test_status`와 `test.*` 작업, `test.run` 실행 행에서 확인한 범위와 종료 결과를 읽을 수 있다. [보고서 판정](REPORT.md#상태와-판정)
 - 클라이언트는 raw shell 명령이나 임의 자격증명을 run 요청에 넣지 못한다. 프로젝트에 저장된 승인 설정을 서버가 해석한다.
 - 요청은 영속 큐에 들어가고 202를 반환한다. 202는 실행이 시작됐다는 뜻이 아니다. 등록된 노드가 없으면 run은 `queued`에 머물고 `waiting_reason`이 `execution_unavailable`이다.

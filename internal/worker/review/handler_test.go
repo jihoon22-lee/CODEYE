@@ -419,7 +419,8 @@ func TestDiscoveryCompositionPlans(t *testing.T) {
 	}
 	want := []string{"env.discover", "docs.discover", "go-vet", "review.environment", "review.documents", "review.investigate", "review.interpret", "review.verify",
 		record.TaskScope}
-	for i := range coverageSlots(planSlices(j.Snapshot.Manifest, j.Scope, record.DefaultSecondary)) {
+	slots := coverageSlots(planSlices(j.Snapshot.Manifest, j.Scope, record.DefaultSecondary))
+	for i := range slots {
 		inv, ver := slotTaskKeys(sliceKey(i))
 		want = append(want, inv, ver)
 	}

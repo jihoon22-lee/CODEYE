@@ -8,6 +8,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
 
 func staticCheckKind(id string) string {
@@ -198,6 +199,73 @@ func processedPathsPart(l Locale, label string, paths []string) secPart {
 	return part
 }
 
+func (v secView) staticResults(language StaticLanguage, obs map[string]Observation) secPart {
+	l := v.L
+	severity := map[string]string{}
+	excerpts := map[string]*sourceexcerpt.Excerpt{}
+	for _, finding := range findingsOf(v.R, StaticFindingIDs(v.R)) {
+		for _, id := range finding.ObservationIDs {
+			if sevRank(finding.Severity) > sevRank(severity[id]) {
+				severity[id] = finding.Severity
+			}
+			o := obs[id]
+			if o.EvidenceState != EvidenceVerified || o.Location == nil {
+				continue
+			}
+			for _, e := range finding.Evidence {
+				if e.Excerpt != nil && e.Location != nil && e.Location.Path == o.Location.Path && e.Location.StartLine == o.Location.StartLine {
+					excerpts[id] = e.Excerpt
+					break
+				}
+			}
+		}
+	}
+	table := &secTable{Head: []string{l.Label("col.tool"), l.Label("col.rule"), l.Label("col.message"), l.Label("col.count"),
+		l.Label("col.severity"), l.Label("col.location")}, DetailGroup: "static-detail"}
+	for _, g := range v.staticGroups(language, obs, severity) {
+		rank := func(o Observation) int {
+			switch {
+			case o.Location == nil:
+				return 3
+			case secondaryPath(o.Location.Path):
+				return 2
+			case excerpts[o.ID] != nil:
+				return 0
+			default:
+				return 1
+			}
+		}
+		o := obs[g.ObservationIDs[0]]
+		for _, id := range g.ObservationIDs[1:] {
+			if next := obs[id]; rank(next) < rank(o) {
+				o = next
+			}
+		}
+		location := l.Label("none")
+		message := v.Message[o.ID]
+		summary := cutLine(message, summaryMessageRunes)
+		if isPromiseRejectDiagnostic(g.Analyzer, g.Rule) {
+			summary = l.Label("rule.promise_rejection")
+		}
+		detail := secTableDetail{ID: "static-detail-" + o.ID, Label: g.Rule}
+		if summary != strings.TrimSpace(message) {
+			detail.Text = message
+		}
+		if o.Location != nil {
+			source := v.inspectionCitation(o.Location, excerpts[o.ID])
+			location = source.Location
+			detail.Label += " · " + location
+			detail.Sources = []sourceCitation{source}
+			if source.Text == "" {
+				detail.Text = strings.TrimSpace(detail.Text + " " + l.Label("inspection.no_excerpt"))
+			}
+		}
+		table.Rows = append(table.Rows, []secCell{code(g.Analyzer), code(g.Rule), txt(summary), num(g.Count), txt(lab(l, "severity", g.Severity)), code(location)})
+		table.Details = append(table.Details, detail)
+	}
+	return secPart{Table: table}
+}
+
 func (v secView) measurementParts(obs map[string]Observation, detail bool) []secPart {
 	l := v.L
 	metrics := v.R.Metrics
@@ -294,12 +362,16 @@ func (v secView) measurementParts(obs map[string]Observation, detail bool) []sec
 		if name == "duplicated_lines" {
 			part.Parts = append(part.Parts, v.cloneParts(results, detail)...)
 		} else {
-			for _, o := range results {
-				if !detail && len(part.List) == summaryShown {
-					part.List = append(part.List, secItem{Text: tf(l, "measurement.full", len(results)-summaryShown)})
-					break
+			first := min(summaryShown, len(results))
+			if first > 0 {
+				part.Table = v.measurementTable(results[:first], detail)
+			}
+			if rest := results[first:]; len(rest) > 0 {
+				if detail {
+					part.Parts = append(part.Parts, secPart{Fold: tf(l, "measurement.other_locations", len(rest)), Table: v.measurementTable(rest, true)})
+				} else {
+					part.Paras = append(part.Paras, tf(l, "measurement.full", len(rest)))
 				}
-				part.List = append(part.List, v.measurementItem(o))
 			}
 		}
 		parts = append(parts, part)
@@ -371,35 +443,35 @@ func (v secView) cloneParts(results []Observation, detail bool) []secPart {
 	if len(groups) > summaryShown {
 		rest.Fold = tf(v.L, "measurement.other_clone_groups", len(groups)-summaryShown)
 	}
+	if len(results) > 0 && len(groups) == len(results) {
+		first := min(len(results), summaryShown)
+		parts = append(parts, secPart{Table: v.measurementTable(results[:first], detail)})
+		if first < len(results) {
+			if detail {
+				rest.Table = v.measurementTable(results[first:], true)
+				parts = append(parts, rest)
+			} else {
+				parts = append(parts, secPart{Paras: []string{tf(v.L, "measurement.full", len(results)-first)}})
+			}
+		}
+		return parts
+	}
 	for i, rows := range groups {
 		if !detail && i == summaryShown {
 			parts = append(parts, secPart{Paras: []string{tf(v.L, "measurement.full", len(groups)-summaryShown)}})
 			break
 		}
-		var part secPart
-		if len(rows) == 1 {
-			part = v.clonePairPart(rows[0], detail)
-		} else {
+		part := secPart{Table: v.measurementTable(rows[:1], detail)}
+		if len(rows) > 1 {
 			seen := map[cloneRange]bool{}
-			item := secItem{}
 			for _, o := range rows {
 				for _, loc := range cloneRanges(o) {
-					if !seen[loc] && len(item.Sources) < 3 {
-						source := v.citeEvidence("code", loc.path, loc.start, loc.end, nil)
-						source.URL = snapshotBrowserURL(v.R, loc.path, loc.start, loc.end)
-						item.Sources = append(item.Sources, source)
-					}
 					seen[loc] = true
 				}
 			}
-			item.Label = tf(v.L, "measurement.clone_group", len(rows), len(seen))
-			part.List = []secItem{item}
+			part.Paras = []string{tf(v.L, "measurement.clone_group", len(rows), len(seen))}
 			if detail {
-				pairs := secPart{Fold: tf(v.L, "measurement.clone_details", len(rows))}
-				for _, o := range rows {
-					pairs.Parts = append(pairs.Parts, v.clonePairPart(o, true))
-				}
-				part.Parts = []secPart{pairs}
+				part.Parts = []secPart{{Fold: tf(v.L, "measurement.clone_details", len(rows)-1), Table: v.measurementTable(rows[1:], true)}}
 			}
 		}
 		if i < summaryShown {
@@ -414,20 +486,41 @@ func (v secView) cloneParts(results []Observation, detail bool) []secPart {
 	return parts
 }
 
-func (v secView) clonePairPart(o Observation, detail bool) secPart {
-	part := secPart{List: []secItem{v.measurementItem(o)}}
-	if detail && o.Metric.Counterpart == nil && o.RawMessage != nil {
-		part.Parts = []secPart{{Fold: v.L.Label("measurement.raw_pair"), List: []secItem{{Codes: []string{*o.RawMessage}}}}}
-	}
-	return part
-}
-
 func legacyThirdParty(o Observation) bool {
 	return o.Location != nil && anypack.ThirdPartyDirectory(o.Location.Path) ||
 		o.Metric != nil && o.Metric.Counterpart != nil && anypack.ThirdPartyDirectory(o.Metric.Counterpart.Path)
 }
 
-func (v secView) measurementItem(o Observation) secItem {
+func (v secView) measurementTable(rows []Observation, detail bool) *secTable {
+	table := &secTable{Head: []string{v.L.Label("measurement.value"), v.L.Label("col.location")}, DetailGroup: "metrics-detail"}
+	clone := rows[0].Metric.Name == "duplicated_lines"
+	if clone {
+		table.Head = append(table.Head, v.L.Label("measurement.counterpart"))
+	}
+	for _, o := range rows {
+		m := o.Metric
+		item := v.measurementItem(o, detail)
+		value := strings.TrimSpace(item.Label + " " + strings.Join(item.Codes, " "))
+		location := func(loc *ObservationLocation) secCell {
+			if loc == nil {
+				return txt("-")
+			}
+			return code(sourceRange(loc.Path, loc.StartLine, loc.EndLine))
+		}
+		row := []secCell{txt(value), location(o.Location)}
+		if clone {
+			row = append(row, location(m.Counterpart))
+		}
+		table.ObservationIDs = append(table.ObservationIDs, o.ID)
+		table.Rows = append(table.Rows, row)
+		if detail {
+			table.Details = append(table.Details, secTableDetail{ID: "metric-detail-" + o.ID, Label: value + " · " + row[1].Text, Text: item.Text, Sources: item.Sources})
+		}
+	}
+	return table
+}
+
+func (v secView) measurementItem(o Observation, detail bool) secItem {
 	m := o.Metric
 	item := secItem{Label: tf(v.L, "measurement.value."+m.Name, m.Value), ObservationID: o.ID}
 	if m.Name == "cyclomatic_complexity" && o.RawMessage != nil {
@@ -439,16 +532,23 @@ func (v secView) measurementItem(o Observation) secItem {
 			item.Codes = []string{name}
 		}
 	}
-	for _, loc := range []*ObservationLocation{o.Location, m.Counterpart} {
-		if loc == nil {
-			continue
+	if detail {
+		var notes []string
+		for _, target := range []struct {
+			loc     *ObservationLocation
+			excerpt *sourceexcerpt.Excerpt
+		}{{o.Location, m.Excerpt}, {m.Counterpart, m.CounterpartExcerpt}} {
+			if target.loc == nil {
+				continue
+			}
+			item.Sources = append(item.Sources, v.inspectionCitation(target.loc, target.excerpt))
+			if target.excerpt == nil {
+				notes = append(notes, sourceRange(target.loc.Path, target.loc.StartLine, target.loc.EndLine))
+			}
 		}
-		source := v.citeEvidence("code", loc.Path, loc.StartLine, loc.EndLine, nil)
-		source.URL = snapshotBrowserURL(v.R, loc.Path, loc.StartLine, loc.EndLine)
-		item.Sources = append(item.Sources, source)
-	}
-	if o.Location == nil {
-		item.Text = v.L.Label("measurement.unlocated")
+		if len(notes) > 0 {
+			item.Text = strings.Join(notes, ", ") + " · " + v.L.Label("inspection.no_excerpt")
+		}
 	}
 	if m.Name == "duplicated_lines" && m.Counterpart == nil {
 		label := "measurement.no_counterpart"
@@ -456,6 +556,22 @@ func (v secView) measurementItem(o Observation) secItem {
 			label = "measurement.legacy_counterpart"
 		}
 		item.Text = strings.TrimSpace(item.Text + " " + v.L.Label(label))
+		if detail && o.RawMessage != nil {
+			item.Text += " " + *o.RawMessage
+		}
 	}
 	return item
+}
+
+func (v secView) inspectionCitation(loc *ObservationLocation, excerpt *sourceexcerpt.Excerpt) sourceCitation {
+	source := v.citeEvidence("code", loc.Path, loc.StartLine, loc.EndLine, excerpt)
+	source.URL = snapshotBrowserURL(v.R, loc.Path, loc.StartLine, loc.EndLine)
+	source.LinkLabel = v.L.Label("opening.open_source")
+	return source
+}
+
+func (s sourceCitation) InspectionPreview() *sourcePreview {
+	// A tool starts a measurement or diagnostic at its verified line anchor.
+	s.EndLine = s.StartLine
+	return s.Preview()
 }

@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
 import type { Observation } from './analysisReport';
 import type { StaticTool } from './parseReportSections';
-import { InspectionReading, MeasurementReading } from './ReportInspections';
+import { InspectionReading, MeasurementReading, StaticDiagnosticReading } from './ReportInspections';
 
 afterEach(cleanup);
 
@@ -80,8 +80,57 @@ it('groups clones sharing one stored range and keeps older tool text expandable'
   } };
   render(<MeasurementReading sections={sections} byID={new Map(observations.map(o => [o.id, o]))} />);
   expect(screen.getByText('같은 범위를 공유한 중복 2쌍 · 저장된 위치 2개')).toBeTruthy();
-  expect(screen.getByText('중복 2쌍의 위치 보기')).toBeTruthy();
+  expect(screen.getByText('중복 1쌍의 위치 보기')).toBeTruthy();
+  expect(screen.queryByText(/이전 보고서에는 상대 블록 위치/)).toBeNull();
+  fireEvent.click(screen.getAllByRole('button', { name: '상세 보기', hidden: true })[1]);
   expect(screen.getByText('도구가 기록한 위치 보기')).toBeTruthy();
   expect(screen.getByText(/이전 보고서에는 상대 블록 위치/)).toBeTruthy();
   expect(screen.queryByText(/스냅샷에서 확인하지 못했습니다/)).toBeNull();
+});
+
+it('expands one individual metric result and reveals its exact stored code', () => {
+  const name = 'cyclomatic_complexity';
+  const lizard = tool('lizard', 'any.lizard', { purpose: 'metrics', metrics: 2 });
+  const observations: Observation[] = ['first', 'second'].map((id, index) => ({
+    id, rule: 'complex_function', tool: 'any.lizard', message: null, path: `src/${id}.go:4`,
+    location: { path: `src/${id}.go`, start: 4, end: 19 }, state: 'resolved',
+    evidenceState: 'verified_against_source_manifest', severity: null, suppressed: false,
+    metric: { name, value: 30 - index, threshold: 16, unit: 'ccn',
+      excerpt: { start: 3, end: 5, text: `// detail\nfunc ${id}() {\n}` } },
+  }));
+  const sections = { staticAnalysis: { stage, languages: [{ ecosystem: 'any', tools: [lizard] }] }, metrics: {
+    stage, tasks: ['lizard'], groups: [{ name, unit: 'ccn', thresholds: [16], max: 30, observations: observations.map(o => o.id) }],
+  } };
+  const { container } = render(<MeasurementReading sections={sections} byID={new Map(observations.map(o => [o.id, o]))} />);
+  expect(container.querySelectorAll('pre')).toHaveLength(0);
+  fireEvent.click(screen.getAllByRole('button', { name: '상세 보기' })[0]);
+  expect(container.querySelectorAll('pre')).toHaveLength(1);
+  expect(container.querySelector('pre')?.textContent).toContain('func first()');
+  fireEvent.click(screen.getByRole('button', { name: '상세 보기' }));
+  expect(container.querySelectorAll('pre')).toHaveLength(1);
+  expect(container.querySelector('pre')?.textContent).toContain('func second()');
+});
+
+it('opens only the selected static diagnostic with stored, matching source', () => {
+  const longerDiagnostic = 'A detailed diagnostic ' + 'with additional tool context '.repeat(5).trim();
+  const observations: Observation[] = ['redundantAssignment', 'anotherRule'].map((rule, n) => ({
+    id: rule, rule, tool: 'cpp.cppcheck', message: n === 0 ? 'Recorded diagnostic' : longerDiagnostic, path: 'src/state.c:' + (n + 4),
+    location: { path: 'src/state.c', start: n + 4, end: n + 4 }, state: 'resolved',
+    evidenceState: 'verified_against_source_manifest', severity: null, suppressed: false, metric: null,
+  }));
+  const languages = [{ ecosystem: 'cpp', tools: [tool('cppcheck', 'cpp.cppcheck', { observations: observations.map(o => o.id) })] }];
+  const findings = [{ observations: ['redundantAssignment'], evidence: [{
+    id: 'source', kind: 'code', description: '', path: 'src/state.c', lines: { start: 4, end: 4 },
+    excerpt: { start: 4, end: 4, text: 'state.left = 5;' },
+  }] }];
+  const { container } = render(<StaticDiagnosticReading languages={languages} findings={findings} byID={new Map(observations.map(o => [o.id, o]))} severityOf={new Map()} />);
+  expect(container.querySelector('pre')).toBeNull();
+  const button = (rule: string) => screen.getByText(rule).closest('tr')!.querySelector('button')!;
+  fireEvent.click(button('redundantAssignment'));
+  expect(container.querySelector('pre')?.textContent).toContain('state.left = 5;');
+  expect(screen.getAllByText('Recorded diagnostic')).toHaveLength(1);
+  fireEvent.click(button('anotherRule'));
+  expect(container.querySelector('pre')).toBeNull();
+  expect(screen.getByText(longerDiagnostic)).toBeTruthy();
+  expect(screen.getByText('이 위치에 저장된 코드 발췌가 없습니다.')).toBeTruthy();
 });

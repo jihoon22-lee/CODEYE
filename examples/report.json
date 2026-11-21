@@ -14,7 +14,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000057d",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "89abcd633d69ef58fa9f8d3c7fcbbd35b234e8181f7e3b76bbc4ee63dbb7c0d7",
+      "sha256": "0f51486da4feb76afd18142838b328e7833473c4ac40e666af165da3ed785e91",
       "size_bytes": 24792,
       "task_key": null
     },
@@ -680,8 +680,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000513",
       "media_type": "application/vnd.codeye.environment+json",
       "role": "other",
-      "sha256": "f12d530054707f18ac711e8a4c3b6c7efb755d7a4eaa9b6ec76519815fe07a8c",
-      "size_bytes": 2221,
+      "sha256": "96e39eac39d0ceeca6ad5c553bcd27adcaae850db49143556f838780d297adf5",
+      "size_bytes": 2223,
       "task_key": "docs.discover"
     },
     {
@@ -725,7 +725,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000565",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "ac6b3b06abbf3283111bf65dee8915f44e1de78efa4056a87719f37d7cef4af7",
+      "sha256": "5b5c1904819f4d931b3dbea12efd27fbbee570042638b83e156fc7a9a92bd9a7",
       "size_bytes": 3377,
       "task_key": "review.documents"
     },
@@ -734,7 +734,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000567",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "0f758a454d3d408f241a4c5ad34b4f6ed5cb70b581e1592abb37c9dd3c11270a",
+      "sha256": "8eace8b409b5ce13abac900aa020cb26e088c0e1814b46c8726fc7d0673de6d2",
       "size_bytes": 3231,
       "task_key": "review.investigate"
     },
@@ -752,7 +752,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000056b",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "df4384b0ee18ff27d69dc8421271ae926adb92503a5052ecdea3b9d7829fd037",
+      "sha256": "2adf3d7ee21813d00ac48df148d1f485b9eb5f1a265280a24c2cfd275085cb1a",
       "size_bytes": 4666,
       "task_key": "review.verify"
     },
@@ -761,7 +761,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000056d",
       "media_type": "application/vnd.codeye.review-scope+json",
       "role": "other",
-      "sha256": "cd44e3ca0f28388c91f4f4963d52ce98fdf1fb028f88cfec9aff92e0a6fcf5a5",
+      "sha256": "ada051e5306197cabb2b42b546b7a82fd615d74c4217c955e96ab27bf1d32145",
       "size_bytes": 2463,
       "task_key": "review.scope"
     }
@@ -776,7 +776,7 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "eac5a8b02e8ae37187f5d498e3c018d6a8e294164f5888c39599d88cadb52f4f",
+    "input_digest": "7c5e03504057ae33890192159e5384271d21266f711c3ca9fe4bc008401801d2",
     "result_manifest_artifact_id": null,
     "version": "16"
   },
@@ -1452,9 +1452,9 @@
   "documents": {
     "budget": {
       "max_documents": 1000,
-      "per_document_bytes": 65536,
+      "per_document_bytes": 524288,
       "read_bytes": 42538,
-      "total_bytes": 262144
+      "total_bytes": 4194304
     },
     "comparisons": [
       {
@@ -3419,6 +3419,11 @@
       },
       "location_state": "resolved",
       "metric": {
+        "excerpt": {
+          "end_line": 15,
+          "start_line": 7,
+          "text": "\n// Forward calls send once and then retries up to MaxRetries times while it\n// fails. It returns nil on the first success, otherwise the last error.\nfunc Forward(send func() error) error {\n\terr := send()\n\tfor i := 0; i < MaxRetries && err != nil; i++ {\n\t\terr = send()\n\t}\n\treturn err"
+        },
         "name": "cyclomatic_complexity",
         "threshold": 16,
         "unit": "count",

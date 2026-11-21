@@ -177,6 +177,11 @@ it('opens three related positions without changing the comparison and keeps only
   invalid.documents.comparisons[0].related_workflow.test_evidence_id = read_evidence_id;
   expect(() => parseAnalysisReport(invalid, invalid.run_id)).toThrow();
   doc.export.include_code = false;
+  for (const { metric } of doc.observations) {
+    if (!metric) continue;
+    delete metric.excerpt;
+    delete metric.counterpart_excerpt;
+  }
   const omitted = '원문 생략(코드 미포함 내보내기).';
   doc.documents.comparisons[0].statement = doc.documents.comparisons[0].reason = omitted;
   doc.documents.contracts[0].statement = omitted;

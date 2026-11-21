@@ -62,21 +62,20 @@ describe('summary grouping', () => {
   it('labels example and test findings together in the code review section', () => {
     const report = load(sectioned);
     const supported = report.findings.find(f => f.validation === 'supported')!;
-    const example = { ...supported, id: 'example-only', title: '예제의 인자 검증', evidence: supported.evidence.map(e => ({ ...e, path: 'examples/charges.go' })) };
-    const test = { ...supported, id: 'test-only', title: '시험의 예상값', validation: 'inconclusive', evidence: supported.evidence.map(e => ({ ...e, path: 'charges_test.go' })) };
+    const example = { ...supported, id: 'example-only', title: '예제의 인자 검증', observations: [], evidence: supported.evidence.map(e => ({ ...e, path: 'examples/charges.go' })) };
+    const test = { ...supported, id: 'test-only', title: '시험의 예상값', validation: 'inconclusive', observations: [], evidence: supported.evidence.map(e => ({ ...e, path: 'charges_test.go' })) };
     report.findings.push(example, test);
     report.sections!.codeReview.findings.push(example.id, test.id);
     const { container } = render(<ReportDocument report={report} />);
     if (report.project) fireEvent.click(within(container).getByRole('tab', { name: t.sections.titles.code_review }));
     const section = within(container.querySelector('#report-section-code_review') as HTMLElement);
     expect(section.getByText(supported.title, { selector: 'summary > strong' })).toBeTruthy();
-    expect(section.queryByText(example.title)).toBeNull();
-    const heading = section.getByText(t.sections.summary.secondaryFindings(2));
-    const details = heading.closest('details')!;
-    details.open = true;
-    fireEvent(details, new Event('toggle'));
-    expect(within(details).getByText(example.title, { selector: 'summary > strong' })).toBeTruthy();
-    expect(within(details).getByText(test.title, { selector: 'summary > strong' })).toBeTruthy();
+    for (const title of [example.title, test.title]) {
+      const summary = section.getByText(title, { selector: 'summary > strong' }).parentElement!;
+      expect(summary.closest('tr')).not.toBeNull();
+      expect(within(summary).getByText(t.reading.secondary)).toBeTruthy();
+      expect(summary.closest('details')!.open).toBe(false);
+    }
   });
 
   it('counts every diagnostic once in the rule groups and shows five places with the rest counted', () => {

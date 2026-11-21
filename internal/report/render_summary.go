@@ -152,6 +152,7 @@ type ruleGroup struct {
 	sev                int
 	Message            string
 	Primary, Secondary []string
+	ObservationIDs     []string
 	order              int
 }
 
@@ -185,6 +186,7 @@ func (v secView) staticGroups(lang StaticLanguage, obs map[string]Observation, s
 				groups = append(groups, g)
 			}
 			g.Count++
+			g.ObservationIDs = append(g.ObservationIDs, o.ID)
 			sev := sevOf[o.ID]
 			if sev == "" && o.RawSeverity != nil {
 				sev = *o.RawSeverity
@@ -459,6 +461,20 @@ func (v secView) summaryCodeReview(b secBlock, findings map[string]Finding) secB
 func (v secView) findingCard(f Finding) secCard {
 	l := v.L
 	c := secCard{ID: f.ID, Title: f.Title, State: lab(l, "validation", f.Validation) + " · " + lab(l, "severity", f.Severity)}
+	if len(f.Locations) > 0 {
+		location := f.Locations[0]
+		c.Location = sourceRange(location.Path, location.StartLine, location.EndLine)
+	}
+	if v.R.Export.IncludeCode {
+		for _, evidence := range f.Evidence {
+			if evidence.Kind == "code" && evidence.Location != nil && !slices.Contains(f.CounterevidenceIDs, evidence.ID) {
+				c.Preview = findingCitation(l, evidence).previewFor(f.Title)
+				if c.Preview != nil {
+					break
+				}
+			}
+		}
+	}
 	c.Lines = append(c.Lines, secItem{Label: l.Label("opening.disposition"), Text: lab(l, "disposition", f.Disposition)})
 	seen := make(map[string]bool, len(f.Evidence))
 	add := func(label, text string, refs []string) {
@@ -1131,13 +1147,7 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 			mdPart(p, part, l)
 		}
 		if s.ID == "overview" {
-			for _, signal := range v.ReadingSignals() {
-				p(mdText(signal))
-				p()
-			}
-			mdPart(p, v.TestRunPart(), l)
-			mdBehaviors(p, v.Behaviors, l)
-			mdDecision(p, v.Decision, l)
+			mdReadingOverview(p, v)
 			p("### ", mdText(l.Label("opening.coverage_details")))
 			p()
 			for _, part := range v.OverviewDetail {
@@ -1273,10 +1283,7 @@ func mdInlineComparison(s string) string {
 }
 
 func mdSectionAnchor(p func(...string), section string) {
-	if section == "documents" {
-		p("<a id=\"documents\"></a>")
-		p()
-	}
+	mdReadingAnchor(p, section)
 }
 
 func mdComparisonAnchor(p func(...string), d projectDecision, behaviors projectBehaviors, anchor string) {

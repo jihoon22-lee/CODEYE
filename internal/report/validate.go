@@ -173,6 +173,15 @@ func ValidateReport(r Report) error {
 				l.EndCol != 0 || l.ColumnUnit != "byte" || !hex64.MatchString(l.BlobSHA256)) {
 				return invalidf("observation %s metric counterpart is invalid", o.ID)
 			}
+			for _, item := range []struct {
+				loc     *ObservationLocation
+				excerpt *sourceexcerpt.Excerpt
+			}{{o.Location, m.Excerpt}, {m.Counterpart, m.CounterpartExcerpt}} {
+				if item.excerpt != nil && (!r.Export.IncludeCode || o.EvidenceState != EvidenceVerified || item.loc == nil ||
+					!sourceexcerpt.SafePath(item.loc.Path) || !item.excerpt.ValidDiagnostic(item.loc.StartLine)) {
+					return invalidf("observation %s metric excerpt is invalid", o.ID)
+				}
+			}
 			metrics[o.ID] = true
 		}
 	}
@@ -410,6 +419,11 @@ func Project(r Report, includeCode bool) Report {
 	rules := map[string]Observation{}
 	for i, o := range r.Observations {
 		o.RawMessage = nil
+		if o.Metric != nil {
+			m := *o.Metric
+			m.Excerpt, m.CounterpartExcerpt = nil, nil
+			o.Metric = &m
+		}
 		out.Observations[i] = o
 		rules[o.ID] = o
 	}

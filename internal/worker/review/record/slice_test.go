@@ -163,18 +163,18 @@ func TestSliceRecordSchema(t *testing.T) {
 }
 
 func TestSliceTaskKeys(t *testing.T) {
-	for key, want := range map[string]string{"review.investigate.s001": "investigate s001", "review.verify.s032": "verify s032", "review.verify.s096": "verify s096", "review.investigate.s090": "investigate s090"} {
+	for key, want := range map[string]string{"review.investigate.s001": "investigate s001", "review.verify.s032": "verify s032", "review.verify.s096": "verify s096", "review.investigate.s999": "investigate s999"} {
 		stage, slice, ok := SliceTask(key)
 		if !ok || stage+" "+slice != want {
 			t.Fatalf("%s: %s %s %v", key, stage, slice, ok)
 		}
 	}
-	for _, key := range []string{"review.investigate", "review.scope", "review.interpret.s001", "review.verify.s097", "review.verify.s000", "review.verify.s100", "review.verify.s1", "go-vet"} {
+	for _, key := range []string{"review.investigate", "review.scope", "review.interpret.s001", "review.verify.s1000", "review.verify.s000", "review.verify.s1", "go-vet"} {
 		if _, _, ok := SliceTask(key); ok {
 			t.Fatalf("%s accepted", key)
 		}
 	}
-	if !ValidMaxCalls(WholeRunMaxCalls) || !ValidMaxCalls(MaxMaxCalls) || ValidMaxCalls(14) || ValidMaxCalls(208) || MaxMaxCalls != 207 || !ValidMaxCalls(DefaultMaxCalls) {
+	if !ValidMaxCalls(WholeRunMaxCalls) || !ValidMaxCalls(MaxMaxCalls) || ValidMaxCalls(14) || ValidMaxCalls(MaxMaxCalls+1) || !ValidMaxCalls(LegacyMaxCalls+1) || !ValidMaxCalls(DefaultMaxCalls) {
 		t.Fatal("call ceiling range")
 	}
 }
@@ -198,7 +198,7 @@ func validScope() (ScopeDoc, Expect) {
 	observed.Observations, observed.Severity = 3, "high"
 	d := ScopeDoc{Schema: ScopeSchemaPriority, Kind: ScopeKind, Pack: PackRef{ID: "review", Version: "2.0.0"}, Snapshot: want.Snapshot, RunID: want.RunID, AttemptID: want.AttemptID,
 		Screen: ScreenApplied, Budget: ScopeBudget{MaxCalls: DefaultMaxCalls, MaxRequestBytes: 40000, WholeRunMaxCalls: WholeRunMaxCalls, SliceReserveCalls: SliceReserveCalls, CallsBeforeSlices: 7, Admission: AdmissionSequentialReserve},
-		Limits:   ScopeLimits{MaxFiles: 8, MaxBytes: 12000, MaxFileBytes: 2400, MaxFileLines: 50, MaxSlices: MaxSlices, Slots: 1},
+		Limits:   ScopeLimits{MaxFiles: 8, MaxBytes: 12000, MaxFileBytes: 2400, MaxFileLines: 50, MaxSlices: LegacyMaxSlices, Slots: 1},
 		Priority: ScopePriority{Order: PriorityOrder, Secondary: DefaultSecondary},
 		Upstream: []Upstream{{Source: "review.investigate", State: UpstreamAccepted, SHA256: strings.Repeat("b", 64)}},
 		Modules:  []ScopeModule{{ID: "go:a", Discovered: true, Class: ClassPrimary, FilesEligible: 5, FilesSecondary: 1, FilesNotPlanned: 1, FilesSecondaryNotPlanned: 1}, {ID: "python:w", Class: ClassPrimary, FilesEligible: 1}},

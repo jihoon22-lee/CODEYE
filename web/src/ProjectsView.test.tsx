@@ -357,6 +357,18 @@ describe('starting a run', () => {
     expect(posts[0]!.headers['x-codeye-csrf']).toBeTruthy();
   });
 
+  it('only opts into expanded model coverage for the selected run', async () => {
+    const { calls } = renderApp(backend());
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: /sample/ }));
+    fireEvent.click(screen.getByText(t.runs.settings));
+    fireEvent.click(screen.getByLabelText(t.runs.extendedReview));
+    click(t.runs.start);
+    await flush();
+    const req = calls.find(c => c.method === 'POST' && c.url === '/api/v1/projects/p1/runs');
+    expect(req?.body).toEqual({ profile: 'deep-review', source_policy: 'latest_at_acquire', scope: { kind: 'full', review_coverage: 'extended' } });
+  });
+
   it('keeps the same key after a server error too', async () => {
     let attempt = 0;
     const { calls } = renderApp(backend({ 'POST /api/v1/projects/p1/runs': () => (++attempt === 1 ? apiError(503, 'UNAVAILABLE', 'm', true) : undefined) }));

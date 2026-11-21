@@ -73,6 +73,13 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
                        "Metric counterpart must carry a line range")
                 path = source_location(counterpart, source_root)
                 ensure(hashlib.sha256(path.read_bytes()).hexdigest() == counterpart["blob_sha256"], "Metric counterpart hash mismatch")
+            for key, loc in (("excerpt", obs.get("location")), ("counterpart_excerpt", counterpart)):
+                if key not in metric:
+                    continue
+                ensure(loc is not None and obs["evidence_state"] == "verified_against_source_manifest", "Unbound metric excerpt")
+                path = source_location(loc, source_root)
+                ensure(hashlib.sha256(path.read_bytes()).hexdigest() == loc["blob_sha256"], "Metric excerpt hash mismatch")
+                check_excerpt({"excerpt": metric[key]}, path, loc, report["export"]["include_code"], False)
         # A diagnostic the tool reported as suppressed in source never becomes a finding.
         suppressed = {o["id"] for o in observations if o.get("suppressed")}
         ensure(not any(suppressed & set(f.get("observation_ids", [])) for f in findings), "Finding built from a suppressed observation")

@@ -27,7 +27,7 @@ const (
 	sliceMaxBytes = roleMaxCodeBytes
 	// MaxSlices bounds the slots of one run; files beyond them are not
 	// planned (review_slice_limit).
-	MaxSlices = record.MaxSlices
+	MaxSlices = record.LegacyMaxSlices
 )
 
 // excerptBound is the most JSON-encoded excerpt bytes a file of size bytes

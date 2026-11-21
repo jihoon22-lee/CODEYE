@@ -90,7 +90,7 @@ builder 5부터 보고서는 위 필드에 더해 분석 종류마다 한 블록
 builder 6부터 보고서는 [모듈 단위 검토 분할](REVIEW.md#모듈-단위-검토-분할)의 산출물을 읽는다. slice 기록(review 기록 0.3)은 자기 slice task에 붙은 것만 받고, 검토 범위 산출물(`application/vnd.codeye.review-scope+json` 0.1~0.3)은 `review.scope`에 붙은 것만 받는다. 둘 다 attempt·snapshot manifest와 대조한다. 범위 산출물 0.3에서는 overview와 slice의 실제 발췌 줄도 대조한다. slice verify는 자기 slice investigate의 후보만 이어받는다.
 
 - **발견.** slice 후보는 `review_sNNN_<후보 ID>`(예: `review_s002_investigate_1`)로 코드 분석 절의 발견 분할에 들어간다. 판정은 같은 slice의 verify 기록에서만 온다. 계획되지 않은 slice 키의 발견은 검증에서 거부한다.
-- **호출과 노출.** `review_calls[]`는 builder 6부터 호출이 든 검토 task(`task_key`, 전체 역할 또는 slice)를 싣고 최대 207개(호출 상한의 최댓값)다. `llm_exposed_files`는 모델에 보낸 서로 다른 경로 수이며 slice와 최종 문서 대조의 실제 요청을 포함한다. 예산 소진·정책 제외·미지원 task는 보낸 것이 없다. `ai_review`는 필수 task만 본다.
+- **호출과 노출.** `review_calls[]`는 검토 호출과 해당 작업 키를 최대 2,013개까지 싣는다. `llm_exposed_files`는 모델에 보낸 서로 다른 경로 수이며 후속 조사와 최종 문서 대조의 요청도 포함한다. `ai_review`는 필수 작업 상태를 집계한다.
 - **역할과 장부.** 코드 분석 절의 `roles`는 전체 역할과 계획된 선택 작업 `review.contract`를 싣는다. `review.scope`와 slice task는 장부에 있다. 최종 문서 대조가 실제로 보낸 호출과 요청 바이트는 장부의 전체 사용량에 포함된다. 모듈 행은 전체 검토와 slice에 계획된 발췌 범위의 검토를 센다.
 
 `code_review.ledger`는 `review.scope`가 계획된 실행에 있다. 줄 범위를 기록하는 worker는 작은 프로젝트에서도 대상 소스가 있으면 이 작업을 계획한다.
@@ -99,6 +99,7 @@ builder 6부터 보고서는 [모듈 단위 검토 분할](REVIEW.md#모듈-단�
 |---|---|
 | `scope` | `review.scope` task와 결과. 범위 산출물을 받았으면 `accepted`, 아니면 작업 상태·사유(예: `skipped` / `model_source_not_approved`) |
 | `max_calls`, `max_request_bytes` | 범위 산출물이 기록한 attempt 호출 상한과 요청 크기 상한. 산출물이 없으면 `null` |
+| `extended_coverage` | 확장 코드 검토를 요청했고 줄 장부가 있는 경우 `true`. 일반 모드에서는 생략 |
 | `calls_used` | slice 앞 호출 수(범위 산출물의 `calls_before_slices`, attempt 호출 기록에서 셈. 기록 없이 실패한 전체 역할 호출도 들어간다)와 slice 기록의 호출 합. 범위 산출물이 없으면 전체 역할 기록에서 센다. 호출했을 수 있는 검토 task에 쓸 수 있는 기록이 없으면 `null` |
 | `request_bytes_sent` | 모든 검토 기록의 요청 크기 합(프롬프트 바이트). 같은 조건에서 `null`이며, 값이 있으면 `code_review.request_bytes`와 같다 |
 | `status` | `complete`(줄 장부의 모든 대상 파일의 전체 원문 줄을 수락된 조사 응답에서 다룸. 이전 장부는 파일을 보냈고 확인 역할이 끝난 경우), `overview_only`(성공한 slice investigate가 없다), 그 밖은 `partial` |
@@ -192,6 +193,8 @@ builder 9부터 pull request run([pull request 분석](GITHUB.md#pull-request-�
 | `raw_observations` | 원시 도구 진단 수 |
 | `unresolved_observations` | 위치를 snapshot manifest로 확인하지 못한 진단(`evidence_state`가 `verified_against_source_manifest`가 아님) |
 | `metric_observations` | 원시 진단 중 구조 지표(복잡도·중복) 수. 0이면 생략한다. 결함이 아니다. |
+
+구조·중복 관찰의 `metric.excerpt`와 `metric.counterpart_excerpt`는 스냅샷에서 검증한 위치에 저장된 짧은 발췌가 있을 때만 코드 포함 내보내기에 들어간다. 구조·중복 및 정적 분석의 결과 표에서 개별 상세를 열어 발췌와 줄 번호를 확인한다. 종합 표는 집계와 위치를 표시한다.
 | `hidden_findings` | 게시 시점 판정이 `accepted_risk`, `false_positive`, `suppressed`, `fixed_by_user`인 항목 수. 0이면 생략한다. 전체 수와 비교에는 남는다. |
 | `priorities` | 우선 확인할 항목 ID 최대 5개. 숨김이 아닌 조치 항목을 먼저, 그다음 숨김이 아닌 미확정 후보를 두고, 같은 묶음 안에서는 심각도, 첫 위치(경로·시작 줄), ID 순이다. |
 
@@ -343,7 +346,7 @@ Markdown과 HTML의 기본은 요약 보기(`detail=summary`)다. 요약 보기�
 
 전체 보기는 개별 도구 진단과 발견, 작업·실행·산출물의 전체 행을 표시한다.
 
-종합은 주요 코드와 시험·예제 경로의 조치 대상 수를 각각 표시한다. 모델 범위 장부에서 발췌를 수락한 파일 수를 읽을 수 있으면 대상 파일 수와 함께 표시한다. 필수 분석 작업의 실패, 시간 초과, 미지원, 정책 제외도 각각 센다. `with-tests`에서는 테스트 미실행·결과 미확인·일부 통과·명령 실패·통과를 구분하고 작업별 상태, 종료 코드와 사유를 표시한다. 웹과 HTML에서는 프로젝트 사용 흐름의 인용 코드를 펼쳐 본다.
+종합은 주요 코드와 시험·예제 경로의 조치 대상 수를 각각 표시한다. 같은 도구 관찰을 참조하거나 정확히 같은 코드 근거와 확인한 규칙을 설명하는 중복 항목은 요약에서 묶인다. 묶인 기록은 별도로 펼칠 수 있고 JSON과 전체 내보내기는 원래의 발견을 유지한다. 모델 범위 장부에서 발췌를 수락한 파일 수를 읽을 수 있으면 대상 파일 수와 함께 표시한다. 필수 분석 작업의 실패, 시간 초과, 미지원, 정책 제외도 각각 센다. `with-tests`에서는 테스트 미실행·결과 미확인·일부 통과·명령 실패·통과를 구분하고 테스트 종류, 작업 사본 경로, 종료 코드와 사유를 표시한다. 웹과 HTML에서는 프로젝트 사용 흐름의 인용 코드를 펼쳐 본다.
 
 문서 분석은 인용 파일별로 문서와 구현의 대조, 문서 품질, 계약과 질문을 모은다. 여러 문서에 걸친 항목은 한 곳에서 읽고 다른 문서에서 그 항목으로 이동할 수 있다. 같은 파일의 저장 발췌가 다른 발췌를 포함하고 내용이 일치하면 공통 발췌를 열며 각 항목의 정확한 인용 줄을 유지한다. 코드 분석에서는 주요 코드의 근거가 있는 문제와 개선 항목을 먼저 읽을 수 있다. 관찰한 구현과 효과, 추가 확인 후보, 시험·예제 항목, 기각 결과와 모델 실행 기록은 해당 표제에서 펼친다.
 

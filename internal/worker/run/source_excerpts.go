@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
@@ -183,7 +184,7 @@ func diagnosticAnchors(body []byte, task, snapshot string, lookup func(string) (
 			return nil
 		}
 		if d.Analyzer.Purpose == obsdoc.PurposeMetrics {
-			return nil
+			return metricAnchors(d.Observations)
 		}
 		var keys []sourceexcerpt.Key
 		for _, o := range d.Observations {
@@ -207,6 +208,35 @@ func diagnosticAnchors(body []byte, task, snapshot string, lookup func(string) (
 		}
 	}
 	return slices.Compact(keys)
+}
+
+func metricAnchors(observations []obsdoc.Observation) []sourceexcerpt.Key {
+	observations = slices.Clone(observations)
+	sort.SliceStable(observations, func(i, j int) bool {
+		return observations[i].Metric.Value > observations[j].Metric.Value
+	})
+	seen := map[sourceexcerpt.Key]bool{}
+	var out []sourceexcerpt.Key
+	add := func(l *obsdoc.Location) {
+		if l == nil || len(out) >= 8 {
+			return
+		}
+		key := sourceexcerpt.Key{Path: l.Path, SHA256: l.BlobSHA256, Line: l.StartLine}
+		if !seen[key] {
+			seen[key] = true
+			out = append(out, key)
+		}
+	}
+	for _, o := range observations {
+		if len(out) >= 8 {
+			break
+		}
+		add(o.Location)
+		if o.Metric.Name == "duplicated_lines" && len(o.Related) == 1 {
+			add(o.Related[0].Location)
+		}
+	}
+	return out
 }
 
 func readExcerptInput(path string, limit int64) []byte {

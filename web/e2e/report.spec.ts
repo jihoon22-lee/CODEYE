@@ -161,6 +161,11 @@ test('published report exposes the same counts, evidence and revision in the bro
   if (doc.inputs.commit_sha) await expect(hero.getByText(doc.inputs.commit_sha.slice(0, 12), {exact: true})).toHaveAttribute('title', doc.inputs.commit_sha);
   const judgment = report.locator('.report-executive');
   await expect(judgment).toHaveCount(1);
+  const context = report.locator('details.report-overview-context');
+  await expect(context).not.toHaveAttribute('open', '');
+  await expect(report.getByRole('tabpanel', {name: '종합', exact: true}).locator('pre:visible')).toHaveCount(0);
+  await context.locator(':scope > summary').press('Enter');
+  await expect(judgment).toBeVisible();
   await expect(judgment.locator('table, .model-reading-list')).toHaveCount(0);
   await expect(judgment.getByText('적용 범위', {exact:true})).toHaveCount(0);
   const comparisonRows = judgment.locator('.report-comparison-rows');
@@ -220,6 +225,11 @@ test('published report exposes the same counts, evidence and revision in the bro
       if (section.key === 'gaps') continue;
       await report.getByRole('tablist').locator('[aria-controls="report-section-' + section.key + '"]').click();
       const counts = report.locator('[data-section-counts="' + section.key + '"]');
+      const disclosure = counts.locator('xpath=ancestor::details[not(@open)][last()]/summary');
+      while (await disclosure.count()) {
+        await expect(disclosure).toBeVisible();
+        await disclosure.press('Enter');
+      }
       for (const [key, value] of Object.entries(section.counts as Record<string, number>)) {
         const cell = counts.locator('[data-count="' + key + '"] dd');
         await expect(cell).toBeVisible();

@@ -28,6 +28,35 @@ func syntheticManifest(files map[string]int64) source.Manifest {
 	return m
 }
 
+func TestOrdinaryCoverageKeepsPinnedRetryTasks(t *testing.T) {
+	files := map[string]int64{"go.mod": 41}
+	for i := range 12 {
+		files[fmt.Sprintf("catalogue/entry%02d.go", i)] = 1017
+	}
+	j := analysis.Job{RunID: domain.NewID(), AttemptID: domain.NewID(), Scope: domain.Scope{Kind: "full"},
+		Snapshot: source.Snapshot{Manifest: syntheticManifest(files)}}
+	// A previous worker planned these keys from this manifest. A failed or
+	// cancelled run requeues all of them before requesting a pinned retry.
+	var stored []string
+	for i := 1; i <= 64; i++ {
+		stored = append(stored, fmt.Sprintf("review.investigate.s%03d", i), fmt.Sprintf("review.verify.s%03d", i))
+	}
+	j.AttemptID = domain.NewID()
+	plan, err := (Handler{Static: secretsStub{}, MaxCalls: 600}).Plan(t.Context(), j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actual []string
+	for _, task := range plan {
+		if _, _, ok := record.SliceTask(task.Key); ok {
+			actual = append(actual, task.Key)
+		}
+	}
+	if !slices.Equal(actual, stored) {
+		t.Fatalf("pinned retry planned %d tasks for %d stored tasks", len(actual), len(stored))
+	}
+}
+
 // randomTree is a repository of Go, Python, JS/TS, Rust and C/C++ modules
 // with files of random size, data and excluded directories included.
 func randomTree(r *rand.Rand) map[string]int64 {
@@ -335,8 +364,9 @@ func TestSmallRepositoriesPlanCoverageForDisplacedLines(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !slices.ContainsFunc(specs, func(s analysis.TaskSpec) bool { return s.Key == record.TaskScope }) || len(sliceKeys(specs)) != coverageSlots(plan) {
-			t.Errorf("%s plan does not allow for displaced lines (%d slots)", name, len(sliceKeys(specs)))
+		slots := len(sliceKeys(specs))
+		if !slices.ContainsFunc(specs, func(s analysis.TaskSpec) bool { return s.Key == record.TaskScope }) || slots < 1 || slots != coverageSlots(plan) || slots > record.LegacyMaxSlices {
+			t.Errorf("%s plan does not allow for displaced lines (%d slots)", name, slots)
 		}
 	}
 }

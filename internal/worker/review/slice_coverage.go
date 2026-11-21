@@ -13,14 +13,9 @@ import (
 	reviewpack "github.com/jihoon22-lee/CODEYE/prompts/review"
 )
 
-func hasCoverageSources(j analysis.Job, rule record.SecondaryRule) bool {
-	return codeGroupsFor(j.Snapshot.Manifest, j.Scope, rule, changedPaths(j), true).eligible > 0
-}
-
-// The number of task keys depends only on the snapshot. The ordinary slot
-// estimate covers unseen files; add room for code after the first request
-// window or displaced by document evidence. The ceiling is enforced during
-// admission because repairs determine the calls actually available.
+// Keep the ordinary slot estimate stable for pinned retries. The controller
+// requeues the original task keys, so reducing this estimate can leave older
+// tasks pending after the worker finishes. This is a manifest-only estimate.
 func coverageSlots(plan slicePlan) int {
 	if len(plan.Groups) == 0 {
 		return 0
@@ -28,13 +23,67 @@ func coverageSlots(plan slicePlan) int {
 	var additionalWindows int64
 	for _, list := range [][]plannedFile{plan.Overview, plan.Rest} {
 		for _, f := range list {
-			// Each extra line costs at least one source byte. Estimate
-			// room even for short lines that hit the line cap before the
-			// encoded byte cap.
+			// Each extra line costs at least one source byte. Estimate room
+			// for short lines that reach the line cap before the byte cap.
 			additionalWindows += max(0, (f.Size-1)/roleMaxCodeLines)
 		}
 	}
 	return min(MaxSlices, max(2, plan.Slots, (len(plan.Groups)+4)/5)+(int(additionalWindows)+3)/4)
+}
+
+// Budget changes affect admission, so plan keys stay stable across worker
+// retries. Count windows from verified text before tool diagnostics or
+// model results can reorder them. The smallest possible fit of windows
+// bounds slots irrespective of that order. Each overview excerpt may
+// split one window, and each tier/class may occur in two scheduling passes.
+func (s *roleStage) coverageSlotPlan(groups codeGroups) (int, error) {
+	type windowGroup struct{ count, maxBytes int }
+	var counts [3][2]windowGroup
+	totalWindows := 0
+	for _, key := range groups.order {
+		for _, e := range groups.files[key] {
+			if err := s.ctx.Err(); err != nil {
+				return 0, err
+			}
+			text, ok, err := s.readSource(e)
+			if err != nil {
+				return 0, err
+			}
+			if !ok || strings.TrimSpace(text) == "" {
+				continue
+			}
+			class := 0
+			if groups.secondary[e.Path] != "" || record.GeneratedHeader([]byte(text)) {
+				class = 1
+			}
+			ranges := missingCoverageWindows(record.ScopeFile{}, strings.Split(text, "\n"), nil, record.MaxSlices, nil)
+			if len(ranges) == 0 {
+				continue
+			}
+			totalWindows += len(ranges)
+			if totalWindows >= record.MaxSlices*sliceMaxFiles {
+				return record.MaxSlices, nil
+			}
+			count := &counts[groups.tierOf(e.Path)][class]
+			count.count += len(ranges)
+			count.maxBytes = max(count.maxBytes, min(roleMaxCodeFile, record.JSONLen(text)))
+		}
+	}
+	total := 0
+	for _, tier := range counts {
+		for _, c := range tier {
+			if c.count == 0 {
+				continue
+			}
+			perSlot := min(sliceMaxFiles, sliceMaxBytes/c.maxBytes)
+			windows := c.count + min(c.count, roleMaxCodeFiles)
+			total += (windows + perSlot - 1) / perSlot
+			if tier[0].count > 0 && tier[1].count > 0 {
+				total++
+			}
+		}
+	}
+	return min(record.MaxSlices, total), nil
 }
 
 type coverageCursor struct {
@@ -59,15 +108,31 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 	}
 	rule := s.h.secondary()
 	changed := changedPaths(s.j)
-	slots := coverageSlots(planSlicesFor(s.j.Snapshot.Manifest, s.j.Scope, rule, changed))
 	groups := codeGroupsFor(s.j.Snapshot.Manifest, s.j.Scope, rule, changed, true)
+	slots := coverageSlots(planSlicesFor(s.j.Snapshot.Manifest, s.j.Scope, rule, changed))
+	maxSlots := record.LegacyMaxSlices
+	if s.j.Scope.ReviewCoverage == domain.ReviewCoverageExtended {
+		// The plan was made before the secrets screen and must keep the
+		// same keys if any file has since been withheld.
+		planner := roleStage{ctx: s.ctx, j: s.j}
+		slots, err = planner.coverageSlotPlan(groups)
+		if err != nil {
+			return result(domain.TaskFailed, "review_input_unavailable")
+		}
+		maxSlots = record.MaxSlices
+	}
+	activeSlots := slots
+	maxCalls := s.h.maxCalls(s.j.Scope)
+	if maxCalls <= record.LegacyMaxCalls {
+		activeSlots = min(activeSlots, record.LegacyMaxSlices)
+	}
 	sent, up := s.overviewOffered()
 	facts := s.priorityFacts(s.entries())
 	doc := record.ScopeDoc{Schema: record.ScopeSchemaVersion, Kind: record.ScopeKind, Pack: record.PackRef{ID: sel.ID, Version: sel.Version}, Snapshot: s.j.Snapshot.Digest,
 		RunID: s.j.RunID, AttemptID: s.j.AttemptID, Screen: screenOf(s.screen),
-		Budget: record.ScopeBudget{MaxCalls: s.h.maxCalls(), MaxRequestBytes: PromptBudget, WholeRunMaxCalls: record.WholeRunMaxCalls, SliceReserveCalls: record.SliceMinCalls,
+		Budget: record.ScopeBudget{MaxCalls: maxCalls, MaxRequestBytes: PromptBudget, WholeRunMaxCalls: record.WholeRunMaxCalls, SliceReserveCalls: record.SliceMinCalls,
 			CallsBeforeSlices: used, Admission: record.AdmissionReserveVerification},
-		Limits:   record.ScopeLimits{MaxFiles: sliceMaxFiles, MaxBytes: sliceMaxBytes, MaxFileBytes: roleMaxCodeFile, MaxFileLines: roleMaxCodeLines, MaxSlices: MaxSlices, Slots: slots},
+		Limits:   record.ScopeLimits{MaxFiles: sliceMaxFiles, MaxBytes: sliceMaxBytes, MaxFileBytes: roleMaxCodeFile, MaxFileLines: roleMaxCodeLines, MaxSlices: maxSlots, Slots: activeSlots},
 		Priority: record.ScopePriority{Order: priorityOrder(s.j), Secondary: rule}, Upstream: []record.Upstream{up},
 		Modules: []record.ScopeModule{}, Overview: record.ScopeOverview{Files: []record.ScopeFile{}, Offered: []string{}},
 		Slices: []record.ScopeSlice{}, Excluded: []record.ScopeFile{}, Limitations: s.screenLimitation(addLim([]string{}, groups.lims...))}
@@ -144,7 +209,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 				row.BoundBytes = row.PlannedBytes
 				doc.Overview.Files = append(doc.Overview.Files, row)
 			}
-			windows := missingCoverageWindows(f, lines, covered, slots, &doc.Omitted)
+			windows := missingCoverageWindows(f, lines, covered, activeSlots, &doc.Omitted)
 			prioritizeCoverageWindow(windows, text, e.Path, facts.line[e.Path])
 			cursors = append(cursors, &coverageCursor{file: f, tier: groups.tierOf(e.Path), severity: facts.severity[e.Path],
 				windows: windows})
@@ -155,6 +220,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		doc.Overview.Offered = append(doc.Overview.Offered, f.Path)
 	}
 	scheduleCoverage(&doc, cursors, sent)
+	doc.Limits.Slots = slots
 	slotOmissions := map[string]bool{}
 	for _, omission := range doc.Omitted {
 		if omission.Reason == record.ScopeReasonSlotLimit {
@@ -219,6 +285,9 @@ func prioritizeCoverageWindow(windows []record.ScopeFile, text, path string, dia
 }
 
 func addScopeOmission(list *[]record.ScopeOmission, path string, start, end int, reason string) {
+	if list == nil {
+		return
+	}
 	if n := len(*list); n > 0 {
 		last := &(*list)[n-1]
 		if last.Path == path && last.EndLine == start-1 && last.Reason == reason {
@@ -233,13 +302,14 @@ func addScopeOmission(list *[]record.ScopeOmission, path string, start, end int,
 // counted separately and does not hide the remaining lines of that file.
 func missingCoverageWindows(f record.ScopeFile, lines []string, covered []bool, slots int, omissions *[]record.ScopeOmission) []record.ScopeFile {
 	var out []record.ScopeFile
+	isCovered := func(i int) bool { return covered != nil && covered[i] }
 	for i := 0; i < len(lines); {
-		if covered[i] {
+		if isCovered(i) {
 			i++
 			continue
 		}
 		start, size := i, 0
-		for i < len(lines) && !covered[i] && i-start < roleMaxCodeLines {
+		for i < len(lines) && !isCovered(i) && i-start < roleMaxCodeLines {
 			cost := record.JSONLen(lines[i])
 			if size+cost > roleMaxCodeFile {
 				break

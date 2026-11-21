@@ -236,7 +236,7 @@ func (s *roleStage) sliceTask(key string) analysis.TaskResult {
 		return result(domain.TaskFailed, reasonCallCountFailed)
 	}
 	decision := decisionAdmitted
-	if s.h.maxCalls()-used < s.sliceReserve {
+	if s.h.maxCalls(s.j.Scope)-used < s.sliceReserve {
 		decision = decisionExhausted
 	}
 	if err := os.WriteFile(admissionPath(s.j, key), []byte(decision), 0o600); err != nil {
@@ -252,6 +252,7 @@ func (s *roleStage) sliceTask(key string) analysis.TaskResult {
 // again. Older scope artifacts assigned only the first window per file.
 func (s *roleStage) sliceCorpus() ([]record.Excerpt, []string, error) {
 	files := s.entries()
+	cached := map[string][]string{}
 	var out []record.Excerpt
 	// A slice is part of the repository by definition.
 	lims := []string{"files_outside_review_context"}
@@ -269,14 +270,18 @@ func (s *roleStage) sliceCorpus() ([]record.Excerpt, []string, error) {
 		}
 		if f.StartLine > 0 {
 			end := f.StartLine + f.PlannedLines - 1
-			text, total, ok, err := s.readLines(e, f.StartLine, end)
-			if err != nil || !ok || total != f.TotalLines || record.JSONLen(text) != f.PlannedBytes || f.PlannedBytes > remain {
+			lines, ok, err := s.sourceLines(e, cached)
+			if err != nil || !ok || len(lines) != f.TotalLines || end > len(lines) || f.PlannedBytes > remain {
+				return nil, nil, errSnapshotIntegrity
+			}
+			text := strings.Join(lines[f.StartLine-1:end], "\n")
+			if record.JSONLen(text) != f.PlannedBytes {
 				return nil, nil, errSnapshotIntegrity
 			}
 			out = append(out, record.Excerpt{ID: record.ExcerptID(s.j.Snapshot.Digest, e.Path, e.SHA256, f.StartLine, end),
 				Path: e.Path, SHA256: e.SHA256, Start: f.StartLine, End: end, Kind: windowKind(e.Path), Origin: "context", Text: text})
 			remain -= f.PlannedBytes
-			if f.StartLine > 1 || end < total {
+			if f.StartLine > 1 || end < len(lines) {
 				lims = append(lims, "excerpt_only")
 			}
 			continue

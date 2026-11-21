@@ -473,9 +473,10 @@ type ReviewLedger struct {
 	// review record (prompt bytes); null under the same condition.
 	RequestBytesSent *int `json:"request_bytes_sent"`
 	// Status is complete, partial or overview_only.
-	Status  string         `json:"status"`
-	Modules []LedgerModule `json:"modules"`
-	Files   []LedgerFile   `json:"files,omitempty"`
+	Status           string         `json:"status"`
+	Modules          []LedgerModule `json:"modules"`
+	Files            []LedgerFile   `json:"files,omitempty"`
+	ExtendedCoverage bool           `json:"extended_coverage,omitempty"`
 	// PrimarySlotsBudgetExhausted counts the filled slots of primary files
 	// whose investigate the call ceiling refused (builder 8 with a schema 0.2
 	// scope artifact): about two calls each would review them.

@@ -44,8 +44,12 @@
       onScroll();
       return;
     }
-    const section = document.getElementById(id)?.closest('.export-section');
+    const target = document.getElementById(id);
+    const section = target?.closest('.export-section');
     if (section) {
+      const result = target.closest('.report-result-details');
+      if (result) result.open = true;
+      if (id === 'test-results') target.querySelector('details')?.setAttribute('open', '');
       if (frame !== undefined) cancelAnimationFrame(frame);
       frame = undefined;
       select(section);

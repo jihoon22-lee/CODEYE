@@ -9,20 +9,19 @@ import { Citations, FindingList, PinnedSourceLink, ReportCalls, ReportCounts, Re
 import { ReportAction, ReportIcon, ReportLayout } from './ReportLayout';
 import { ProjectOverview } from './ProjectOverview';
 import { ReportDocumentReading } from './ReportDocumentReading';
-import { InspectionReading, MeasurementReading } from './ReportInspections';
+import { ReportOverviewTable } from './ReportOverviewTable';
+import { InspectionReading, MeasurementReading, StaticDiagnosticReading } from './ReportInspections';
 import { ReportCodeStrengths } from './ReportCodeStrengths';
 import { ReportSearch, focusReportFinding, focusReportSearchLocation, type ReportSearchTarget } from './ReportSearch';
 import { projectBehaviors } from './reportBehaviors';
-import { cutLine } from './format';
 import {
   gapGroups,
+  duplicateReadingFindings,
   locationPath,
   moduleDir,
   moduleSecondary,
   overviewFacts,
   readingSummary,
-  places,
-  ruleGroups,
   secondaryDir,
   secondaryPath,
   secondaryReviewFinding,
@@ -30,7 +29,6 @@ import {
   severityOf,
   slotRuns,
   SHOWN,
-  type Places,
 } from './reportGroups';
 
 const s = t.sections;
@@ -39,12 +37,6 @@ const ORDER = ['environment', 'documents', 'static_analysis', 'metrics', 'secret
 const TABS = ['overview', ...ORDER] as const;
 const TAB_ICONS = { overview: 'overview', environment: 'server', documents: 'file', static_analysis: 'terminal', metrics: 'chart', secrets: 'secret', code_review: 'code', gaps: 'alert' } as const;
 
-function placesText(p: Places) {
-  let out = p.shown.join(', ');
-  if (p.more > 0) out += ' ' + sm.morePlaces(p.more);
-  if (p.moreSecondary > 0) out += ' ' + sm.ofSecondary(p.moreSecondary);
-  return out;
-}
 function shortList(list: string[]) {
   return list.length <= SHOWN ? list.join(', ') : list.slice(0, SHOWN).join(', ') + ' ' + sm.more(list.length - SHOWN);
 }
@@ -132,12 +124,12 @@ function StageLine({ stage }: { stage: SectionStage }) {
   return <p>{s.stageLine(state(stage.state), stage.tasks, stage.succeeded)}</p>;
 }
 
-function TestRunOverview({ results }: { results: NonNullable<AnalysisReport['testResults']> }) {
+function TestRunOverview({ results, id }: { results: NonNullable<AnalysisReport['testResults']>; id: string }) {
   const reasons = new Set(results.tasks.map(task => task.reason));
   const reason = results.status === 'not_run' && reasons.size === 1 ? [...reasons][0] : null;
   const notStarted = results.status === 'not_run' && results.tasks.every(task =>
     !task.attempted && !['succeeded', 'failed', 'timed_out', 'cancelled'].includes(task.status));
-  return <details className="report-reading-records report-test-results" data-test-status={results.status} aria-label={t.tests.heading}>
+  return <details id={id} className="report-reading-records report-test-results" data-test-status={results.status} aria-label={t.tests.heading}>
     <summary>{notStarted ? t.tests.notStarted : label(t.tests.summary, results.status)}
       {reason && <small className="report-test-reason">{explainReason(reason)}</small>}
     </summary>
@@ -246,6 +238,7 @@ function LedgerBlock({ ledger }: { ledger: Ledger }) {
           {ledger.scope.reason ? ' — ' + explainReason(ledger.scope.reason) : ''}
         </li>
         <li>{l.calls(n(ledger.callsUsed), n(ledger.maxCalls))}</li>
+        {ledger.extended && <li>{l.extendedCoverage}</li>}
         <li>{l.bytes(n(ledger.requestBytesSent), n(ledger.maxRequestBytes))}</li>
         {ledger.primarySlotsRefused > 0 && <li>{l.refusedSlots(ledger.primarySlotsRefused)}</li>}
       </ul>
@@ -373,6 +366,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const [open, setOpen] = useState<Set<string>>(() => new Set(sections.attention.map((a) => a.section)));
   const tabbed = Boolean(report.project);
   const id = useId();
+  const testsId = id + '-test-results';
   const documentTarget = useRef<string | null>(null);
   const [active,setActive] = useState('overview');
   const [readingSection, setReadingSection] = useState<string>();
@@ -492,7 +486,10 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const modSecondary = (id: string) => secondaryDir(moduleDir(id));
   // Review findings: the supported and reproduced ones on primary paths
   // open the section; the others and those on secondary paths come after.
-  const reviewFindings = pick(report.findings, cr.findings).sort((a, b) => sevRank(b.severity) - sevRank(a.severity));
+  const allReviewFindings = pick(report.findings, cr.findings).sort((a, b) => sevRank(b.severity) - sevRank(a.severity));
+  const duplicates = duplicateReadingFindings(allReviewFindings, report.observations);
+  const groupedRecords = allReviewFindings.filter(f => duplicates.has(f.id));
+  const reviewFindings = allReviewFindings.filter(f => !duplicates.has(f.id));
   const supported = (f: Finding) => f.validation === 'supported' || f.validation === 'reproduced';
   const currentDisposition = new Map(history?.load.state === 'ready' ? history.load.value.findings.map(f => [f.findingID, f.current]) : []);
   const isDisposed = (f: Finding) => {
@@ -581,7 +578,10 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
     documents: (
       <>
         <ReportDocumentReading documents={d} includesCode={report.includesCode !== false} id={id} comparisonId={comparisonId} />
-        {!d.model.performed && <ModelNote model={d.model} />}
+        {!d.model.performed && (d.model.reason === 'documents_not_selected' && d.items.length > 0 &&
+          d.items.every(item => item.reason === 'credential_like_content')
+          ? <p>{s.noModel(s.modelReasons.documentsWithheld)}</p>
+          : <ModelNote model={d.model} />)}
         <details className="report-reading-records" open={d.comparisons.length === 0 && d.quality.length === 0 && !d.model.performed ? true : undefined}>
           <summary>{t.documentReading.discovery}</summary>
         <StageLine stage={d.stage} />
@@ -618,35 +618,12 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
     static_analysis: (
       <>
         <StageLine stage={sa.stage} />
+        <StaticDiagnosticReading languages={sa.languages} findings={report.findings} byID={byID} severityOf={sevOf} />
         {sa.languages.map(lang => (
           <InspectionReading key={lang.ecosystem ?? 'unknown'} language={lang} byID={byID} />
         ))}
         <details><summary>{inspectionsKo.counts}</summary><SectionCounts sections={sections} keyName="static_analysis" /></details>
         <details><summary>{t.glossary}</summary><Table head={[s.col.tool,s.col.message]} rows={Object.entries(t.tools)} /></details>
-        {sa.languages.map((lang) => {
-          const groups = ruleGroups(lang.tools, byID, sevOf);
-          return (
-            <section key={lang.ecosystem ?? 'unknown'}>
-              {groups.length > 0 && (
-                // What (the rule and its first message), how many, how severe, where first.
-                <Table
-                  head={[s.col.rule, s.col.message, s.col.count, s.col.severity, s.col.location]}
-                  rows={groups.map((g) => [
-                    <span key="r">
-                      <code>{g.rule}</code>
-                      <br />
-                      <small>{g.analyzer}</small>
-                    </span>,
-                    t.ruleDescriptions[g.analyzer + ':' + g.rule] ?? cutLine(g.message),
-                    g.count,
-                    g.severity === null ? '—' : <span key="v" className={'pill sev sev-' + (Object.hasOwn(t.severity, g.severity) ? g.severity : 'unknown')}>{label(t.severity, g.severity)}</span>,
-                    placesText(places(g.primary, g.secondary)),
-                  ])}
-                />
-              )}
-            </section>
-          );
-        })}
         <p className="small">{sm.rulesNote}</p>
         {suppressed > 0 && <p className="small">{sm.suppressedRows(suppressed)}</p>}
         <More title={sm.allDiagnostics(allDiagnostics.length)} reveal={findingTarget?.section === 'static_analysis' ? findingTarget : undefined}>
@@ -723,19 +700,9 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
     code_review: (
       <>
         <p className="small">{t.codeReading.requestCounts(investigationRequests, verificationRequests)}</p>
-        <h6>{t.codeReading.actions}</h6>
-        <FindingList findings={reviewFirst} history={history} empty={hasCodeReview ? t.codeReading.none : t.codeReading.noEvidence} reveal={findingTarget} groupByCategory={false} />
+        <h6>{t.codeReading.results}</h6>
+        <FindingList findings={[...reviewFirst, ...reviewRest, ...reviewSecondary]} history={history} empty={hasCodeReview ? t.codeReading.none : t.codeReading.noEvidence} reveal={findingTarget} groupByCategory={false} />
         <ReportCodeStrengths review={cr} includesCode={report.includesCode !== false} id={id} />
-        {reviewRest.length > 0 && (
-          <More title={t.codeReading.limited(reviewRest.length)} reveal={reviewRest.some(f => f.id === findingTarget?.id) ? findingTarget : undefined}>
-            {() => <FindingList findings={reviewRest} history={history} empty={s.noFindings} reveal={findingTarget} groupByCategory={false} />}
-          </More>
-        )}
-        {reviewSecondary.length > 0 && (
-          <More title={sm.secondaryFindings(reviewSecondary.length)} reveal={reviewSecondary.some(f => f.id === findingTarget?.id) ? findingTarget : undefined}>
-            {() => <FindingList findings={reviewSecondary} history={history} empty={s.noFindings} reveal={findingTarget} groupByCategory={false} />}
-          </More>
-        )}
         {refuted.length > 0 && (
           <More title={t.codeReading.refuted(refuted.length)} reveal={refuted.some(f => f.id === findingTarget?.id) ? findingTarget : undefined}>
             {() => <FindingList findings={refuted} history={history} empty={s.noFindings} reveal={findingTarget} groupByCategory={false} />}
@@ -744,6 +711,11 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
         {disposed.length > 0 && (
           <More title={t.codeReading.disposition(disposed.length)} reveal={disposed.some(f => f.id === findingTarget?.id) ? findingTarget : undefined}>
             {() => <FindingList findings={disposed} history={history} empty={s.noFindings} reveal={findingTarget} groupByCategory={false} />}
+          </More>
+        )}
+        {groupedRecords.length > 0 && (
+          <More title={t.codeReading.relatedRecords(groupedRecords.length)} reveal={groupedRecords.some(f => f.id === findingTarget?.id) ? findingTarget : undefined}>
+            {() => <FindingList findings={groupedRecords} history={history} empty={s.noFindings} reveal={findingTarget} groupByCategory={false} />}
           </More>
         )}
         {cr.limits.length > 0 && (
@@ -841,13 +813,20 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       <section id={anchor('overview')} role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? tabId('overview') : 'report-overview'} hidden={tabbed && active!=='overview'} tabIndex={tabbed ? 0 : undefined}>
         <h5 id="report-overview" className="visually-hidden">{s.overview}</h5>
         {(!tabbed || active === 'overview') && <>
-          {readingSignals.length > 0 && <ul className="report-reading-signals">{readingSignals.map(signal => <li key={signal}>{signal}</li>)}</ul>}
-          {report.testResults && report.testResults.status !== 'passed' && <TestRunOverview results={report.testResults} />}
-          <ProjectOverview report={report} sections={sections} behaviors={behaviors} openDocuments={index => {
-            documentTarget.current = index === undefined ? null : comparisonId(index);
-            go('documents');
+          <ReportOverviewTable rows={readingSignals} open={section => {
+            if (section !== 'tests') { go(section); return; }
+            const tests = document.getElementById(testsId) as HTMLDetailsElement | null;
+            if (tests) tests.open = true;
+            focusReportSearchLocation(tests?.querySelector('summary'));
           }} />
-          {report.testResults?.status === 'passed' && <TestRunOverview results={report.testResults} />}
+          {report.testResults && <TestRunOverview results={report.testResults} id={testsId} />}
+          <details className="report-reading-records report-overview-context">
+            <summary>{t.reading.contextDetails}</summary>
+            <ProjectOverview report={report} sections={sections} behaviors={behaviors} openDocuments={index => {
+              documentTarget.current = index === undefined ? null : comparisonId(index);
+              go('documents');
+            }} />
+          </details>
           <More title={t.reading.operations}>{() => <div className="report-more-body">
             <ReportReviewStatus report={report} />
             <ReportCounts report={report} />

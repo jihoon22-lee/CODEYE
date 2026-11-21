@@ -150,6 +150,7 @@ export function operatorHints(setup: Setup | null): boolean {
 
 // The largest call ceiling (docs/REVIEW.md#호출-상한과-승인).
 export const MAX_REVIEW_CALLS = 207;
+const MAX_EXTENDED_REVIEW_CALLS = 2013;
 
 // Estimate enough calls to admit the remaining slots and verify one reply
 // per slot. Historical file-only scope artifacts reserved all six calls.
@@ -163,5 +164,6 @@ function budgetHint(ledger: Ledger | null): Hint {
   }
   if (slots === 0) return { key: 'budget', text: t.improve.budget };
   const needed = ledger.callsUsed + 2 * (slots - 1) + (ledger.files === null ? 6 : 2);
-  return { key: 'budget', text: needed > MAX_REVIEW_CALLS ? t.improve.budgetCallsMax(ledger.callsUsed, slots, needed) : t.improve.budgetCalls(ledger.callsUsed, slots, needed) };
+  const ceiling = ledger.extended ? MAX_EXTENDED_REVIEW_CALLS : MAX_REVIEW_CALLS;
+  return { key: 'budget', text: needed > ceiling ? t.improve.budgetCallsMax(ledger.callsUsed, slots, needed, ceiling) : t.improve.budgetCalls(ledger.callsUsed, slots, needed) };
 }

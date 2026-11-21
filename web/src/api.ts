@@ -133,7 +133,7 @@ export const TEST_RUN_BODY = { ...RUN_BODY, profile: 'with-tests' } as const;
 export type ManualRunBody = {
   profile: 'deep-review' | 'with-tests';
   source_policy: 'latest_at_acquire';
-  scope: { kind: 'full' } | { kind: 'paths'; paths: string[] };
+  scope: ({ kind: 'full' } | { kind: 'paths'; paths: string[] }) & { review_coverage?: 'extended' };
 };
 
 // Either a declared source, or an absolute folder path on the server that it maps onto a folder

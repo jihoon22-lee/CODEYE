@@ -46,6 +46,13 @@ func init() {
 		"inspection.format_limit":                     "입력 한도로 %d개 파일의 서식을 확인하지 못했다.",
 		"inspection.module_checks":                    "모듈별 검사 %d개 보기",
 		"inspection.processed_paths":                  "기록된 처리 파일 %d개 보기",
+		"inspection.detail_column":                    "상세",
+		"inspection.open_detail":                      "상세 보기",
+		"inspection.no_excerpt":                       "이 위치에 저장된 코드 발췌가 없습니다.",
+		"inspection.all_diagnostics":                  "전체 진단 %d건 보기",
+		"inspection.documents_withheld":               "자격증명과 비슷한 내용이 있는 문서가 입력에서 제외되어 검토할 문서가 남지 않았다",
+		"measurement.value":                           "측정값",
+		"measurement.counterpart":                     "상대 블록",
 		"measurement.not_planned":                     "이 실행에 계획된 구조·중복 측정 없음",
 		"measurement.name.cyclomatic_complexity":      "함수 복잡도",
 		"measurement.name.duplicated_lines":           "코드 중복",
@@ -74,6 +81,7 @@ func init() {
 		"measurement.submitted_paths":                 "도구에 전달한 파일 %d개 보기",
 		"measurement.unlocated":                       "위치를 확인할 수 없음",
 		"measurement.full":                            "나머지 %d개 위치는 전체 보기에서 확인할 수 있다.",
+		"measurement.other_locations":                 "나머지 %d개 위치 보기",
 	} {
 		Korean.Labels[k] = v
 	}

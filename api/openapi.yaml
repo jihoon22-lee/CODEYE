@@ -1861,6 +1861,7 @@ components:
       properties:
         kind: {enum: [full, paths]}
         paths: {type: array, items: {type: string}}
+        review_coverage: {enum: ['', extended], description: '확장 모델 검토를 선택하면 같은 범위의 후속 코드 조사 작업을 최대 999개 배정할 수 있다. 실제 실행은 노드의 모델 호출 상한을 따른다. 비어 있으면 일반 검토다.'}
     AnalysisChoices:
       type: object
       additionalProperties: false

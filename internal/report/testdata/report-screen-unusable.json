@@ -14,7 +14,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000a0b",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "835ed932317a27c2e8150ae539e20729cbed108c63643a1c4714ee8df7c10c1c",
+      "sha256": "4f12eaf19aa14a6b37bb256be787151820274b1f47feadb4d48ca31f67b98ec5",
       "size_bytes": 54072,
       "task_key": null
     },
@@ -311,8 +311,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000912",
       "media_type": "application/vnd.codeye.environment+json",
       "role": "other",
-      "sha256": "098c562cd98191edc436311d1b9a903ac9f4dca5468978fa791cd93e15579c18",
-      "size_bytes": 1463,
+      "sha256": "31e85f4b7a29f00cc65034734f41985d68b71081b3476d80b1b02f22356a6875",
+      "size_bytes": 1465,
       "task_key": "docs.discover"
     },
     {
@@ -329,7 +329,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000932",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "ed20ece61558552ca4b9122c560d2612e4e90e72a3e02d7520f176ea4b779b88",
+      "sha256": "8a021d6d368d7563658dbea6f174de82715f815747996b4e75c622f4a4ca580c",
       "size_bytes": 1374,
       "task_key": "review.documents"
     },
@@ -338,7 +338,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000934",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "87d1d57d433b206c56fa3849600b32c04db08321dace502d6248ebe7668f065a",
+      "sha256": "4cc63c68161f4a1e45e44fb5e30482fea5add045fdc0b7ac27f17a58107d9f19",
       "size_bytes": 3348,
       "task_key": "review.investigate"
     },
@@ -347,7 +347,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000937",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "943b0fa00b5e0ad1c58af53e1a519b4487e3f37acc1a2d8e8c68864be8a94b0d",
+      "sha256": "4635871f921e79e7e8af3062a81b942b4017f96337a6a1dd0cfed341c663c365",
       "size_bytes": 4084,
       "task_key": "review.verify"
     },
@@ -356,7 +356,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000939",
       "media_type": "application/vnd.codeye.review-scope+json",
       "role": "other",
-      "sha256": "f0b511aa35b9be17b0ed76378381c10d6089c7d7077302f642d04b9e8eea2aaf",
+      "sha256": "9e0f5ef4c4f4994aa2e042400e176368414a30a823a54093725fc0516cac33fa",
       "size_bytes": 21448,
       "task_key": "review.scope"
     },
@@ -365,7 +365,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000093b",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "14d33672574a27d7983f7b931ce3dc9d40c272065e02387ced2610cc6dbf8fc9",
+      "sha256": "6770cddc9f5c130f8af7b442445df71a4edeb121d3c0829335f3f3f4d8ed144f",
       "size_bytes": 3520,
       "task_key": "review.investigate.s001"
     },
@@ -374,7 +374,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000093d",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "3bb2fa0c28531bfd4c94297ea51a8447316e9bdaa527a0a96456a9dd6604d949",
+      "sha256": "f2cdef718a646d5a3471ef68613792734bc8da1ea8014ad8d773620eabe1a1ff",
       "size_bytes": 4145,
       "task_key": "review.verify.s001"
     },
@@ -383,7 +383,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000093f",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "f1f60e3f4e3d967588a32ad7644d3e400aab0ed5d1a52037b1570c0708887ceb",
+      "sha256": "842fa98f6d5870f3e73427ba73db9d93577f4da6535b1c89e5e756685ef217ed",
       "size_bytes": 3514,
       "task_key": "review.investigate.s002"
     },
@@ -392,7 +392,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000941",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "50bbafc5ad07b51428c8f0d19607cd47cda6e935b04613592e87c5879a13141e",
+      "sha256": "874fa6673bf1191695096a3ff40f6cdfcc0cf7754e13e63eaa36f770c1108c4e",
       "size_bytes": 4139,
       "task_key": "review.verify.s002"
     },
@@ -401,7 +401,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000943",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "711ad7a107b1efc4e2e6a07f3942f750a2129a24a10bb7d2c9781584e32773a2",
+      "sha256": "1d48f65bb08f03948d55a44c199eaeddc3bcf4c119a951fa72b5f75799ebb6a3",
       "size_bytes": 3521,
       "task_key": "review.investigate.s003"
     },
@@ -410,7 +410,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000945",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "bb58dada73154217ea13d99164685e8c60d1e48b4ea8ff188ebc901aadb0396d",
+      "sha256": "d89f18bf44a58ef2b8f3b5d778dd810fbf439088ee21050e0920c121ca5ccd1c",
       "size_bytes": 4146,
       "task_key": "review.verify.s003"
     },
@@ -419,7 +419,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000947",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "652e9375ce229f8ff8c69fada1a7c93e51968215f0a0ba28cceb5ce8e554c35a",
+      "sha256": "112f0dca7d4f857ec889dfd432832c2b145ab9f47a44a79b2893b9f90689b384",
       "size_bytes": 3582,
       "task_key": "review.investigate.s004"
     },
@@ -428,7 +428,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000949",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "a1fd4d8deaae63afba95ae20f1391aae13e7515123d6106d30bb78d00ab914fc",
+      "sha256": "50add44515eae7338a6f87287bacc96d920db02a43451387e85e50b0b4c4c143",
       "size_bytes": 4206,
       "task_key": "review.verify.s004"
     },
@@ -437,7 +437,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000094b",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "584ff3e3ae2d0aac9e3314c1cf4da459a46e548907d95a5e00c82418a8da3874",
+      "sha256": "512674bba066380b684f0cd5fd38a2ee3e8a819550220bbf2d4bb363c83a290e",
       "size_bytes": 3530,
       "task_key": "review.investigate.s005"
     },
@@ -446,7 +446,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000094d",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "a8303098b64dc48368730a7a58f76ac8cb5daf4b30af621141163d3a94a6851d",
+      "sha256": "57cdf48e1f22502b61c96feb1552f0e537d82897a3eabfbc6e499ec8e7f41643",
       "size_bytes": 4162,
       "task_key": "review.verify.s005"
     },
@@ -455,7 +455,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000094f",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "c599b6831a2ec4c08dbcb03abd4f64d7cabc39046c37ea9bb498d4151d8802d7",
+      "sha256": "e52cccdc70b60a25944e1a901d80410502aad84c324364438f54b4f914ece051",
       "size_bytes": 3521,
       "task_key": "review.investigate.s006"
     },
@@ -464,7 +464,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000951",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "b613ff1a8380b6bcce1bcb4b50b4cb550f217fd5563c6e56381ca94868055fa8",
+      "sha256": "517e29b1a1e5ccbe8633c40b78909864e99af833715cccacbbb33527a4d8db74",
       "size_bytes": 4153,
       "task_key": "review.verify.s006"
     },
@@ -473,7 +473,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000953",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "551c9356cf78b0613b28ad7edfd8b29ad6fd962efe2211cac001097a6f95abb9",
+      "sha256": "f79ffbdd51976682ebf08df61df3cbb284048651055336180b9c5f70c18bc48f",
       "size_bytes": 3528,
       "task_key": "review.investigate.s007"
     },
@@ -482,7 +482,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000955",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "525dfa3c733af8a7c3874673c27cf042d04427e64cd7e6835cece6232fe0582d",
+      "sha256": "30c6c7f092b2ae937d44ab39ddf63a0372de9a501b99b1adae5ec1e2fbde788f",
       "size_bytes": 4160,
       "task_key": "review.verify.s007"
     },
@@ -491,7 +491,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000957",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "f0313f028ee0cbcf805b3cb242140bbf1a506c79c9bb7d8ca5fa5a0f601c99de",
+      "sha256": "8e336ba2917c31d92133a2d6bb1c5240505216f0650fe163fe0b94f4d02bbc51",
       "size_bytes": 2923,
       "task_key": "review.investigate.s008"
     },
@@ -500,7 +500,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000959",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "fb200bfae89bfa12342f397a473f082af66b48bd6f0d4b171b33802ad945d302",
+      "sha256": "1d3a2adc1c43c1cee436a7f10751eedeb711d518e7d36a480f52890d73ad9f73",
       "size_bytes": 3555,
       "task_key": "review.verify.s008"
     }
@@ -515,7 +515,7 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "01f39ca8525d6ba3d511779b27ca8346b141c36999930636f41a27d190750047",
+    "input_digest": "e144a002e1c97e8d0752907d64d5f2c0fb4c5816ea527892f8a544efdd20499f",
     "result_manifest_artifact_id": null,
     "version": "16"
   },
@@ -2722,9 +2722,9 @@
   "documents": {
     "budget": {
       "max_documents": 1000,
-      "per_document_bytes": 65536,
+      "per_document_bytes": 524288,
       "read_bytes": 168,
-      "total_bytes": 262144
+      "total_bytes": 4194304
     },
     "comparisons": [
       {

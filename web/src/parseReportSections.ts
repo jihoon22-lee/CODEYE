@@ -193,6 +193,7 @@ export type Ledger = {
   primarySlotsRefused: number;
   modules: LedgerModule[];
   files: LedgerFile[] | null;
+  extended: boolean;
 };
 
 type LedgerFile = {
@@ -218,6 +219,7 @@ function parseLedger(v: unknown): Ledger | null {
     requestBytesSent: optCount(l.request_bytes_sent),
     status: str(l.status),
     primarySlotsRefused: l.primary_slots_budget_exhausted == null ? 0 : count(l.primary_slots_budget_exhausted),
+    extended: l.extended_coverage == null ? false : bool(l.extended_coverage),
     modules: array(l.modules, (m) => {
       const x = object(m);
       const cls = x.class == null ? null : str(x.class);
@@ -264,6 +266,7 @@ function parseLedger(v: unknown): Ledger | null {
     if (m.secondary > m.eligible || m.secondarySent > Math.min(m.sent, m.secondary) || (m.cls === null && m.secondary + m.secondaryNotReached > 0)) invalid();
   }
   validateLedgerFileCoverage(out);
+  if ((out.maxCalls ?? 0) > 207 && !out.extended || out.extended && out.scope.result !== 'accepted') invalid();
   return out;
 }
 
@@ -633,6 +636,7 @@ export function parseSections(
   checkContractFollowup(r, out.documents, includesCode);
   checkRelatedWorkflow(r, out.documents);
   const ledger = out.codeReview.ledger;
+  if (ledger?.extended && Number(str(object(r.builder).version)) < 16) invalid();
   if (ledger?.files !== null && ledger?.files !== undefined) {
     if (Number(str(object(r.builder).version)) < 16) invalid();
     const complete = ledger.files.length > 0 && ledger.files.every((f) => f.accepted > 0 && f.accepted === f.total);

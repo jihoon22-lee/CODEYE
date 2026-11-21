@@ -49,7 +49,7 @@ export type Observation = {
   severity: string | null;
   suppressed: boolean;
   // Structure or duplication measurement (never a finding).
-  metric: { name: string; value: number; threshold: number; unit: string; counterpart?: ObservationPlace } | null;
+  metric: { name: string; value: number; threshold: number; unit: string; counterpart?: ObservationPlace; excerpt?: Excerpt | null; counterpartExcerpt?: Excerpt | null } | null;
 };
 export type AnalysisReport = {
   project?: {name: string; source: string | null; start: string | null; finish: string | null};
@@ -241,7 +241,8 @@ export function parseAnalysisReport(
       metric: o.metric == null ? null : (() => {
         const m = object(o.metric);
         const name = str(m.name);
-        const metric = { name, value: count(m.value), threshold: count(m.threshold), unit: str(m.unit) };
+        const metric = { name, value: count(m.value), threshold: count(m.threshold), unit: str(m.unit),
+          excerpt: parseExcerpt(m.excerpt), counterpartExcerpt: parseExcerpt(m.counterpart_excerpt) };
         if (m.counterpart === undefined) return metric;
         const other = object(m.counterpart);
         const counterpart = { path: str(other.path), start: count(other.start_line), end: count(other.end_line) };
@@ -270,6 +271,14 @@ export function parseAnalysisReport(
     return { name: str(p.name), source: nullable(p.source), start: nullable(p.started_at), finish: nullable(p.finished_at) };
   })();
   const includesCode = r.export != null && object(r.export).include_code === true;
+  for (const observation of observations) {
+    const metric: Observation['metric'] = observation.metric;
+    if (!metric) continue;
+    for (const [excerpt, place] of [[metric.excerpt, observation.location], [metric.counterpartExcerpt, metric.counterpart]] as const) {
+      if (excerpt && (!includesCode || !place || observation.evidenceState !== 'verified_against_source_manifest' ||
+        !excerptFits(excerpt, place.start, place.end, false))) invalid();
+    }
+  }
   const sections = parseSections(r, observations.map(o => o.id), findings.map(f => f.id), counts.total, includesCode);
   const modelFindings = new Set(sections?.codeReview.findings);
   for (const finding of findings) {

@@ -245,6 +245,27 @@ func attachExcerpts(r *Report, snippets map[sourceexcerpt.Key][]sourceexcerpt.Ex
 			}
 		}
 	}
+	// Only excerpt windows already present in the validated evidence artifact
+	// can appear here. Copies sharing an exact location reuse the first sample.
+	used := map[sourceexcerpt.Key]bool{}
+	metricWindow := func(l *ObservationLocation) *sourceexcerpt.Excerpt {
+		if l == nil || withheld[l.Path] {
+			return nil
+		}
+		key := sourceexcerpt.Key{Path: l.Path, SHA256: l.BlobSHA256, Line: l.StartLine}
+		if used[key] {
+			return nil
+		}
+		used[key] = true
+		return get(l.Path, l.BlobSHA256, l.StartLine, l.EndLine, false)
+	}
+	for _, o := range r.Observations {
+		if o.Metric == nil || o.EvidenceState != EvidenceVerified {
+			continue
+		}
+		o.Metric.Excerpt = metricWindow(o.Location)
+		o.Metric.CounterpartExcerpt = metricWindow(o.Metric.Counterpart)
+	}
 }
 
 func usesModelExcerpts(r *Report, id string) bool {

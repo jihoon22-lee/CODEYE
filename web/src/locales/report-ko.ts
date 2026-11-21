@@ -1,4 +1,6 @@
 const promiseRejectionDescription = 'Promise 거부 사유에 Error 객체의 메시지와 스택이 필요한지 인용된 호출에서 확인합니다.';
+const summaryNumber = new Intl.NumberFormat('ko-KR');
+const n = (value: number) => summaryNumber.format(value);
 
 export const reportKo = {
   sourcePath: '분석 경로', commit: '커밋', start: '시작 시각', finish: '종료 시각', published: '작성 시각',
@@ -10,6 +12,7 @@ export const reportKo = {
   ].filter(Boolean).join(' '),
   status: '분석 상태', excerptAt: (location: string) => `${location} 원문 발췌`,
   target: '분석 대상',
+  projectIntro: '프로젝트 소개',
   executionStatus: (status: string) => `분석 ${status}`,
   executionStatuses: {completed: '분석 완료', partial: '일부 검사 미완료로 종료', failed: '분석 실패', cancelled: '분석 취소됨'} as Record<string, string>,
   openSource: '커밋에서 열기',
@@ -36,6 +39,7 @@ export const reportKo = {
       'javascript-e2e': 'JavaScript 브라우저 테스트', python: 'Python unittest', rust: 'Rust Cargo 테스트', unavailable: '테스트 탐색' } as Record<string, string>,
   },
   documentReading: {
+    lineRange: (start: number, end: number) => start === end ? `${start}행` : `${start}–${end}행`,
     files: '문서별로 이동', unlocated: '인용 위치가 없는 문서 검토', otherNotes: '그 밖의 문서 검토',
     sources: '문서 원문 발췌', discovery: '문서 탐색과 적용 범위',
     sharedWith: (path: string) => `${path}에서도 함께 인용`,
@@ -43,10 +47,12 @@ export const reportKo = {
     withheldContract: (index: number) => `추가 문서 계약 ${index}`,
   },
   codeReading: {
+    results: '코드 검토 결과',
     requestCounts: (investigation: number, verification: number) => `모델 조사 요청 ${investigation}회 · 후보 검증 요청 ${verification}회`,
     actions: '근거를 확인한 문제와 개선 기회',
     limited: (count: number) => `추가 확인이 필요한 후보(${count}건)`,
     refuted: (count: number) => `기각된 후보(${count}건)`,
+    relatedRecords: (count: number) => `같은 근거로 묶인 기록(${count}건)`,
     disposition: (count: number) => `처리 상태가 기록된 발견(${count}건)`,
     none: '검토한 주요 코드 경로에서 근거로 지지하거나 재현한 조치 항목을 찾지 못했습니다.',
     noEvidence: '수락한 모델 검토 결과가 없습니다.',
@@ -64,9 +70,26 @@ export const reportKo = {
     read: '조회 처리기', change: '변경 처리기', test: '테스트 단언',
   },
   reading: {
+    outcome: '주요 분석 결과', area: '영역', result: '결과', details: '상세', view: '보기', detailItem: '항목',
+    viewArea: (area: string) => `${area} 상세 보기`,
+    outcomeStatus: { failed: '실패', timed_out: '시간 초과', unsupported: '미지원', skipped_policy: '정책 제외' } as Record<string, string>,
+    codeOutcome: '코드 분석', modelScopeLabel: '모델 조사', testsOutcome: '기존 테스트', requiredOutcome: '필수 분석 작업',
+    staticOutcome: (accepted: number, planned: number, primary: number) => `결과 확보 ${accepted}/${planned}개 작업 · 주요 코드 진단 ${primary}건`,
+    documentsPending: '대조 보류', documentsRead: '문서 읽음', environmentMismatch: '요구 불일치',
+    documentsOutcome: (read: number, assessed: number, unknown: number) => [
+      `${n(read)}개 읽음`, assessed > 0 ? `구현 대조 ${n(assessed)}건` : '', unknown > 0 ? `구현 미확인 ${n(unknown)}건` : '',
+    ].filter(Boolean).join(' · '),
+    environmentOutcome: (modules: number, mismatch: number) => `모듈 ${modules}개 탐색 · 환경 요구 불일치 ${mismatch}건`,
+    complexityOutcome: (count: number) => `복잡도 기준 초과 함수 ${n(count)}개`,
+    duplicationOutcome: (count: number) => `중복 쌍 ${n(count)}개`,
+    metricOutcome: (name: string, count: number) => `${name} 기록 ${n(count)}건`,
+    metricsEmpty: '기준 초과 기록 0건',
+    secretsOutcome: (count: number) => `검사에서 보고한 탐지 ${count}건`,
+    contextDetails: '문서 대조와 판단 근거',
     actionCounts: (primary: number, secondary: number) => `주요 코드 조치 ${primary}건${secondary > 0 ? ` · 시험·예제 등 조치 ${secondary}건` : ''}`,
-    modelScope: (accepted: number, eligible: number) => `모델 조사 · 발췌를 수락한 대상 파일 ${accepted}/${eligible}개`,
-    modelSent: (sent: number, eligible: number) => `모델에 발췌를 보낸 대상 파일 ${sent}/${eligible}개`,
+    modelScope: (accepted: number, eligible: number, lines?: { accepted: number; total: number }) =>
+      `발췌 포함 ${n(accepted)}/${n(eligible)}파일${lines?.total ? ` · ${n(lines.accepted)}/${n(lines.total)}줄` : ''}`,
+    modelSent: (sent: number, eligible: number) => `발췌 요청 ${n(sent)}/${n(eligible)}파일`,
     incompleteTasks: (states: string) => `필수 분석 작업 · ${states}`,
     nextAction: '다음 조치', nextCheck: '확인 방법',
     priorityAction: '우선 조치',
@@ -132,6 +155,8 @@ export const reportKo = {
     gitleaks: '저장소에 포함된 인증정보 후보의 위치를 찾습니다.',
   } as Record<string,string>,
   reasons: {
+    credential_like_content: '자격증명과 비슷한 내용이 있어 문서 검토 입력에서 제외했습니다.',
+    documents_not_selected: '탐색에서 검토할 문서가 선택되지 않았습니다.',
     excerpt_only: '검토는 선택된 코드 발췌 범위에 한정됩니다.',
     no_document_in_selected_context:
       '선택된 범위에서 설명 문서를 찾지 못했습니다.',
@@ -500,6 +525,7 @@ export const reportKo = {
       not_succeeded: '역할 작업이 성공하지 않았습니다',
       no_environment_gap: '모듈 요구와 노드 관측에 해석할 차이가 없어 역할을 생략했습니다',
       no_documents: '범위에 읽을 문서가 없어 역할을 생략했습니다',
+      documentsWithheld: '자격증명과 비슷한 내용이 있는 문서가 입력에서 제외되어 검토할 문서가 남지 않았습니다',
       no_tool_observations: '해석할 도구 진단이 없어 역할을 생략했습니다',
       model_source_not_approved: '이 소스의 모델 전송이 승인되지 않았습니다',
       model_review_not_offered: '관리자가 다른 사용자의 모델 검토를 허용하지 않았습니다',
@@ -649,6 +675,7 @@ export const reportKo = {
       lineCoverage: (modules: number, acceptedModules: number, files: number, requested: number, accepted: number) =>
         `모듈 ${modules}개 중 ${acceptedModules}개의 소스가 수락된 조사에 포함되었습니다. 대상 파일 ${files}개 중 요청 ${requested}개, 수락 ${accepted}개입니다.`,
       allFiles: (n: number) => `파일과 원문 줄 범위(${n}개)`,
+      extendedCoverage: '확장 코드 검토가 선택됐습니다. 실제 조사 범위는 호출 상한과 입력 한도에 따릅니다.',
       lineStates: {
         accepted: '조사 응답 수락',
         requested_without_accepted_response: '요청 기록 있음 · 수락된 응답 없음',

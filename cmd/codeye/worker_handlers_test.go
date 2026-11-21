@@ -86,12 +86,12 @@ func TestWorkerHandlersComposeReview(t *testing.T) {
 	if _, err := os.Stat(goExe); err != nil {
 		t.Skip("go toolchain not found at GOROOT/bin")
 	}
-	for _, n := range []int{14, 208, -1} {
+	for _, n := range []int{14, 2014, -1} {
 		if _, _, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), ReviewMaxCalls: n}, &executor.Executor{}); err == nil {
 			t.Fatalf("call ceiling %d accepted", n)
 		}
 	}
-	hs, _, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir()}, &executor.Executor{})
+	hs, _, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), ReviewMaxCalls: 600}, &executor.Executor{})
 	if err != nil || len(hs) != 2 {
 		t.Fatal(err)
 	}

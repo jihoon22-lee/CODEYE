@@ -66,6 +66,10 @@ type secPart struct {
 type secTable struct {
 	Head []string
 	Rows [][]secCell
+	// Details is parallel to Rows when a table has an individual inspection.
+	// Details in every table with the same DetailGroup open one at a time.
+	Details     []secTableDetail
+	DetailGroup string
 	// ObservationIDs, when set, name the observation of each row (HTML row
 	// id and data-observation).
 	ObservationIDs []string
@@ -74,11 +78,18 @@ type secTable struct {
 	RowIDs []string
 }
 
+type secTableDetail struct {
+	ID, Label, Text string
+	Sources         []sourceCitation
+}
+
+func (t secTable) DetailColumns() int { return len(t.Head) + 1 }
+
 // secCard is one finding of the summary layout: its title and a few lines.
 type secCard struct {
-	ID, Title string
-	State     string
-	Lines     []secItem
+	ID, Title, State, Location string
+	Lines                      []secItem
+	Preview                    *sourcePreview
 }
 
 // secCell is plain text or a code span; Anchor links to an in-page id.
@@ -372,7 +383,11 @@ func newSecView(r Report, digest string, l Locale) secView {
 			if x.SizeBytes != nil {
 				size = strconv.FormatInt(*x.SizeBytes, 10)
 			}
-			it.Rows = append(it.Rows, []secCell{code(x.Path), code(x.Class), txt(displayDocumentScope(x.AppliesTo)), txt(lab(l, "doc_status", x.Status)), code(optText(x.Reason, "-")), txt(size), txt(optInt(x.LineCount, "-"))})
+			reason := "-"
+			if x.Reason != nil {
+				reason = reasonText(l, *x.Reason)
+			}
+			it.Rows = append(it.Rows, []secCell{code(x.Path), code(x.Class), txt(displayDocumentScope(x.AppliesTo)), txt(lab(l, "doc_status", x.Status)), txt(reason), txt(size), txt(optInt(x.LineCount, "-"))})
 		}
 		docs.Parts = append(docs.Parts, secPart{Heading: l.Label("docs.items"), Table: it, Empty: l.Label("none")})
 		dm := &secTable{Head: []string{l.Label("col.module"), l.Label("col.status"), l.Label("col.own"), l.Label("col.inherited")}}
@@ -401,7 +416,12 @@ func newSecView(r Report, digest string, l Locale) secView {
 			docs.Parts = append(docs.Parts, listPart(l.Label("docs.limitations"), items, ""))
 		}
 	}
-	docs.Parts = append(docs.Parts, modelPart(l, d.Model))
+	dp := modelPart(l, d.Model)
+	if optText(d.Model.Reason, "") == "documents_not_selected" && len(d.Items) > 0 &&
+		!slices.ContainsFunc(d.Items, func(item DocItem) bool { return optText(item.Reason, "") != "credential_like_content" }) {
+		dp.Paras = []string{tf(l, "model.not_performed", l.Label("inspection.documents_withheld"))}
+	}
+	docs.Parts = append(docs.Parts, dp)
 	v.Sections = append(v.Sections, docs)
 
 	// Static analysis.
@@ -410,13 +430,18 @@ func newSecView(r Report, digest string, l Locale) secView {
 	st.Parts = append(st.Parts, secPart{Paras: []string{stageLine(l, s.Stage), l.Label("static.lead")}, Counts: countsOf(l, SectionStaticAnalysis, overviewCounts(r, SectionStaticAnalysis), countOrder[SectionStaticAnalysis])})
 	var diag []string
 	for _, lang := range s.Languages {
+		st.Parts = append(st.Parts, v.staticResults(lang, obs))
 		st.Parts = append(st.Parts, v.staticInspectionParts(lang, obs)...)
 		for _, tool := range lang.Tools {
 			diag = append(diag, tool.ObservationIDs...)
 		}
 	}
 
-	st.Parts = append(st.Parts, v.observationsPart(l.Label("static.observations"), diag, obs, l.Label("static.no_observations")))
+	if len(diag) > 0 {
+		records := v.observationsPart("", diag, obs, l.Label("static.no_observations"))
+		records.Fold = tf(l, "inspection.all_diagnostics", len(diag))
+		st.Parts = append(st.Parts, records)
+	}
 	st.Parts = append(st.Parts, secPart{Heading: l.Label("static.findings"), Findings: pick(StaticFindingIDs(r)), Empty: l.Label("static.no_findings")})
 	v.Sections = append(v.Sections, st)
 
@@ -517,6 +542,9 @@ func ledgerParts(l Locale, x ReviewLedger) []secPart {
 	head := secPart{Heading: l.Label("ledger.heading"), Paras: []string{l.Label("ledger.lead"), l.Label("ledger.status." + x.Status),
 		tf(l, "ledger.scope", x.Scope.Key, scope), tf(l, "ledger.calls", optInt(x.CallsUsed, unknown), optInt(x.MaxCalls, unknown)),
 		tf(l, "ledger.bytes", optInt(x.RequestBytesSent, unknown), optInt(x.MaxRequestBytes, unknown))}}
+	if x.ExtendedCoverage {
+		head.Paras = append(head.Paras, l.Label("ledger.extended"))
+	}
 	mt := &secTable{Head: []string{l.Label("col.module"), l.Label("col.discovered"), l.Label("col.eligible"), l.Label("col.sent"), l.Label("col.bytes_sent"),
 		l.Label("col.truncated"), l.Label("col.withheld"), l.Label("col.unreadable"), l.Label("col.budget_exhausted"), l.Label("col.not_planned"),
 		l.Label("col.not_sent"), l.Label("col.completed")}}
@@ -725,13 +753,7 @@ func renderMarkdownSections(r Report, digest string, l Locale) []byte {
 		p("## ", mdText(s.Title))
 		p()
 		if s.ID == "overview" {
-			for _, signal := range v.ReadingSignals() {
-				p(mdText(signal))
-				p()
-			}
-			mdPart(p, v.TestRunPart(), l)
-			mdBehaviors(p, v.Behaviors, l)
-			mdDecision(p, v.Decision, l)
+			mdReadingOverview(p, v)
 		}
 		for _, part := range s.Parts {
 			mdComparisonAnchor(p, v.Decision, v.Behaviors, part.Anchor)
@@ -796,16 +818,35 @@ func mdPart(p func(...string), part secPart, l Locale) {
 		for _, h := range t.Head {
 			head, sep = append(head, mdText(h)), append(sep, "---")
 		}
+		if len(t.Details) > 0 {
+			head, sep = append(head, mdText(l.Label("inspection.detail_column"))), append(sep, "---")
+		}
 		p("| ", strings.Join(head, " | "), " |")
 		p("|", strings.Join(sep, "|"), "|")
-		for _, row := range t.Rows {
+		for n, row := range t.Rows {
 			cells := make([]string, len(row))
 			for i, c := range row {
 				cells[i] = mdCell(c)
 			}
+			if len(t.Details) > 0 {
+				cells = append(cells, "["+mdText(l.Label("inspection.open_detail"))+"](#"+t.Details[n].ID+")")
+			}
 			p("| ", strings.Join(cells, " | "), " |")
 		}
 		p()
+		for _, d := range t.Details {
+			mdReadingAnchor(p, d.ID)
+			p("<details>")
+			p("<summary>", mdText(d.Label), "</summary>")
+			p()
+			mdCitations(p, d.Sources)
+			if d.Text != "" {
+				p(mdText(d.Text))
+				p()
+			}
+			p("</details>")
+			p()
+		}
 	}
 	if len(part.List) > 0 {
 		for _, it := range part.List {
@@ -895,8 +936,8 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <main class="report-main">
 <header class="report-hero">
 {{if and .R.Project .R.Project.Name}}<h1 class="report-name">{{.R.Project.Name}}</h1>{{else}}<h1 class="report-name">{{.L.Label "title"}}</h1>{{end}}
-{{if .Behaviors.Description}}<p class="report-purpose">{{.Behaviors.Description}} {{with .Behaviors.Source}}
-{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer"><code>{{.Location}}</code></a>{{else}}<code>{{.Location}}</code>{{end}}{{end}}</p>{{end}}
+{{if .Behaviors.Description}}<details class="report-purpose"><summary>{{.L.Label "behavior.project_intro"}}</summary><p>{{.Behaviors.Description}} {{with .Behaviors.Source}}
+{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer"><code>{{.Location}}</code></a>{{else}}<code>{{.Location}}</code>{{end}}{{end}}</p></details>{{end}}
 {{with .HeaderSource}}<p class="export-target"><strong>{{$.L.Label "report.target"}}</strong><code>{{.}}</code></p>{{end}}
 <div class="report-verdict">
 <span class="badge">{{if .HasStatusBanner}}{{reportIcon "clock"}}{{else}}{{reportIcon "circle-check"}}{{end}} {{.ReportStatus}}</span>
@@ -912,17 +953,14 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{$l := .L}}{{range .Sections}}<section id="{{.ID}}" data-section="{{.ID}}" class="export-section">
 <h2>{{.Title}}</h2>
 {{if eq .ID "overview"}}
-{{with $.ReadingSignals}}<ul class="report-reading-signals">{{range .}}<li>{{.}}</li>{{end}}</ul>{{end}}
-{{template "part" (pair $l $.TestRunPart)}}
+{{template "reading_overview" $}}
+{{if eq $.R.Inputs.Profile "with-tests"}}<div id="test-results">{{template "part" (pair $l $.TestRunPart)}}</div>{{end}}
 {{if $.Summary}}{{range .Parts}}{{template "part" (pair $l .)}}{{end}}{{end}}
-{{if $.Behaviors.Rows}}
-{{if $.PriorityDecision}}{{template "decision" $}}{{end}}
-{{template "behaviors" $}}
-{{if not $.PriorityDecision}}<details class="card report-disclosure">
-<summary>{{reportIcon "chevron-down"}} {{$l.Label "decision.document_assessment"}}</summary>
+<details class="card report-disclosure">
+<summary>{{reportIcon "chevron-down"}} {{$l.Label "reading.context_details"}}</summary>
 {{template "decision" $}}
-</details>{{end}}
-{{else}}{{template "decision" $}}{{end}}
+{{if $.Behaviors.Rows}}{{template "behaviors" $}}{{end}}
+</details>
 <details class="card report-disclosure">
 <summary>{{reportIcon "chevron-down"}} {{$l.Label "opening.coverage_details"}}</summary>
 {{if $.Summary}}{{range $.OverviewDetail}}{{template "part" (pair $l .)}}{{end}}{{else}}{{range .Parts}}{{template "part" (pair $l .)}}{{end}}{{end}}
@@ -986,6 +1024,11 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <script id="report-export-navigation">` + reportExportNavigation + `</script>
 </body>
 </html>
+{{define "reading_overview"}}{{$l := .L}}{{with .ReadingOverview}}<section class="report-overview-results" aria-label="{{$l.Label "reading.outcome"}}">
+<h3>{{$l.Label "reading.outcome"}}</h3>
+<table><thead><tr><th scope="col">{{$l.Label "reading.area"}}</th><th scope="col">{{$l.Label "reading.result"}}</th><th scope="col">{{$l.Label "reading.details"}}</th></tr></thead>
+<tbody>{{range .}}<tr><th scope="row">{{.Label}}{{if .Status}}<small>{{.Status}}</small>{{end}}</th><td>{{.Value}}</td><td><a class="btn btn-sm btn-ghost-primary overview-result-action" href="#{{.Section}}" aria-label="{{tf $l "reading.view_area" .Label}}"><span>{{$l.Label "reading.view"}}</span>{{reportIcon "chevron-right"}}</a></td></tr>{{end}}</tbody></table>
+</section>{{end}}{{end}}
 {{define "report_navigation"}}<ul class="nav nav-vertical">
 {{range .Sections}}<li><a href="#{{.ID}}" class="nav-link">{{reportIcon (sectionIcon .ID)}}<span>{{.Title}}</span></a></li>{{end}}
 <li><a href="#appendix" class="nav-link">{{reportIcon "list-details"}}<span>{{.L.Label "section.appendix"}}</span></a></li>
@@ -1054,26 +1097,21 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <ul>{{range .Items}}<li>{{template "item" .}}</li>{{end}}</ul>
 </details>{{end}}{{end}}
 {{define "section_reading"}}{{$l := .L}}{{with .P.Reading}}<div class="report-reading-groups">
-<p class="model" role="note">{{.Model}}</p>
 {{if and .IndexLabel (gt (len .Groups) 1)}}<nav aria-label="{{.IndexLabel}}"><ul class="report-reading-index">
 {{range .Groups}}<li><a href="#{{.ID}}"><code>{{.Title}}</code></a></li>{{end}}
 </ul></nav>{{end}}
 {{$sources := .SourcesLabel}}{{range .Groups}}<section class="report-reading-group">
 <h4{{if .ID}} id="{{.ID}}" tabindex="-1"{{end}}><code>{{.Title}}</code></h4>
-{{range .Categories}}<div class="report-reading-category">
-{{if .Title}}<h5>{{.Title}}</h5>{{end}}
-<ul class="report-reading-list">{{range .Rows}}
-{{if .SharedPath}}<li><a href="#{{.ID}}">{{.Title}}</a> <small>{{tf $l "docs.reading_shared" .SharedPath}}</small></li>
-{{else}}<li class="report-reading-row">
+<div class="scroll report-detail-index"><table><thead><tr><th scope="col">{{$l.Label "col.item"}}</th><th scope="col">{{$l.Label "col.status"}}</th><th scope="col">{{$l.Label "col.location"}}</th></tr></thead><tbody>{{range .Categories}}{{$category := .Title}}{{range .Rows}}
+{{if .SharedPath}}<tr><td colspan="3"><a href="#{{.ID}}">{{.Title}}</a> <small>{{tf $l "docs.reading_shared" .SharedPath}}</small></td></tr>
+{{else}}<tr class="report-reading-row"><td colspan="3"><details name="report-reading-rows" class="report-result-details">
+<summary id="{{.ID}}" tabindex="-1"><strong>{{.Title}}</strong><span class="report-index-status">{{if .Status}}<span class="badge report-reading-status">{{.Status}}</span>{{else}}{{.Type}}{{end}}{{if $category}}<small class="report-item-category">{{$category}}</small>{{end}}</span><span class="report-index-location">{{.Location}}</span></summary>
 {{range .Aliases}}<span id="{{.}}" tabindex="-1"></span>{{end}}
-<h5 id="{{.ID}}" tabindex="-1">{{.Title}}</h5>
-{{if .Status}}<span class="badge report-reading-status">{{.Status}}</span>{{end}}
-{{if .Type}}<span class="badge report-reading-status">{{.Type}}</span>{{end}}
+{{template "source_preview" .Preview}}
 {{if .Details}}<ul>{{range .Details}}<li>{{template "item" .}}</li>{{end}}</ul>{{end}}
 {{range .Sources}}{{template "citation" .}}{{end}}
 {{template "workflow_reading" .Workflow}}
-</li>{{end}}{{end}}</ul>
-</div>{{end}}
+</details></td></tr>{{end}}{{end}}{{end}}</tbody></table></div>
 {{if .Sources}}<details class="report-reading-sources"><summary>{{$sources}}</summary>
 {{range .Sources}}<div id="{{.Anchor}}" tabindex="-1">
 <p class="report-excerpt-label">{{.StoredLabel}} <code>{{.ExcerptLocation}}</code></p>
@@ -1091,8 +1129,11 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{end}}{{if .Counts}}<table><tr><th>{{$l.Label "col.item"}}</th><th>{{$l.Label "col.count"}}</th></tr>
 {{range .Counts}}<tr><td>{{.Label}}</td><td data-count="{{.Name}}">{{.Value}}</td></tr>
 {{end}}</table>
-{{end}}{{if and .Table .Table.Rows}}<div class="scroll"><table><tr>{{range .Table.Head}}<th scope="col">{{.}}</th>{{end}}</tr>
-{{$t := .Table}}{{range $i, $row := $t.Rows}}<tr{{if $t.ObservationIDs}} id="{{index $t.ObservationIDs $i}}" data-observation="{{index $t.ObservationIDs $i}}"{{end}}{{if $t.RowIDs}} id="{{index $t.RowIDs $i}}"{{end}}>{{range $row}}<td>{{if .Anchor}}<a href="#{{.Anchor}}">{{end}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{if .Anchor}}</a>{{end}}</td>{{end}}</tr>
+{{end}}{{if and .Table .Table.Rows}}<div class="scroll"><table><tr>{{range .Table.Head}}<th scope="col">{{.}}</th>{{end}}{{if .Table.Details}}<th scope="col">{{$l.Label "inspection.detail_column"}}</th>{{end}}</tr>
+{{$t := .Table}}{{range $i, $row := $t.Rows}}<tr{{if $t.ObservationIDs}} id="{{index $t.ObservationIDs $i}}" data-observation="{{index $t.ObservationIDs $i}}"{{end}}{{if $t.RowIDs}} id="{{index $t.RowIDs $i}}"{{end}}>{{range $row}}<td>{{if .Anchor}}<a href="#{{.Anchor}}">{{end}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{if .Anchor}}</a>{{end}}</td>{{end}}{{if $t.Details}}<td><details class="report-row-toggle" name="{{$t.DetailGroup}}"><summary aria-controls="{{(index $t.Details $i).ID}}" aria-label="{{(index $t.Details $i).Label}}">{{$l.Label "inspection.open_detail"}}</summary></details></td>{{end}}</tr>
+{{if $t.Details}}{{with index $t.Details $i}}<tr class="report-row-detail" id="{{.ID}}"><td colspan="{{$t.DetailColumns}}">
+{{range .Sources}}<div class="report-evidence">{{with .InspectionPreview}}{{template "source_preview" .}}{{else}}{{template "citation_file" .}}{{end}}{{if .URL}} <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.LinkLabel}}</a>{{end}}</div>{{end}}
+{{if .Text}}<p>{{.Text}}</p>{{end}}</td></tr>{{end}}{{end}}
 {{end}}</table></div>
 {{end}}{{if .List}}<ul>{{range .List}}<li{{with .ObservationID}} id="{{.}}" data-observation="{{.}}"{{end}}>{{template "item" .}}</li>{{end}}</ul>
 {{end}}{{template "workflow_reading" .Workflow}}{{range .Sources}}{{template "citation" .}}{{end}}{{range .Findings}}<section class="card export-full-finding" id="{{.ID}}" data-finding="{{.ID}}">
@@ -1112,14 +1153,13 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{range .Verification}}<li>verification: {{.}}</li>{{end}}
 {{range .Limitations}}<li>limitation: {{.}}</li>{{end}}
 </ul></section>
-{{end}}{{if .Cards}}<div class="report-cards">{{range .Cards}}<article class="card report-card"{{if .ID}} id="{{.ID}}" data-finding="{{.ID}}"{{end}}>
-<div class="card-body">
-{{if .State}}<span class="badge">{{.State}}</span>{{end}}
-<h4 class="card-title">{{.Title}}</h4>
+{{end}}{{if .Cards}}<div class="scroll report-detail-index"><table><thead><tr><th scope="col">{{$l.Label "col.item"}}</th><th scope="col">{{$l.Label "col.status"}}</th><th scope="col">{{$l.Label "col.location"}}</th></tr></thead><tbody>
+{{range .Cards}}<tr><td colspan="3"><details class="report-result-details" name="report-finding-rows"{{if .ID}} data-finding="{{.ID}}"{{end}}>
+<summary{{if .ID}} id="{{.ID}}"{{end}}><strong>{{.Title}}</strong><span class="report-index-status">{{.State}}</span><span class="report-index-location"><code>{{.Location}}</code></span></summary>
+{{template "source_preview" .Preview}}
 {{if .Lines}}<ul class="export-card-points">{{range .Lines}}<li>{{template "item" .}}</li>{{end}}</ul>{{end}}
-</div>
-</article>
-{{end}}</div></section>
+</details></td></tr>
+{{end}}</tbody></table></div></section>
 {{end}}{{if .ShowEmpty}}<p>{{.Empty}}</p>{{end}}
 {{range .Parts}}{{template "part" (pair $l .)}}{{end}}
 {{if .Fold}}</details>{{end}}{{end}}{{end}}
@@ -1136,6 +1176,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{else if .URL}}<a href="{{.URL}}" class="btn btn-sm btn-ghost-primary report-source-action export-evidence-control" target="_blank" rel="noopener noreferrer" aria-label="{{.ActionLabel}} · {{.Location}}">{{template "citation_action" .}}{{reportIcon "external-link"}}</a>
 {{else}}{{template "citation_file" .}}{{end}}
 </div>{{end}}
+{{define "source_preview"}}{{with .}}<div class="report-selected-source"><p><code>{{.Location}}</code></p><pre class="source-window" tabindex="0" aria-label="{{.Location}}"><code>{{range .Lines}}<span class="source-line"{{if .Focus}} data-focus="true"{{end}}><span aria-hidden="true">{{.Number}}</span>{{.Text}}</span>{{end}}</code></pre></div>{{end}}{{end}}
 {{define "citation_action"}}<span class="export-evidence-label">{{.ActionLabel}}</span>{{template "citation_file" .}}{{end}}
 {{define "citation_file"}}<span class="report-file" title="{{.Location}}">{{reportIcon "file-description"}}<code class="report-file-name">{{.File}}</code><code class="report-file-lines">:{{.Range}}</code></span>{{end}}`))
 

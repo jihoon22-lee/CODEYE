@@ -11,7 +11,7 @@
       "required": ["schema_version", "pack", "snapshot_manifest_digest", "run_id", "attempt_id", "stage", "outcome", "upstream", "evidence", "observations", "limitations", "calls"],
       "properties": {
         "schema_version": {"enum":["0.2","0.3","0.4","0.5","0.6"]},
-        "slice": {"type":"object","additionalProperties":false,"required":["key","modules"],"properties":{"key":{"type":"string","pattern":"^s(00[1-9]|0[1-8][0-9]|09[0-6])$"},"modules":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":{"type":"string","pattern":"^(cpp|go|javascript|python|rust):(\\.|[^:\\u0000-\\u001f]+)$"}}}},
+        "slice": {"type":"object","additionalProperties":false,"required":["key","modules"],"properties":{"key":{"type":"string","pattern":"^s(00[1-9]|0[1-9][0-9]|[1-9][0-9]{2})$"},"modules":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":{"type":"string","pattern":"^(cpp|go|javascript|python|rust):(\\.|[^:\\u0000-\\u001f]+)$"}}}},
         "pack": {"type":"object","additionalProperties":false,"required":["id","version"],"properties":{"id":{"$ref":"#/$defs/pack_id"},"version":{"$ref":"#/$defs/version"}}},
         "snapshot_manifest_digest": {"$ref":"#/$defs/digest"},
         "run_id": {"$ref":"#/$defs/uuid"}, "attempt_id": {"$ref":"#/$defs/uuid"},
@@ -96,7 +96,7 @@
         "calls":{"maxItems":2,"items":{"properties":{"role":{"const":"contract"},"attempt":{"maximum":2}}}},
         "upstream":{
           "minItems":2,"maxItems":7,
-          "items":{"properties":{"state":{"const":"accepted"},"source":{"anyOf":[{"enum":["review.documents","review.investigate","review.scope"]},{"pattern":"^review\\.(investigate|verify)\\.s(00[1-9]|0[1-8][0-9]|09[0-6])$"}]}}},
+          "items":{"properties":{"state":{"const":"accepted"},"source":{"anyOf":[{"enum":["review.documents","review.investigate","review.scope"]},{"pattern":"^review\\.(investigate|verify)\\.s(00[1-9]|0[1-9][0-9]|[1-9][0-9]{2})$"}]}}},
           "allOf":[
             {"contains":{"properties":{"source":{"const":"review.documents"}}},"maxContains":1},
             {"contains":{"properties":{"source":{"const":"review.investigate"}}},"maxContains":1},

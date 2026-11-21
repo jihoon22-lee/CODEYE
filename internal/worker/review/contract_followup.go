@@ -59,7 +59,7 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 	if err != nil {
 		return result(domain.TaskFailed, reasonCallCountFailed)
 	}
-	if used >= s.h.maxCalls() {
+	if used >= s.h.maxCalls(s.j.Scope) {
 		return result(domain.TaskBudgetExhausted, reasonBudgetExhausted)
 	}
 	if r := s.begin([]record.Upstream{uDoc, uInv}); r != nil {

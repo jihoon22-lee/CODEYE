@@ -403,6 +403,72 @@ func TestInvestigationKeepsCandidateWhenStrengthCitesOnlyImportAndComment(t *tes
 	}
 }
 
+func TestExtendedCoverageReadsPastOrdinarySlotLimitOnRetry(t *testing.T) {
+	const tail = "late.go"
+	const marker = "return catalogueSize + 1"
+	tree := map[string]string{"go.mod": "module sample.test/catalogue\n\ngo 1.23\n"}
+	for i := range 390 {
+		// Seventy-five short lines force two windows per file without
+		// depending on the byte budget or synthetic padding in prompts.
+		tree[fmt.Sprintf("file%03d.go", i)] = fmt.Sprintf("package catalogue\nfunc Entry%03d() int {\n", i) +
+			strings.Repeat("_ = 0\n", 71) + fmt.Sprintf("return %d\n}\n", i)
+	}
+	tree[tail] = "package catalogue\nfunc Last(catalogueSize int) int {\n" + strings.Repeat("_ = 0\n", 71) + marker + "\n}\n"
+	j := treeJob(t, tree)
+	j.Scope = domain.Scope{Kind: "full", ReviewCoverage: domain.ReviewCoverageExtended}
+	pinExampleSnapshot(t, &j)
+
+	normal := j
+	normal.Scope.ReviewCoverage = ""
+	normal.Snapshot.SnapshotDir = "" // Standard planning only requires the manifest.
+	if got := (Handler{MaxCalls: 600}).maxCalls(normal.Scope); got != record.LegacyMaxCalls {
+		t.Fatalf("ordinary review inherited the extended operator limit: %d", got)
+	}
+	noModel, err := Handler{Static: secretsStub{}}.Plan(t.Context(), normal)
+	if err != nil || len(sliceKeys(noModel)) > record.LegacyMaxSlices {
+		t.Fatalf("ordinary plan with no model allocated %d pairs: %v", len(sliceKeys(noModel)), err)
+	}
+
+	script := coverageScript(t)
+	script["investigate"] = func(_ int, _ opencode.Request) opencode.Reply {
+		return asJSON(map[string]any{"candidates": []any{}})
+	}
+	originalCaller := &scriptedCaller{script: script}
+	original := sliceReportWithCaller(t, j, secretsStub{}, record.LegacyMaxCalls, &exampleIDs{n: 0x802}, originalCaller)
+	j.AttemptID, j.Scratch = domain.NewID(), t.TempDir()
+	retryCaller := &scriptedCaller{script: script}
+	retried := sliceReportWithCaller(t, j, secretsStub{}, 600, &exampleIDs{n: 0x902}, retryCaller)
+	first, refreshed := original.CodeReview.Ledger, retried.CodeReview.Ledger
+	if first == nil || refreshed == nil || !first.ExtendedCoverage || !refreshed.ExtendedCoverage ||
+		first.Status == report.LedgerComplete || refreshed.Status != report.LedgerComplete ||
+		refreshed.CallsUsed == nil || *refreshed.CallsUsed > 600 || retryCaller.calls(record.StageInvestigate) <= record.LegacyMaxSlices {
+		t.Fatalf("unexpected coverage status: ordinary calls %d, extended calls %d", len(originalCaller.requests), len(retryCaller.requests))
+	}
+	find := func(files []report.LedgerFile) report.LedgerFile {
+		return files[slices.IndexFunc(files, func(f report.LedgerFile) bool { return f.Path == tail })]
+	}
+	before, after := find(first.Files), find(refreshed.Files)
+	if !slices.ContainsFunc(before.Remaining, func(r report.LedgerRange) bool { return r.Reason == record.ScopeReasonSlotLimit }) ||
+		len(after.Remaining) != 0 || after.ReviewedLines != after.TotalLines ||
+		!slices.ContainsFunc(retryCaller.requests, func(q opencode.Request) bool { return strings.Contains(string(q.Input), marker) }) {
+		t.Fatalf("extended review did not reach the late source: before %+v, after %+v", before, after)
+	}
+	keys := func(r report.Report) []string {
+		var keys []string
+		for _, task := range r.Tasks {
+			if _, _, ok := record.SliceTask(task.Key); ok {
+				keys = append(keys, task.Key)
+			}
+		}
+		return keys
+	}
+	if !slices.Equal(keys(original), keys(retried)) || original.Inputs.ManifestSHA256 != retried.Inputs.ManifestSHA256 {
+		t.Fatal("retry changed the pinned plan keys or snapshot")
+	}
+	t.Logf("pinned snapshot: %d ordinary vs %d extended investigation requests; file tail advanced from %d/%d to %d/%d accepted source lines",
+		originalCaller.calls(record.StageInvestigate), retryCaller.calls(record.StageInvestigate), before.ReviewedLines, before.TotalLines, after.ReviewedLines, after.TotalLines)
+}
+
 // writeOrCompare stores r (demo) at p, or compares with the stored file.
 func writeOrCompare(t *testing.T, r report.Report, p string) {
 	t.Helper()

@@ -174,7 +174,7 @@
 - 뒤쪽 절에 여러 API 멤버 제목이 들어 있고 발췌 개수에 여유가 있으면 같은 줄 범위를 제목 경계에서 나눈다. 나눈 발췌의 합계는 원래 선택한 절과 같으며 각 발췌에 별도의 근거 ID를 부여한다. 모델이 해당 멤버의 발췌를 인용하면 보고서가 그 제목 주변을 보여준다.
 - 기존 발췌를 모두 둔 뒤에도 예산이 남으면 대표 README부터 각 사용 안내의 빠진 본문을 한 구간씩 돌아가며 추가한다. 제목이 없거나 인식되지 않은 절도 본문을 담으며, 이미 선택한 범위와 운영 섹션을 피하고 원래 줄 경계에서 자른다. 발췌 개수와 바이트 합계는 같은 요청 상한을 따른다. 보고서는 요청에 실린 줄을 근거로 연결한다.
 - Markdown 목록은 같은 파일의 인접 발췌를 합쳐서 확인한다. 요청 한도에 맞춘 뒤 목록 일부가 빠진 발췌에는 `incomplete_list`를 붙인다. 모델은 보이는 항목을 근거로 쓰고 전체 목록의 구성이나 실행 순서를 단정하지 않는다.
-- 예산 때문에 문서가 빠지면 `documents_outside_review_input`, 문서 일부만 보내면 `document_excerpt_only`를 남긴다.
+- 탐색의 로컬 읽기 범위는 [문서 탐색](ARCHITECTURE.md#문서-탐색)에 기록한다. 모델 검토의 근거는 요청에 실제로 포함된 발췌다. 예산 때문에 문서가 빠지면 `documents_outside_review_input`, 문서 일부만 보내면 `document_excerpt_only`를 남긴다.
 - 읽지 않은 안내 문서(최대 16개), 모듈별 문서 연결과 겹침 묶음(각 최대 32·16개, 목록당 8개)을 함께 준다. 줄이면 `document_lists_shortened`다.
 - 발췌와 부가 목록을 함께 보낼 수 있는지 먼저 확인한다. 요청 상한에 닿으면 읽지 않은 문서·모듈 연결·겹침 묶음을 먼저 줄여 문서 원문을 보존한다. 목록을 모두 덜어 내도 상한에 닿으면 뒤쪽 발췌부터 줄인다. 요청과 검토 기록에 `document_lists_shortened`를 남기고 탐색 산출물은 유지한다.
 - 문서 요청의 `evidence_id`는 전달한 발췌 순서에 따른 `D1`, `D2` 같은 짧은 참조다. 형식 복구에서도 같은 참조를 보낸다. 워커는 응답의 모든 문서 인용을 스냅샷 근거 ID로 바꾼 뒤 범위와 중복을 검사한다. 정확히 제공된 참조와 그 발췌의 근거 ID만 받으며 저장 기록과 후속 검토에는 스냅샷 근거 ID를 사용한다.
@@ -238,14 +238,14 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 ### 검토 우선순위
 
 - 모듈 ID는 `<ecosystem>:<dir>`이다. 소스는 해당 생태계의 가장 깊은 선언 디렉터리에 속하고, 선언이 없으면 루트(`.`)에 속한다. `discovered`는 모듈 탐색에서도 같은 ID를 찾았는지 나타낸다. 각 모듈의 적격 파일 수와 실제 검토 범위를 각각 기록한다.
-- 슬롯 수는 manifest와 scope로 정한다. overview에 들어갈 가능성이 높은 앞부분을 추정하고, 나머지 파일을 묶은 수에 긴 파일과 순서 변화에 필요한 여유를 둔다. slot은 최대 96개이며 같은 스냅샷·범위는 호출 상한에 관계없이 같은 작업 키를 사용한다. `review.scope`는 원문을 JSON으로 인코딩한 실제 크기로 배정한다.
+- 일반 검토는 manifest에서 필요한 작업 수를 추정하며 최대 96개의 후속 조사·확인 쌍을 계획한다. 실패하거나 취소된 실행을 고정 스냅샷에서 재시도할 때 이전 작업 키가 모두 필요하므로 기존 추정 규칙을 유지한다. 확장 코드 검토는 스냅샷의 검증된 원문에서 필요한 발췌 수를 산정해 최대 999개의 작업 쌍을 계획한다. 같은 스냅샷·범위에서 노드 호출 상한을 바꾸거나 재시도해도 작업 키가 같다. `review.scope`는 실제 JSON 바이트 크기를 기준으로 발췌를 배정한다.
 - 일반 실행은 아직 수락된 발췌가 없는 모듈에 공백이 아닌 소스 발췌를 하나씩 먼저 배정한다. 주요 소스의 모듈을 먼저 배정하고, 부차 소스만 남은 모듈에도 첫 발췌를 배정한 뒤 모듈의 추가 파일과 나머지 줄로 넘어간다. PR은 변경 파일, 변경 파일과 같은 디렉터리의 파일, 그 밖의 파일 순을 유지하며 각 단계 안에서 같은 배정 순서를 쓴다. 한 slot에 여러 모듈의 짧은 발췌를 담을 수 있다.
 - 같은 순서에서 비지표 도구 진단의 심각도와 수, 필수 분석기 실패, 진입점, 소스, 테스트, 경로를 사용한다. 파일 안에서는 해당 진단 위치, 그다음 실행문이 있는 발췌를 우선한다. 억제된 진단과 지표는 진단 우선순위에 포함하지 않는다. `priority.secondary`에는 예제·시험 입력·의존성·생성물 경로를 식별하는 규칙이 남는다. 첫 10줄에 생성 표지가 있는 파일도 부차 파일이다. [분류 규칙](../internal/worker/review/record/priority.go)
 - 원문 길이 한도에 걸린 줄은 `review_line_input_limit`을 남기고 다음 줄을 검토한다. 공백으로만 이루어진 발췌는 `source_blank_range`로 기록한다. slot 한도 뒤의 파일과 줄은 `review_slice_limit`로 남는다. 원문 입력 크기 상한, 읽을 수 없는 텍스트와 빈 파일, 비밀값 선별에 걸린 파일에도 실제 이유가 남는다.
 
 ### 호출 상한과 승인
 
-- `codeye agent --review-max-calls N`과 서비스 설정 `agent.model.review_max_calls`는 attempt당 호출 수를 제한한다(기본 99, 15~207). run 요청은 상한을 바꿀 수 없다. 전체 역할 다섯 개의 최대 호출은 15회이며 slice보다 먼저 실행된다.
+- `codeye agent --review-max-calls N`과 서비스 설정 `agent.model.review_max_calls`는 attempt당 호출 수를 제한한다(기본 99, 15~2,013). 일반 검토에는 최대 207회가 적용된다. `scope.review_coverage: "extended"`를 선택하고 노드 상한이 207회를 넘을 때 96개 이후의 후속 조사도 실행할 수 있다. 전체 역할 다섯 개의 최대 호출은 15회이며 후속 조사보다 먼저 실행된다.
 - slice는 조사와 확인을 위해 두 호출이 남아 있을 때 시작한다. 조사 재시도는 확인에 쓸 한 호출을 보존한다. 후보가 없는 slot은 검증 호출 없이 완료된다. 형식 복구도 같은 상한을 쓰며, 호출을 남김없이 써야 하는 검토는 기존 복구 횟수보다 일찍 종료할 수 있다. 승인되지 않은 slot은 `budget_exhausted`(`review_budget_exhausted`)로 기록한다. 선택적 `review.contract`도 같은 계수의 잔여 호출을 사용한다.
 - 계수 파일은 attempt의 scratch에 둔다. 순서대로 실행하는 모든 모델 요청은 호출 전에 계수를 확인하고 한 줄을 기록한다. 계수를 읽거나 쓰지 못하면 해당 호출은 `review_call_count_failed`로 끝난다.
 
@@ -419,12 +419,12 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 
 ## 모델에 보낼 수 있는 소스
 
-- 모델 전송은 노드 운영자가 로컬 소스 루트마다 허용한다. `codeye agent --model-source-root ROOT_ID`(반복 가능)다.
-- `codeye up`이 띄운 에이전트는 프로젝트마다 고른다(관리자가 아닌 사람이 시작한 run은 관리자 스위치 안에서). 에이전트가 `--project-analysis-policy`로 뜨고, job에 실린 프로젝트의 분석 선택 `send_source_to_model`(로컬 폴더·Git 저장소 모두 기본 켬)이 모델 전송을 정한다. Git 저장소 프로젝트도 모델 검토를 받는다. `source_roots[].model_review`는 더 이상 쓰이지 않는다(A40). 모델이 설정되지 않았으면 선택과 관계없이 검토 단계가 `model_not_configured`로 끝난다.
-- 실제 모델을 쓰려면 에이전트에 `--opencode ABSOLUTE_PATH --model PROVIDER/MODEL`과 키 파일(`--model-credential-file`)을 준다. 예산 relay를 쓸 때는 `--model-relay-file ABSOLUTE_PATH`를 준다.
-- 일반 소스 매핑(`--source-root`)과 모델 전송 허가는 별개다. 허가가 없는 루트의 run은 모든 검토 task가 `model_source_not_approved`이고 정적 분석 결과만 남는다.
-- Git 소스는 모델에 보낼 수 없다. Git 취득 run의 검토 task는 항상 `model_source_not_approved`다. Git 소스의 개별 모델 전송 승인은 설계 계약(미구현)이다.
-- run이나 스냅샷의 어떤 내용도 이 허가를 올리지 못한다. 저장소 코드 실행 허가(`--repo-code-source-root`)와도 별개다([분석기](ANALYZERS.md)).
+| 실행 방식 | 모델 검토 범위 |
+|---|---|
+| 웹 서비스(`codeye up`) | 플랫폼 계정이 읽을 수 있는 로컬·NFS 폴더와 GitHub·GHES 저장소 및 PR. 에이전트는 `--project-analysis-policy`로 시작하고, 프로젝트의 `send_source_to_model` 선택과 실행자에게 제공한 모델 검토 권한을 적용한다. |
+| 루트별 정책으로 직접 시작한 에이전트 | 운영자가 `--model-source-root ROOT_ID`로 허용한 로컬 루트를 검토한다. 이 방식에서 Git 소스는 도구 검사만 수행한다. |
+
+모델을 연결하지 않은 노드는 `model_not_configured`를 기록한다. 운영자는 서버의 OpenCode 실행 파일과 모델 설정을 지정한다. 저장소 스크립트 실행 권한은 별도로 설정한다. [모델 설정](#모델-설정) · [실행 정책](EXECUTION.md) · [플랫폼 소스 계정](GITHUB.md)
 
 ## 검토 기록
 
@@ -475,7 +475,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 보고서 규칙의 전체는 [보고서](REPORT.md)에 있다. 검토 기록과 직접 맞물리는 규칙은 다음과 같다.
 
 - 필수 검토 역할은 계획된 `review.*` task의 `required_for_verdict`로 정한다. 하나 이상이고 모두 수락됐을 때만 `ai_review: performed`, 하나도 없으면 `not_performed`다. 필수가 아닌 역할은 `coverage.ai_review.optional_tasks`에 결과와 사유를 적고 수행으로 세지 않는다. 검토 task가 없는 계획은 필수 역할이 없다.
-- `coverage.review_calls`는 호출마다 `pack_id`·`pack_version`을, builder 6부터 호출이 든 task(`task_key`)를 싣는다. 상한은 207(호출 상한의 최댓값)이다. `llm_exposed_files`는 slice 기록이 보낸 경로도 센다.
+- `coverage.review_calls`는 호출마다 `pack_id`·`pack_version`과 호출이 든 task(`task_key`)를 싣는다. 최대 2,013개다. `llm_exposed_files`는 slice 기록이 보낸 경로도 센다.
 - 앞 단계·탐색·도구 산출물의 SHA-256, 관찰 ID, verify 후보와 앞 단계 후보가 맞지 않으면 그 단계를 `review_lineage_mismatch:<task>`로 제외한다. 같은 발췌가 앞 단계마다 다른 출처 표시(`context`·`observation`)로 올 수 있으므로 어느 한 표시와 같으면 받는다.
 - 모델이 서술한 숫자를 run 상태나 통계로 쓰지 않는다. 도구 관찰과 모델 후보는 서로 다른 산출물이다.
 

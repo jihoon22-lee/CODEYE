@@ -96,16 +96,32 @@ func (s *roleStage) reviewSource(e source.Entry) (string, string, error) {
 // readLines returns lines start..end (1-based, inclusive) of a verified
 // snapshot blob, or ok=false when the blob is not safe model input.
 func (s *roleStage) readLines(e source.Entry, start, end int) (string, int, bool, error) {
-	text, ok, err := s.readSource(e)
+	lines, ok, err := s.sourceLines(e, nil)
 	if err != nil || !ok {
 		return "", 0, false, err
 	}
-	lines := strings.Split(text, "\n")
 	if start < 1 || start > len(lines) {
 		return "", len(lines), false, nil
 	}
 	end = min(end, len(lines))
 	return strings.Join(lines[start-1:end], "\n"), len(lines), true, nil
+}
+
+// sourceLines can reuse a checked blob across excerpts in one role. The
+// caller resolves entries against that role's immutable snapshot index.
+func (s *roleStage) sourceLines(e source.Entry, cached map[string][]string) ([]string, bool, error) {
+	if lines, ok := cached[e.Path]; ok {
+		return lines, true, nil
+	}
+	text, ok, err := s.readSource(e)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	lines := strings.Split(text, "\n")
+	if cached != nil {
+		cached[e.Path] = lines
+	}
+	return lines, true, nil
 }
 
 // secretFiles are the files the secrets screen withholds from every model
@@ -151,20 +167,21 @@ func shortReviewSource(text string, maxBytes int) bool {
 // each excerpt's ID binding again.
 func (s *roleStage) withText(list []record.Excerpt) ([]record.Excerpt, error) {
 	files := s.entries()
+	cached := map[string][]string{}
 	out := make([]record.Excerpt, 0, len(list))
 	for _, x := range list {
 		e, ok := files[x.Path]
 		if !ok || e.SHA256 != x.SHA256 || x.ID != record.ExcerptID(s.j.Snapshot.Digest, x.Path, x.SHA256, x.Start, x.End) {
 			return nil, errSnapshotIntegrity
 		}
-		text, _, ok, err := s.readLines(e, x.Start, x.End)
+		lines, ok, err := s.sourceLines(e, cached)
 		if err != nil {
 			return nil, err
 		}
-		if !ok {
+		if !ok || x.Start < 1 || x.Start > len(lines) {
 			return nil, errSnapshotIntegrity
 		}
-		x.Text = text
+		x.Text = strings.Join(lines[x.Start-1:min(x.End, len(lines))], "\n")
 		out = append(out, x)
 	}
 	return out, nil

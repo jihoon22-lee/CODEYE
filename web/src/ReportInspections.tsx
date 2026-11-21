@@ -1,6 +1,9 @@
-import type { Observation, ObservationPlace } from './analysisReport';
-import type { Sections, StaticTool } from './parseReportSections';
-import { explainReason, label, PinnedSourceLink, sourceLocation } from './ReportParts';
+import { Fragment, useState, type ReactNode } from 'react';
+import type { Finding, Observation, ObservationPlace } from './analysisReport';
+import type { Excerpt, Sections, StaticTool } from './parseReportSections';
+import { explainReason, label, PinnedSourceLink, ReportPreview, sourceLocation } from './ReportParts';
+import { cutLine } from './format';
+import { ruleGroups, secondaryPath } from './reportGroups';
 import { reportKo } from './locales/report-ko';
 import { inspectionsKo as i } from './locales/report-inspections-ko';
 
@@ -113,6 +116,81 @@ function Place({ value }: { value?: ObservationPlace | null }) {
   return <PinnedSourceLink path={value.path} start={value.start} end={value.end} fallback={sourceLocation(value.path, value.start, value.end)} />;
 }
 
+type InspectionRow = { id: string; cells: ReactNode[]; detail: () => ReactNode };
+type RowSelection = { value: string | null; set: (value: string | null) => void };
+
+function InspectionDetailTable({ head, rows, selection, diagnostics = false }: {
+  head: string[]; rows: InspectionRow[]; selection: RowSelection; diagnostics?: boolean;
+}) {
+  if (rows.length === 0) return null;
+  return <div className={'table report-data-table inspection-results' + (diagnostics ? ' inspection-diagnostics' : '')}>
+    <table role="table">
+      <thead><tr role="row">{[...head, i.details].map(key => <th key={key} scope="col" role="columnheader">{key}</th>)}</tr></thead>
+      <tbody>{rows.map(row => {
+        const opened = selection.value === row.id;
+        const detailID = 'inspection-' + row.id;
+        return <Fragment key={row.id}>
+          <tr role="row">{row.cells.map((cell, n) => <td key={n} role="cell" data-label={head[n]}><div className="report-cell-value">{cell}</div></td>)}
+            <td role="cell" data-label={i.details}><button type="button" className="btn btn-sm btn-ghost-primary" aria-expanded={opened}
+              aria-controls={opened ? detailID : undefined} onClick={() => selection.set(opened ? null : row.id)}>
+              {opened ? i.hideDetail : i.showDetail}
+            </button></td>
+          </tr>
+          {opened && <tr id={detailID} className="inspection-selected" role="row"><td colSpan={head.length + 1} role="cell">{row.detail()}</td></tr>}
+        </Fragment>;
+      })}</tbody>
+    </table>
+  </div>;
+}
+
+function InspectionExcerpt({ place, excerpt }: { place?: ObservationPlace | null; excerpt?: Excerpt | null }) {
+  if (!place) return <p>{i.noLocation}</p>;
+  return <div className="inspection-source">
+    {excerpt ? <>
+      <ReportPreview path={place.path} start={place.start} end={place.start} excerpt={excerpt} />
+      <PinnedSourceLink {...place} />
+    </> : <><Place value={place} /><small>{i.noExcerpt}</small></>}
+  </div>;
+}
+
+export function StaticDiagnosticReading({ languages, findings, byID, severityOf }: {
+  languages: Sections['staticAnalysis']['languages']; findings: Pick<Finding, 'evidence' | 'observations'>[]; byID: Map<string, Observation>; severityOf: Map<string, string>;
+}) {
+  const [value, set] = useState<string | null>(null);
+  const evidenceByObservation = new Map<string, Excerpt>();
+  for (const finding of findings) for (const id of finding.observations) {
+    const o = byID.get(id);
+    if (o?.evidenceState !== 'verified_against_source_manifest' || !o.location) continue;
+    const place = o.location;
+    const evidence = finding.evidence.find(e => e.excerpt && e.path === place.path && e.lines?.start === place.start);
+    if (evidence?.excerpt) evidenceByObservation.set(id, evidence.excerpt);
+  }
+  return <>{languages.map(lang => {
+    const groups = ruleGroups(lang.tools, byID, severityOf);
+    const rows = groups.map(g => {
+      const rank = (o: Observation) => !o.location ? 3 : secondaryPath(o.location.path) ? 2 : evidenceByObservation.has(o.id) ? 0 : 1;
+      const candidates = g.observations.map(id => byID.get(id)!).sort((a, b) => rank(a) - rank(b));
+      const o = candidates[0];
+      const message = reportKo.ruleDescriptions[g.analyzer + ':' + g.rule] ?? cutLine(o.message);
+      return {
+        id: 'static-' + o.id,
+        cells: [<><code>{g.rule}</code><br /><small>{g.analyzer}</small></>,
+          message, g.count,
+          g.severity ? <span className={'pill sev sev-' + (Object.hasOwn(reportKo.severity, g.severity) ? g.severity : 'unknown')}>{label(reportKo.severity, g.severity)}</span> : '—',
+          <Place value={o.location} />],
+        detail: () => <>
+          <InspectionExcerpt place={o.location} excerpt={evidenceByObservation.get(o.id)} />
+          {o.message && o.message.trim() !== message && <p>{o.message}</p>}
+          {candidates.length > 1 && <details className="inspection-paths"><summary>{i.otherLocations(candidates.length - 1)}</summary>
+            <ul className="plain">{candidates.slice(1).map(other => <li key={other.id}><Place value={other.location} /></li>)}</ul>
+          </details>}
+        </>,
+      };
+    });
+    return <InspectionDetailTable key={lang.ecosystem ?? 'unknown'} head={[s.col.rule, s.col.message, s.col.count, s.col.severity, s.col.location]} rows={rows} selection={{ value, set }} diagnostics />;
+  })}</>;
+}
+
 function thirdParty(value?: ObservationPlace | null) {
   return !!value && value.path.split('/').slice(0, -1).some(segment => ['third-party', 'third_party', 'thirdparty'].includes(segment.toLowerCase()));
 }
@@ -151,44 +229,49 @@ function cloneGroups(rows: Observation[]) {
   return [...groups.values()];
 }
 
-function MetricRows({ rows, name }: { rows: Observation[]; name: keyof typeof i.metric }) {
+function MetricRows({ rows, name, selection }: { rows: Observation[]; name: keyof typeof i.metric; selection: RowSelection }) {
   const m = i.metric[name];
-  return <ul className="plain inspection-metrics">
-    {rows.map(o => {
-      const metric = o.metric!;
-      const symbolMarker = o.location ? ` at ${o.location.path}:${o.location.start}: ` : undefined;
-      const fn = name === 'cyclomatic_complexity' && symbolMarker && o.message?.includes(symbolMarker) && o.message.split(symbolMarker)[0];
-      return <li key={o.id}>
-        <strong>{m.item(metric.value)}</strong>
-        {fn && <> <code>{fn}</code></>}
-        <Place value={o.location} />
-        {name === 'duplicated_lines' && (metric.counterpart
-          ? <Place value={metric.counterpart} />
-          : <>
-            <small>{o.evidenceState === 'verified_against_source_manifest' ? i.legacyCounterpart : i.noCounterpart}</small>
-            {o.message && <details><summary>{i.rawToolOutput}</summary><code>{o.message}</code></details>}
-          </>)}
-      </li>;
-    })}
-  </ul>;
+  const duplicate = name === 'duplicated_lines';
+  return <InspectionDetailTable head={[i.measure, s.col.location, ...(duplicate ? [i.counterpart] : [])]} selection={selection} rows={rows.map(o => {
+    const metric = o.metric!;
+    const symbolMarker = o.location ? ` at ${o.location.path}:${o.location.start}: ` : undefined;
+    const fn = !duplicate && symbolMarker && o.message?.includes(symbolMarker) && o.message.split(symbolMarker)[0];
+    const counterpartStatus = o.evidenceState === 'verified_against_source_manifest' ? i.legacyCounterpart : i.noCounterpart;
+    return {
+      id: 'metric-' + o.id,
+      cells: [<><strong>{m.item(metric.value)}</strong>{fn && <><br /><code>{fn}</code></>}</>,
+        <Place value={o.location} />, ...(duplicate ? [metric.counterpart ? <Place value={metric.counterpart} /> : '—'] : [])],
+      detail: () => <>
+        <InspectionExcerpt place={o.location} excerpt={metric.excerpt} />
+        {duplicate && (metric.counterpart
+          ? <InspectionExcerpt place={metric.counterpart} excerpt={metric.counterpartExcerpt} />
+          : <><p>{counterpartStatus}</p>{o.message && <details><summary>{i.rawToolOutput}</summary><code>{o.message}</code></details>}</>)}
+      </>,
+    };
+  })} />;
 }
 
-function CloneRows({ groups }: { groups: Observation[][] }) {
+function CloneRows({ groups, selection }: { groups: Observation[][]; selection: RowSelection }) {
+  if (groups.every(rows => rows.length === 1)) {
+    return <MetricRows rows={groups.flat()} name="duplicated_lines" selection={selection} />;
+  }
   return <>{groups.map(rows => {
-    if (rows.length === 1) return <MetricRows key={rows[0].id} rows={rows} name="duplicated_lines" />;
+    if (rows.length === 1) return <MetricRows key={rows[0].id} rows={rows} name="duplicated_lines" selection={selection} />;
     const places = new Map(rows.flatMap(clonePlaces).map(place => [placeKey(place), place] as const));
     return <div key={rows[0].id} className="inspection-clone-group">
       <strong>{i.cloneGroup(rows.length, places.size)}</strong>
-      {[...places.entries()].slice(0, 3).map(([key, place]) => <div key={key}><Place value={place} /></div>)}
+      <MetricRows rows={rows.slice(0, 1)} name="duplicated_lines" selection={selection} />
       <details className="inspection-paths">
-        <summary>{i.cloneDetails(rows.length)}</summary>
-        <MetricRows rows={rows} name="duplicated_lines" />
+        <summary>{i.cloneDetails(rows.length - 1)}</summary>
+        <MetricRows rows={rows.slice(1)} name="duplicated_lines" selection={selection} />
       </details>
     </div>;
   })}</>;
 }
 
 export function MeasurementReading({ sections, byID }: { sections: Pick<Sections, 'staticAnalysis' | 'metrics'>; byID: Map<string, Observation> }) {
+  const [value, set] = useState<string | null>(null);
+  const selection = { value, set };
   const tools = sections.staticAnalysis.languages.flatMap(lang => lang.tools).filter(tool => sections.metrics.tasks.includes(tool.task));
   if (!tools.length) return <p>{i.noMeasuredTasks}</p>;
   return <>{tools.map(tool => {
@@ -221,17 +304,17 @@ export function MeasurementReading({ sections, byID }: { sections: Pick<Sections
         ].filter(Boolean).join(' · ')}</p>}
       {shown(tool) && <p>{rows.length === 0 ? tool.limitations.includes('no_file_reached_clone_thresholds') ? i.noEligibleCloneFiles : i.noMetricHit : m && <><strong>{m.value(rows.length)}</strong>{' · '}{m.next}</>}</p>}
       {clones && clones.length > 0 && <>
-        <CloneRows groups={clones.slice(0, 5)} />
+        <CloneRows groups={clones.slice(0, 5)} selection={selection} />
         {clones.length > 5 && <details className="report-more">
           <summary>{i.otherCloneGroups(clones.length - 5)}</summary>
-          <CloneRows groups={clones.slice(5)} />
+          <CloneRows groups={clones.slice(5)} selection={selection} />
         </details>}
       </>}
       {name === 'cyclomatic_complexity' && rows.length > 0 && <>
-        <MetricRows rows={first} name={name} />
+        <MetricRows rows={first} name={name} selection={selection} />
         {rows.length > first.length && <details className="report-more">
           <summary>{i.otherLocations(rows.length - first.length)}</summary>
-          <MetricRows rows={rows.slice(first.length)} name={name} />
+          <MetricRows rows={rows.slice(first.length)} name={name} selection={selection} />
         </details>}
       </>}
     </section>;

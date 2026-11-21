@@ -414,12 +414,12 @@ def main() -> None:
     bad = copy.deepcopy(role_calls)
     del bad["coverage"]["review_calls"][0]["pack_id"]
     expect_invalid("report review call without its pack", validators["report.schema.json"].validate, bad)
-    # The largest call ceiling (207: five whole-run roles and 96 slots of two calls each) fits the report; more do not.
+    # The largest operator-set call ceiling fits the report.
     most = copy.deepcopy(role_calls)
-    most["coverage"]["review_calls"] = [dict(role_calls["coverage"]["review_calls"][0]) for _ in range(207)]
+    most["coverage"]["review_calls"] = [dict(role_calls["coverage"]["review_calls"][0]) for _ in range(2013)]
     validators["report.schema.json"].validate(most)
     most["coverage"]["review_calls"].append(dict(role_calls["coverage"]["review_calls"][0]))
-    expect_invalid("report with 208 review calls", validators["report.schema.json"].validate, most)
+    expect_invalid("report with 2014 review calls", validators["report.schema.json"].validate, most)
     role_calls["coverage"]["review_calls"][0]["pack_version"] = "2.0.0 rc1"
     expect_invalid("invalid report pack version", validators["report.schema.json"].validate, role_calls)
 
