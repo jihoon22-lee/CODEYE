@@ -614,8 +614,10 @@ def scenarios(base, root, env):
         # lease 안의 짧은 정지(8s < 여유 20s): 같은 attempt가 그대로 끝난다.
         (paths["b"] / "pause" / "codeye-fixture-mode").write_text("pause\n14\n")
         r_pause = session.enqueue(projects["pause"])
-        wait_for("pause 작업 실행", lambda: count(f"SELECT count(*) FROM tasks WHERE run_id='{r_pause}' AND status='running'") == 1, children)
         beta = agents["beta"][0]
+        # The task row can be running while its worker still waits for the
+        # agent's acknowledgement. Pause only once the actual work has begun.
+        wait_for("pause 작업 프로세스 실행", lambda: any(comm(pid) == "sleep" for pid in descendants(beta.pid)), children)
         beta.send_signal(signal.SIGSTOP)
         time.sleep(8)
         beta.send_signal(signal.SIGCONT)
