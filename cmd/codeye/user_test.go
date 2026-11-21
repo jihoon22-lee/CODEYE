@@ -68,7 +68,11 @@ func TestUserAccountCommands(t *testing.T) {
 	// --password-file must not be readable by others.
 	dir := t.TempDir()
 	loose := filepath.Join(dir, "loose")
-	if err := os.WriteFile(loose, []byte("another long passphrase\n"), 0o644); err != nil {
+	if err := os.WriteFile(loose, []byte("another long passphrase\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Set the group bit after creation so the test is independent of umask.
+	if err := os.Chmod(loose, 0o640); err != nil {
 		t.Fatal(err)
 	}
 	if code, _, errOut := cli(t, "user", "create", "--username", "bob", "--password-file", loose); code != 2 || strings.Contains(errOut, "another long") {
