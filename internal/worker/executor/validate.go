@@ -179,6 +179,12 @@ func prepare(spec Spec) (*prepared, *specError) {
 		for key, value := range managedOpenCodeEnv(spec.OpenCodeModel, spec.OpenCodeProvider) {
 			env[key] = value
 		}
+		if p := spec.OpenCodeProvider; p != nil && p.Native != nil {
+			// OpenCode 1.19.5 otherwise applies /etc/opencode after the
+			// isolated profile, allowing a second endpoint or plugins there
+			// to override the selected native connection.
+			env["OPENCODE_TEST_MANAGED_CONFIG_DIR"] = filepath.Join(dir, ".managed-opencode")
+		}
 	}
 	p.env = env
 	return p, nil
@@ -335,6 +341,16 @@ func secretValues(spec Spec) []string {
 	}
 	if spec.OpenCodeProvider != nil {
 		add(spec.OpenCodeProvider.APIKey)
+		if n := spec.OpenCodeProvider.Native; n != nil {
+			for _, value := range n.Headers {
+				add(value)
+				// Providers may report an authorization header's value
+				// with its scheme removed.
+				if scheme, token, ok := strings.Cut(value, " "); ok && strings.EqualFold(scheme, "Bearer") {
+					add(token)
+				}
+			}
+		}
 	}
 	for _, i := range spec.SensitiveArgs {
 		if i >= 0 && i < len(spec.Args) {

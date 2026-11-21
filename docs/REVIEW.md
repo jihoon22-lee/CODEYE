@@ -428,7 +428,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 - **작업 디렉터리와 workspace digest.** 요청마다 attempt scratch 아래 새 디렉터리를 만든다. 그 안의 `identity.txt`에 snapshot digest, 요청 digest, 무작위 32바이트 nonce에 묶인 확인값을 쓰고 첨부로 준다. 응답의 `workspace_proof`가 이 값과 다르면 `workspace_unreachable`이다. 프롬프트와 선택된 데이터는 표준 입력으로만 전달한다. 요청 digest는 정확한 메시지 텍스트의 SHA-256이다.
 - **권한 차단.** `run --pure`로 실행하고, 실행별 HOME/TMP와 플랫폼이 만든 설정(`OPENCODE_CONFIG_CONTENT`)만 쓴다. 설정은 `permission: deny`, 모든 도구 `false`, share·snapshot·autoupdate·LSP·formatter·plugin 끔, 허용 provider 하나다. 프로젝트 설정, 기본 플러그인, 외부 skill, 모델 목록 조회, LSP 다운로드는 환경변수로 끈다. 사용자 설정과 대상 프로젝트 설정을 읽는 경로를 분리한다. 스냅샷 디렉터리는 보호 루트로 넘긴다.
 - **응답 수집.** 한 세션·한 메시지의 완료된 응답만 받는다. `tool_use`·`permission` 이벤트는 `policy_blocked`, `error`는 `model_unavailable`, 세션 불일치·순서 위반은 `model_output_invalid`, 완료 사유가 `stop`이 아니거나 잘린 출력(64 KiB 초과)은 `model_output_incomplete`다. `reasoning` 이벤트는 버린다. 공급자 사용량 제한 메시지는 `model_rate_limited`로만 남긴다.
-- **공급자와 API 키.** 키는 [모델 설정](#모델-설정)의 키 파일에서 호출마다 읽고 `OPENCODE_CONFIG_CONTENT`의 provider `options.apiKey`(와 `base_url`이 있으면 `options.baseURL`)로만 넘긴다. argv, Hello, 작업 기록, 로그에는 키 파일 경로만 있다. 실행기는 키 값을 기록된 명령과 표준 출력·오류에서 가린다(`[REDACTED]`). 실행별 HOME과 환경변수 필터(`*API_KEY*`, `OPENAI_*`, `OPENCODE_*` 등)는 그대로라 사용자의 셸 환경이나 OpenCode 설정은 들어오지 않는다. 모델은 provider의 `models`에 항상 선언한다. OpenCode의 오프라인 모델 목록(1.19.5)에 `gpt-6.2-sol`이 없기 때문이다. 목록에 있는 모델은 목록의 정보(한도·추론 여부)를 유지한다. 키 파일의 `openai_compatible: true`는 provider를 OpenCode의 OpenAI 호환(chat completions) 패키지로 부른다.
+- **공급자와 인증.** 워커는 선택한 provider와 모델만 요청별 `OPENCODE_CONFIG_CONTENT`에 넣는다. OpenCode의 전송 방식·엔드포인트·인증은 [모델 설정](#모델-설정)을 따른다. 키 값은 argv에 넣지 않으며 실행 기록과 표준 출력·오류에서 가린다. 워커는 격리한 HOME과 환경변수로 실행한다.
 - **relay 파일.** 예산 relay를 쓸 때 ready 파일은 일반 파일이고 그룹·기타 권한이 없어야 하며(Windows 제외) 4,096바이트 이하다. `base_url`은 `http://127.0.0.1:PORT/v1`, token은 32~256자다. OpenCode에는 이 임시 로컬 token만 넘기고 실행 기록에서 가린다. 상위 API 키는 relay만 가진다. relay 운영은 [평가](EVALUATION.md)에 있다.
 - **취소.** 컨텍스트 취소·제한시간은 프로세스 트리 정리까지 확인한다. 정리를 확인하지 못하면 `recovery_required`로 남기고 작업 디렉터리를 지우지 않는다. 이미 전송된 공급자 추론은 취소 뒤에도 청구될 수 있다. 공급자 측 생성의 확정 중단은 보장하지 않는다.
 - **실패 분류.** `opencode run`이 실패하면 JSON 오류 이벤트의 HTTP 상태와 오류 이름만 읽는다. 401·403은 `model_auth_failed`, 404는 `model_not_found`, 429는 `model_rate_limited`, 나머지는 `model_unavailable`이다. 공급자의 오류 문장은 남기지 않는다. OpenCode는 5xx를 몇 번 다시 시도하므로 실패까지 1분 넘게 걸릴 수 있다.
@@ -437,12 +437,14 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 
 ## 모델 설정
 
-모델은 공급자(provider) 하나와 그 API 키다. 키는 파일에 두고 워커가 모델을 호출할 때마다 읽는다(키를 바꾸면 다음 호출부터 적용된다). 키 파일은 일반 파일이고 그룹·기타 권한이 없어야 한다(Windows 제외).
+**관리 → OpenCode 연결**에서 서비스 머신의 실행 파일, OpenCode 설정 파일, 인증 파일과 모델을 지정한다. `codeye up` 또는 `codeye start`로 띄운 서비스에서 관리자가 저장하면 다음 분석에 적용된다. **연결 확인**은 저장한 모델에 짧은 합성 요청을 한 번 보낸다. [화면에서 연결하기](GUIDE.md#관리자-화면에서-연결하기)
+
+설정 파일은 OpenCode 1.x의 JSON·JSONC 형식이다. 모델을 비워 두면 파일의 `model`을 쓰고, 값을 입력하면 그 모델을 선택한다. 사내 OpenAI 호환 서버는 선택한 `provider`의 `npm`과 `options.baseURL`로 연결한다. 인증 파일을 함께 지정하면 그 파일의 provider 키를 사용한다. 키 파일은 서비스 계정만 읽을 수 있게 둔다. 관리자가 지정한 모델 연결 항목만 읽으며, 프로젝트의 플러그인이나 도구 권한은 실행 설정으로 가져오지 않는다.
 
 - **에이전트.** `codeye agent --opencode ABSOLUTE_PATH --model PROVIDER/MODEL [--model-credential-file ABSOLUTE_PATH | --model-relay-file ABSOLUTE_PATH] [--model-timeout 180s]`. 키 파일 경로와 제한시간은 Hello의 `model_credential_file`, `model_timeout_seconds`로 워커에 간다. 키 파일 없이 고른 provider는 키가 필요 없는 경우(OpenCode Zen의 무료 모델)에만 답한다.
 - **키 파일 형식.** CODEYE 키 파일 `{"schema_version":"0.1","provider":"openai","api_key":"…","base_url":"…","openai_compatible":false}`(`base_url`·`openai_compatible` 선택, 알 수 없는 필드 거부) 또는 OpenCode의 `auth.json`이다. `auth.json`은 모델 provider의 항목이 `{"type":"api","key":"…"}`일 때만 쓴다(OAuth 항목은 쓰지 않는다). `base_url`은 http·https URL이다. OpenAI 호환 서버, 프록시, 시험용 가짜 upstream에 쓴다.
-- **`codeye up`의 키.** 순서대로 찾는다. (1) `agent.model.credential_file`, (2) `<state_dir>/secrets/model.json`(0600, 디렉터리 0700), (3) 사용자의 OpenCode `auth.json`(`$XDG_DATA_HOME/opencode/auth.json`, 기본 `~/.local/share/opencode/auth.json`)에서 모델 provider의 `api` 항목. `agent.model.name`이 없으면 (3)은 아래 표의 provider를 표 순서로 찾는다. 환경변수 `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENCODE_API_KEY` 중 처음 있는 것을 `codeye up`이 (2)에 쓴다(`instance.WriteModelSecretFromEnv`). 같은 키면 파일을 다시 쓰지 않는다.
-- **`codeye up`의 모델.** `agent.model.name`(`PROVIDER/MODEL`, 또는 키 provider의 모델 이름), 없으면 사용자 OpenCode 설정(`~/.config/opencode/opencode.json`, 주석 없는 JSON일 때)의 `model` 중 그 provider의 것, 없으면 provider별 기본값이다. OpenCode 실행 파일은 `agent.model.opencode`, 없으면 `~/.opencode/bin/opencode`, 없으면 PATH의 `opencode`다. 제한시간은 `agent.model.timeout_seconds`(1~1800, 기본 180)다.
+- **OpenCode 설정 파일을 지정하지 않았을 때의 키.** 순서대로 찾는다. (1) `agent.model.credential_file`, (2) `<state_dir>/secrets/model.json`(0600, 디렉터리 0700), (3) 사용자의 OpenCode `auth.json`(`$XDG_DATA_HOME/opencode/auth.json`, 기본 `~/.local/share/opencode/auth.json`)에서 모델 provider의 `api` 항목. `agent.model.name`이 없으면 (3)은 아래 표의 provider를 표 순서로 찾는다. 환경변수 `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENCODE_API_KEY` 중 처음 있는 것을 `codeye up`이 (2)에 쓴다(`instance.WriteModelSecretFromEnv`). 같은 키면 파일을 다시 쓰지 않는다.
+- **OpenCode 설정 파일을 지정하지 않았을 때의 모델.** `agent.model.name`(`PROVIDER/MODEL`, 또는 키 provider의 모델 이름), 없으면 사용자 OpenCode 설정(`~/.config/opencode/opencode.json`, 주석 없는 JSON일 때)의 `model` 중 그 provider의 것, 없으면 provider별 기본값이다. OpenCode 실행 파일은 `agent.model.opencode`, 없으면 `~/.opencode/bin/opencode`, 없으면 PATH의 `opencode`다. 제한시간은 `agent.model.timeout_seconds`(1~1800, 기본 180)다.
 
 | provider | 키 환경변수 | 기본 모델 |
 |---|---|---|
@@ -451,9 +453,9 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 | `opencode`(OpenCode Zen) | `OPENCODE_API_KEY` | `gpt-6.1-sol` |
 
 - 키를 찾지 못하면 `agent.model`이 없을 때는 모델 없이 시작한다(검토 task `model_not_configured`). `agent.model`이 있는데 그 provider의 키가 없으면 모델 플래그는 넘기되 호출은 실패한다. 키 파일이 있으나 쓸 수 없거나(권한·형식), 기본 모델이 없는 provider에 이름이 없거나, OpenCode를 찾지 못하면 모델 없이 시작한다. 어느 경우든 정적 분석은 실행된다.
-- 오프라인 모드에서는 `base_url`이 있는 키 파일과 relay만 쓴다. 환경변수의 키는 저장하지 않고, OpenCode `auth.json`을 찾지 않는다([오프라인 모드](OPERATIONS.md#오프라인-모드)).
+- 오프라인 모드에서는 관리자가 명시한 엔드포인트(OpenCode의 `options.baseURL`, CODEYE 키 파일의 `base_url` 또는 relay)를 사용한다. 환경변수의 키를 저장하지 않는다([오프라인 모드](OPERATIONS.md#오프라인-모드)).
 - OpenCode는 플러그인을 꺼도 시작할 때 npm 레지스트리에 `@opencode-ai/plugin`을 묻는다(1.19.5 측정). CODEYE는 OpenCode 환경에 `npm_config_registry=http://127.0.0.1:9/`를 넣어 그 요청이 loopback에서 바로 실패하게 한다. `--ca-bundle`이 있으면 `NODE_EXTRA_CA_CERTS` 등 CA 변수도 넣는다.
-- `codeye model probe`가 같은 해석으로 확인한다. `codeye up`은 모델 설정(모델 ID, OpenCode 경로, 키 파일 경로와 수정 시각·크기)이 마지막 확인과 다를 때 한 번 확인하고 결과를 `<state_dir>/run/model-probe.json`에 둔다(키에서 나온 값은 없다).
+- `codeye model probe`가 같은 해석으로 확인한다. `codeye up`은 모델 설정(모델 ID와 실행 파일 경로, 지정한 설정·인증 파일 정보)이 마지막 확인과 다를 때 한 번 확인하고 결과를 `<state_dir>/run/model-probe.json`에 둔다(키에서 나온 값은 없다).
 - 이 표의 기본값 중 `gpt-6.2-sol`은 OpenCode 1.19.5의 오프라인 모델 목록에 없다. OpenCode가 요청을 OpenAI Responses API(`POST {base_url}/responses`, 스트리밍)로 보내는 것은 가짜 upstream으로 확인했고, OpenAI가 이 요청을 받는지는 실제 확인 한 번으로만 알 수 있다.
 
 ## 모델에 보낼 수 있는 소스

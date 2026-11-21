@@ -57,6 +57,24 @@ func (l Layout) Lock() (func(), error) {
 	return func() { _ = unix.Flock(int(f.Fd()), unix.LOCK_UN); _ = f.Close() }, nil
 }
 
+func lockConfigFile(path string) (func(), error) {
+	f, err := os.OpenFile(path+".lock", os.O_RDWR|os.O_CREATE|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0600)
+	if err != nil {
+		return nil, errors.New("cannot open the configuration lock")
+	}
+	for {
+		err = unix.Flock(int(f.Fd()), unix.LOCK_EX)
+		if !errors.Is(err, unix.EINTR) {
+			break
+		}
+	}
+	if err != nil {
+		_ = f.Close()
+		return nil, errors.New("cannot lock the configuration file")
+	}
+	return func() { _ = f.Close() }, nil
+}
+
 // AgentLockHeld reports whether some process holds the agent's state lock
 // (<agent>/agent.lock, internal/agent). It is probed with a non-blocking lock
 // that is released at once; a missing lock file means no agent ever ran.

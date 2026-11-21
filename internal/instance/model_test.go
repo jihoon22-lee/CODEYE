@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -199,5 +200,45 @@ func TestModelResolutionOrder(t *testing.T) {
 	}
 	if _, err = ResolveModel(c, layout, ModelEnv{Home: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "OpenCode not found") {
 		t.Fatalf("no opencode: %v", err)
+	}
+}
+
+func TestNativeConfigReusesMatchingStoredAuth(t *testing.T) {
+	home := fakeHome(t, `{"openai":{"type":"api","key":"stored-openai"},"corp":{"type":"api","key":"stored-corp"},"anthropic":{"type":"oauth","access":"unused"}}`, "")
+	// This test exercises provider selection. Supply the known binary path
+	// directly, since Windows does not represent the fixture's POSIX mode.
+	home.Executable = filepath.Join(home.Home, ".opencode", "bin", "opencode")
+	path := filepath.Join(home.Home, "opencode.jsonc")
+	c, layout := modelConfig(t, `{"config_file":`+strconv.Quote(path)+`}`)
+	for _, tc := range []struct {
+		name, raw, model, source, endpoint string
+		offline, fail                      bool
+	}{
+		{"model only", `{"model":"openai/m"}`, "openai/m", ModelSourceOpenCode, "", false, false},
+		{"public offline", `{"model":"openai/m"}`, "", "", "", true, true},
+		{"environment reference", `{"model":"openai/m","provider":{"openai":{"options":{"apiKey":"{env:OPENAI_API_KEY}"}}}}`, "openai/m", ModelSourceOpenCode, "", false, false},
+		{"custom provider", `{"model":"corp/m","provider":{"corp":{"options":{"baseURL":"https://llm.example/v1"}}}}`, "corp/m", ModelSourceOpenCode, "https://llm.example/v1", true, false},
+		{"inline key", `{"model":"corp/m","provider":{"corp":{"options":{"baseURL":"https://llm.example/v1","apiKey":"inline"}}}}`, "corp/m", ModelSourceOpenCodeConfig, "https://llm.example/v1", true, false},
+		{"unrelated or OAuth key", `{"model":"anthropic/m"}`, "", "", "", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(path, []byte(tc.raw), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			c.Offline = tc.offline
+			m, err := ResolveModel(c, layout, home)
+			if tc.fail {
+				if err == nil {
+					t.Fatal("resolved unsupported native credentials or a public offline endpoint")
+				}
+				return
+			}
+			if err != nil || m.ID != tc.model || m.Source != tc.source || m.NativeEndpoint != tc.endpoint {
+				t.Fatalf("resolution does not match native settings: %+v, %v", m, err)
+			}
+			if tc.source == ModelSourceOpenCode && m.CredentialFile != home.OpenCodeAuthFile() {
+				t.Fatal("resolved credential is not the installed auth.json")
+			}
+		})
 	}
 }

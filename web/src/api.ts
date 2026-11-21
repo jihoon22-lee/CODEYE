@@ -24,6 +24,7 @@ export class ApiError extends Error {
     readonly retryAfter: number | null = null,
     // A refused folder path: the folders this user may read (error.details.readable_folders).
     readonly readableFolders: string[] | null = null,
+    readonly reason: string | null = null,
   ) {
     super(`${kind}:${status}:${code}`);
     this.name = 'ApiError';
@@ -164,6 +165,10 @@ export type ServiceAddressKind = 'configured' | 'this_machine' | 'name' | 'lan' 
 export type ServiceAddress = { origin: string; kind: ServiceAddressKind };
 // GET/PUT /admin/settings: the two service switches, the address to share and every address the service answers on.
 export type ServiceSettings = { others_model_review: boolean; others_build_scripts: boolean; updated_at: string; service_origin: string | null; service_addresses: ServiceAddress[] };
+export type OpenCodeSettingsInput = { executable: string; config_file: string; credential_file: string; model: string };
+export type OpenCodeSettings = OpenCodeSettingsInput & {
+  editable: boolean; configured: boolean; effective_model: string | null; probe: string | null; reason: string | null;
+};
 export type AddSourceRootBody = { path: string; label?: string; everyone?: boolean };
 
 // ---- schedules (members list; managers create and delete) ----
@@ -319,6 +324,12 @@ export function createApi(options: ApiOptions = {}) {
     getSettings: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/admin/settings', signal }, parseSettings),
     putSettings: (patch: Partial<Pick<ServiceSettings, 'others_model_review' | 'others_build_scripts'>>) =>
       json({ method: 'PUT', path: '/api/v1/admin/settings', body: patch }, parseSettings),
+    getOpenCodeSettings: (signal?: AbortSignal) =>
+      json({ method: 'GET', path: '/api/v1/admin/opencode', signal }, parseOpenCodeSettings),
+    putOpenCodeSettings: (body: OpenCodeSettingsInput) =>
+      json({ method: 'PUT', path: '/api/v1/admin/opencode', body }, parseOpenCodeSettings),
+    probeOpenCodeSettings: () =>
+      json({ method: 'POST', path: '/api/v1/admin/opencode/probe' }, parseOpenCodeSettings),
     listAudit: (filter: AuditFilter, cursor: string | null, signal?: AbortSignal) =>
       json({ method: 'GET', path: `/api/v1/audit${auditQuery(filter, cursor)}`, signal }, parseAuditPage),
     listSourceRoots: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/source-roots', signal }, items(parseSourceRoot)),
@@ -382,6 +393,7 @@ function httpError(status: number, text: string, headers?: Headers): ApiError {
   let message: string | null = null;
   let retryAfter = status === 429 ? seconds(headers?.get('Retry-After') ?? undefined) : null;
   let readable: string[] | null = null;
+  let reason: string | null = null;
   try {
     const body: unknown = JSON.parse(text);
     const error = isRecord(body) && isRecord(body.error) ? body.error : null;
@@ -390,6 +402,7 @@ function httpError(status: number, text: string, headers?: Headers): ApiError {
       if (typeof error.retryable === 'boolean') retryable = error.retryable;
       if (typeof error.request_id === 'string') requestId = error.request_id.slice(0, 80);
       if (typeof error.message === 'string') message = error.message.slice(0, 300);
+      if (isRecord(error.details) && typeof error.details.reason === 'string') reason = error.details.reason.slice(0, 80);
       if (status === 429 && isRecord(error.details)) {
         // Both carry the same seconds; take the longer one if they ever disagree.
         const fromBody = seconds(error.details.retry_after_seconds);
@@ -400,7 +413,7 @@ function httpError(status: number, text: string, headers?: Headers): ApiError {
       }
     }
   } catch { /* non-JSON error body: keep the status-derived defaults */ }
-  return new ApiError('http', status, code, retryable, requestId, message, retryAfter, readable);
+  return new ApiError('http', status, code, retryable, requestId, message, retryAfter, readable, reason);
 }
 
 // ---- response validation: anything unexpected is an invalid_response, never a guess ----
@@ -532,6 +545,13 @@ function parseSettings(v: unknown): ServiceSettings {
   const o = rec(v);
   return { others_model_review: bool(o.others_model_review), others_build_scripts: bool(o.others_build_scripts), updated_at: date(o.updated_at), service_origin: nullableStr(o.service_origin),
     service_addresses: list(parseServiceAddress)(o.service_addresses ?? []) };
+}
+function parseOpenCodeSettings(v: unknown): OpenCodeSettings {
+  const o = rec(v);
+  const field = (name: keyof OpenCodeSettingsInput) => o[name] === '' ? '' : str(o[name]);
+  return { executable: field('executable'), config_file: field('config_file'), credential_file: field('credential_file'), model: field('model'),
+    editable: bool(o.editable), configured: bool(o.configured), effective_model: nullableStr(o.effective_model),
+    probe: nullableStr(o.probe), reason: nullableStr(o.reason) };
 }
 const ADDRESS_KINDS: readonly ServiceAddressKind[] = ['configured', 'this_machine', 'name', 'lan', 'vpn'];
 function parseServiceAddress(v: unknown): ServiceAddress {

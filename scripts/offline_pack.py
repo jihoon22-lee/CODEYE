@@ -25,6 +25,7 @@ import hashlib
 import io
 import json
 import os
+import posixpath
 import re
 import shutil
 import struct
@@ -34,15 +35,22 @@ import tarfile
 import tempfile
 import time
 from pathlib import Path
+from urllib.parse import quote, urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_VERSION = "0.1"
 MANIFEST = "MANIFEST.json"
 SUMS = "SHA256SUMS"
-# Documents shipped as files (the binary embeds migrations and prompt packs).
-DOCS = ["docs/GUIDE.md", "docs/OPERATIONS.md"]
+# User-facing documentation and examples, kept in their repository layout.
+DOCS = ["docs/ANALYZERS.md", "docs/API.md", "docs/ARCHITECTURE.md", "docs/EXECUTION.md",
+        "docs/GITHUB.md", "docs/GUIDE.md", "docs/OPERATIONS.md", "docs/REPORT.md",
+        "docs/REQUIREMENTS.md", "docs/REVIEW.md", "docs/SECURITY.md"]
 EXAMPLES = ["examples/config-offline.json"]
 INSTALL_TEMPLATE = ROOT / "scripts" / "offline_pack_install.md"
+SOURCE_URL = "https://github.com/jihoon22-lee/CODEYE"
+WEB_NOTICES = ".vite/license.md"
+NOTICES = "THIRD_PARTY_NOTICES"
+MARKDOWN_LINK = re.compile(r"\]\(([^()\s]+)\)")
 
 # Hosts a built web app may name without loading anything from them: XML and
 # SVG namespaces, schema identifiers, React's error decoder link (shown as
@@ -79,6 +87,10 @@ def check_web(directory: Path) -> list[str]:
     for path in sorted(p for p in directory.rglob("*") if p.is_file()):
         data = path.read_bytes()
         rel = path.relative_to(directory).as_posix()
+        # Vite emits this Markdown for distribution notices, not an application
+        # asset. The pack moves it outside web/dist.
+        if rel == WEB_NOTICES and data.startswith(b"# Licenses\n"):
+            continue
         # Vite copies these licenses as download assets. Only the unchanged
         # notice may name its publisher or the license site without using them.
         notice = REPORT_NOTICE.fullmatch(rel)
@@ -113,6 +125,59 @@ def elf_linking(path: Path) -> str:
         if ptype in (2, 3):  # PT_DYNAMIC, PT_INTERP
             return "dynamic"
     return "static"
+
+
+def elf_machine(path: Path) -> int:
+    with path.open("rb") as f:
+        head = f.read(20)
+    if len(head) < 20 or head[:4] != b"\x7fELF" or head[5] not in (1, 2):
+        return 0
+    return int.from_bytes(head[18:20], "little" if head[5] == 1 else "big")
+
+
+def release_doc(text: str, path: str, commit: str) -> str:
+    """Keep shipped links local and point source-only references at the commit."""
+    shipped = set(DOCS + EXAMPLES + ["INSTALL.md"])
+
+    def replace(m: re.Match) -> str:
+        target = urlsplit(m[1])
+        if target.scheme or target.netloc or not target.path or target.path.startswith("/"):
+            return m[0]
+        resolved = posixpath.normpath(posixpath.join(posixpath.dirname(path), target.path))
+        if resolved in shipped or resolved == ".." or resolved.startswith("../"):
+            return m[0]
+        kind = "tree" if (ROOT / resolved).is_dir() else "blob"
+        link = f"{SOURCE_URL}/{kind}/{commit}/{quote(resolved, safe='/')}"
+        if target.fragment:
+            link += "#" + quote(target.fragment, safe="-%")
+        return f"]({link})"
+
+    return MARKDOWN_LINK.sub(replace, text)
+
+
+def copy_go_notices(stage: Path, env: dict[str, str]) -> None:
+    """Read the Go toolchain and linked package modules' upstream notices locally."""
+    notices = stage / NOTICES / "go"
+    toolchain = Path(run(["go", "env", "GOROOT"], cwd=ROOT, env=env))
+    (notices / "toolchain").mkdir(parents=True)
+    shutil.copyfile(toolchain / "LICENSE", notices / "toolchain" / "LICENSE")
+    shutil.copyfile(toolchain / "PATENTS", notices / "toolchain" / "PATENTS")
+    template = "{{with .Module}}{{if not .Main}}{{.Path}}\t{{.Version}}\t{{.Dir}}{{end}}{{end}}"
+    listing = run(["go", "list", "-deps", "-f", template, "./cmd/codeye"], cwd=ROOT, env=env)
+    modules = {}
+    for line in listing.splitlines():
+        if line:
+            name, version, directory = line.split("\t", 2)
+            modules[(name, version)] = Path(directory)
+    for (name, version), directory in sorted(modules.items()):
+        upstream = [p for p in sorted(directory.iterdir()) if p.is_file() and not p.is_symlink() and
+                    p.name.upper().startswith(("LICENSE", "LICENCE", "COPYING", "NOTICE", "PATENTS"))]
+        if not upstream:
+            raise ValueError(f"no upstream notice found for Go module {name}@{version}")
+        dest = notices / "modules" / f"{name}@{version}"
+        dest.mkdir(parents=True)
+        for p in upstream:
+            shutil.copyfile(p, dest / p.name)
 
 
 def embedded_inventory() -> dict:
@@ -159,7 +224,7 @@ def write_archive(stage: Path, top: str, target: Path, mtime: int) -> None:
 def build(args) -> int:
     goos, goarch = args.goos, args.goarch
     commit = run(["git", "-C", str(ROOT), "rev-parse", "HEAD"])
-    dirty = bool(run(["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=no"]))
+    dirty = bool(run(["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=all"]))
     if dirty and not args.allow_dirty:
         print("the working tree has uncommitted changes; commit them or pass --allow-dirty", file=sys.stderr)
         return 2
@@ -170,7 +235,12 @@ def build(args) -> int:
     if not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._+-]{0,63}", version):
         print("version must be 1..64 of [0-9A-Za-z._+-]", file=sys.stderr)
         return 2
-    go_version = run(["go", "env", "GOVERSION"])
+    env = dict(os.environ, CGO_ENABLED="0", GOOS=goos, GOARCH=goarch, GOFLAGS="", GOTOOLCHAIN="local", GOWORK="off")
+    if goarch == "amd64":
+        env["GOAMD64"] = "v1"
+    elif goarch == "arm64":
+        env["GOARM64"] = "v8.0"
+    go_version = run(["go", "env", "GOVERSION"], cwd=ROOT, env=env)
     # The Node.js release that builds the web app (unknown with --skip-web-build).
     node_version = "" if args.skip_web_build else run(["node", "--version"])
     if not args.skip_web_build:
@@ -181,6 +251,9 @@ def build(args) -> int:
     dist = ROOT / "web/dist"
     if not (dist / "index.html").is_file():
         print("web/dist/index.html is missing; build the web app", file=sys.stderr)
+        return 2
+    if not (dist / WEB_NOTICES).is_file() or not (dist / WEB_NOTICES).read_bytes().startswith(b"# Licenses\n"):
+        print(f"web/dist/{WEB_NOTICES} is missing or invalid; rebuild the web app with the current source", file=sys.stderr)
         return 2
     problems = check_web(dist)
     if problems:
@@ -194,15 +267,29 @@ def build(args) -> int:
         stage.mkdir()
         exe = "codeye.exe" if goos == "windows" else "codeye"
         ldflags = f"-s -w -X main.buildVersion={version} -X main.buildCommit={commit} -X main.buildTime={build_time}"
-        env = dict(os.environ, CGO_ENABLED="0", GOOS=goos, GOARCH=goarch, GOFLAGS="", GOTOOLCHAIN="local")
         subprocess.run(["go", "build", "-trimpath", "-buildvcs=false", "-ldflags", ldflags, "-o", str(stage / exe), "./cmd/codeye"],
                        cwd=ROOT, env=env, check=True)
         linking = elf_linking(stage / exe) if goos == "linux" else "not_checked"
         if goos == "linux" and linking != "static":
             print(f"the binary is {linking}, expected a static ELF (CGO_ENABLED=0)", file=sys.stderr)
             return 1
+        machine = {"amd64": 62, "arm64": 183}.get(goarch)
+        if goos == "linux" and machine is not None and elf_machine(stage / exe) != machine:
+            print(f"the binary ELF machine does not match {goarch}", file=sys.stderr)
+            return 1
         shutil.copytree(dist, stage / "web" / "dist")
-        for rel in DOCS + EXAMPLES:
+        (stage / NOTICES).mkdir()
+        (stage / "web" / "dist" / WEB_NOTICES).replace(stage / NOTICES / "web.md")
+        try:
+            copy_go_notices(stage, env)
+        except ValueError as err:
+            print(err, file=sys.stderr)
+            return 1
+        for rel in DOCS:
+            (stage / rel).parent.mkdir(parents=True, exist_ok=True)
+            text = (ROOT / rel).read_text(encoding="utf-8")
+            (stage / rel).write_text(release_doc(text, rel, commit), encoding="utf-8")
+        for rel in EXAMPLES:
             (stage / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / rel, stage / rel)
         install = INSTALL_TEMPLATE.read_text(encoding="utf-8")

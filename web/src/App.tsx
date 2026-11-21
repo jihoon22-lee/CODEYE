@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { AdminView } from './AdminView';
+import { AdminView, type AdminTab } from './AdminView';
 import { personName } from './accounts';
 import type { Api } from './api';
 import type { DeepLink } from './deepLink';
@@ -20,6 +20,7 @@ type Authenticated = Extract<SessionState, { status: 'authenticated' }>;
 export function App({ api, controller, idempotency, link }: Props) {
   const session = useSyncExternalStore(controller.subscribe, controller.getState);
   const [view, setView] = useState<View>('projects');
+  const [adminTab, setAdminTab] = useState<AdminTab>('users');
   const [passwordSet, setPasswordSet] = useState(false);
   const pendingReport = useRef(link?.run ?? null);
   const dismissReportLanding = () => { pendingReport.current = null; };
@@ -29,7 +30,12 @@ export function App({ api, controller, idempotency, link }: Props) {
     return document.activeElement === document.body;
   }, []);
   useEffect(() => { void controller.start(); }, [controller]);
-  const go = (next: View) => { dismissReportLanding(); setPasswordSet(false); setView(next); };
+  const go = (next: View, tab: AdminTab = 'users') => {
+    dismissReportLanding();
+    setPasswordSet(false);
+    setView(next);
+    if (next === 'admin') setAdminTab(tab);
+  };
 
   const signedIn = session.status === 'authenticated' ? session : null;
   // A session that must change its password sees only that screen and logout: nothing else is
@@ -65,13 +71,13 @@ export function App({ api, controller, idempotency, link }: Props) {
       {signedIn?.logoutFailed && <p role="alert" className="error">{t.session.logoutFailed}</p>}
       {passwordSet && !forced && shown === 'projects' && <p role="status">{t.accounts.password.done}</p>}
       <div id="main" tabIndex={-1}>
-        {shown === 'doctor' ? (signedIn && !forced ? <ToolsView api={api} /> : <DoctorView />)
+        {shown === 'doctor' ? (signedIn && !forced ? <ToolsView api={api} onOpenCode={signedIn.isAdmin ? () => go('admin', 'opencode') : undefined} /> : <DoctorView />)
           : !signedIn ? <ConnectionPanel session={session} controller={controller} />
           : shown === 'account' ? <>
             <PasswordForm key={signedIn.userId} controller={controller} user={signedIn} forced={forced} onDone={() => { if (forced) { setPasswordSet(true); setView('projects'); } }} />
             {!forced && <p><button type="button" onClick={() => go('projects')}>{t.accounts.password.back}</button></p>}
           </>
-          : shown === 'admin' ? <AdminView api={api} controller={controller} me={signedIn.userId} />
+          : shown === 'admin' ? <AdminView key={adminTab} api={api} controller={controller} me={signedIn.userId} initialTab={adminTab} />
           : <ProjectsView api={api} userId={signedIn.userId} idempotency={idempotency} link={link} claimReportLanding={claimReportLanding} />}
       </div>
     </main>

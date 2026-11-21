@@ -62,6 +62,8 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	// The provider API key is read by workers from this file at each model
 	// call; it is never an argument (docs/REVIEW.md#모델-설정).
 	modelCredential := fs.String("model-credential-file", "", "")
+	modelConfig := fs.String("model-config-file", "", "")
+	modelInstance := fs.String("model-instance-config", "", "")
 	modelTimeout := fs.Duration("model-timeout", opencode.DefaultTimeout, "")
 	reviewMaxCalls := fs.Int("review-max-calls", review.DefaultMaxCalls, "")
 	fs.Var(&modelRoots, "model-source-root", "")
@@ -206,6 +208,10 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		StorageLogDir:             *storageLogDir,
 		Log:                       stderr,
 	}
+	cfg.ModelConfigFile = *modelConfig
+	if *modelInstance != "" {
+		cfg.ModelSettings = localModelSettings(*modelInstance, filepath.Dir(abs), instanceModelEnv())
+	}
 	cfg.AdvertiseWithoutBaseline = *advertiseAlways
 	cfg.DependencyFetch, cfg.DependencyCacheDir, cfg.GoProxy = *depFetch, *depCache, *goProxy
 	cfg.GoSumDB, cfg.GoPrivate, cfg.GoNoProxy, cfg.GoNoSumDB = *goSumDB, *goPrivate, *goNoProxy, *goNoSumDB
@@ -267,7 +273,22 @@ func pythonConsumers(cfg builtin.Config, missing []builtin.Unavailable) bool {
 }
 
 func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
-	return workerrun.Main(ctx, workerrun.Config{In: in, Out: out, Stderr: stderr, Handlers: workerHandlers})
+	model := &instanceModelCaller{}
+	return workerrun.Main(ctx, workerrun.Config{In: in, Out: out, Stderr: stderr,
+		PrepareAttempt: model.prepareAttempt,
+		Handlers: func(ctx context.Context, h *workerproto.Hello, runner executor.Runner) ([]analysis.Handler, []string, error) {
+			model.settings, model.static, model.offline, model.caBundle = h.ModelSettings, workerModel(h), h.Offline, h.CABundle
+			return workerHandlersWithCaller(ctx, h, runner, model)
+		}})
+}
+
+func workerModel(h *workerproto.Hello) opencode.Config {
+	timeout := opencode.DefaultTimeout
+	if h.ModelTimeoutSeconds > 0 {
+		timeout = time.Duration(h.ModelTimeoutSeconds) * time.Second
+	}
+	return opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, CredentialFile: h.ModelCredentialFile,
+		ConfigFile: h.ModelConfigFile, Timeout: timeout, Offline: h.Offline, CABundle: h.CABundle}
 }
 
 // workerHandlers registers the handlers of this build. Without a usable
@@ -282,6 +303,10 @@ func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
 // toolchains (--node) and every configured analyzer tool. The test-only fixture handler is left
 // unwrapped.
 func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.Runner) ([]analysis.Handler, []string, error) {
+	return workerHandlersWithCaller(ctx, h, runner, workerModel(h))
+}
+
+func workerHandlersWithCaller(ctx context.Context, h *workerproto.Hello, runner executor.Runner, caller review.Caller) ([]analysis.Handler, []string, error) {
 	if h.ReviewMaxCalls != 0 && !review.ValidMaxCalls(h.ReviewMaxCalls) {
 		return nil, nil, errors.New("review call ceiling out of range")
 	}
@@ -320,12 +345,6 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 	depCfg.PythonConsumers = pythonConsumers(cfg, missing)
 	for i, handler := range hs {
 		if handler.Info().Name == analyzerpack.CompositeName {
-			timeout := opencode.DefaultTimeout
-			if h.ModelTimeoutSeconds > 0 {
-				timeout = time.Duration(h.ModelTimeoutSeconds) * time.Second
-			}
-			caller := opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, CredentialFile: h.ModelCredentialFile, Timeout: timeout,
-				Offline: h.Offline, CABundle: h.CABundle}
 			reviewed := review.Handler{Static: handler, Caller: caller, MaxCalls: h.ReviewMaxCalls}
 			// Dependency tasks run after discovery and before the analyzers;
 			// review plans only through the static handler and never sees them.

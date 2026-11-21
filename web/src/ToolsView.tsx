@@ -12,7 +12,7 @@ const t = ko.tools;
 // the model and platform source access. A controller that recorded no setup (started
 // on its own) does not know its nodes' tools; there the doctor file view stays. Tool paths and
 // hints reach administrators only.
-export function ToolsView({ api }: { api: Api }) {
+export function ToolsView({ api, onOpenCode }: { api: Api; onOpenCode?: () => void }) {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [error, setError] = useState<ErrorText | null>(null);
   const [loads, setLoads] = useState(0);
@@ -24,9 +24,17 @@ export function ToolsView({ api }: { api: Api }) {
   }, [api, loads]);
   if (error) return <section className="panel"><ErrorNote error={{ ...error, message: `${t.failed} ${error.message}` }} /><button type="button" onClick={() => setLoads(n => n + 1)}>{t.reload}</button></section>;
   if (!setup) return <section className="panel" role="status"><p>{t.loading}</p></section>;
-  if (setup.tools === null && setup.model === null) return <DoctorView />;
+  const openCode = setup.is_admin && onOpenCode && <button type="button" onClick={onOpenCode}>{ko.accounts.admin.tabs.opencode}</button>;
+  if (setup.tools === null && setup.model === null) return <>{openCode}<DoctorView /></>;
   const tools = setup.tools?.tools ?? [];
   const status = (s: string) => (Object.hasOwn(t.statuses, s) ? t.statuses[s] : t.statusUnknown(s));
+  const model = setup.model;
+  const probe = model?.probe && Object.hasOwn(t.probes, model.probe) ? t.probes[model.probe] : t.probes.not_probed;
+  const modelStatus = setup.is_admin && model?.configured && model.id
+    ? t.modelSet(model.id, probe)
+    : setup.available.model_review?.available === true || (setup.available.model_review === undefined && model?.configured)
+      ? t.modelAvailable
+      : model?.configured ? t.modelUnavailable : t.modelNone;
   return <>
     <section aria-labelledby="tools-title"><h1 id="tools-title">{t.title}</h1><p>{t.intro}</p></section>
     <section className="panel" aria-labelledby="tools-table">
@@ -48,7 +56,7 @@ export function ToolsView({ api }: { api: Api }) {
       <h2 id="tools-setup" className="visually-hidden">{t.model}</h2>
       <dl>
         <dt>{t.model}</dt>
-        <dd>{setup.model?.configured && setup.model.id ? t.modelSet(setup.model.id, Object.hasOwn(t.probes, setup.model.probe ?? '') ? t.probes[setup.model.probe!] : setup.model.probe ?? '—') : <>{t.modelNone}<br /><CopyText text="codeye up" /></>}</dd>
+        <dd>{modelStatus}{openCode && <div className="actions">{openCode}</div>}</dd>
         <dt>{t.git}</dt>
         <dd>{setup.git?.available ? t.gitOn(setup.git.hosts.join(', ')) : t.gitOff}</dd>
         <dt>{t.folders}</dt>

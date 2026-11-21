@@ -4,9 +4,9 @@
 
 ## 구현 범위
 
-- OpenAPI operation의 `x-codeye-status`가 `implemented`이면 서버가 실제로 제공한다. 그 밖의 operation은 설계 계약(미구현)이다. 현재 미구현 operation은 풀 관리(`/api/v1/admin/pools/{pool_id}`)와 Git webhook 수신(`/api/v1/providers/{provider_id}/webhook`)이다.
+- OpenAPI operation의 `x-codeye-status`가 `implemented`이면 서버가 실제로 제공한다. 그 밖의 operation은 설계 계약(미구현)이다. 저장소의 PR·멘션 웹훅은 `POST /api/v1/github/webhooks/{project_id}`로 받는다. 풀 관리와 provider 단위 웹훅은 설계 단계에 있다.
 - 서버가 등록한 라우트와 OpenAPI의 구현 operation이 같은지 [`internal/httpapi/contract_test.go`](../internal/httpapi/contract_test.go)가 확인한다. 라우트 표는 [`internal/httpapi/api.go`](../internal/httpapi/api.go)와 [`node.go`](../internal/httpapi/node.go)에 있다.
-- 사용자 인증은 세션 cookie뿐이며, 세션은 일회용 로그인 링크나 사용자 이름·비밀번호로 만든다. 사용자 Bearer 토큰(`UserBearer`)은 구현하지 않았다. loopback이 아닌 주소는 TLS나 명시적 평문 HTTP(`--plain-http`)로만 받는다([보안](SECURITY.md#네트워크와-브라우저)). 관리자는 `/admin/providers`와 `/admin/settings`로 Git 호스트와 서비스 스위치를 관리한다. 계정·구성원·감사 기록은 웹 화면과 CLI에서 다룬다.
+- 사용자 인증은 세션 cookie뿐이며, 이메일·비밀번호 또는 일회용 로그인 링크로 세션을 만든다. 기존 사용자 이름을 사용하는 계정도 로그인할 수 있다. 사용자 Bearer 토큰(`UserBearer`)은 구현하지 않았다. loopback이 아닌 주소는 TLS나 명시적 평문 HTTP(`--plain-http`)로만 받는다([보안](SECURITY.md#네트워크와-브라우저)). 관리자는 `/admin/providers`와 `/admin/settings`로 Git 호스트와 서비스 스위치를 관리한다. 계정·구성원·감사 기록은 웹 화면과 CLI에서 다룬다.
 - 설계 계약(미구현) 사용자 API: 프로젝트 설정 변경(분석 선택 `PUT /projects/{id}/analysis`만 구현), 연결 진단·브랜치 조회, 개별 task·로그 조회(로그는 상태 이벤트와 별도의 byte/record cursor로 가져오는 설계), 첫 발견 시각 이력, 판정 일괄 적용, 풀·노드 관리 웹 API. 풀·노드 관리는 운영자 CLI를 쓴다([운영](OPERATIONS.md)).
 
 ## 공통 규칙
@@ -222,6 +222,7 @@ github.com 저장소 프로젝트는 누가 등록했든 `{"profile":"deep-revie
 
 `GET /setup`은 로그인한 사용자의 분석 기본값, Git 호스트 목록, 모델 상태와 도구 정보를 준다. 도구 경로와 힌트는 관리자에게만 표시한다.
 
+- 관리형 설치의 모델 상태는 저장된 OpenCode 설정을 읽는다. 일반 계정은 모델 검토의 사용 가능 여부를 보고, 관리자는 모델 ID와 최근 연결 확인 결과도 본다.
 - `available`은 `git_url`, `local_path`, `pull_requests`, `model_review`, `build_scripts`, `fetch_dependencies`별 가용 여부와 사유를 담는다. 절대 경로 등록은 해당 경로를 서비스 계정이 실제로 읽을 수 있는지 확인한다.
 - `github_connections`는 호스트별 `enabled`, `host`, `token`(설정 여부), 선택 `account` 및 `reason`이다. 서비스 시작 시 확인한 상태로 토큰 값은 포함하지 않는다. [플랫폼 GitHub 계정](GITHUB.md#플랫폼-github-계정)
 - 오프라인에서는 설정한 사내 GHES가 `git.hosts`에 표시된다. `readable_folders`는 이전 클라이언트용 필드이며 빈 배열이다.
@@ -493,6 +494,9 @@ Python API docstring 근거는 `documents.evidence[]`에서 선택 필드 `direc
 | `PUT/DELETE /admin/source-roots/{rid}/grants/{uid}` | — | 204. 이미 그 상태면 변경 없이 204 |
 | `GET /admin/providers` | — | `{items: [{id, kind, host, api_url}]}` |
 | `POST /admin/providers` | `{host}` | Git host 승인. 새로 더하면 201, 이미 있으면 200(`AdminProvider`). `github.com`은 `github`, 그 밖은 `ghes`. 형식 오류 422. 감사 `provider.added` |
+| `GET /admin/opencode` | — | 관리자가 저장한 경로와 모델, 수정 가능 여부, 현재 선택된 모델과 연결 확인 결과. 인증 파일 내용은 전달하지 않는다. |
+| `PUT /admin/opencode` | `{executable, config_file, credential_file, model}` | 관리형 서비스의 로컬 OpenCode 설정을 교체한다. 경로는 절대 경로 또는 서비스 계정의 `~/`로 입력한다. 빈 값은 설치 기본값을 쓴다. 저장은 모델을 호출하지 않으며 새 분석부터 적용된다. |
+| `POST /admin/opencode/probe` | — | 저장된 설정으로 합성 입력을 한 번 보낸다. 응답의 `probe`와 `reason`으로 결과를 확인한다. [관리자 설정](GUIDE.md#관리자-화면에서-연결하기) |
 | `GET /admin/settings` | — | `ServiceSettings`: `{others_model_review, others_build_scripts, updated_at, service_origin}` |
 | `PUT /admin/settings` | `{others_model_review?, others_build_scripts?}`(하나 이상) | 200 `ServiceSettings`. 관리자가 아닌 사람이 시작한 run에 다음 배정부터 적용한다. 바뀐 값이 있을 때만 감사 `service.settings_set` |
 | `GET /audit` | — | 전체 감사 기록 `AuditPage` |

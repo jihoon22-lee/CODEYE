@@ -2,7 +2,7 @@
 // groups and order as the summary Markdown and HTML (internal/report/
 // render_summary.go). Everything is computed from the stored report.
 import type { AnalysisReport, Evidence, Finding, Observation } from './analysisReport';
-import type { Citation, Ledger, Sections, StaticTool } from './reportSections';
+import type { Citation, Ledger, Sections, StaticTool } from './parseReportSections';
 import { reportKo as t } from './locales/report-ko';
 
 // The default secondary path rule of review priority (docs/REVIEW.md#검토-우선순위,

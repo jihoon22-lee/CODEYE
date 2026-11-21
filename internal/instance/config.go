@@ -44,6 +44,7 @@ const (
 // Config is the service configuration (docs/OPERATIONS.md#서비스-설정-파일). Unknown fields are
 // rejected; paths must be absolute and clean.
 type Config struct {
+	filePath      string
 	SchemaVersion string       `json:"schema_version"`
 	StateDir      string       `json:"state_dir"`
 	Listen        string       `json:"listen,omitempty"`
@@ -210,6 +211,8 @@ type Model struct {
 	OpenCode string `json:"opencode,omitempty"`
 	// Name is PROVIDER/MODEL, or a model name of the credential's provider.
 	Name string `json:"name,omitempty"`
+	// ConfigFile is an explicit native OpenCode JSON or JSONC configuration.
+	ConfigFile string `json:"config_file,omitempty"`
 	// CredentialFile is a CODEYE model credential or an OpenCode auth.json.
 	CredentialFile string `json:"credential_file,omitempty"`
 	RelayFile      string `json:"relay_file,omitempty"`
@@ -311,6 +314,12 @@ func DefaultStateDir() (string, error) {
 // Load reads and validates path. knownTools are the analyzer tool and
 // toolchain flag names of this build (agent.tools keys).
 func Load(path string, knownTools []string) (*Config, error) {
+	return LoadForStateDir(path, knownTools, "")
+}
+
+// LoadForStateDir uses the running installation's state directory when the
+// document omits state_dir. Isolated workers have a different HOME.
+func LoadForStateDir(path string, knownTools []string, defaultStateDir string) (*Config, error) {
 	if !filepath.IsAbs(path) {
 		abs, err := filepath.Abs(path)
 		if err != nil {
@@ -330,11 +339,23 @@ func Load(path string, knownTools []string) (*Config, error) {
 	if err != nil {
 		return nil, errors.New("cannot read the configuration file")
 	}
-	return Parse(raw, knownTools)
+	cfg, err := parseConfig(raw, knownTools, defaultStateDir)
+	if err != nil {
+		return nil, err
+	}
+	cfg.filePath = filepath.Clean(path)
+	return cfg, nil
 }
+
+// FilePath is the source of a loaded service configuration.
+func (c *Config) FilePath() string { return c.filePath }
 
 // Parse decodes a configuration strictly and validates it.
 func Parse(raw []byte, knownTools []string) (*Config, error) {
+	return parseConfig(raw, knownTools, "")
+}
+
+func parseConfig(raw []byte, knownTools []string, defaultStateDir string) (*Config, error) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	var c Config
@@ -343,6 +364,9 @@ func Parse(raw []byte, knownTools []string) (*Config, error) {
 	}
 	if dec.More() {
 		return nil, errors.New("config is not valid: trailing data")
+	}
+	if c.StateDir == "" {
+		c.StateDir = defaultStateDir
 	}
 	if err := c.validate(knownTools); err != nil {
 		return nil, fmt.Errorf("config is not valid: %w", err)
@@ -531,13 +555,18 @@ func (c *Config) validate(knownTools []string) error {
 		if m.Name != "" && !executor.ValidOpenCodeModel(m.Name) && (strings.Contains(m.Name, "/") || !executor.ValidOpenCodeModel("p/"+m.Name)) {
 			return errors.New("agent.model.name must be PROVIDER/MODEL or a model name (no spaces)")
 		}
-		for name, p := range map[string]string{"agent.model.relay_file": m.RelayFile, "agent.model.credential_file": m.CredentialFile} {
-			if p != "" && !absClean(p) {
-				return fmt.Errorf("%s must be an absolute, clean path", name)
+		for _, field := range []struct{ name, path string }{
+			{"relay_file", m.RelayFile}, {"credential_file", m.CredentialFile}, {"config_file", m.ConfigFile},
+		} {
+			if field.path != "" && !absClean(field.path) {
+				return fmt.Errorf("agent.model.%s must be an absolute, clean path", field.name)
 			}
 		}
 		if m.RelayFile != "" && m.CredentialFile != "" {
 			return errors.New("agent.model.relay_file and agent.model.credential_file are alternatives")
+		}
+		if m.RelayFile != "" && m.ConfigFile != "" {
+			return errors.New("agent.model.relay_file and agent.model.config_file are alternatives")
 		}
 		if m.TimeoutSeconds < 0 || m.TimeoutSeconds > 1800 {
 			return errors.New("agent.model.timeout_seconds must be 1..1800 (0 = 180)")

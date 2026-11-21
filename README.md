@@ -4,32 +4,33 @@ CODEYE는 프로젝트의 문서와 코드를 함께 읽는 자체 호스팅 QA 
 
 프로젝트 소스를 직접 확보해 검사하는 Native 실행이 기본입니다. Docker·Kubernetes가 없어도 동작합니다.
 
-## 시작하기
+## 다운로드하고 실행하기
 
-CODEYE는 `codeye up`으로 띄우는 웹 서비스 하나입니다. 혼자 쓸 때도, 다른 사람을 초대할 때도 같은 서비스입니다. 소스는 플랫폼 계정으로 읽고, 실행과 보고서는 요청한 사용자의 프로젝트에 보관합니다.
+Linux(WSL2 포함)에서 일반 Linux 계정으로 실행합니다. 기본 설치에는 PostgreSQL 14 이상의 서버 프로그램이 필요합니다. CODEYE가 자체 데이터베이스를 만들고 시작합니다. 배포 파일에 실행 파일과 웹 화면이 들어 있습니다. [준비물과 지원 범위](docs/GUIDE.md#준비물)
 
-1. **시작.** 빌드한 뒤(아래) PostgreSQL 프로그램만 설치돼 있으면 한 줄로 시작합니다. 데이터베이스는 CODEYE가 만듭니다.
+| Linux CPU | CODEYE v0.1.0 | 검증 파일 |
+|---|---|---|
+| x86-64 (`amd64`) | [다운로드](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.0/codeye-v0.1.0-linux-amd64.tar.gz) | [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.0/codeye-v0.1.0-linux-amd64.tar.gz.sha256) |
+| ARM64 (`arm64`) | [다운로드](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.0/codeye-v0.1.0-linux-arm64.tar.gz) | [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.0/codeye-v0.1.0-linux-arm64.tar.gz.sha256) |
 
-   ```bash
-   ./bin/codeye up ~/src/myproject    # DB·서버·에이전트를 띄우고 분석을 요청한 뒤 로그인된 브라우저를 엽니다
-   ```
+x86-64 Linux에서 내려받아 시작하는 예입니다. ARM64에서는 파일명과 폴더명의 `amd64`를 `arm64`로 바꿉니다.
 
-   처음 `up`을 실행한 사람이 관리자입니다. GitHub.com 또는 GHES의 비공개 저장소는 운영자가 설치에 연결한 GitHub 계정에 읽기 권한을 부여합니다. [플랫폼 GitHub 연결](docs/GITHUB.md)
-2. **열기.** `codeye open`이 로그인된 브라우저를 다시 엽니다. 첫 화면의 칸 하나에 폴더 경로나 Git 주소(`https://github.com/OWNER/REPO`, pull request 주소)를 넣고 분석을 누릅니다.
-3. **분석.** 입력을 고정한 사본에서 환경·문서를 파악하고 정적 분석과 모델 검토를 한 뒤 보고서를 보여 줍니다. 원본 경로에서는 아무것도 실행하지 않습니다.
-4. **초대.** 다른 머신에서 열려면 주소를 정해 다시 시작합니다. TLS(권장) 또는 명시적인 평문 HTTP입니다.
+```sh
+curl -fLO https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.0/codeye-v0.1.0-linux-amd64.tar.gz &&
+  curl -fLO https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.0/codeye-v0.1.0-linux-amd64.tar.gz.sha256 &&
+  sha256sum -c codeye-v0.1.0-linux-amd64.tar.gz.sha256 &&
+  tar -xzf codeye-v0.1.0-linux-amd64.tar.gz &&
+  cd codeye-v0.1.0-linux-amd64 &&
+  ./codeye up
+```
 
-   ```bash
-   ./bin/codeye up --listen 0.0.0.0:7443 --tls-cert /path/cert.pem --tls-key /path/key.pem --public-origin https://codeye.example:7443
-   ./bin/codeye up --listen 0.0.0.0:7331 --plain-http   # 이 머신의 모든 주소로 받습니다. 로그인 쿠키가 암호화되지 않습니다
-   ```
+`up`은 관리자 로그인 링크를 열고 터미널에도 출력합니다. 화면의 **폴더 경로 또는 Git 주소**에 서버가 읽을 수 있는 절대 경로 또는 GitHub 저장소·PR 주소를 넣고 **분석**을 누릅니다. 다시 열 때는 `./codeye open`을 실행합니다. [첫 시작과 프로젝트 등록](docs/GUIDE.md#첫-시작)
 
-   사용자는 서비스 주소에서 이메일과 비밀번호로 가입합니다. 설정은 `~/.config/codeye/config.json`에 남습니다.
-5. **결과 확인.** 같은 프로젝트에서 구성원을 추가하면 보고서를 함께 볼 수 있습니다. 다른 사용자가 같은 Git URL이나 폴더를 자기 프로젝트로 분석하면 별도 실행과 보고서가 생깁니다.
+Git 저장소를 분석하려면 `git`을 설치합니다. 비공개 저장소에는 운영자가 연결한 플랫폼 GitHub 계정에 읽기 권한을 부여합니다. 사용자 가입과 프로젝트 공유는 CODEYE의 웹 계정에서 관리합니다. [플랫폼 GitHub 연결](docs/GITHUB.md) · [다른 사람 초대](docs/GUIDE.md#다른-사람-초대)
 
-WSL에서는 서비스 계정이 읽을 수 있는 프로젝트 경로를 입력합니다. 혼자 사용할 때는 loopback에 띄운 서비스를 Tailscale 안에서 제공합니다. 부서 설치에서는 서비스 머신에 마운트한 NFS의 프로젝트 경로를 입력할 수 있습니다. 분석기는 복사한 파일로 작업합니다.
+모델 검토를 사용하려면 관리자 화면의 **OpenCode 연결**에서 서버에 설치된 OpenCode를 지정하고 연결을 확인합니다. 모델 설정 전에도 정적 분석을 실행할 수 있습니다. [모델 설정](docs/GUIDE.md#모델-설정)
 
-저장소 웹훅을 연결하면 PR이 열리거나 갱신될 때, 또는 PR 댓글에 플랫폼 계정의 `@멘션`을 한 줄로 남길 때 같은 과정을 실행합니다. [저장소 웹훅 설정](docs/GITHUB.md#저장소-웹훅)
+인터넷이 없는 머신에서는 같은 배포 파일과 검증 파일을 함께 옮깁니다. 묶음 안 `INSTALL.md`의 오프라인 절차를 따릅니다. [폐쇄망 배포팩](docs/OPERATIONS.md#폐쇄망-배포팩)
 
 ## 지금 사용할 수 있는 기능
 
@@ -38,11 +39,9 @@ WSL에서는 서비스 계정이 읽을 수 있는 프로젝트 경로를 입력
 - **정적 분석.** Go, C/C++, Python, JS/TS, Rust 분석기와 구조·중복 지표, 비밀정보 검사를 실행합니다. 설치하지 않은 도구는 0건 통과가 아니라 미지원으로 표시합니다.
 - **모델 검토.** 전송을 허용한 소스에 한해 독립 조사와 반증 검토를 수행합니다. 모델 없이도 도구 결과 보고서가 나옵니다.
 - **보고서.** 웹에서 읽고 같은 리비전을 JSON·Markdown·HTML로 내려받습니다. 숫자는 모두 구조화 데이터에서 계산합니다.
-- **GitHub pull request.** 바뀐 줄 기준으로 분석하고, 원하면 결과 댓글 하나를 남겨 다시 분석할 때 고칩니다.
+- **GitHub pull request.** 바뀐 줄 기준으로 분석하고, 원하면 결과 댓글 하나를 남겨 다시 분석할 때 고칩니다. PR 갱신이나 플랫폼 계정 멘션으로도 실행할 수 있습니다. [저장소 웹훅 설정](docs/GITHUB.md#저장소-웹훅)
 - **여러 사용자와 권한, 프로젝트 구성원, 감사 기록.**
 - **예약, 진행 표시, 실행 비교와 사람 판정, 저장 영역 상한, 백업·복원, 오프라인 설치, 여러 노드.**
-
-설치부터 백업까지의 절차는 [사용 안내서](docs/GUIDE.md)에 있습니다. 남은 일은 [다음 작업](docs/ROADMAP.md)에 있습니다.
 
 ## 빌드와 검증
 

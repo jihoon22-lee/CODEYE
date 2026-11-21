@@ -6,23 +6,24 @@ import { CopyText } from './CopyText';
 import { AuditLog, type ActorOption } from './AuditLog';
 import { describeError, shorten, type ErrorText } from './format';
 import { ko as t } from './locales/ko';
+import { OpenCodeSettings } from './OpenCodeSettings';
 import { ErrorNote } from './RunPanel';
 import type { SessionController } from './session';
 
 // The administrator area: the address to share, accounts, the service switches, the approved Git hosts and the server-wide audit log. Being
 // an administrator opens no project; the screen says so.
 
-type Tab = 'users' | 'service' | 'providers' | 'audit';
-const TABS: Tab[] = ['users', 'service', 'providers', 'audit'];
+export type AdminTab = 'users' | 'service' | 'opencode' | 'providers' | 'audit';
+const TABS: AdminTab[] = ['users', 'service', 'opencode', 'providers', 'audit'];
 // Pickers need every user; the list is small in practice, so follow the cursor to a fixed bound.
 const MAX_USER_PAGES = 50;
 
 export type UsersState = { items: UserView[]; truncated: boolean; error: ErrorText | null; loading: boolean };
 
-type Props = { api: Api; controller: SessionController; me: string };
+type Props = { api: Api; controller: SessionController; me: string; initialTab: AdminTab };
 
-export function AdminView({ api, controller, me }: Props) {
-  const [tab, setTab] = useState<Tab>('users');
+export function AdminView({ api, controller, me, initialTab }: Props) {
+  const [tab, setTab] = useState(initialTab);
   const [users, setUsers] = useState<UsersState>({ items: [], truncated: false, error: null, loading: true });
   const [loads, setLoads] = useState(0);
   const reloadUsers = useCallback(() => setLoads(n => n + 1), []);
@@ -60,14 +61,16 @@ export function AdminView({ api, controller, me }: Props) {
   return <>
     <section aria-labelledby="admin-title">
       <h1 id="admin-title">{s.title}</h1>
-      <p>{s.intro}</p>
-      <p className="notice">{s.noProjectAccess}</p>
-      {current && <div id="service-address" className="field">
-        <span>{s.serviceAddress}: </span>
-        {current.service_origin ? <><CopyText text={current.service_origin} id="service-address-value" /><small className="small">{s.serviceAddressHelp}</small></>
-          : <small className="small">{s.serviceAddressLocal}</small>}
-      </div>}
-      {current?.service_origin && current.service_addresses.length > 1 && <ServiceAddresses addresses={current.service_addresses} />}
+      {tab !== 'opencode' && <>
+        <p>{s.intro}</p>
+        <p className="notice">{s.noProjectAccess}</p>
+        {current && <div id="service-address" className="field">
+          <span>{s.serviceAddress}: </span>
+          {current.service_origin ? <><CopyText text={current.service_origin} id="service-address-value" /><small className="small">{s.serviceAddressHelp}</small></>
+            : <small className="small">{s.serviceAddressLocal}</small>}
+        </div>}
+        {current?.service_origin && current.service_addresses.length > 1 && <ServiceAddresses addresses={current.service_addresses} />}
+      </>}
     </section>
     <nav aria-label={s.tabs.label} className="tabs">
       {TABS.map(x => <button key={x} type="button" aria-current={tab === x ? 'page' : undefined} onClick={() => setTab(x)}>{s.tabs[x]}</button>)}
@@ -76,6 +79,7 @@ export function AdminView({ api, controller, me }: Props) {
       <h2 id="admin-tab-title">{s.tabs[tab]}</h2>
       {tab === 'users' && <AdminUsers api={api} me={me} users={users} onChanged={reloadUsers} onForbidden={forbidden} />}
       {tab === 'service' && <ServiceSwitches api={api} settings={current} error={settings.error} reload={settings.reload} onSaved={settings.set} onForbidden={forbidden} />}
+      {tab === 'opencode' && <OpenCodeSettings api={api} onForbidden={forbidden} />}
       {tab === 'providers' && <Providers api={api} onForbidden={forbidden} />}
       {tab === 'audit' && <AuditLog load={loadAudit} actors={actors} projectFilter intro={t.accounts.audit.globalIntro} onForbidden={forbidden} />}
     </section>

@@ -89,3 +89,10 @@ export function orderStages<T extends { key: string }>(stages: T[]): T[] {
 // A project role in words; an unrecognised role keeps its raw value and grants nothing.
 export const roleLabel = (role: string): string =>
   Object.hasOwn(t.accounts.roles, role) ? t.accounts.roles[role]! : t.accounts.roleUnknown(shorten(role, 32));
+
+// cutLine is s on one line, cut to n characters.
+export function cutLine(text: string | null, n = 100) {
+  const one = (text ?? '').split(/\s+/).filter(Boolean).join(' ');
+  const chars = Array.from(one);
+  return chars.length <= n ? one : chars.slice(0, n).join('') + '…';
+}

@@ -278,6 +278,9 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 		return nodeproto.OutcomeFailed, nodeproto.ReasonHandlerError, nil
 	}
 	_ = os.Mkdir(filepath.Join(a.scratch, "tmp"), 0700)
+	if w.cfg.PrepareAttempt != nil {
+		job.Source.ProtectedDirs = append(job.Source.ProtectedDirs, w.cfg.PrepareAttempt(a.scratch)...)
+	}
 
 	if reason := w.acquire(a); reason != "" {
 		return nodeproto.OutcomeFailed, reason, nil

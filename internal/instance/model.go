@@ -43,11 +43,12 @@ func defaultModel(provider string) string {
 
 // Credential sources (ResolvedModel.Source).
 const (
-	ModelSourceConfig   = "config"        // agent.model.credential_file
-	ModelSourceSecret   = "state_secret"  // <state>/secrets/model.json
-	ModelSourceOpenCode = "opencode_auth" // the user's OpenCode auth.json
-	ModelSourceRelay    = "relay"         // agent.model.relay_file
-	ModelSourceNone     = "none"          // a provider that needs no key
+	ModelSourceConfig         = "config"          // agent.model.credential_file
+	ModelSourceSecret         = "state_secret"    // <state>/secrets/model.json
+	ModelSourceOpenCode       = "opencode_auth"   // the user's OpenCode auth.json
+	ModelSourceOpenCodeConfig = "opencode_config" // explicit OpenCode config_file
+	ModelSourceRelay          = "relay"           // agent.model.relay_file
+	ModelSourceNone           = "none"            // a provider that needs no key
 )
 
 // SecretsDir holds files only the worker's model call reads (0700).
@@ -65,6 +66,8 @@ type ModelEnv struct {
 	Getenv   func(string) string
 	Home     string
 	LookPath func(string) (string, error)
+	// Model defaults passed to a managed worker without the host environment.
+	Executable, AuthFile, ConfigFile string
 }
 
 // SystemModelEnv is the process environment and the user's home.
@@ -93,6 +96,9 @@ func (e ModelEnv) xdg(variable, fallback string) string {
 
 // OpenCodeAuthFile is the user's OpenCode credential store.
 func (e ModelEnv) OpenCodeAuthFile() string {
+	if e.AuthFile != "" {
+		return e.AuthFile
+	}
 	d := e.xdg("XDG_DATA_HOME", filepath.Join(".local", "share"))
 	if d == "" {
 		return ""
@@ -100,7 +106,10 @@ func (e ModelEnv) OpenCodeAuthFile() string {
 	return filepath.Join(d, "opencode", "auth.json")
 }
 
-func (e ModelEnv) openCodeConfigFile() string {
+func (e ModelEnv) OpenCodeConfigFile() string {
+	if e.ConfigFile != "" {
+		return e.ConfigFile
+	}
 	d := e.xdg("XDG_CONFIG_HOME", ".config")
 	if d == "" {
 		return ""
@@ -114,6 +123,9 @@ type ResolvedModel struct {
 	// ID is PROVIDER/MODEL.
 	ID             string
 	CredentialFile string
+	ConfigFile     string
+	NativeEndpoint string // endpoint for operator diagnostics; contains no authentication fields
+	nativeHome     string
 	RelayFile      string
 	Timeout        time.Duration
 	ReviewMaxCalls int
@@ -136,7 +148,7 @@ func (m *ResolvedModel) Provider() string {
 
 // Caller is the worker-side call configuration of m.
 func (m *ResolvedModel) Caller() opencode.Config {
-	return opencode.Config{Executable: m.OpenCode, Model: m.ID, RelayFile: m.RelayFile, CredentialFile: m.CredentialFile, Timeout: m.Timeout,
+	return opencode.Config{Executable: m.OpenCode, Model: m.ID, RelayFile: m.RelayFile, CredentialFile: m.CredentialFile, ConfigFile: m.ConfigFile, NativeHome: m.nativeHome, Timeout: m.Timeout,
 		Offline: m.Offline, CABundle: m.CABundle}
 }
 
@@ -160,6 +172,9 @@ func ResolveModel(cfg *Config, layout Layout, env ModelEnv) (*ResolvedModel, err
 	if m.TimeoutSeconds > 0 {
 		res.Timeout = time.Duration(m.TimeoutSeconds) * time.Second
 	}
+	if m.ConfigFile != "" {
+		return resolveNativeModel(cfg, m, res, layout, env)
+	}
 	provider, model, _ := strings.Cut(m.Name, "/")
 	if !strings.Contains(m.Name, "/") {
 		provider, model = "", m.Name
@@ -173,7 +188,10 @@ func ResolveModel(cfg *Config, layout Layout, env ModelEnv) (*ResolvedModel, err
 	case m.CredentialFile != "":
 		p, err := credentialProvider(m.CredentialFile)
 		if err != nil {
-			return nil, fmt.Errorf("agent.model.credential_file: %w", err)
+			p = authProvider(m.CredentialFile, provider)
+			if p == "" {
+				return nil, fmt.Errorf("agent.model.credential_file: %w", err)
+			}
 		}
 		res.CredentialFile, res.Source = m.CredentialFile, ModelSourceConfig
 		if provider != "" && provider != p {
@@ -206,10 +224,10 @@ func ResolveModel(cfg *Config, layout Layout, env ModelEnv) (*ResolvedModel, err
 	if cfg.Offline {
 		switch res.Source {
 		case ModelSourceNone:
-			return nil, errors.New("offline mode needs a model key file with base_url (an internal endpoint); a model without a key answers from a public endpoint")
+			return nil, opencode.ErrNativeEndpoint
 		case ModelSourceConfig, ModelSourceSecret:
 			if !credentialHasEndpoint(res.CredentialFile, provider) {
-				return nil, errors.New("offline mode: the model key file has no base_url; add the internal endpoint (an OpenAI-compatible URL) as base_url")
+				return nil, fmt.Errorf("the model key file has no base_url: %w", opencode.ErrNativeEndpoint)
 			}
 		}
 	}
@@ -217,7 +235,7 @@ func ResolveModel(cfg *Config, layout Layout, env ModelEnv) (*ResolvedModel, err
 		return nil, errors.New("agent.model.name must be PROVIDER/MODEL when no API key is configured")
 	}
 	if model == "" {
-		model = openCodeConfigModel(env.openCodeConfigFile(), provider)
+		model = openCodeConfigModel(env.OpenCodeConfigFile(), provider)
 	}
 	if model == "" {
 		model = defaultModel(provider)
@@ -232,9 +250,50 @@ func ResolveModel(cfg *Config, layout Layout, env ModelEnv) (*ResolvedModel, err
 	if res.Source == ModelSourceNone && provider != "opencode" {
 		res.Notice = fmt.Sprintf("no API key found for provider %q: set %s and run codeye up, or write %s", provider, envVarOf(provider), layout.ModelSecret())
 	}
+	return resolveModelExecutable(m, res, env)
+}
+
+func resolveNativeModel(cfg *Config, m *Model, res *ResolvedModel, layout Layout, env ModelEnv) (*ResolvedModel, error) {
+	res.ConfigFile, res.CredentialFile, res.nativeHome = m.ConfigFile, m.CredentialFile, env.Home
+	res.Source = ModelSourceOpenCodeConfig
+	if res.CredentialFile != "" {
+		res.Source = ModelSourceConfig
+	}
+	name, selected, err := opencode.NativeSelection(res.ConfigFile, m.Name, res.CredentialFile, cfg.Offline, env.Home)
+	provider, _, _ := strings.Cut(name, "/")
+	keyMissing := selected != nil && selected.APIKey == "" || errors.Is(err, opencode.ErrNativeKeyMissing) || errors.Is(err, opencode.ErrNativeEndpoint)
+	var ref *opencode.NativeKeyReference
+	if errors.As(err, &ref) && ref.APIKey {
+		for _, d := range DefaultModels {
+			keyMissing = keyMissing || d.Provider == provider && d.EnvVar == ref.Variable
+		}
+	}
+	if keyMissing && res.CredentialFile == "" {
+		for _, candidate := range []struct{ path, source string }{
+			{layout.ModelSecret(), ModelSourceSecret}, {env.OpenCodeAuthFile(), ModelSourceOpenCode},
+		} {
+			if _, readErr := opencode.ReadCredential(candidate.path, provider); readErr != nil {
+				continue
+			}
+			resolvedName, p, readErr := opencode.NativeSelection(res.ConfigFile, m.Name, candidate.path, cfg.Offline, env.Home)
+			if readErr == nil {
+				res.CredentialFile, res.Source = candidate.path, candidate.source
+				name, selected, err = resolvedName, p, nil
+				break
+			}
+		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("agent.model.config_file: %w", err)
+	}
+	res.ID, res.NativeEndpoint = name, selected.BaseURL
+	return resolveModelExecutable(m, res, env)
+}
+
+func resolveModelExecutable(m *Model, res *ResolvedModel, env ModelEnv) (*ResolvedModel, error) {
 	res.OpenCode = m.OpenCode
 	if res.OpenCode == "" {
-		res.OpenCode = findOpenCode(env)
+		res.OpenCode = env.FindOpenCode()
 	}
 	if res.OpenCode == "" {
 		return nil, errors.New("OpenCode not found (looked in ~/.opencode/bin and PATH); install it or set agent.model.opencode")
@@ -251,8 +310,11 @@ func envVarOf(provider string) string {
 	return "the provider's API key variable"
 }
 
-// findOpenCode looks in OpenCode's install location, then PATH.
-func findOpenCode(env ModelEnv) string {
+// FindOpenCode looks in OpenCode's install location, then PATH.
+func (env ModelEnv) FindOpenCode() string {
+	if env.Executable != "" {
+		return env.Executable
+	}
 	if env.Home != "" {
 		p := filepath.Join(env.Home, ".opencode", "bin", "opencode")
 		if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() && st.Mode().Perm()&0o111 != 0 {
@@ -398,10 +460,17 @@ type modelProbe struct {
 	Reason        string `json:"reason,omitempty"`
 }
 
-func (m *ResolvedModel) fingerprint() string {
+// ProbeFingerprint identifies selected model inputs without storing credential values.
+func (m *ResolvedModel) ProbeFingerprint() string {
 	parts := []string{m.ID, m.OpenCode, m.CredentialFile, m.RelayFile}
 	if st, err := os.Stat(m.CredentialFile); m.CredentialFile != "" && err == nil {
 		parts = append(parts, st.ModTime().UTC().Format(time.RFC3339Nano), fmt.Sprint(st.Size()))
+	}
+	if m.ConfigFile != "" {
+		parts = append(parts, m.ConfigFile)
+		if st, err := os.Stat(m.ConfigFile); err == nil {
+			parts = append(parts, st.ModTime().UTC().Format(time.RFC3339Nano), fmt.Sprint(st.Size()))
+		}
 	}
 	return strings.Join(parts, "\x00")
 }
@@ -414,26 +483,38 @@ func ModelProbeDue(layout Layout, m *ResolvedModel) bool {
 		return true
 	}
 	var p modelProbe
-	return json.Unmarshal(raw, &p) != nil || p.Fingerprint != m.fingerprint()
+	return json.Unmarshal(raw, &p) != nil || p.Fingerprint != m.ProbeFingerprint()
 }
 
 // ModelProbeResult is the recorded probe outcome of m's configuration:
 // "verified", "failed", or "not_probed" when none matches it.
 func ModelProbeResult(layout Layout, m *ResolvedModel) string {
+	status, _ := ModelProbeStatus(layout, m)
+	return status
+}
+
+// ModelProbeStatus includes the adapter's reason for a failed saved probe.
+func ModelProbeStatus(layout Layout, m *ResolvedModel) (string, string) {
 	raw, err := os.ReadFile(layout.ModelProbeRecord())
 	var p modelProbe
-	if err != nil || json.Unmarshal(raw, &p) != nil || p.Fingerprint != m.fingerprint() {
-		return "not_probed"
+	if err != nil || json.Unmarshal(raw, &p) != nil || p.Fingerprint != m.ProbeFingerprint() {
+		return "not_probed", ""
 	}
 	if p.Verified {
-		return "verified"
+		return "verified", ""
 	}
-	return "failed"
+	return "failed", p.Reason
 }
 
 // RecordModelProbe stores the outcome of a probe of m.
 func RecordModelProbe(layout Layout, m *ResolvedModel, verified bool, reason string) error {
-	data, err := json.Marshal(modelProbe{SchemaVersion: recordSchema, Fingerprint: m.fingerprint(), Verified: verified, Reason: reason})
+	return RecordModelProbeFor(layout, m.ProbeFingerprint(), verified, reason)
+}
+
+// RecordModelProbeFor records the inputs captured before the call. A profile
+// edited while the provider is responding will still need its own check.
+func RecordModelProbeFor(layout Layout, fingerprint string, verified bool, reason string) error {
+	data, err := json.Marshal(modelProbe{SchemaVersion: recordSchema, Fingerprint: fingerprint, Verified: verified, Reason: reason})
 	if err != nil {
 		return err
 	}

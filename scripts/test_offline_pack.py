@@ -1,6 +1,8 @@
 """offline_pack.py: the web check, the archive's determinism and verify."""
 import hashlib
 import json
+import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -59,6 +61,37 @@ class WebCheck(unittest.TestCase):
             self.assertIn(f"{name}: external URL host scripts.sil.org", problems)
 
 
+class Distribution(unittest.TestCase):
+    def test_shipped_docs_open_locally_and_source_links_name_the_build_commit(self):
+        page = "[Guide](GUIDE.md#usage) [code](../cmd/codeye) [tests](TESTING.md#suite) [here](#more)"
+        commit = "a" * 40
+        actual = offline_pack.release_doc(page, "docs/API.md", commit)
+        self.assertIn("[Guide](GUIDE.md#usage)", actual)
+        self.assertIn(f"[code]({offline_pack.SOURCE_URL}/tree/{commit}/cmd/codeye)", actual)
+        self.assertIn(f"[tests]({offline_pack.SOURCE_URL}/blob/{commit}/docs/TESTING.md#suite)", actual)
+        self.assertIn("[here](#more)", actual)
+
+    @unittest.skipUnless(shutil.which("go"), "Go toolchain required for binary notices")
+    def test_go_notices_for_the_binary_and_linked_modules(self):
+        with tempfile.TemporaryDirectory() as directory:
+            stage = Path(directory)
+            offline_pack.copy_go_notices(stage, dict(os.environ, GOWORK="off", CGO_ENABLED="0"))
+            notices = stage / offline_pack.NOTICES / "go"
+            self.assertTrue((notices / "toolchain/LICENSE").stat().st_size)
+            self.assertTrue(any((notices / "modules/github.com/jackc/pgx").glob("v5@*/LICENSE")))
+
+    def test_vite_notice_moves_outside_the_served_web_tree(self):
+        notice = b"# Licenses\n[React](https://reactjs.org/)\n"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metadata = root / offline_pack.WEB_NOTICES
+            metadata.parent.mkdir()
+            metadata.write_bytes(notice)
+            self.assertEqual(offline_pack.check_web(root), [])
+            (root / "script.js").write_bytes(notice)
+            self.assertTrue(any("script.js" in issue for issue in offline_pack.check_web(root)))
+
+
 class Archive(unittest.TestCase):
     def stage(self, root: Path) -> Path:
         stage = root / "stage"
@@ -102,6 +135,15 @@ class Archive(unittest.TestCase):
 
 
 class Linking(unittest.TestCase):
+    def test_linux_target_machine(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "codeye"
+            for machine in (62, 183):
+                binary.write_bytes(b"\x7fELF\x02\x01" + bytes(12) + machine.to_bytes(2, "little"))
+                self.assertEqual(offline_pack.elf_machine(binary), machine)
+            binary.write_bytes(b"incomplete")
+            self.assertEqual(offline_pack.elf_machine(binary), 0)
+
     def test_elf_program_headers(self):
         import struct
         # A 64-bit little-endian ELF header with one program header of the given type.

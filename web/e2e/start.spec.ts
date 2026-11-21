@@ -39,9 +39,9 @@ test('a folder path goes straight to its run, and the report opens with what wou
   test.setTimeout(180_000);
   await analyze(env.CODEYE_TEST_START_FOLDER!);
   await expect(page.getByRole('article', { name: '분석 보고서' })).toBeVisible({ timeout: 150_000 });
-  // No model key in the smoke: the first hint says how to set one.
+  // An installation without a model directs its administrator to the connection settings.
   const hints = page.getByRole('region', { name: '더 나은 결과를 얻으려면' });
-  await expect(hints).toContainText('모델 키를 설정하세요');
+  await expect(hints).toContainText('관리 화면의 OpenCode 연결');
 });
 
 test('a GitHub address is analyzed the same way; turning the build scripts on retries it', async () => {

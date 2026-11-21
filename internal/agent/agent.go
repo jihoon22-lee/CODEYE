@@ -49,6 +49,8 @@ type Config struct {
 	// ModelCredentialFile is where workers read the provider API key at each
 	// model call (--model-credential-file).
 	ModelCredentialFile string
+	ModelConfigFile     string
+	ModelSettings       *workerproto.ModelSettings
 	// ModelTimeout bounds one model call (--model-timeout); 0 means 180 s.
 	ModelTimeout time.Duration
 	// ReviewMaxCalls is the model call ceiling per review attempt
@@ -250,6 +252,12 @@ func New(cfg Config) (*Agent, error) {
 	if cfg.ModelRelayFile != "" && cfg.ModelCredentialFile != "" {
 		return nil, &ExitError{ExitUsage, "--model-relay-file and --model-credential-file are alternatives"}
 	}
+	if cfg.ModelRelayFile != "" && cfg.ModelConfigFile != "" {
+		return nil, &ExitError{ExitUsage, "--model-relay-file and --model-config-file are alternatives"}
+	}
+	if cfg.ModelSettings != nil && (!filepath.IsAbs(cfg.ModelSettings.InstancePath) || !filepath.IsAbs(cfg.ModelSettings.StateDir)) {
+		return nil, &ExitError{ExitUsage, "--model-instance-config must be an absolute path"}
+	}
 	if cfg.ModelTimeout < 0 || cfg.ModelTimeout > 30*time.Minute || (cfg.ModelTimeout != 0 && cfg.ModelTimeout < time.Second) {
 		return nil, &ExitError{ExitUsage, "--model-timeout must be between 1s and 30m"}
 	}
@@ -279,7 +287,7 @@ func New(cfg Config) (*Agent, error) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}
 	}
-	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.DependencyCacheDir, cfg.ModelExecutable, cfg.ModelRelayFile, cfg.ModelCredentialFile, cfg.GitCredentialFile} {
+	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.DependencyCacheDir, cfg.ModelExecutable, cfg.ModelRelayFile, cfg.ModelCredentialFile, cfg.ModelConfigFile, cfg.GitCredentialFile} {
 		if p != "" && !filepath.IsAbs(p) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}

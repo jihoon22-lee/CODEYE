@@ -47,7 +47,7 @@ CODEYE 저장소 자체의 자동 테스트(GitHub Actions)는 위 CI 비목표�
 |---|---|
 | 실행 형태 | 상태 디렉터리의 관리형 PostgreSQL(기본) 또는 운영자가 준비한 PostgreSQL, controller(loopback, 또는 다른 머신용 TLS·명시적 평문 HTTP)와 로컬 에이전트. `codeye up`·`open`·`start`·`stop`·`status`(Linux 전용), 한 머신의 여러 워커와 최소·최대 자동 증감, 취소, lease·fencing |
 | 계정 | 이메일·비밀번호 회원가입과 로그인, 기존 사용자 이름·일회용 링크 로그인. 같은 소스를 등록해도 사용자마다 프로젝트·실행·보고서를 소유하고 접근은 프로젝트 ACL로 관리한다 |
-| 입력 | 서비스 Linux 계정이 읽을 수 있는 서버·NFS 폴더, 승인된 HTTPS 호스트의 Git 저장소 브랜치와 GitHub.com/GHES pull request. 비공개 저장소는 설치에 지정한 플랫폼 GitHub 계정으로 읽는다. 설명 없이 등록하고 문서·환경·모듈을 자동 탐색 |
+| 입력 | 서비스 Linux 계정이 읽을 수 있는 서버·NFS 폴더, 승인된 HTTPS 호스트의 Git 저장소 브랜치와 GitHub.com/GHES pull request. 저장소 웹훅과 PR 댓글 멘션으로도 분석을 요청한다. 비공개 저장소는 설치에 지정한 플랫폼 GitHub 계정으로 읽는다. 설명 없이 등록하고 문서·환경·모듈을 자동 탐색 |
 | 정적 분석 | Go(go vet·Staticcheck), C/C++(cppcheck·clang-tidy), Python(ruff·mypy·pyright·bandit), JS/TS(ESLint·tsc), Rust(cargo check·clippy) 다섯 언어 팩과 언어 무관 구조·중복 지표(lizard·jscpd)·비밀정보(gitleaks). 도구는 운영자가 설치하고 경로를 지정한다 |
 | 모델 검토 | 검토 지침 하나(`prompts/review`), 승인된 OpenCode 연결. 모델 없이도 도구 결과 보고서가 나온다 |
 | 보고서 | 종합과 분석 종류별 절(환경·문서·정적 분석·지표·비밀정보·모델 검토·분석 공백), 개별 근거, JSON·Markdown·HTML 내보내기(코드 제외가 기본), 프로젝트별 단계 표시와 가중 진행률, SSE 재접속 |
@@ -121,7 +121,7 @@ API 권한·프로젝트 소유권·노드 식별·lease는 처음부터 여러 
 | REQ-023 | MUST | 시간대 예약과 중복·겹침·놓친 예약 처리 |
 | REQ-024 | MUST | GitHub.com/GHES 읽기와 선택적인 App·PR·댓글 기능 |
 | REQ-025 | MUST | 사용자 권한 부여 가이드·연결 진단. 플랫폼의 자동 권한 변경 없음 |
-| REQ-026 | MUST | OpenCode 버전·워크스페이스·모델·응답·취소 능력 확인 |
+| REQ-026 | MUST | 관리자가 웹에서 서비스 머신의 OpenCode 실행 파일·설정·인증 파일을 지정하고 연결을 확인. OpenCode 버전·워크스페이스·모델·응답·취소 능력 확인 |
 | REQ-027 | MUST | 환경·문서·코드 조사·검증 등 모델 역할별 지침과 입출력 경계 분리. 지침·규칙·모델·환경·소스 버전 기록과 회귀 평가 |
 | REQ-028 | MUST | 이전 결과 비교. 검사 누락을 해결로 처리하지 않음 |
 | REQ-029 | MUST | 오탐·수용·수정 예정 등 사람의 처리 상태와 이유 기록 |
@@ -146,7 +146,7 @@ API 권한·프로젝트 소유권·노드 식별·lease는 처음부터 여러 
 | REQ-018 | 작업·노드·pool·전역 자원 상한과 relay의 모델 예산은 구현. endpoint별 모델 동시 요청 상한(`model_max_inflight`)과 전역 모델 semaphore는 설계 계약(미구현)([실행](EXECUTION.md)) |
 | REQ-019 | 등록·능력 배정은 구현. 한 머신의 두 노드 신원으로만 시험했고 여러 물리 머신은 미검증 |
 | REQ-022 | durable queue·lease/fencing·취소·복구·다시 시도(`POST /runs/{id}/retry`)는 구현. `recovery_required` run의 다시 시도는 미구현([API](API.md#다시-시도)) |
-| REQ-024 | GitHub.com·GHES 플랫폼 계정으로 저장소·PR을 읽고 선택적으로 결과 댓글을 게시한다. 서명된 PR 이벤트와 플랫폼 계정 멘션으로 자동 분석할 수 있다. 저장소 웹훅과 권한 있는 작성자의 플랫폼 계정 멘션으로 PR 분석을 요청할 수 있다. GitHub App과 실제 웹훅 전달 및 GHES 설치 검증이 남아 있다 |
+| REQ-024 | GitHub.com·GHES 플랫폼 계정으로 저장소·PR을 읽고 선택적으로 결과 댓글을 게시한다. 서명된 PR 이벤트와 권한 있는 작성자의 플랫폼 계정 멘션으로 자동 분석을 요청할 수 있다. GitHub App과 실제 웹훅 전달 및 GHES 설치 검증이 남아 있다 |
 | REQ-025 | 연결 진단과 권한 부여 가이드는 설계 계약(미구현) |
 | REQ-030 | 외부 다운로드·모델 fallback을 하지 않는 실행 경로, 폐쇄망 배포팩(`scripts/offline_pack.py`), 오프라인 모드(`offline`), 사내 CA(`ca_bundle`), doctor 오프라인 점검은 구현. 사설 CA·로컬 미러·network namespace로 확인했고 실제 폐쇄망·RHEL 8.10은 미실행 |
 | REQ-031 | 코드 포함/미포함 내보내기와 요청마다의 열람 권한 확인은 구현. 여러 사용자 사이의 접근 제어는 다중 사용자 작업에 속함 |
@@ -174,7 +174,7 @@ API 권한·프로젝트 소유권·노드 식별·lease는 처음부터 여러 
 | NFR-009 | 한 도구의 실패/OOM이 관리 서버와 다른 작업을 종료시키지 않게 배치·제어 |
 | NFR-010 | 자원·호출량·비용 추적. 호출 수 증가를 정확도 향상으로 해석하지 않음 |
 
-검증 상태: NFR-001의 실기 검증은 Linux(WSL2)에서만 했다. Windows는 CI의 Go 단위 시험과 빌드까지이고 RHEL 8.10은 실행하지 않았다. NFR-004는 측정하지 않았다. NFR-006은 토큰 분리와 민감값 마스킹이 구현돼 있다. loopback은 평문 예외이고, loopback이 아닌 주소는 TLS나 운영자가 명시한 `--plain-http`(시작할 때 경고 한 줄) 없이는 시작하지 않는다. 플랫폼 GitHub 자격증명은 호스트별로 정하고 서비스 계정 전용 파일에 보관한다. 통합 감사 로그는 구현돼 있다([보안](SECURITY.md)). reverse proxy 뒤 배포는 지원하지 않는다.
+검증 상태: NFR-001은 WSL2의 Linux 서비스와 Red Hat UBI 8.10 사용자 공간에서 읽기 전용 NFSv4.1 분석을 확인했다. Windows CI는 Go 단위 시험과 빌드를 수행한다. RHEL 8.10 호스트 커널에서의 검증은 남아 있다. NFR-004는 측정하지 않았다. NFR-006은 토큰 분리와 민감값 마스킹이 구현돼 있다. loopback은 평문 예외이고, loopback이 아닌 주소는 TLS나 운영자가 명시한 `--plain-http`(시작할 때 경고 한 줄) 없이는 시작하지 않는다. 플랫폼 GitHub 자격증명은 호스트별로 정하고 서비스 계정 전용 파일에 보관한다. 통합 감사 로그는 구현돼 있다([보안](SECURITY.md)). reverse proxy 뒤 배포는 지원하지 않는다.
 
 ## 해석
 

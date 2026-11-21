@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Project, Setup } from './api';
 import { improvementHints, operatorHints, type Gap } from './improve';
-import type { Dependency } from './reportSections';
+import type { Dependency } from './parseReportSections';
 import { ko as t } from './locales/ko';
 import { choiceLocked, choicesFor, parseTarget, quickBody, unavailableReason } from './quickStart';
 

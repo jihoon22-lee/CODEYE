@@ -34,12 +34,12 @@ const CompileDBName = "compile_commands.json"
 
 // Shared task reasons (TaskResult.Reason and outcome.reason).
 const (
-	ReasonCleanupUncertain     = "cleanup_uncertain"
-	ReasonCancelled            = "cancelled"
-	ReasonTimeout              = "timeout"
-	ReasonExecutionUnsupported = "execution_unsupported"
-	ReasonToolStartFailed      = "tool_start_failed"
-	ReasonExecutionRejected    = "execution_rejected"
+	ReasonCleanupUncertain     = pack.ReasonCleanupUncertain
+	ReasonCancelled            = pack.ReasonCancelled
+	ReasonTimeout              = pack.ReasonTimeout
+	ReasonExecutionUnsupported = pack.ReasonExecutionUnsupported
+	ReasonToolStartFailed      = pack.ReasonToolStartFailed
+	ReasonExecutionRejected    = pack.ReasonExecutionRejected
 	ReasonToolVersion          = "tool_version_unrecognized"
 	ReasonSnapshotIntegrity    = "snapshot_integrity_failed"
 	ReasonWorkspaceDrift       = "workspace_drift"

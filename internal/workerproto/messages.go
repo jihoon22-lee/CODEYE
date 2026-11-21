@@ -86,6 +86,9 @@ type Hello struct {
 	// key from at every model call (docs/REVIEW.md#모델-설정); the key itself
 	// never travels in the hello.
 	ModelCredentialFile string `json:"model_credential_file,omitempty"`
+	ModelConfigFile     string `json:"model_config_file,omitempty"`
+	// ModelSettings is present only on the native instance's local worker.
+	ModelSettings *ModelSettings `json:"model_settings,omitempty"`
 	// ModelTimeoutSeconds bounds one model call; 0 means the default (180).
 	ModelTimeoutSeconds int `json:"model_timeout_seconds,omitempty"`
 	// GitCredentialFile is the file the worker reads a Git host token from
@@ -125,6 +128,17 @@ type Hello struct {
 	// (--dependency-fetch and its options, docs/ARCHITECTURE.md#의존성-준비);
 	// absent when the operator did not turn fetching on.
 	Dependencies *Dependencies `json:"dependencies,omitempty"`
+}
+
+// ModelSettings names the trusted host settings a managed worker reloads at the
+// beginning of a review attempt. These fields carry paths, never key values.
+type ModelSettings struct {
+	InstancePath   string `json:"instance_path"`
+	StateDir       string `json:"state_dir"`
+	Home           string `json:"home,omitempty"`
+	Executable     string `json:"executable,omitempty"`
+	OpenCodeConfig string `json:"opencode_config,omitempty"`
+	OpenCodeAuth   string `json:"opencode_auth,omitempty"`
 }
 
 // Dependencies configures the dependency tasks of a worker.

@@ -47,12 +47,12 @@ const (
 
 // Task failure reasons shared by these adapters.
 const (
-	ReasonCleanupUncertain     = "cleanup_uncertain"
-	ReasonCancelled            = "cancelled"
-	ReasonTimeout              = "timeout"
-	ReasonExecutionUnsupported = "execution_unsupported"
-	ReasonToolStartFailed      = "tool_start_failed"
-	ReasonExecutionRejected    = "execution_rejected"
+	ReasonCleanupUncertain     = pack.ReasonCleanupUncertain
+	ReasonCancelled            = pack.ReasonCancelled
+	ReasonTimeout              = pack.ReasonTimeout
+	ReasonExecutionUnsupported = pack.ReasonExecutionUnsupported
+	ReasonToolStartFailed      = pack.ReasonToolStartFailed
+	ReasonExecutionRejected    = pack.ReasonExecutionRejected
 	ReasonToolVersion          = "tool_version_unrecognized"
 	ReasonWorkspaceDrift       = "workspace_drift"
 	ReasonSnapshotIntegrity    = "snapshot_integrity_failed"
@@ -455,36 +455,8 @@ func (o *Outcome) Failed() bool { return o.Reason != "" }
 // Executions applies the execution precedence: cleanup uncertain, then
 // cancellation, timeout and processes that never ran.
 func (o *Outcome) Executions(cancelled bool, results ...*executor.Result) {
-	for _, r := range results {
-		if r != nil && r.Cleanup == executor.CleanupUncertain {
-			o.Fail(domain.TaskFailed, ReasonCleanupUncertain, obsdoc.ExitExecutionError)
-		}
-	}
-	for _, r := range results {
-		if r != nil && r.Status == executor.StatusCancelled {
-			o.Fail(domain.TaskCancelled, ReasonCancelled, obsdoc.ExitCancelled)
-		}
-	}
-	if cancelled {
-		o.Fail(domain.TaskCancelled, ReasonCancelled, obsdoc.ExitCancelled)
-	}
-	for _, r := range results {
-		if r != nil && r.Status == executor.StatusTimedOut {
-			o.Fail(domain.TaskTimedOut, ReasonTimeout, obsdoc.ExitTimeout)
-		}
-	}
-	for _, r := range results {
-		if r == nil {
-			continue
-		}
-		switch r.Status {
-		case executor.StatusUnsupported:
-			o.Fail(domain.TaskUnsupported, ReasonExecutionUnsupported, obsdoc.ExitNotRun)
-		case executor.StatusStartFailed:
-			o.Fail(domain.TaskFailed, ReasonToolStartFailed, obsdoc.ExitNotRun)
-		case executor.StatusRejected:
-			o.Fail(domain.TaskFailed, ReasonExecutionRejected, obsdoc.ExitNotRun)
-		}
+	if status, reason, class := pack.ExecutionOutcome(results, cancelled); reason != "" {
+		o.Fail(status, reason, class)
 	}
 }
 

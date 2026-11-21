@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jihoon22-lee/CODEYE/internal/jsonc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
@@ -15,81 +16,8 @@ import (
 // tsconfig is JSONC data. CODEYE reads it, never executes it: compiler
 // plugins listed in it are ignored by tsc (measured, docs/ANALYZERS.md#저장소-코드와-tsconfig-검사).
 
-// StripJSONC removes comments and trailing commas outside strings, the two
-// JSONC extensions TypeScript accepts in tsconfig files.
-func StripJSONC(b []byte) []byte { return stripTrailingCommas(stripComments(b)) }
-
-// stripComments drops // and /* */ comments outside JSON strings.
-func stripComments(b []byte) []byte {
-	out := make([]byte, 0, len(b))
-	inStr, esc := false, false
-	for i := 0; i < len(b); i++ {
-		c := b[i]
-		switch {
-		case inStr:
-			out = append(out, c)
-			switch {
-			case esc:
-				esc = false
-			case c == '\\':
-				esc = true
-			case c == '"':
-				inStr = false
-			}
-		case c == '"':
-			inStr = true
-			out = append(out, c)
-		case c == '/' && i+1 < len(b) && b[i+1] == '/':
-			for i < len(b) && b[i] != '\n' {
-				i++
-			}
-			if i < len(b) {
-				out = append(out, '\n')
-			}
-		case c == '/' && i+1 < len(b) && b[i+1] == '*':
-			i += 2
-			for i+1 < len(b) && !(b[i] == '*' && b[i+1] == '/') {
-				i++
-			}
-			i++
-			out = append(out, ' ')
-		default:
-			out = append(out, c)
-		}
-	}
-	return out
-}
-
-func stripTrailingCommas(b []byte) []byte {
-	out := make([]byte, 0, len(b))
-	inStr, esc := false, false
-	for i := 0; i < len(b); i++ {
-		c := b[i]
-		switch {
-		case inStr:
-			switch {
-			case esc:
-				esc = false
-			case c == '\\':
-				esc = true
-			case c == '"':
-				inStr = false
-			}
-		case c == '"':
-			inStr = true
-		case c == ',':
-			j := i + 1
-			for j < len(b) && (b[j] == ' ' || b[j] == '\t' || b[j] == '\n' || b[j] == '\r') {
-				j++
-			}
-			if j < len(b) && (b[j] == '}' || b[j] == ']') {
-				continue
-			}
-		}
-		out = append(out, c)
-	}
-	return out
-}
+// StripJSONC removes comments and trailing commas from a TypeScript config.
+func StripJSONC(b []byte) []byte { return jsonc.StripJSONC(b) }
 
 // ConfigChain is the tsconfig files a check reads, followed as data: the
 // selected config, its local "extends" chain and the configs of its

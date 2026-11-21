@@ -197,6 +197,73 @@ describe('shared service', () => {
   });
 });
 
+describe('OpenCode settings', () => {
+  const opencode = a.opencode;
+  const path = '/api/v1/admin/opencode';
+  const defaults = { editable: true, executable: '', config_file: '', credential_file: '', model: '',
+    configured: false, effective_model: null, probe: 'not_probed' };
+
+  it('saves only server paths and the model override, then checks the saved configuration', async () => {
+    let settings = { ...defaults, effective_model: null as string | null };
+    const { calls } = await openAdmin({
+      [`GET ${path}`]: () => json(200, settings),
+      [`PUT ${path}`]: c => {
+        settings = { ...settings, ...(c.body as object), configured: true, effective_model: 'local/reviewer' };
+        return json(200, settings);
+      },
+      [`POST ${path}/probe`]: () => json(200, { ...settings, probe: 'verified' }),
+    });
+    expect(calls.some(c => c.url === path)).toBe(false);
+    adminTab(a.tabs.opencode);
+    await flush();
+    const values = { executable: '~/.opencode/bin/opencode', config_file: '/srv/codeye/opencode.jsonc', credential_file: '/srv/codeye/auth.json', model: 'local/reviewer' };
+    for (const field of Object.keys(values) as (keyof typeof values)[]) {
+      fireEvent.change(screen.getByLabelText(opencode.fields[field].label), { target: { value: values[field] } });
+    }
+    const probe = screen.getByRole('button', { name: opencode.probe }) as HTMLButtonElement;
+    expect(probe.disabled).toBe(true);
+    expect(screen.getByText(opencode.unsaved)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: opencode.save }));
+    await flush();
+    expect(calls.find(c => c.method === 'PUT' && c.url === path)?.body).toEqual(values);
+    expect(screen.getByText(opencode.saved)).toBeTruthy();
+    expect(probe.disabled).toBe(false);
+    fireEvent.click(probe);
+    await flush();
+    expect(calls.find(c => c.method === 'POST' && c.url === `${path}/probe`)?.body).toBeUndefined();
+    expect(screen.getByText(`· ${opencode.verified}`)).toBeTruthy();
+  });
+
+  it('explains invalid path input and a failed probe without echoing raw diagnostics', async () => {
+    const { calls } = await openAdmin({
+      [`GET ${path}`]: () => json(200, defaults),
+      [`POST ${path}/probe`]: () => json(200, { ...defaults, configured: true, probe: 'failed', reason: 'model_auth_failed' }),
+    });
+    adminTab(a.tabs.opencode);
+    await flush();
+    const credential = screen.getByLabelText(opencode.fields.credential_file.label);
+    fireEvent.change(credential, { target: { value: 'relative/auth.json' } });
+    fireEvent.click(screen.getByRole('button', { name: opencode.save }));
+    expect(screen.getByRole('alert').textContent).toContain(opencode.badPath(opencode.fields.credential_file.label));
+    expect(calls.some(c => c.method === 'PUT' && c.url === path)).toBe(false);
+    fireEvent.change(credential, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: opencode.probe }));
+    await flush();
+    expect(screen.getByText(opencode.reasons.model_auth_failed!)).toBeTruthy();
+  });
+
+  it('explains read-only deployments and prevents changes or probes', async () => {
+    const { calls } = await openAdmin({ [`GET ${path}`]: () => json(200, { ...defaults, editable: false }) });
+    adminTab(a.tabs.opencode);
+    await flush();
+    expect(screen.getByText(opencode.readOnly)).toBeTruthy();
+    expect((screen.getByLabelText(opencode.fields.executable.label) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: opencode.save }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: opencode.probe }) as HTMLButtonElement).disabled).toBe(true);
+    expect(calls.filter(c => c.url.startsWith(path)).map(c => c.method)).toEqual(['GET']);
+  });
+});
+
 describe('server audit log', () => {
   it('filters by time range, actor, action and project, and validates the inputs first', async () => {
     const { calls } = await openAdmin();

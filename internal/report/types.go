@@ -20,32 +20,8 @@ import (
 const (
 	SchemaVersion = "0.1"
 	BuilderID     = "codeye-report"
-	// BuilderVersion 4 adds the tool rows' rule_context and the
-	// observations' suppressed flag (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제, docs/REPORT.md#항목-상태).
-	// Version 5 adds the per-analysis sections (docs/REPORT.md#분석-종류별-절); every
-	// earlier field keeps its shape and meaning. Version 6 reads the review
-	// slices (docs/REPORT.md#모듈별-검토-장부): their records and findings, the
-	// scope artifact, the code review ledger and the review calls' task_key.
-	// Version 7 reads the dependency records of the deps.* tasks: the
-	// environment section's optional dependencies list, its counts and the
-	// dependency gaps (docs/REPORT.md#분석-범위와-한계). Version 8 reads the
-	// review scope artifact of schema 0.2 (slots filled by review priority,
-	// docs/REVIEW.md#검토-우선순위): the ledger rows' class and secondary
-	// counts, the slots of primary files the ceiling refused, the code review
-	// overview's primary and secondary counts and the
-	// review_primary_not_sent attention. Version 9 writes the pull_request
-	// section of a pull-request run (docs/REPORT.md#pull-request-보고서) and
-	// its pull_request_focus note; a report of any other run is the same as
-	// version 8 wrote it. Version 10 reads review records of schema 0.2 and
-	// 0.3 only: the code review section has no pack field, every review call
-	// carries pack_id and pack_version, and a plan without a review task
-	// requires none.
-	// Version 11 adds report context, source excerpts and document/code insights.
-	// Version 12 reads optional evidence from the final contract review.
-	// Version 13 retains supporting citations from the final contract review,
-	// binds JavaScript package guidance to the snapshot and reports the
-	// document scope items omitted during model review.
-	// Version 14 accepts documents records with HTTP route selections.
+	// Stored revisions keep their original builder and schema. Bump this
+	// version when the same accepted inputs would produce a different report.
 	BuilderVersion = "14"
 )
 

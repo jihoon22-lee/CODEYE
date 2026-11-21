@@ -36,7 +36,8 @@ type Credential struct {
 
 const maxCredentialBytes = 64 << 10
 
-var errCredential = errors.New("model credential unavailable")
+// ErrCredentialUnavailable covers unreadable files and unsupported authentication entries.
+var ErrCredentialUnavailable = errors.New("model credential unavailable")
 
 // ReadCredential reads path for provider. The file is either a CODEYE
 // Credential or an OpenCode auth.json, whose entry for provider must be of
@@ -45,18 +46,18 @@ var errCredential = errors.New("model credential unavailable")
 func ReadCredential(path, provider string) (*executor.ModelProvider, error) {
 	b, err := readPrivate(path, maxCredentialBytes)
 	if err != nil {
-		return nil, errCredential
+		return nil, ErrCredentialUnavailable
 	}
 	var probe map[string]json.RawMessage
 	if json.Unmarshal(b, &probe) != nil {
-		return nil, errCredential
+		return nil, ErrCredentialUnavailable
 	}
 	if _, ok := probe["api_key"]; ok {
 		var c Credential
 		dec := json.NewDecoder(bytes.NewReader(b))
 		dec.DisallowUnknownFields()
 		if dec.Decode(&c) != nil || c.SchemaVersion != CredentialSchema || c.Provider != provider {
-			return nil, errCredential
+			return nil, ErrCredentialUnavailable
 		}
 		return checked(&executor.ModelProvider{ID: provider, APIKey: c.APIKey, BaseURL: c.BaseURL, OpenAICompatible: c.OpenAICompatible})
 	}
@@ -65,7 +66,7 @@ func ReadCredential(path, provider string) (*executor.ModelProvider, error) {
 		Key  string `json:"key"`
 	}
 	if raw, ok := probe[provider]; !ok || json.Unmarshal(raw, &entry) != nil || entry.Type != "api" {
-		return nil, errCredential
+		return nil, ErrCredentialUnavailable
 	}
 	return checked(&executor.ModelProvider{ID: provider, APIKey: entry.Key})
 }
@@ -74,7 +75,7 @@ func ReadCredential(path, provider string) (*executor.ModelProvider, error) {
 // always passes, so a malformed key or endpoint is a credential error.
 func checked(p *executor.ModelProvider) (*executor.ModelProvider, error) {
 	if !executor.ValidProvider(p) {
-		return nil, errCredential
+		return nil, ErrCredentialUnavailable
 	}
 	return p, nil
 }

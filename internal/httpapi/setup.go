@@ -29,6 +29,7 @@ type Instance struct {
 	// controller keeps running. The controller also reads the platform GitHub
 	// credentials from the state directory for each GitHub API call.
 	StateDir string
+	OpenCode OpenCodeConnection
 	// GitHubAPI is the GitHub REST API base; "" is github.APIBase() (tests
 	// point it at a fake).
 	GitHubAPI string
@@ -254,6 +255,17 @@ func (s *Server) getSetup(q *request) {
 			id, probe := st.Model.ID, st.Model.Probe
 			v.Model = &setupModelView{Configured: true, ID: &id, Probe: &probe}
 		}
+	}
+	if s.inst != nil && s.inst.OpenCode != nil {
+		current, err := s.inst.OpenCode.Get()
+		if err != nil {
+			v.Model = nil
+		} else {
+			v.Model = &setupModelView{Configured: current.Configured, ID: current.EffectiveModel, Probe: current.Probe}
+		}
+	}
+	if v.Model != nil && !q.session.IsAdmin {
+		v.Model.ID, v.Model.Probe = nil, nil
 	}
 	switch {
 	case !offer.ModelReview:

@@ -1,15 +1,13 @@
 # 아키텍처
 
-CODEYE의 구성 요소, 분석 파이프라인과 상태 전이, 소스 확보와 스냅샷, 모듈·환경·문서 탐색, 프로젝트별 진행 단계 판정, 데이터 모델과 무결성 규칙을 정리한다. 작업이 실제로 실행되는 방식(실행기, 노드 에이전트, 노드 프로토콜, 워커 풀, 예약)은 [실행](EXECUTION.md), 분석기 팩은 [분석기](ANALYZERS.md), 모델 검토는 [검토](REVIEW.md), 보고서와 화면은 [보고서](REPORT.md), HTTP 계약은 [API](API.md)에 있다.
-
-각 절은 필요한 곳에 구현 상태를 적는다. "설계 계약(미구현)"은 아직 코드가 없는 목표 동작이다.
+관리 서버는 사용자·프로젝트 권한과 작업 큐를 관리한다. 노드 에이전트는 워커를 실행하고, 워커는 플랫폼 계정으로 확보한 소스에서 분석 결과를 만든다. 실행 정책은 [실행](EXECUTION.md), 분석기와 모델의 입력은 [분석기](ANALYZERS.md)와 [모델 검토](REVIEW.md)에 있다.
 
 ## 배치
 
 ```mermaid
 flowchart TD
   UI[Web UI] --> CP[Control Plane]
-  GH[GitHub.com / GHES] -.->|설계 계약| CP
+  GH[GitHub.com / GHES] -->|저장소 webhook| CP
   CP --> DB[(PostgreSQL)]
   CP --> AS[Artifact Store]
   N1[Node Agent A] <-->|HTTPS API| CP
@@ -29,7 +27,7 @@ flowchart TD
 - 노드 에이전트는 controller에 outbound HTTPS 연결만 만든다. SSH 원격 실행은 없다. 노드와 워커는 DB에 접근하지 않는다.
 - 스냅샷 사본은 그것을 만든 노드에 남는다. manifest와 결과 산출물만 인증된 API로 controller에 전송한다. 그래서 고정 입력 재시도에는 그 스냅샷을 보유한 노드가 필요하다. 노드 간 스냅샷 전송은 없다.
 - NFS는 필수 공용 버스가 아니다. 선택적인 소스 경로일 뿐이다.
-- GitHub·GHES 연결은 설계 계약(미구현)이다([GitHub](GITHUB.md)).
+- 플랫폼 계정으로 저장소와 PR을 읽는다. 저장소 웹훅은 분석을 요청하고, 관리 서버는 결과 댓글을 전송한다. 조직 단위 GitHub App 설치는 후속 작업이다. [GitHub 연동](GITHUB.md)
 
 ## 기술 선택
 
@@ -47,24 +45,24 @@ SQLite·PostgreSQL 이중 저장 계층, Redis, Kafka, Kubernetes, 벡터 DB를 
 
 ## 구성 요소와 코드 위치
 
-| 구성 요소 | 책임 | 상태 | 코드 |
-|---|---|---|---|
-| 진입점 | CLI·controller·에이전트·워커 하위 명령 | 구현 | [cmd/codeye](../cmd/codeye) |
-| 프로젝트·실행 서비스 | 소스·설정 revision·구성원, 요청 멱등성, 입력 고정, attempt·상태 | 구현 | [httpapi](../internal/httpapi), [storage/postgres](../internal/storage/postgres), [domain](../internal/domain) |
-| 배정(scheduler) | 호환 노드·자원 예약·공정 순서 | 구현 | [claim.go](../internal/storage/postgres/claim.go) |
-| 자동 증감(autoscaler) | 풀 정책과 실제 용량으로 워커 수 조정 | 구현 | [scheduler.go](../internal/storage/postgres/scheduler.go) |
-| 예약 | cron·시간대·occurrence materialize | 구현 | [schedule](../internal/schedule), [schedules.go](../internal/storage/postgres/schedules.go) |
-| 노드 에이전트 | heartbeat, 워커 시작·정리, journal, 프로세스 조사 | 구현 | [agent](../internal/agent), [nodeproto](../internal/nodeproto), [workerproto](../internal/workerproto) |
-| 분석 워커 | 한 attempt의 소스 확보·계획·task 실행 | 구현 | [worker/run](../internal/worker/run) |
-| 소스 어댑터 | Git·로컬 확보, manifest, 작업 사본 | 구현 | [worker/source](../internal/worker/source) |
-| 실행기 | argv·환경·시간·출력·프로세스 종료 | 구현(자원 강제 없음) | [worker/executor](../internal/worker/executor) |
-| 탐색 | 모듈·환경·문서 사실 | 구현 | [worker/discovery](../internal/worker/discovery) |
-| 분석기 어댑터 | probe, plan, 실행, parse, 정규화 | 구현 | [worker/analysis](../internal/worker/analysis) |
-| 검토 엔진 | 문맥·지침 팩·탐색·반증 | 구현 | [worker/review](../internal/worker/review), [worker/opencode](../internal/worker/opencode) |
-| 진행 단계 | 저장 기록에서 단계 상태 계산 | 구현 | [progress](../internal/progress) |
-| 발견 비교·사람 판정 | fingerprint, run 비교, 판정 | 구현 | [history](../internal/history) |
-| 보고서 | 구조화 결과에서 웹·Markdown·HTML·JSON | 구현 | [reportsvc](../internal/reportsvc), [report](../internal/report), [web/src](../web/src) |
-| Git provider | Git 정보·App webhook·댓글 | 설계 계약(미구현) | — |
+| 구성 요소 | 책임 | 코드 |
+|---|---|---|
+| 진입점 | CLI·controller·에이전트·워커 하위 명령 | [cmd/codeye](../cmd/codeye) |
+| 프로젝트·실행 서비스 | 소스·설정 revision·구성원, 요청 멱등성, 입력 고정, attempt·상태 | [httpapi](../internal/httpapi), [storage/postgres](../internal/storage/postgres), [domain](../internal/domain) |
+| 배정(scheduler) | 호환 노드·자원 예약·공정 순서 | [claim.go](../internal/storage/postgres/claim.go) |
+| 자동 증감(autoscaler) | 풀 정책과 실제 용량으로 워커 수 조정 | [scheduler.go](../internal/storage/postgres/scheduler.go) |
+| 예약 | cron·시간대·occurrence materialize | [schedule](../internal/schedule), [schedules.go](../internal/storage/postgres/schedules.go) |
+| 노드 에이전트 | heartbeat, 워커 시작·정리, journal, 프로세스 조사 | [agent](../internal/agent), [nodeproto](../internal/nodeproto), [workerproto](../internal/workerproto) |
+| 분석 워커 | 한 attempt의 소스 확보·계획·task 실행 | [worker/run](../internal/worker/run) |
+| 소스 어댑터 | Git·로컬 확보, manifest, 작업 사본 | [worker/source](../internal/worker/source) |
+| 실행기 | argv·환경·시간·출력·프로세스 종료 | [worker/executor](../internal/worker/executor) |
+| 탐색 | 모듈·환경·문서 사실 | [worker/discovery](../internal/worker/discovery) |
+| 분석기 어댑터 | probe, plan, 실행, parse, 정규화 | [worker/analysis](../internal/worker/analysis) |
+| 검토 엔진 | 문맥·지침 팩·탐색·반증 | [worker/review](../internal/worker/review), [worker/opencode](../internal/worker/opencode) |
+| 진행 단계 | 저장 기록에서 단계 상태 계산 | [progress](../internal/progress) |
+| 발견 비교·사람 판정 | fingerprint, run 비교, 판정 | [history](../internal/history) |
+| 보고서 | 구조화 결과에서 웹·Markdown·HTML·JSON | [reportsvc](../internal/reportsvc), [report](../internal/report), [web/src](../web/src) |
+| GitHub 연동 | 플랫폼 계정, PR 조회, 저장소 웹훅·결과 댓글 | [github](../internal/github), [httpapi](../internal/httpapi) |
 
 ## 불변조건
 
@@ -84,7 +82,7 @@ SQLite·PostgreSQL 이중 저장 계층, Redis, Kafka, Kubernetes, 벡터 DB를 
 인증 → 프로젝트 revision 동결 → run 영속화 → 워커 용량 확보 → 호환 노드 배정·lease → 소스 확보 → snapshot 확정 → 탐색·계획 → 도구·모델 관찰 → 검증 → 보고서 게시.
 
 - artifact는 업로드 후 hash·크기 검증을 거쳐 finalize된다. 보고서는 참조하는 artifact가 준비된 뒤 게시한다([보고서](REPORT.md)).
-- Git 댓글 outbox는 설계 계약(미구현)이다. 댓글 실패는 notification 상태로 분리하며 완료된 분석을 failed로 바꾸지 않는다.
+- PR 댓글 전송은 보고서 게시 후 별도 큐에서 처리한다. 전송 실패는 댓글 상태에 기록하고 게시된 보고서를 유지한다. [결과 댓글](GITHUB.md#결과-댓글)
 
 ## 분석 파이프라인
 
@@ -131,7 +129,7 @@ task ID·kind·purpose·scope·depends_on·required_for_verdict·capabilities·r
 | 모델 timeout·429 | 제한된 재시도, 예산이 끝나면 partial |
 | 잘못된 JSON·증거 참조 | 형식 복구 요청 후에도 틀리면 격리([검토](REVIEW.md)) |
 | 노드 lease 만료 | fenced, recovery_required. 부작용 가능한 작업은 종료 확인 전 재시도 금지 |
-| Git 댓글 실패 | 보고서 유지, outbox만 재시도(설계 계약) |
+| Git 댓글 실패 | 보고서를 유지하고 전송 정책에 따라 댓글 큐에서 재시도 |
 | 원본과 workspace 불일치 | 변경 파일과 이유 기록, 오래된 근거 invalid |
 
 재시도 attempt는 이미 고정한 snapshot과 설정 revision을 유지한다. 입력을 새로 가져오려면 새 run을 만든다. snapshot이 없으면 같은 입력 재실행을 거부한다. 재시도 규칙은 [재시도](#재시도)에 있다.
@@ -212,7 +210,7 @@ lease·만료·정리 보고의 프로토콜은 [실행](EXECUTION.md)에 있다
 
 [`internal/worker/source`](../internal/worker/source)는 `AcquireLocal`, `AcquireGit`, `Load`, `CloneWorkspace`를 제공한다. 입력은 승인 root와 상대 경로 또는 승인된 Git host·브랜치, 플랫폼 data root, 파일·용량·재시도 한도다. 결과는 snapshot 디렉터리, 별도 writable workspace, manifest, 입력 digest다. snapshot ID와 프로젝트·attempt 소유권 연결은 controller가 맡는다.
 
-- 워커는 사용자·source root ACL과 노드·attempt 권한이 확인된 설정으로만 호출한다. 라이브러리의 파일 읽기 성공이 사용자 권한 확인을 대신하지 않는다.
+- 관리 서버가 웹 사용자의 프로젝트 권한을 검사한다. 파일 읽기에는 서비스 Linux 계정, Git 읽기에는 플랫폼 GitHub 계정의 권한을 사용한다. 노드는 자신에게 배정된 attempt와 소스 범위로 작업한다.
 - 이 API는 shell 문자열을 받지 않는다.
 
 ### 등록과 접근

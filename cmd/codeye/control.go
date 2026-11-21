@@ -308,10 +308,11 @@ type serveConfig struct {
 	sessionTTL time.Duration
 	// stateDir is the installation's state directory (httpapi.Instance):
 	// the setup summary, detected tools and platform GitHub credentials.
-	stateDir string
-	offline  bool
-	gitHosts []string
-	caBundle string
+	stateDir       string
+	instanceConfig string
+	offline        bool
+	gitHosts       []string
+	caBundle       string
 }
 
 func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
@@ -331,6 +332,7 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fs.Func("public-origin", "", func(v string) error { c.publicOrigins = append(c.publicOrigins, v); return nil })
 		fs.DurationVar(&c.sessionTTL, "session-ttl", 0, "")
 		fs.StringVar(&c.stateDir, "state-dir", "", "")
+		fs.StringVar(&c.instanceConfig, "instance-config", "", "")
 		fs.BoolVar(&c.offline, "offline", false, "")
 		fs.Func("git-host", "", func(v string) error {
 			if err := domain.ValidateHost(v); err != nil {
@@ -398,6 +400,10 @@ func serve(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "--state-dir must be an absolute path")
 		return 2
 	}
+	if c.instanceConfig != "" && (c.stateDir == "" || !filepath.IsAbs(c.instanceConfig)) {
+		fmt.Fprintln(stderr, "--instance-config needs an absolute configuration path and --state-dir")
+		return 2
+	}
 	if c.artifactDir, err = filepath.Abs(c.artifactDir); err != nil {
 		fmt.Fprintln(stderr, "--artifact-dir cannot be resolved")
 		return 2
@@ -429,6 +435,9 @@ func serveOn(ctx, startCtx context.Context, store *postgres.Store, c serveConfig
 	cfg.SessionTTL = c.sessionTTL
 	if c.stateDir != "" || c.offline {
 		cfg.Instance = &httpapi.Instance{StateDir: c.stateDir, Offline: c.offline, GitHosts: c.gitHosts, CABundle: c.caBundle}
+		if c.instanceConfig != "" {
+			cfg.Instance.OpenCode = newManagedOpenCode(c.instanceConfig, c.stateDir, c.offline, c.caBundle)
+		}
 	}
 	srv, err := httpapi.New(cfg, store)
 	if err != nil {

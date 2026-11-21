@@ -235,6 +235,11 @@ func isoCases() map[string]isoCase {
 		}, body: func(*isoWorld) any { return map[string]bool{"everyone": true} }},
 		"admin.providers.create": {need: adminRole, ok: 201, body: func(w *isoWorld) any { return map[string]string{"host": w.name("git") + ".example.com"} }},
 		"admin.settings.get":     {need: adminRole, ok: 200},
+		"admin.opencode.get":     {need: adminRole, ok: 200},
+		"admin.opencode.put": {need: adminRole, ok: 200, body: func(*isoWorld) any {
+			return OpenCodeFields{Model: "opencode/example"}
+		}},
+		"admin.opencode.probe": {need: adminRole, ok: 200},
 		// Every accepted request flips the switch, so it records a change.
 		"admin.settings.put": {need: adminRole, ok: 200, body: func(w *isoWorld) any {
 			if w.accepting {
@@ -289,7 +294,7 @@ func newIsoWorld(t *testing.T) *isoWorld {
 		gh.Users[isoToken(a)] = "gh-" + a
 	}
 	gh.AddPullRequest("acme/widget", githubtest.PullRequest{Number: 7, Title: "Fix", State: "open", BaseRef: "main", BaseSHA: strings.Repeat("1", 40), HeadRef: "fix", HeadSHA: strings.Repeat("2", 40), HeadRepo: "acme/widget"})
-	e.inst = &Instance{StateDir: filepath.Join(t.TempDir(), "state"), GitHubAPI: gh.URL}
+	e.inst = &Instance{StateDir: filepath.Join(t.TempDir(), "state"), GitHubAPI: gh.URL, OpenCode: &testOpenCodeConnection{}}
 	fastStreams(e, StreamConfig{})
 	a := e.driveAttempt("succeeded")
 	e.publishRun(a)

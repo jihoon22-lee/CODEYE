@@ -211,7 +211,8 @@ func (a *ClangTidy) Run(ctx context.Context, job analysis.Job, task analysis.Tas
 		return notRun(s, doc, domain.TaskFailed, ReasonCompileDBUnreadable, obsdoc.ExitNotRun)
 	}
 	in := ctInput{Key: task.Key, Layout: l, Mapping: &m, ConfigFiles: cfgFiles}
-	applyClangTidyMapping(&doc, in)
+	doc.Target.Properties["mode"] = modeCompileDB
+	applyCompileDB(&doc, in.Mapping, in.Layout, in.ConfigFiles)
 	if len(m.Units) == 0 {
 		return notRun(s, doc, domain.TaskUnsupported, ReasonNoTranslationUnits, obsdoc.ExitNotRun)
 	}
@@ -282,37 +283,6 @@ type ctInput struct {
 	Mask        func(string) string
 	SnapshotDir string
 	Cancelled   bool
-}
-
-// applyClangTidyMapping records the compile DB (honored repository build
-// configuration, bound to its manifest digests) and its mapping.
-func applyClangTidyMapping(doc *obsdoc.Document, in ctInput) {
-	m := in.Mapping
-	doc.Target.Properties["mode"] = modeCompileDB
-	doc.RulePack.RepositoryConfig = obsdoc.RepoConfigHonored
-	doc.RulePack.ConfigFiles = append([]obsdoc.ConfigFile{}, in.ConfigFiles...)
-	compileDBProperties(doc, m, len(in.Layout.DBs))
-	doc.Limitations = append(doc.Limitations, m.Limitations()...)
-	if len(in.Layout.DBs) > 1 {
-		doc.Limitations = append(doc.Limitations, LimMultipleDBs)
-	}
-	listed := map[string]bool{}
-	for _, u := range m.Units {
-		listed[u.Rel] = true
-	}
-	for _, src := range in.Layout.Sources {
-		if _, excluded := m.ExcludedSources[src]; !listed[src] && !excluded {
-			doc.Coverage.FilesUnlisted++
-		}
-	}
-	doc.Coverage.FilesSkipped = len(m.ExcludedSources)
-	if doc.Coverage.FilesUnlisted > 0 {
-		doc.Limitations = append(doc.Limitations, LimSourcesNotInDB)
-		doc.Coverage.Units[TUNotInCompileDB] = doc.Coverage.FilesUnlisted
-	}
-	if doc.Coverage.FilesSkipped > 0 {
-		doc.Coverage.Units[TUCompileDBEntryExcluded] = doc.Coverage.FilesSkipped
-	}
 }
 
 // clangTidyCategory is the policy of codeye-cpp-clang-tidy v1.
