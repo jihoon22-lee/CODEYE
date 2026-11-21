@@ -723,7 +723,7 @@ func TestRenderingEscapesHostileText(t *testing.T) {
 	flat.Overview, flat.Environment, flat.Documents, flat.StaticAnalysis, flat.Metrics, flat.Secrets, flat.CodeReview, flat.Gaps = nil, nil, nil, nil, nil, nil, nil, nil
 	for rep, pipes := range map[*Report]int{&r: 7, &flat: 8} {
 		md := string(RenderMarkdown(*rep, Digest(b), Korean))
-		outside := stripCodeSpans(md)
+		outside := strings.ReplaceAll(stripCodeSpans(md), "[문서 분석에서 보기](#documents)", "")
 		if strings.Contains(outside, "<script") || strings.Contains(outside, "<img") || strings.Contains(outside, "](") || strings.Contains(outside, "![") || strings.Contains(outside, "\n# heading") {
 			t.Fatalf("markdown structure broken:\n%s", md)
 		}

@@ -392,6 +392,7 @@ function strengthReading(row: Sections['codeReview']['strengths'][number], catal
 
 type OverviewReading = {
   comparisonIndex?: number;
+  comparisonExample?: string;
   title: string;
   text?: string;
   documentClaim?: string;
@@ -408,16 +409,29 @@ type OverviewReading = {
   sources?: ReactNode;
 };
 
-function selectedReading(report: AnalysisReport, sections: Sections): OverviewReading {
-  const { actions, comparisons, uncertainComparison, documentedBehavior, strengths, followups, diagnostic } = projectReadings(report, sections);
+function strengthTextKey(text: string) {
+  return text.trim().split(/\s+/).join(' ').toLowerCase().replace(/[.。!?！？]+$/, '').trimEnd();
+}
+
+function distinctStrengthDetails(titles: string[], ...benefits: string[]) {
+  const shown = new Set(['', ...titles.map(strengthTextKey)]);
+  return benefits.filter(benefit => {
+    const key = strengthTextKey(benefit);
+    if (shown.has(key)) return false;
+    shown.add(key);
+    return true;
+  }).join(' ');
+}
+
+function selectedReading(report: AnalysisReport, sections: Sections, readings: ReturnType<typeof projectReadings>): OverviewReading {
+  const { actions, comparisons, unresolvedComparison, exampleComparison, strengths, followups, diagnostic } = readings;
   const { documents, codeReview } = sections;
+  const included = report.includesCode !== false;
   const source = (catalog: Citation[], refs: string[], kind: 'code' | 'document') =>
     catalog.find(c => refs.includes(c.id) && primaryCitation(c, kind))?.id;
   const action = actions[0];
   const actionStatus = action?.finding.validation === 'supported' ? t.reading.supported : t.reading.reproduced;
-  const comparison = comparisons[0] ?? uncertainComparison ?? documentedBehavior;
-  if (comparison) {
-    const included = report.includesCode !== false;
+  const readComparison = (comparison: (typeof comparisons)[number]): OverviewReading => {
     const unknown = comparison.status === 'unknown';
     const newCode = comparison.additional && source(documents.citations, comparison.additional.codeRefs, 'code');
     const documentRef = source(documents.citations, comparison.documentRefs, 'document');
@@ -465,48 +479,63 @@ function selectedReading(report: AnalysisReport, sections: Sections): OverviewRe
         source: <FindingSourceLink evidence={action.source} />,
       } : undefined,
     };
-  }
+  };
+  if (comparisons[0]) return readComparison(comparisons[0]);
+  const example = exampleComparison && {
+    comparisonIndex: documents.comparisons.indexOf(exampleComparison),
+    comparisonExample: included ? exampleComparison.statement : undefined,
+  };
   if (action) return {
-    title: report.includesCode === false ? t.reading.omitted : action.finding.title,
+    ...example,
+    title: included ? action.finding.title : t.reading.omitted,
     model: true,
-    text: report.includesCode === false ? undefined : action.finding.impact,
+    text: included ? action.finding.impact : undefined,
     status: actionStatus,
-    next: report.includesCode === false ? undefined : { label: t.reading.nextAction, text: action.finding.recommendation },
+    next: included ? { label: t.reading.nextAction, text: action.finding.recommendation } : undefined,
     sources: <FindingSourceLink evidence={action.source} />,
   };
   const followup = followups[0];
-  if (followup?.next) {
-    const confirmed = relatedStrength(followup, strengths, codeReview.citations);
+  if (!unresolvedComparison && followup?.next) {
+    const confirmed = included ? relatedStrength(followup, strengths, codeReview.citations) : undefined;
+    const strength = confirmed?.strength;
+    const text = strength ? distinctStrengthDetails([strength.title], strength.benefit)
+      : followup.condition ? `${t.conditions} · ${followup.condition}` : undefined;
     return {
-      title: confirmed?.strength.benefit ?? followup.finding.title,
+      title: included ? strength?.title ?? followup.finding.title : t.reading.omitted,
       model: true,
-      text: !confirmed && followup.condition ? `${t.conditions} · ${followup.condition}` : undefined,
+      text: included ? text : undefined,
       unresolved: confirmed ? followup.finding.title : undefined,
       status: confirmed ? t.reading.recordedStrength : label(t.validation, followup.finding.validation),
-      next: { label: t.reading.nextCheck, text: followup.next },
+      next: included ? { label: t.reading.nextCheck, text: followup.next } : undefined,
       sources: <>
         {confirmed && <Citations catalog={[confirmed.citation]} refs={[confirmed.citation.id]} actionLabel={t.reading.confirmedCode} />}
         <FindingSourceLink evidence={followup.source} actionLabel={confirmed ? t.reading.followupCode : undefined} />
       </>,
     };
   }
-   const strength = strengths[0];
+  const strength = strengths[0];
   if (strength) {
     const first = codeReview.citations.find(c => strength.refs.includes(c.id) && primaryCitation(c, 'code'))!;
-    const related = strengths.slice(1).find(row => row.benefit !== strength.benefit && shareTitleSubject(strength.title, row.title) &&
+    const related = strengths.slice(1).find(row => strengthTextKey(row.title) !== strengthTextKey(strength.title) &&
+      strengthTextKey(row.benefit) !== strengthTextKey(strength.benefit) && shareTitleSubject(strength.title, row.title) &&
       codeReview.citations.some(c => row.refs.includes(c.id) && primaryCitation(c, 'code') && c.path === first.path &&
         ((first.line <= c.line && c.end <= first.end) || (c.line <= first.line && first.end <= c.end))));
     const proof = related && codeReview.citations.find(c => related.refs.includes(c.id) && primaryCitation(c, 'code') &&
       c.path === first.path && c.line <= first.line && first.end <= c.end);
+    const [title, text] = related
+      ? [t.reading.relatedStrengths(strength.title, related.title), distinctStrengthDetails([strength.title, related.title], strength.benefit, related.benefit)]
+      : [strength.title, distinctStrengthDetails([strength.title], strength.benefit)];
     return {
-      title: strength.benefit,
+      ...example,
+      title: included ? title : t.reading.omitted,
       model: true,
-      text: related?.benefit,
+      text: included ? text : undefined,
       status: t.reading.recordedStrength,
       sources: <Citations catalog={codeReview.citations} refs={[(proof || first).id]} />,
     };
   }
-   if (diagnostic?.location) return {
+  if (unresolvedComparison) return readComparison(unresolvedComparison);
+  if (diagnostic?.location) return {
     title: diagnostic.message || diagnostic.rule,
     status: t.reading.staticStatus,
     sources: <PinnedSourceLink {...diagnostic.location}
@@ -539,9 +568,9 @@ function inlineComparisonCode(text: string): ReactNode[] {
 }
 
 function ProjectOverview({ report, sections, openDocuments }: { report: AnalysisReport; sections: Sections; openDocuments: (index?: number) => void }) {
-  const { status, title, text, documentClaim, reasonLabel, comparisonRows, condition, scope, comparisonIndex, followedContract, action, unresolved, next, sources, model } = selectedReading(report, sections);
-  const comparisons = sections.documents.comparisons;
-  const unknown = comparisons.filter(row => row.status === 'unknown').length;
+  const readings = projectReadings(report, sections);
+  const { status, title, text, documentClaim, reasonLabel, comparisonRows, condition, scope, comparisonIndex, comparisonExample, followedContract, action, unresolved, next, sources, model } =
+    selectedReading(report, sections, readings);
   const heading = cutLine(title, 165);
   const detail = text !== title ? cutLine(text ?? null, 205) : '';
   const claim = cutLine(documentClaim ?? null, 205);
@@ -570,12 +599,22 @@ function ProjectOverview({ report, sections, openDocuments }: { report: Analysis
           <p className="report-executive-next"><strong>{t.reading.priorityAction}</strong> {action.state}{action.title && <> · {cutLine(action.title, 165)}</>}</p>
           <div className="report-executive-sources">{action.source}</div>
         </>}
+        <div className="report-document-assessment">
+          <div className="report-document-assessment-header">
+            <strong>{t.reading.documentAssessment}</strong>
+            {readings.comparisonCounts.length > 0
+              ? <dl>{readings.comparisonCounts.map(({status, count}) => <div key={status}>
+                <dt>{label(t.reading.comparisonCount, status)}</dt><dd data-comparison-status={status}>{count}</dd>
+              </div>)}</dl>
+              : <p>{t.reading.noDocumentAssessment}</p>}
+          </div>
+          {comparisonExample && <p className="report-document-assessment-example">
+            <strong>{t.reading.documentClaim}</strong>{' '}{inlineComparisonCode(cutLine(comparisonExample, 165))}
+          </p>}
+          <ReportAction onClick={() => openDocuments(comparisonIndex)}>{t.reading.openDocumentAnalysis}</ReportAction>
+        </div>
         <ReportGlossary text={[heading, claim, detail, condition ?? '', boundary, nextStep, ...(comparisonRows?.map(row => row.text) ?? [])]}
           hasSources={Boolean(sources || action || comparisonRows?.some(row => row.sources))} />
-        {(unknown > 0 || comparisonIndex !== undefined) && <div className="report-executive-scope">
-          {unknown > 0 && <p>{t.reading.unknownContracts(comparisons.length, unknown)}</p>}
-          <ReportAction onClick={() => openDocuments(comparisonIndex)}>{t.reading.openDocumentAnalysis}</ReportAction>
-        </div>}
       </div>
     </section>
   );

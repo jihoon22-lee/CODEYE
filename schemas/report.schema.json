@@ -61,7 +61,8 @@
         "llm_exposed_files": {"type": ["integer", "null"], "minimum": 0},
         "test_status": {"enum": ["no_tests", "not_run", "passed", "failed"]},
         "notes": {"type": "array", "items": {"type": "string"}},
-        "review_calls": {"type": "array", "maxItems": 207, "items": {"$ref": "#/$defs/reviewCall"}},
+        "review_calls": {"type": "array", "maxItems": 207, "items": {"$ref": "#/$defs/reviewCall"},
+          "contains": {"required": ["purpose"]}, "minContains": 0, "maxContains": 1},
         "ai_review": {"$ref": "#/$defs/aiReview"},
         "tools": {"type": "array", "items": {"$ref": "#/$defs/toolCoverage"}}
       }
@@ -137,6 +138,7 @@
       "required": ["role", "model", "opencode_version", "pack_sha256", "request_sha256", "outcome", "pack_id", "pack_version"],
       "properties": {
         "role": {"enum": ["environment", "documents", "investigate", "interpret", "verify", "contract"]},
+        "purpose": {"const": "workflow_selection"},
         "model": {"type": "string", "maxLength": 160},
         "opencode_version": {"type": "string", "maxLength": 64},
         "pack_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -146,7 +148,10 @@
         "pack_version": {"type": "string", "pattern": "^[a-zA-Z0-9_.-]{1,64}$"},
         "task_key": {"type": "string", "pattern": "^review\\.(contract|(environment|documents|investigate|interpret|verify)(\\.s(00[1-9]|0[1-8][0-9]|09[0-6]))?)$", "description": "호출이 든 검토 task(전체 역할, slice 또는 최종 문서 대조)"}
       },
-      "allOf": [{"if": {"properties": {"role": {"const": "contract"}}}, "then": {"required": ["task_key"], "properties": {"task_key": {"const": "review.contract"}}}}]
+      "allOf": [
+        {"if": {"properties": {"role": {"const": "contract"}}}, "then": {"required": ["task_key"], "properties": {"task_key": {"const": "review.contract"}}}},
+        {"if": {"required": ["purpose"]}, "then": {"required": ["task_key"], "properties": {"role": {"const": "documents"}, "task_key": {"const": "review.documents"}}}}
+      ]
     },
     "reviewTask": {
       "type": "object",
@@ -250,7 +255,9 @@
         "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "size_bytes": {"type": "integer", "minimum": 0},
         "decoder": {"type": ["string", "null"]}
-      }
+      },
+      "if": {"required": ["decoder"], "properties": {"decoder": {"const": "application/vnd.codeye.review+json;schema_version=0.5"}}},
+      "then": {"properties": {"task_key": {"const": "review.documents"}, "role": {"const": "other"}, "media_type": {"const": "application/vnd.codeye.review+json"}}}
     },
     "observationLocation": {
       "type": "object",
@@ -366,6 +373,11 @@
   },
   "allOf": [
     {"if": {"properties": {"demo": {"const": false}}}, "then": {"required": ["builder", "export", "attempt", "observations", "executions", "artifacts"], "properties": {"coverage": {"required": ["ai_review", "tools"]}, "summary": {"required": ["raw_observations", "unresolved_observations"]}}}},
+    {"if": {"anyOf":[
+      {"required": ["artifacts"], "properties": {"artifacts": {"contains": {"required": ["decoder"], "properties": {"decoder": {"const": "application/vnd.codeye.review+json;schema_version=0.5"}}}}}},
+      {"properties": {"coverage": {"required": ["review_calls"], "properties": {"review_calls": {"contains": {"required": ["purpose"]}}}}}}
+    ]},
+     "then": {"required": ["builder"], "properties": {"builder": {"properties": {"version": {"pattern": "^(1[4-9]|[2-9][0-9]|[1-9][0-9]{2,})$"}}}}}},
     {"$comment": "코드 미포함 문서 근거에서 패키지와 호출 이름을 생략한다.",
      "if": {"required": ["export"], "properties": {"export": {"properties": {"include_code": {"const": false}}}}},
      "then": {"properties": {"documents": {"properties": {"evidence": {"items": {"properties": {"package_reference": {"not": {"required": ["name"]}}}}}}}}}},

@@ -278,7 +278,11 @@ func mdAIReview(p func(...string), r Report, l Locale, h string) {
 		if c.PackID != "" {
 			pack = " " + mdCode(c.PackID+"@"+c.PackVersion)
 		}
-		p("- 모델 호출 ", mdCode(c.Role), " · ", mdCode(c.Model), " · OpenCode ", mdCode(c.Version), " · ", mdCode(c.Outcome), " · 지침", pack, " ", mdCode(c.PackDigest))
+		role := mdCode(c.Role)
+		if c.Purpose != "" {
+			role += " (" + mdText(l.Label("call."+c.Purpose)) + ")"
+		}
+		p("- 모델 호출 ", role, " · ", mdCode(c.Model), " · OpenCode ", mdCode(c.Version), " · ", mdCode(c.Outcome), " · 지침", pack, " ", mdCode(c.PackDigest))
 	}
 	p()
 }
@@ -606,7 +610,7 @@ var htmlTemplate = template.Must(template.New("report").Funcs(htmlFuncs).Parse(`
 <table><tr><th>task</th><th>상태</th><th>결과</th></tr>
 {{range .R.Coverage.AIReview.OptionalTasks}}<tr><td><code>{{.Key}}</code></td><td><code>{{deref .TaskStatus "없음"}}</code></td><td><code>{{.Result}}</code>{{with .Reason}} <code>{{.}}</code>{{end}}</td></tr>
 {{end}}</table>{{end}}
-{{if .R.Coverage.ReviewCalls}}<ul>{{range .R.Coverage.ReviewCalls}}<li>모델 호출 <code>{{.Role}}</code> · <code>{{.Model}}</code> · OpenCode <code>{{.Version}}</code> · <code>{{.Outcome}}</code> · 지침{{if .PackID}} <code>{{.PackID}}@{{.PackVersion}}</code>{{end}} <code>{{.PackDigest}}</code></li>{{end}}</ul>{{end}}
+{{if .R.Coverage.ReviewCalls}}<ul>{{range .R.Coverage.ReviewCalls}}<li>모델 호출 <code>{{.Role}}</code>{{if .Purpose}} ({{$.L.Label (printf "call.%s" .Purpose)}}){{end}} · <code>{{.Model}}</code> · OpenCode <code>{{.Version}}</code> · <code>{{.Outcome}}</code> · 지침{{if .PackID}} <code>{{.PackID}}@{{.PackVersion}}</code>{{end}} <code>{{.PackDigest}}</code></li>{{end}}</ul>{{end}}
 <h2 id="coverage">{{.L.Label "coverage"}}</h2>
 <ul>
 <li>scope: <code>{{.R.Coverage.ScopeMode}}</code></li>

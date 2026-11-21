@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -89,9 +90,17 @@ func ValidateReport(r Report) error {
 		return invalidf("quality verdict does not follow the rules")
 	}
 	arts := map[string]bool{}
+	workflowKey := (WorkflowReviewDecoder{}).Key()
 	for _, a := range r.Artifacts {
 		if !domain.ValidID(a.ID) || arts[a.ID] || !hex64.MatchString(a.SHA256) || a.SizeBytes < 0 {
 			return invalidf("artifact %s is invalid", a.ID)
+		}
+		if a.Decoder != nil && *a.Decoder == workflowKey.String() {
+			version, err := strconv.Atoi(r.Builder.Version)
+			if err != nil || version < WorkflowReviewSince || strconv.Itoa(version) != r.Builder.Version ||
+				deref(a.TaskKey) != "review.documents" || a.Role != "other" || a.MediaType != workflowKey.MediaType {
+				return invalidf("workflow review artifact %s requires its document task and builder", a.ID)
+			}
 		}
 		arts[a.ID] = true
 	}

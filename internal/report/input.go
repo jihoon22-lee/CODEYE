@@ -271,7 +271,7 @@ func NewRegistry(ds ...ArtifactDecoder) (*Registry, error) {
 // analyzer envelope, docs/ANALYZERS.md), snapshot-bound review records and
 // discovery documents.
 func DefaultRegistry() *Registry {
-	r, err := NewRegistry(GoVetDecoder{}, AnalyzerDecoder{}, ReviewDecoder{}, SliceReviewDecoder{}, ContractReviewDecoder{}, ScopeDecoder{}, PlannedScopeDecoder{}, EnvironmentDecoder{}, DependenciesDecoder{})
+	r, err := NewRegistry(GoVetDecoder{}, AnalyzerDecoder{}, ReviewDecoder{}, SliceReviewDecoder{}, ContractReviewDecoder{}, WorkflowReviewDecoder{}, ScopeDecoder{}, PlannedScopeDecoder{}, EnvironmentDecoder{}, DependenciesDecoder{})
 	if err != nil {
 		panic(err)
 	}

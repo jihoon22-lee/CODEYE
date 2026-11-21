@@ -45,7 +45,8 @@ const (
 	// Version 13 retains supporting citations from the final contract review,
 	// binds JavaScript package guidance to the snapshot and reports the
 	// document scope items omitted during model review.
-	BuilderVersion = "13"
+	// Version 14 accepts documents records with HTTP route selections.
+	BuilderVersion = "14"
 )
 
 // Report statuses (schemas/report.schema.json).
@@ -180,6 +181,7 @@ type Summary struct {
 // ReviewCall records one model request of a review record.
 type ReviewCall struct {
 	Role          string `json:"role"`
+	Purpose       string `json:"purpose,omitempty"`
 	Model         string `json:"model"`
 	Version       string `json:"opencode_version"`
 	PackDigest    string `json:"pack_sha256"`

@@ -48,7 +48,9 @@ package gateway
 const MaxRetries = 3
 ```
 
-문서가 설명한 동작 3개 중 1개는 코드 근거가 충분하지 않아 일치 여부를 판단하지 못했습니다\.
+**문서 동작 대조** · 일치 2 · 미확인 1
+
+[문서 분석에서 보기](#document-comparison-1)
 
 ### 검토 범위와 집계
 
@@ -187,6 +189,8 @@ AI가 검토한 문제 2건 중 코드 근거를 확인한 항목 1건 \(기각 
   ```
 
 
+<a id="documents"></a>
+
 ## 문서 분석
 
 ### 따라 하기 · 잘된 점
@@ -236,6 +240,8 @@ Call the payment endpoint exactly once per request. Never retry a failed
 call: a repeated call may charge the customer twice. Return the error to the
 caller instead.
 ```
+
+<a id="document-comparison-1"></a>
 
 ### 문서와 구현 일치
 
@@ -556,11 +562,11 @@ const MaxRetries = 3
 
 상태\: ✓ 성공 · 작업 4개 중 3개 성공
 
-검토 팩\: review@2\.4\.0
+검토 팩\: review@2\.5\.1
 
 모델 호출 5회, 그중 수락 5회\(환경·문서 역할 호출 포함, 전체 합계\)\.
 
-모델 요청 크기 합계 69038바이트\(지침과 입력을 합친 요청 크기이며 소스 크기가 아니다\)\.
+모델 요청 크기 합계 70839바이트\(지침과 입력을 합친 요청 크기이며 소스 크기가 아니다\)\.
 
 모델에 보낸 파일 6개 / snapshot 파일 10개\.
 
@@ -684,7 +690,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 | 항목 | 값 |
 |---|---|
 | report | `0195f3a0-0000-7000-8000-000000000504` rev `1` |
-| digest | `4eeac1cf762e` |
+| digest | `b87eef5f30b3` |
 | status | `partial` |
 | quality\_verdict | `attention_required` |
 | run | `0195f3a0-0000-7000-8000-000000000501` |
@@ -694,4 +700,4 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 | created\_at | `2026-11-18T00:10:00Z` |
 | export | 코드 포함 내보내기\(권한 있는 사용자 전용\) |
 
-digest sha256: `4eeac1cf762e928a4bb2074ab7bebfef29644e3cc760759746671d52cedd1113`
+digest sha256: `b87eef5f30b329d1129fe6b5b31695813721fd0b92fc754ba03cfe623e4e326f`

@@ -81,6 +81,7 @@ export type AnalysisReport = {
   };
   calls: {
     role: string;
+    purpose?: string;
     model: string;
     version: string;
     outcome: string;
@@ -280,6 +281,7 @@ export function parseAnalysisReport(
       const c = object(v);
       return {
         role: str(c.role),
+        purpose: nullable(c.purpose) ?? undefined,
         model: str(c.model),
         version: str(c.opencode_version),
         outcome: str(c.outcome),

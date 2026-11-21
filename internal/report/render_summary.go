@@ -1251,6 +1251,7 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 	}
 
 	for _, s := range v.Sections {
+		mdSectionAnchor(p, s.ID)
 		p("## ", mdText(s.Title))
 		p()
 		for _, part := range s.Parts {
@@ -1291,15 +1292,7 @@ func mdDecision(p func(...string), d projectDecision, l Locale) {
 		p()
 	}
 	for _, row := range d.ComparisonRows {
-		var prose strings.Builder
-		for _, text := range inlineCodeParts(row.Text) {
-			if text.Code {
-				prose.WriteString(mdCodeSpan(oneLine(text.Text)))
-			} else {
-				prose.WriteString(mdText(text.Text))
-			}
-		}
-		p("**", mdText(row.Label), "** ", prose.String())
+		p("**", mdText(row.Label), "** ", mdInlineComparison(row.Text))
 		p()
 		for _, source := range row.Sources {
 			mdCitations(p, []sourceCitation{source.Brief()})
@@ -1353,18 +1346,49 @@ func mdDecision(p func(...string), d projectDecision, l Locale) {
 		p()
 		mdCitations(p, []sourceCitation{d.Action.Source.Brief()})
 	}
-	if d.Coverage != "" {
-		p(mdText(d.Coverage))
+	counts := make([]string, 0, len(d.ComparisonCounts))
+	for _, row := range d.ComparisonCounts {
+		counts = append(counts, mdText(row.Label)+" "+row.Value)
+	}
+	summary := mdText(l.Label("decision.no_document_assessment"))
+	if len(counts) > 0 {
+		summary = strings.Join(counts, " · ")
+	}
+	p("**", mdText(l.Label("decision.document_assessment")), "** · ", summary)
+	p()
+	if d.ComparisonExample != "" {
+		p("**", mdText(l.Label("decision.document_claim")), "** ", mdInlineComparison(d.ComparisonExample))
 		p()
 	}
-	if len(d.ComparisonRows) > 0 && d.ComparisonAnchor != "" {
-		p("[", mdText(l.Label("decision.documents")), "](#", d.ComparisonAnchor, ")")
+	anchor := d.ComparisonAnchor
+	if anchor == "" {
+		anchor = "documents"
+	}
+	p("[", mdText(l.Label("decision.documents")), "](#", anchor, ")")
+	p()
+}
+
+func mdInlineComparison(s string) string {
+	var prose strings.Builder
+	for _, part := range inlineCodeParts(s) {
+		if part.Code {
+			prose.WriteString(mdCodeSpan(oneLine(part.Text)))
+		} else {
+			prose.WriteString(mdText(part.Text))
+		}
+	}
+	return prose.String()
+}
+
+func mdSectionAnchor(p func(...string), section string) {
+	if section == "documents" {
+		p("<a id=\"documents\"></a>")
 		p()
 	}
 }
 
 func mdComparisonAnchor(p func(...string), d projectDecision, anchor string) {
-	if len(d.ComparisonRows) > 0 && anchor != "" && anchor == d.ComparisonAnchor {
+	if anchor != "" && anchor == d.ComparisonAnchor {
 		p("<a id=\"", anchor, "\"></a>")
 		p()
 	}

@@ -2,7 +2,7 @@
   "schema_version": "0.3",
   "pack": {
     "id": "review",
-    "version": "2.4.0"
+    "version": "2.5.1"
   },
   "snapshot_manifest_digest": "5555555555555555555555555555555555555555555555555555555555555555",
   "run_id": "0195f3a0-0000-7000-8000-000000000041",
@@ -19,17 +19,17 @@
     {
       "source": "review.environment",
       "state": "accepted",
-      "sha256": "70e53ed5e86ef69eeaef631e8b33cb646835c40c941eb41dee2126129703e737"
+      "sha256": "1e406f81d9eae3aab19473e1b0c581d748aa1878213090921ca9afaf74640575"
     },
     {
       "source": "review.documents",
       "state": "accepted",
-      "sha256": "c19bd44975d8ca7b8709cb2a71e04fbb40e8c5f8448000ae1e46143ab79ab852"
+      "sha256": "06c55313dc334a47f0a5558c550f33c2d3ddd8b907efad7a5df702cc2e941e3c"
     },
     {
       "source": "review.scope",
       "state": "accepted",
-      "sha256": "c945bffed54c0081303571a81233e3c88ca49d0012062b9a80e92c4cc1768f29"
+      "sha256": "4ba7d24bc54e00c1b829ff09688d74d3d2e499ff5cc71b976e8e082ecaba4295"
     }
   ],
   "evidence": [
@@ -112,8 +112,8 @@
       "model": "fake/scripted",
       "opencode_version": "1.19.5",
       "pack_id": "review",
-      "pack_version": "2.4.0",
-      "pack_sha256": "959dfb9b9e8e1e5428943e4dbe3ff0ceab3f095ff4cdc4710b08f67b69c97e16",
+      "pack_version": "2.5.1",
+      "pack_sha256": "c632f2a06d72ba91c0c7e31653dfd9dfbdeb51a1267b5a0481c64fbe03802b97",
       "pack_files": [
         "00-core.md",
         "domains.md",
@@ -123,8 +123,8 @@
         "languages/python.md",
         "pack.yaml"
       ],
-      "request_sha256": "9819efc5990d34f413ef9f4bd57879e6dd70dced7e61644452ba140911fa96eb",
-      "request_bytes": 25521,
+      "request_sha256": "38d7b4ac4d542e99e74314e20463ceec932b2d0f6c64fa4020f6bea583556cc7",
+      "request_bytes": 26111,
       "usage": {
         "input": 10578,
         "output": 50

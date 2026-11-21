@@ -20,11 +20,24 @@ import (
 const LimReviewLineage = "review_lineage_mismatch"
 
 const ContractReviewSince = 12
+const WorkflowReviewSince = 14
 
 type (
 	ReviewDecoder         struct{}
 	ContractReviewDecoder struct{}
+	WorkflowReviewDecoder struct{}
 )
+
+func (WorkflowReviewDecoder) Key() DecoderKey {
+	return DecoderKey{MediaType: record.MediaType, SchemaVersion: record.SchemaVersionWorkflow}
+}
+
+func (WorkflowReviewDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Contribution, error) {
+	if ctx.Task.Key != "review.documents" || art.Role != "other" {
+		return Contribution{}, invalidf("workflow review record attached to unexpected task or role")
+	}
+	return decodeWholeReview(ctx, body, record.StageDocuments)
+}
 
 func (ContractReviewDecoder) Key() DecoderKey {
 	return DecoderKey{MediaType: record.MediaType, SchemaVersion: record.SchemaVersionContract}
@@ -243,7 +256,7 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 			if key == record.TaskContract && c.RequestDigest == "" {
 				continue
 			}
-			r.Coverage.ReviewCalls = append(r.Coverage.ReviewCalls, ReviewCall{Role: c.Role, Model: c.Model, Version: c.Version, PackDigest: c.PackDigest,
+			r.Coverage.ReviewCalls = append(r.Coverage.ReviewCalls, ReviewCall{Role: c.Role, Purpose: c.Purpose, Model: c.Model, Version: c.Version, PackDigest: c.PackDigest,
 				RequestDigest: c.RequestDigest, Outcome: c.Outcome, PackID: c.PackID, PackVersion: c.PackVersion, TaskKey: key})
 			sent = sent || c.RequestDigest != ""
 		}

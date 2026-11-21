@@ -23,6 +23,8 @@ const (
 	// SchemaVersionContract adds the optional whole-run investigation probe
 	// and the single contract followup record.
 	SchemaVersionContract = "0.4"
+	// SchemaVersionWorkflow adds accepted HTTP route selections to documents.
+	SchemaVersionWorkflow = "0.5"
 
 	StageEnvironment = "environment"
 	StageDocuments   = "documents"
@@ -140,6 +142,7 @@ type Candidate struct {
 // platform codes the output of this call was rejected with.
 type Call struct {
 	Role          string   `json:"role"`
+	Purpose       string   `json:"purpose,omitempty"`
 	Model         string   `json:"model"`
 	Version       string   `json:"opencode_version"`
 	PackID        string   `json:"pack_id"`
@@ -183,6 +186,7 @@ type Record struct {
 	Questions           []Question              `json:"questions,omitempty"`
 	InstructionNotes    []InstructionNote       `json:"instruction_notes,omitempty"`
 	DocumentQuality     []DocumentQuality       `json:"document_quality,omitempty"`
+	WorkflowSelections  []WorkflowSelection     `json:"workflow_selections,omitempty"`
 	Strengths           []Strength              `json:"strengths,omitempty"`
 	ContractComparisons []ContractComparison    `json:"contract_comparisons,omitempty"`
 	PartialSupport      *ContractPartialSupport `json:"partial_support,omitempty"`
@@ -303,6 +307,10 @@ func Validate(r Record, want Expect) error {
 		if r.Slice != nil || want.Slice != "" || (r.Stage != StageContract && (r.Stage != StageInvestigate || r.ContractProbe == nil)) {
 			return invalid("contract record version")
 		}
+	case SchemaVersionWorkflow:
+		if r.Slice != nil || want.Slice != "" || r.ContractProbe != nil {
+			return invalid("workflow record version")
+		}
 	default:
 		return invalid("schema_version")
 	}
@@ -362,6 +370,9 @@ func Validate(r Record, want Expect) error {
 		return err
 	}
 	if err := checkInsights(r, catalog); err != nil {
+		return err
+	}
+	if err := checkWorkflowSelections(r); err != nil {
 		return err
 	}
 	return checkCalls(r)
@@ -717,9 +728,17 @@ func checkCalls(r Record) error {
 			}
 		}
 		ok := c.Outcome == OutcomeAccepted
+		last := i == len(r.Calls)-1
+		extra := c.Purpose != ""
+		if extra && (c.Purpose != WorkflowSelectionPurpose || r.Schema != SchemaVersionWorkflow ||
+			r.Stage != StageDocuments || !r.Accepted() || !accepted || !last ||
+			(ok && len(c.OutputErrors) != 0)) {
+			return invalid("workflow call sequence")
+		}
+		primaryLast := last || (i == len(r.Calls)-2 && r.Calls[i+1].Purpose == WorkflowSelectionPurpose)
 		// A verifier accepts candidates per item, so both of its calls may
-		// carry accepted items; any other stage accepts one whole output.
-		if ok && r.Stage != StageVerify && (accepted || len(c.OutputErrors) != 0 || i != len(r.Calls)-1) {
+		// carry accepted items; any other stage accepts one primary output.
+		if ok && !extra && r.Stage != StageVerify && (accepted || len(c.OutputErrors) != 0 || !primaryLast) {
 			return invalid("call sequence")
 		}
 		accepted = accepted || ok

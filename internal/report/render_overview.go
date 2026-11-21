@@ -11,16 +11,17 @@ import (
 // projectDecision is a reading of verified links within the stored report.
 // Rendering does not turn evidence coverage or a candidate into a verdict.
 type projectDecision struct {
-	Tone, State, Title, Reason, Boundary, Next, Coverage string
-	DocumentClaim, ReasonLabel, Condition, Scope         string
-	ComparisonAnchor                                     string
-	ComparisonRows                                       []secItem
-	Sources                                              []sourceCitation
-	Action                                               *projectAction
-	Followup                                             bool
-	AdditionalObservation                                bool
-	Glossary                                             []reportTerm
-	Review                                               bool
+	Tone, State, Title, Reason, Boundary, Next   string
+	DocumentClaim, ReasonLabel, Condition, Scope string
+	ComparisonAnchor, ComparisonExample          string
+	ComparisonCounts                             []countRow
+	ComparisonRows                               []secItem
+	Sources                                      []sourceCitation
+	Action                                       *projectAction
+	Followup                                     bool
+	AdditionalObservation                        bool
+	Glossary                                     []reportTerm
+	Review                                       bool
 }
 
 type projectAction struct {
@@ -29,7 +30,9 @@ type projectAction struct {
 }
 
 func (v secView) projectDecision() projectDecision {
-	d := v.selectDecision()
+	assessment, representative, counts := v.documentOverview()
+	d := v.selectDecision(assessment, representative)
+	d.ComparisonCounts = counts
 	if !v.R.Export.IncludeCode && d.Review {
 		d.Title, d.Reason, d.Boundary, d.Next = v.L.Label("decision.omitted"), "", "", ""
 		d.DocumentClaim, d.Condition = "", ""
@@ -37,26 +40,58 @@ func (v secView) projectDecision() projectDecision {
 			d.Action.Title = ""
 		}
 	}
-	if n := len(v.R.Documents.Comparisons); n > 0 {
-		unknown := 0
-		for _, comparison := range v.R.Documents.Comparisons {
-			if comparison.Status == "unknown" {
-				unknown++
-			}
-		}
-		if unknown > 0 {
-			if unknown == n {
-				d.Coverage = tf(v.L, "decision.comparison_all_unknown", n)
-			} else {
-				d.Coverage = tf(v.L, "decision.comparison_some_unknown", n, unknown)
-			}
-		}
-	}
 	d.Glossary = decisionGlossary(d)
 	return d
 }
 
-func (v secView) selectDecision() projectDecision {
+// A comparison contributes to the product overview only if it cites a
+// product document and any resolved conclusion cites product code.
+func (v secView) documentOverview() (assessment, representative int, counts []countRow) {
+	doc := v.R.Documents
+	assessment, representative = -1, -1
+	for _, status := range []string{"mismatch", "partial", "match", "unknown"} {
+		var tied []int
+		n, bestRank := 0, -1
+		for i, c := range doc.Comparisons {
+			if c.Status != status || !v.hasReviewText(c.Statement) || !productLocation(path.Join(c.AppliesTo, "scope"), 1, 1) ||
+				!hasProductSectionEvidence(c.DocumentEvidenceIDs, doc.Evidence, "document") {
+				continue
+			}
+			additional := additionalPrimaryCode(c, doc.Evidence) != nil
+			code := additional || hasProductSectionEvidence(c.CodeEvidenceIDs, doc.Evidence, "code")
+			if status != "unknown" && !code {
+				continue
+			}
+			n++
+			rank := 0
+			if code {
+				rank = 1
+			}
+			if c.Followup || additional {
+				rank = 2
+			}
+			if rank > bestRank {
+				bestRank = rank
+				tied = tied[:0]
+			}
+			if rank == bestRank {
+				tied = append(tied, i)
+			}
+		}
+		if n > 0 {
+			counts = append(counts, countRow{Name: status, Label: v.L.Label("decision.count." + status), Value: itoa(n)})
+			if assessment < 0 {
+				assessment, representative = tied[0], tied[0]
+				if status == "unknown" && len(tied) > 1 && v.R.Export.IncludeCode {
+					assessment = questionComparison(doc, tied)
+				}
+			}
+		}
+	}
+	return assessment, representative, counts
+}
+
+func (v secView) selectDecision(assessment, representative int) projectDecision {
 	l, r := v.L, v.R
 	doc, review := r.Documents, r.CodeReview
 
@@ -79,48 +114,8 @@ func (v secView) selectDecision() projectDecision {
 			}
 		}
 	}
-	assessment := -1
-	assessmentRank := -1
-	// Earlier statuses take priority. A resolved follow-up at the same
-	// status carries the additional evidence gathered for that contract.
-	for _, status := range []string{"mismatch", "partial", "match", "unknown"} {
-		var tied []int
-		for i := range doc.Comparisons {
-			c := &doc.Comparisons[i]
-			if c.Status != status || !v.hasReviewText(c.Statement) ||
-				!hasProductSectionEvidence(c.DocumentEvidenceIDs, doc.Evidence, "document") {
-				continue
-			}
-			additional := additionalPrimaryCode(*c, doc.Evidence) != nil
-			code := additional || hasProductSectionEvidence(c.CodeEvidenceIDs, doc.Evidence, "code")
-			if status != "unknown" && !code {
-				continue
-			}
-			rank := 0
-			if code {
-				rank = 1
-			}
-			if c.Followup || additional {
-				rank = 2
-			}
-			if rank > assessmentRank {
-				assessmentRank = rank
-				tied = tied[:0]
-			}
-			if rank == assessmentRank {
-				tied = append(tied, i)
-			}
-		}
-		if len(tied) > 0 {
-			assessment = tied[0]
-			if len(tied) > 1 && status == "unknown" && r.Export.IncludeCode {
-				assessment = questionComparison(doc, tied)
-			}
-			break
-		}
-	}
-	if assessment >= 0 {
-		d := v.comparisonDecision(doc.Comparisons[assessment], assessmentRank > 0)
+	if assessment >= 0 && doc.Comparisons[assessment].Status != "unknown" {
+		d := v.comparisonDecision(doc.Comparisons[assessment], true)
 		d.ComparisonAnchor = comparisonAnchor(assessment)
 		if action != nil && sevRank(action.Severity) >= sevRank("high") {
 			risk := v.findingDecision(*action, false)
@@ -128,8 +123,26 @@ func (v secView) selectDecision() projectDecision {
 		}
 		return d
 	}
+	withExample := func(d projectDecision) projectDecision {
+		if representative >= 0 {
+			d.ComparisonAnchor = comparisonAnchor(representative)
+			if r.Export.IncludeCode {
+				d.ComparisonExample = doc.Comparisons[representative].Statement
+			}
+		}
+		return d
+	}
 	if action != nil {
-		return v.findingDecision(*action, false)
+		return withExample(v.findingDecision(*action, false))
+	}
+	if assessment >= 0 {
+		if strength := v.strengthDecision(); strength.Title != "" {
+			return withExample(strength)
+		}
+		c := doc.Comparisons[assessment]
+		d := v.comparisonDecision(c, hasProductSectionEvidence(c.CodeEvidenceIDs, doc.Evidence, "code"))
+		d.ComparisonAnchor = comparisonAnchor(assessment)
+		return d
 	}
 
 	if pending != nil {
@@ -210,7 +223,8 @@ func (v secView) withRelatedStrength(d projectDecision, f Finding) projectDecisi
 				if !productFindingEvidence(f, candidate) || candidate.Location.Path != e.Path {
 					continue
 				}
-				d.Title, d.Boundary, d.State = strength.Benefit, f.Title, l.Label("decision.observed_and_pending")
+				d.Title, d.Boundary, d.State = strength.Title, f.Title, l.Label("decision.observed_and_pending")
+				d.Reason = distinctStrengthDetails([]string{strength.Title}, strength.Benefit)
 				confirmed := v.citeSectionEvidence(e)
 				confirmed.ActionLabel = l.Label("evidence.view_confirmed")
 				loc := candidate.Location
@@ -479,7 +493,8 @@ func (v secView) strengthDecision() projectDecision {
 	for i, first := range items {
 		for _, second := range items[i+1:] {
 			a, b := first.evidence, second.evidence
-			if a.Path != b.Path || first.title == second.title || first.benefit == second.benefit || !sharedSubject(first.title, second.title) {
+			if a.Path != b.Path || strengthTextKey(first.title) == strengthTextKey(second.title) ||
+				strengthTextKey(first.benefit) == strengthTextKey(second.benefit) || !sharedSubject(first.title, second.title) {
 				continue
 			}
 			if b.StartLine <= a.StartLine && b.EndLine >= a.EndLine {
@@ -487,8 +502,9 @@ func (v secView) strengthDecision() projectDecision {
 			}
 			if a.StartLine <= b.StartLine && a.EndLine >= b.EndLine {
 				return projectDecision{Tone: "strength", State: v.L.Label("decision.preserve"),
-					Title:  tf(v.L, "decision.related", first.title, second.title),
-					Reason: first.benefit + " " + second.benefit, Sources: []sourceCitation{v.citeSectionEvidence(*a)}, Review: true}
+					Title:   tf(v.L, "decision.related", first.title, second.title),
+					Reason:  distinctStrengthDetails([]string{first.title, second.title}, first.benefit, second.benefit),
+					Sources: []sourceCitation{v.citeSectionEvidence(*a)}, Review: true}
 			}
 		}
 	}
@@ -497,7 +513,29 @@ func (v secView) strengthDecision() projectDecision {
 	}
 	first := items[0]
 	return projectDecision{Tone: "strength", State: v.L.Label("decision.preserve"), Title: first.title,
-		Reason: first.benefit, Sources: []sourceCitation{v.citeSectionEvidence(*first.evidence)}, Review: true}
+		Reason:  distinctStrengthDetails([]string{first.title}, first.benefit),
+		Sources: []sourceCitation{v.citeSectionEvidence(*first.evidence)}, Review: true}
+}
+
+func strengthTextKey(text string) string {
+	return strings.TrimSpace(strings.TrimRight(strings.ToLower(strings.Join(strings.Fields(text), " ")), ".。!?！？"))
+}
+
+// Keep the stored wording and suppress exact repeats with superficial edits.
+func distinctStrengthDetails(titles []string, benefits ...string) string {
+	seen := map[string]bool{"": true}
+	for _, title := range titles {
+		seen[strengthTextKey(title)] = true
+	}
+	var details []string
+	for _, benefit := range benefits {
+		key := strengthTextKey(benefit)
+		if !seen[key] {
+			details = append(details, benefit)
+			seen[key] = true
+		}
+	}
+	return strings.Join(details, " ")
 }
 
 func (v secView) hasReviewText(s string) bool {
@@ -603,7 +641,7 @@ func productLocation(file string, start, end int) bool {
 	}
 	for _, dir := range strings.Split(strings.ToLower(path.Dir(file)), "/") {
 		switch dir {
-		case "test", "tests", "__tests__", "spec", "specs", "fuzz", "fuzzer", "fuzzers", "fuzzing":
+		case "test", "tests", "__tests__", "spec", "specs", "e2e", "integration-tests", "unit-tests", "fuzz", "fuzzer", "fuzzers", "fuzzing":
 			return false
 		}
 	}
@@ -616,6 +654,8 @@ func productLocation(file string, start, end int) bool {
 	case ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts":
 		stem := strings.TrimSuffix(base, ext)
 		return !strings.HasSuffix(stem, ".test") && !strings.HasSuffix(stem, ".spec")
+	case ".sh", ".bash":
+		return !strings.HasPrefix(base, "test_") && !strings.HasPrefix(base, "test-") && !strings.HasPrefix(base, "qa_") && !strings.HasPrefix(base, "qa-")
 	}
 	return true
 }

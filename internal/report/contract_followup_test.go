@@ -280,10 +280,14 @@ func TestAdditionalUnknownObservationRendersWithoutChangingVerdict(t *testing.T)
 			!slices.Equal(c.CodeEvidenceIDs, row.CodeEvidenceIDs) || !slices.Equal(c.AdditionalObservation.CodeEvidenceIDs, refs) {
 			t.Fatalf("additional observation changed the original comparison or its references: %+v", c)
 		}
-		decision := newSummaryView(r, "0", Korean).Decision
 		if !reflect.DeepEqual(*r.Overview, priorOverview) || r.QualityVerdict != priorVerdict {
 			t.Fatal("observed source changed quality or coverage counts")
 		}
+		// Isolate the unresolved contract in the rendered overview.
+		review := *r.CodeReview
+		r.CodeReview = &review
+		r.CodeReview.FindingIDs, r.CodeReview.Strengths = nil, nil
+		decision := newSummaryView(r, "0", Korean).Decision
 		if decision.Followup || !decision.AdditionalObservation || decision.State != Korean.Label("decision.comparison.unknown") {
 			t.Fatalf("unresolved observation opening: %+v", decision)
 		}

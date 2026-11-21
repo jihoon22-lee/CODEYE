@@ -267,6 +267,48 @@ def check_probe_example(validator, role_docs: dict, role_raw: dict) -> int:
     return len(negatives)
 
 
+def check_workflow_example(validator, pack: dict, roles: dict) -> int:
+    root = ROOT / "fixtures/modules/workflows/input"
+    example = json.loads((ROOT / "examples/review/documents-workflow.json").read_text(encoding="utf-8"))
+
+    def check(doc: dict) -> None:
+        validator.validate(doc)
+        ensure(doc["pack"] == {"id": pack["id"], "version": pack["version"]}, "workflow document pack")
+        for call in doc["calls"]:
+            ensure(call["pack_files"] == roles["documents"]["files"] and call["pack_sha256"] == roles["documents"]["digest"],
+                   "workflow document role digest")
+        selected = doc.get("workflow_selections", [])
+        indices = [entry["contract_index"] for entry in selected]
+        ensure(indices == sorted(set(indices)) and (not indices or indices[-1] <= len(doc["contracts"])) and
+               sum(len(entry["route_digests"]) for entry in selected) <= 4, "workflow routes exceed contract or selection bounds")
+        for excerpt in doc["evidence"]:
+            p = source_location(excerpt, root)
+            sha = hashlib.sha256(p.read_bytes()).hexdigest()
+            bind = "\0".join([doc["snapshot_manifest_digest"], excerpt["path"], sha, f'{excerpt["start_line"]}:{excerpt["end_line"]}'])
+            ensure(excerpt["kind"] == "document" and excerpt["sha256"] == sha and
+                   excerpt["id"] == "ev_" + hashlib.sha256(bind.encode()).hexdigest()[:24], "workflow document evidence")
+
+    check(example)
+    no_choice = copy.deepcopy(example)
+    no_choice.pop("workflow_selections")
+    no_choice["calls"].append(dict(no_choice["calls"][0], attempt=2, purpose="workflow_selection",
+                                  outcome="output_rejected", output_errors=["workflow_selection_invalid"]))
+    check(no_choice)
+    negatives = {
+        "workflow selections on a legacy record": lambda d: d.update(schema_version="0.2"),
+        "workflow selection of absent contract": lambda d: d["workflow_selections"][0].update(contract_index=2),
+        "workflow selection repeats contract": lambda d: d["workflow_selections"].append({"contract_index": 1, "route_digests": ["0" * 64]}),
+        "workflow alias persisted as selection": lambda d: d["workflow_selections"][0].update(route_digests=["R1"]),
+        "workflow call before accepted document response": lambda d: d["calls"].insert(0, no_choice["calls"][1]),
+        "workflow call repeated": lambda d: d["calls"].extend([no_choice["calls"][1], dict(no_choice["calls"][1], attempt=3)]),
+    }
+    for name, edit in negatives.items():
+        bad = copy.deepcopy(example)
+        edit(bad)
+        expect_invalid(name, check, bad)
+    return len(negatives)
+
+
 def check_contract_example(validator, pack: dict, roles: dict) -> int:
     """Verify the snapshot and prior comparison for a scripted final role."""
     fixture = ROOT / "fixtures/modules/input"

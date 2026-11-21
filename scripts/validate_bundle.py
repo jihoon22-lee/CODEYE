@@ -26,7 +26,7 @@ except ImportError as exc:
 from bundle_checks.common import ROOT, ensure, expect_invalid, json_file, make_validators, within_root, yaml_file
 from bundle_checks.report import check_analyzer, check_document_comparisons, check_observations, check_plan, check_report
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
-from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_slice_examples, pack_selection, slice_examples
+from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_slice_examples, check_workflow_example, pack_selection, slice_examples
 from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_shared_service_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
 from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_markdown_anchors, check_mode_names, check_stage_labels, heading_anchors
 
@@ -165,6 +165,20 @@ def main() -> None:
     for doc in role_docs.values():
         review_validator.validate(doc)
     check_stage_examples(role_docs, role_raw, pack_doc, role_files)
+    workflow_negatives = check_workflow_example(review_validator, pack_doc, role_files)
+    print(f"PASS: workflow route selections attached to the accepted document contract; {workflow_negatives} negative cases")
+    workflow_report = copy.deepcopy(unscreened)
+    workflow_artifact = next(a for a in workflow_report["artifacts"] if a["task_key"] == "review.documents" and a["media_type"] == "application/vnd.codeye.review+json")
+    workflow_artifact["decoder"] = "application/vnd.codeye.review+json;schema_version=0.5"
+    validators["report.schema.json"].validate(workflow_report)
+    workflow_report["builder"]["version"] = "13"
+    expect_invalid("older builder claiming the workflow document decoder", validators["report.schema.json"].validate, workflow_report)
+    workflow_report = copy.deepcopy(report)
+    doc_call = next(c for c in workflow_report["coverage"]["review_calls"] if c["role"] == "documents")
+    workflow_report["coverage"]["review_calls"].append(dict(doc_call, purpose="workflow_selection"))
+    validators["report.schema.json"].validate(workflow_report)
+    workflow_report["builder"]["version"] = "13"
+    expect_invalid("older builder marking a workflow selection call", validators["report.schema.json"].validate, workflow_report)
     probe_negatives = check_probe_example(review_validator, role_docs, role_raw)
     print(f"PASS: review navigation probe bound to the example snapshot; {probe_negatives} negative cases")
     contract_negatives = check_contract_example(review_validator, pack_doc, role_files)
