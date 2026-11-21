@@ -205,6 +205,9 @@ func TestModelResolutionOrder(t *testing.T) {
 
 func TestNativeConfigReusesMatchingStoredAuth(t *testing.T) {
 	home := fakeHome(t, `{"openai":{"type":"api","key":"stored-openai"},"corp":{"type":"api","key":"stored-corp"},"anthropic":{"type":"oauth","access":"unused"}}`, "")
+	// This test exercises provider selection. Supply the known binary path
+	// directly, since Windows does not represent the fixture's POSIX mode.
+	home.Executable = filepath.Join(home.Home, ".opencode", "bin", "opencode")
 	path := filepath.Join(home.Home, "opencode.jsonc")
 	c, layout := modelConfig(t, `{"config_file":`+strconv.Quote(path)+`}`)
 	for _, tc := range []struct {

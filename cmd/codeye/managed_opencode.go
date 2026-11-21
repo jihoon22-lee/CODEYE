@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -70,8 +71,15 @@ func (c *managedOpenCode) current(cfg *instance.Config) (httpapi.OpenCodeSetting
 }
 
 func usableExecutable(path string) bool {
+	if !filepath.IsAbs(path) {
+		return false
+	}
 	st, err := os.Stat(path)
-	return err == nil && st.Mode().IsRegular() && st.Mode().Perm()&0111 != 0
+	if err != nil || !st.Mode().IsRegular() {
+		return false
+	}
+	_, err = exec.LookPath(path)
+	return err == nil
 }
 
 func (c *managedOpenCode) Get() (httpapi.OpenCodeSettings, error) {
