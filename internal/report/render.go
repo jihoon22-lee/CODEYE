@@ -580,6 +580,7 @@ var htmlFuncs = template.FuncMap{
 	"tf":              tf,
 	"reportIcon":      reportIcon,
 	"sectionIcon":     sectionIcon,
+	"displayLocation": displayLocation,
 	"pathSegments":    func(value string) []string { return strings.SplitAfter(value, "/") },
 	"groupIcon":       groupIcon,
 	"findingCitation": findingCitation,

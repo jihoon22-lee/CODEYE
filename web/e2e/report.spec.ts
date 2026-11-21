@@ -151,28 +151,59 @@ test('mobile source wraps every code line and can scroll complete unwrapped code
   })).toBe(true);
 });
 
-test('selected HTML findings keep their heading and the full source within the page', async ({page}) => {
+test('saved report focuses one mobile finding while retaining its list, links and print source', async ({page}) => {
   const assets = new URL('../../internal/report/reportui/', import.meta.url);
   const css = ['tabler.css', 'report.css', 'workbench.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
+  const script = readFileSync(new URL('export-navigation.js', assets), 'utf8');
+  const finding = (id: string, title: string) => `
+    <section class="report-group"><div class="report-export-workbench">
+    <div class="report-workbench-index"><table class="report-workbench-table export-workbench-table"><tbody><tr><td colspan="4">
+    <details class="report-result-details" name="report-finding-rows"><summary id="${id}" class="export-workbench-select"><strong>${title}</strong></summary>
+    <div class="export-workbench-body"><button type="button" data-report-inspector-close>결과 목록</button>
+    <h6 class="report-finding-heading" tabindex="-1">${title}</h6>
+    <div class="report-selected-source" data-wrap="false"><pre class="source-window" data-mode="short"><code>
+    <span class="source-line"><span class="source-line-number">18</span><span class="source-line-code">${'long_source_line_'.repeat(25)}</span></span>
+    </code></pre><pre class="source-window" data-mode="full" hidden>full source</pre></div>
+    <details class="report-excerpt" data-preview-covered><summary>코드 보기</summary><pre>duplicate stored source</pre></details>
+    </div></details></td></tr></tbody></table></div><aside class="export-inspector report-workbench-detail" hidden></aside>
+    </div></section>`;
   await page.setViewportSize({width:390,height:844});
   await page.setContent(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style>
-    <article class="report-export review-theme report-scroll-navigation">
-    <div class="report-export-workbench"><div class="report-workbench-index">
-    <table class="report-workbench-table export-workbench-table"><tbody><tr><td colspan="4">
-    <details class="report-result-details" open><summary class="export-workbench-select"><strong>결과 제목</strong></summary>
-    <div class="export-workbench-body"><h6 class="report-finding-heading" tabindex="-1">결과 제목</h6>
-    <div class="report-selected-source" data-wrap="false"><pre class="source-window"><code>
-    <span class="source-line"><span class="source-line-number">18</span><span class="source-line-code">${'long_source_line_'.repeat(25)}</span></span>
-    </code></pre></div></div></details>
-    </td></tr></tbody></table></div></div></article>`);
-  const heading = page.locator('.report-finding-heading');
+    <article class="report-export review-theme"><nav class="report-rail"><a href="#code_review">코드 분석</a></nav>
+    <main class="report-main"><section class="export-section" id="code_review"><h2>코드 분석</h2>
+    ${finding('finding-one', '첫 번째 결과')}${finding('finding-two', '두 번째 결과')}</section></main></article>`);
+  const first = page.locator('#finding-one');
+  const second = page.locator('#finding-two');
+  const heading = page.getByRole('heading', {name:'두 번째 결과', exact:true});
+  await second.press('Enter');
+  await expect(heading).toBeVisible();
+  await expect(first).toBeVisible();
+  await second.press('Enter');
+
+  await page.addScriptTag({content:script});
+  await page.evaluate(() => { location.hash = '#finding-two'; });
+  await expect(heading).toBeFocused();
+  await expect(page.locator('.export-workbench-select:visible')).toHaveCount(0);
+  await expect(page.getByText('두 번째 결과', {exact:true}).filter({visible:true})).toHaveCount(1);
   expect(await heading.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
-  const source = page.locator('.source-window');
+  const selected = heading.locator('..');
+  const source = selected.locator('.source-window[data-mode=short]');
+  await selected.locator('.report-selected-source').evaluate(element => { element.dataset.wrap = 'false'; });
   expect(await source.evaluate(pre => pre.scrollWidth > pre.clientWidth)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+
   await page.emulateMedia({media:'print'});
-  await expect(page.getByText('결과 제목', {exact:true}).filter({visible:true})).toHaveCount(1);
+  await page.evaluate(() => dispatchEvent(new Event('beforeprint')));
+  await expect(page.getByText('두 번째 결과', {exact:true}).filter({visible:true})).toHaveCount(1);
+  await expect(source).toBeVisible();
+  await expect(selected.locator('.report-excerpt')).toBeHidden();
   expect((await heading.evaluate(element => parseFloat(getComputedStyle(element).fontSize))) * .75).toBeGreaterThanOrEqual(11);
+  await page.evaluate(() => dispatchEvent(new Event('afterprint')));
+  await page.emulateMedia({media:'screen'});
+  await page.getByRole('button', {name:'결과 목록'}).press('Enter');
+  await expect(second).toBeFocused();
+  await expect(first).toBeVisible();
+  await expect(second).toBeVisible();
 });
 
 test('published report exposes the same counts, evidence and revision in the browser and exports', async ({page}) => {

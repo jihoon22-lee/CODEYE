@@ -113,6 +113,7 @@ type sourceCitation struct {
 	Example                                           *documentExample
 	ExampleLabel                                      string
 	StartLine, EndLine, ExcerptStart                  int
+	CoveredByPreview, PrintLocation                   bool
 }
 
 type sourcePreview struct {
@@ -306,6 +307,22 @@ func snapshotBrowserURL(r Report, path string, start, end int) string {
 
 func sourceRange(path string, start, end int) string {
 	return path + ":" + strconv.Itoa(start) + "-" + strconv.Itoa(end)
+}
+
+var locationRange = regexp.MustCompile(`:(\d+)-(\d+)$`)
+
+// displayLocation changes only presentation. Stored locations, links and
+// identities still use their original paths and ranges.
+func displayLocation(location string) string {
+	match := locationRange.FindStringSubmatchIndex(location)
+	if match == nil {
+		return location
+	}
+	first, last := location[match[2]:match[3]], location[match[4]:match[5]]
+	if first == last {
+		return location[:match[3]]
+	}
+	return location[:match[3]] + "–" + last
 }
 
 func citeSource(path string, start, end int, excerpt *sourceexcerpt.Excerpt) sourceCitation {

@@ -475,11 +475,13 @@ func (v secView) findingCard(f Finding) secCard {
 			c.ShortLocation = "…/" + sourceRange(location.Path[slash+1:], location.StartLine, location.EndLine)
 		}
 	}
+	var previewSource sourceCitation
 	if v.R.Export.IncludeCode {
 		for _, evidence := range f.Evidence {
 			if evidence.Kind == "code" && evidence.Location != nil && !slices.Contains(f.CounterevidenceIDs, evidence.ID) {
-				c.Preview = findingCitation(l, evidence).previewFor(f.Title)
-				if c.Preview != nil {
+				source := findingCitation(l, evidence)
+				if preview := source.previewFor(f.Title); preview != nil {
+					c.Preview, previewSource = preview, source
 					break
 				}
 			}
@@ -494,6 +496,10 @@ func (v secView) findingCard(f Finding) secCard {
 			}
 			x := v.citeEvidence(e.Kind, e.Location.Path, e.Location.StartLine, e.Location.EndLine, e.Excerpt)
 			if !seen[x.Location] {
+				if c.Preview != nil && x.Text != "" && x.ExcerptLocation == previewSource.ExcerptLocation && x.Text == previewSource.Text {
+					x.CoveredByPreview = true
+					x.PrintLocation = x.Location != previewSource.Location
+				}
 				item.Sources = append(item.Sources, x)
 				seen[x.Location] = true
 			}

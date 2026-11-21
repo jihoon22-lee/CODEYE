@@ -1148,7 +1148,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 </details></td></tr>{{end}}{{end}}{{end}}</tbody></table></div>
 {{if .Sources}}<details class="report-reading-sources"><summary>{{$sources}}</summary>
 {{range .Sources}}<div id="{{.Anchor}}" tabindex="-1">
-<p class="report-excerpt-label">{{.StoredLabel}} <code>{{.ExcerptLocation}}</code></p>
+<p class="report-excerpt-label">{{.StoredLabel}} <code>{{displayLocation .ExcerptLocation}}</code></p>
 {{if .URL}}<a href="{{.URL}}" class="btn btn-sm btn-ghost-primary report-source-action" target="_blank" rel="noopener noreferrer">{{reportIcon "external-link"}}{{.LinkLabel}}</a>{{end}}
 <pre tabindex="0" aria-label="{{.ExcerptLocation}}"><code>{{.Text}}</code></pre>
 </div>{{end}}</details>{{end}}
@@ -1197,11 +1197,11 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <div class="report-workbench-index">
 <table class="report-workbench-table export-workbench-table"><thead><tr><th scope="col">{{$l.Label "col.item"}}</th><th scope="col">{{$l.Label "col.location"}}</th><th scope="col">{{$l.Label "col.validation"}}</th><th scope="col">{{$l.Label "col.severity"}}</th></tr></thead><tbody>
 {{range .Cards}}<tr><td colspan="4"><details class="report-result-details" name="report-finding-rows"{{if .ID}} data-finding="{{.ID}}"{{end}}>
-<summary{{if .ID}} id="{{.ID}}"{{end}} class="export-workbench-select"><strong>{{.Title}}</strong><code class="report-index-path" title="{{.Location}}" aria-label="{{.Location}}">{{.ShortLocation}}</code><span class="report-status-badge" data-tone="{{.Tone}}">{{.State}}</span><small>{{.Severity}}</small></summary>
+<summary{{if .ID}} id="{{.ID}}"{{end}} class="export-workbench-select"><strong>{{.Title}}</strong><code class="report-index-path" title="{{.Location}}" aria-label="{{.Location}}">{{displayLocation .ShortLocation}}</code><span class="report-status-badge" data-tone="{{.Tone}}">{{.State}}</span><small>{{.Severity}}</small></summary>
 <div class="export-workbench-body">
 <button class="report-plain-action export-workbench-close" type="button" data-report-inspector-close>← {{$l.Label "reading.result_list"}}</button>
 <h6 class="report-finding-heading" tabindex="-1">{{.Title}}</h6>
-<div class="report-workbench-meta"><span class="report-status-badge" data-tone="{{.Tone}}">{{.State}}</span> <span class="report-detail-severity">{{.Severity}}</span>{{if not .Preview}}<code class="report-index-path report-path-text">{{range $i, $segment := pathSegments .Location}}{{if $i}}<wbr>{{end}}{{$segment}}{{end}}</code>{{end}}</div>
+<div class="report-workbench-meta"><span class="report-status-badge" data-tone="{{.Tone}}">{{.State}}</span> <span class="report-detail-severity">{{.Severity}}</span>{{if not .Preview}}<code class="report-index-path report-path-text">{{range $i, $segment := pathSegments (displayLocation .Location)}}{{if $i}}<wbr>{{end}}{{$segment}}{{end}}</code>{{end}}</div>
 {{template "source_preview" .Preview}}
 {{if .Lines}}<ul class="export-card-points">{{range .Lines}}<li>{{template "item" .}}</li>{{end}}</ul>{{end}}
 {{if .Context}}<details class="report-finding-context"><summary>{{$l.Label "opening.finding_basis"}}</summary><ul class="export-card-points">{{range .Context}}<li>{{template "item" .}}</li>{{end}}</ul></details>{{end}}
@@ -1218,11 +1218,12 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{if .Example}}<p class="report-document-example"><strong>{{.ExampleLabel}}</strong> <code>{{.Example.Call}}</code> → <code>{{.Example.Output}}</code></p>{{end}}
 {{if .Jump}}<a href="#{{.Jump}}" class="report-reading-reference">{{template "citation_file" .}}</a>
 {{if .URL}}<a class="report-reading-source-link" href="{{.URL}}" target="_blank" rel="noopener noreferrer" aria-label="{{.LinkLabel}} · {{.Location}}" title="{{.LinkLabel}}">{{reportIcon "external-link"}}</a>{{end}}
-{{else if .Text}}<details class="report-excerpt">
+{{else if .Text}}<details class="report-excerpt"{{if .CoveredByPreview}} data-preview-covered{{end}}>
 <summary class="btn btn-sm btn-ghost-primary export-evidence-control" aria-label="{{.ActionLabel}} · {{.Location}}">{{template "citation_action" .}}{{reportIcon "chevron-down"}}</summary>
 {{if .URL}}<a href="{{.URL}}" class="btn btn-sm btn-ghost-primary report-source-action" target="_blank" rel="noopener noreferrer">{{reportIcon "external-link"}}{{.LinkLabel}}</a>{{end}}
-<p class="report-excerpt-label">{{.StoredLabel}} <code>{{.ExcerptLocation}}</code></p>
+<p class="report-excerpt-label">{{.StoredLabel}} <code>{{displayLocation .ExcerptLocation}}</code></p>
 <pre tabindex="0" aria-label="{{.ExcerptLocation}}"><code>{{.Text}}</code></pre></details>
+{{if .PrintLocation}}<p class="report-print-citation">{{template "citation_file" .}}</p>{{end}}
 {{else if .URL}}<a href="{{.URL}}" class="btn btn-sm btn-ghost-primary report-source-action export-evidence-control" target="_blank" rel="noopener noreferrer" aria-label="{{.ActionLabel}} · {{.Location}}">{{template "citation_action" .}}{{reportIcon "external-link"}}</a>
 {{else}}{{template "citation_file" .}}{{end}}
 </div>{{end}}
@@ -1230,16 +1231,16 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <p class="report-excerpt-label"><code class="report-path-text">{{range $i, $segment := pathSegments .File}}{{if $i}}<wbr>{{end}}{{$segment}}{{end}}</code></p>
 <div class="report-source-toolbar">
 {{if .FullLines}}<button type="button" data-report-source-mode="short" aria-pressed="true">{{.PreviewLabel}} {{.PreviewRange}}</button><button type="button" data-report-source-mode="full" aria-pressed="false">{{.FullLabel}} {{.FullRange}}</button>{{else}}<span>{{.PreviewLabel}} {{.PreviewRange}}</span>{{end}}
-{{if and .Citation (ne .FullLabel .CitationLabel)}}<span>{{.CitationLabel}} <code>{{.Citation}}</code></span>{{end}}
+{{if and .Citation (ne .FullLabel .CitationLabel)}}<span>{{.CitationLabel}} <code>{{displayLocation .Citation}}</code></span>{{end}}
 <button type="button" data-report-source-wrap aria-pressed="false">{{.WrapLabel}}</button>
 </div>
-<p class="report-print-ranges">{{.Label}} <code>{{.Location}}</code>{{if .Citation}} · {{.CitationLabel}} <code>{{.Citation}}</code>{{end}}</p>
+<p class="report-print-ranges">{{.Label}} <code>{{displayLocation .Location}}</code>{{if .Citation}} · {{.CitationLabel}} <code>{{displayLocation .Citation}}</code>{{end}}</p>
 <pre class="source-window" tabindex="0" aria-label="{{.Location}}" data-mode="short"><code>{{range .Lines}}{{template "preview_line" .}}{{end}}</code></pre>
 {{if .FullLines}}<pre class="source-window" tabindex="0" aria-label="{{.FullLocation}}" data-mode="full" hidden><code>{{range .FullLines}}{{template "preview_line" .}}{{end}}</code></pre>{{end}}
 </div>{{end}}{{end}}
 {{define "preview_line"}}<span class="source-line"{{if .Focus}} data-focus="true"{{end}}><span class="source-line-number" aria-hidden="true">{{.Number}}</span><span class="source-line-code">{{.Text}}</span></span>{{end}}
 {{define "citation_action"}}<span class="export-evidence-label">{{.ActionLabel}}</span>{{template "citation_file" .}}{{end}}
-{{define "citation_file"}}<span class="report-file" title="{{.Location}}">{{reportIcon "file-description"}}<code class="report-file-name report-path-text">{{range $i, $segment := pathSegments .File}}{{if $i}}<wbr>{{end}}{{$segment}}{{end}}</code><code class="report-file-lines">:{{.Range}}</code></span>{{end}}`))
+{{define "citation_file"}}<span class="report-file" title="{{.Location}}">{{reportIcon "file-description"}}<code class="report-file-name report-path-text">{{range $i, $segment := pathSegments .File}}{{if $i}}<wbr>{{end}}{{$segment}}{{end}}</code><code class="report-file-lines">{{displayLocation (printf ":%s" .Range)}}</code></span>{{end}}`))
 
 type inspectionDetailArgs struct {
 	L Locale

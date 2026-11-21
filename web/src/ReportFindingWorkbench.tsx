@@ -13,8 +13,10 @@ function FindingLocation({ finding, full = false }: { finding: Finding; full?: b
   const suffix = line == null ? '' : ':' + line;
   const complete = first + suffix;
   if (full) return <ReportPath value={complete} className="report-index-path" />;
-  const display = first.includes('/') ? '…/' + (first.split('/').at(-1) ?? first) + suffix : complete;
-  return <code className="report-index-path" title={complete} aria-label={complete}>{display}</code>;
+  const shortPath = first.includes('/') ? '…/' + (first.split('/').at(-1) ?? first) : first;
+  return <code className="report-index-path report-index-compact" title={complete} aria-label={complete}>
+    <span>{shortPath}</span><span>{suffix}</span>
+  </code>;
 }
 
 export function ReportFindingWorkbench({ findings, reveal, detail }: {

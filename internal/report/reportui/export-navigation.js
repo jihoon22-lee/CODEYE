@@ -48,7 +48,11 @@
     const section = target?.closest('.export-section');
     if (section) {
       const result = target.closest('.report-result-details');
-      if (result) result.open = true;
+      if (result) {
+        result.open = true;
+        const workbench = result.closest('.report-export-workbench');
+        if (workbench) inspect(workbench, true);
+      }
       if (id === 'test-results') target.querySelector('details')?.setAttribute('open', '');
       if (frame !== undefined) cancelAnimationFrame(frame);
       frame = undefined;
@@ -60,6 +64,7 @@
 
   const workbenches = [...document.querySelectorAll('.report-export-workbench')];
   const wide = window.matchMedia('(min-width: 62rem)');
+  const narrow = window.matchMedia('(max-width: 36rem)');
   const moved = new Map();
   let printed;
 
@@ -73,20 +78,23 @@
   }
 
   function inspect(workbench, focus) {
-    if (printed || !wide.matches) {
+    if (printed || !wide.matches && !narrow.matches) {
       restore(workbench);
       return;
     }
     const row = workbench.querySelector('details.report-result-details[open]');
     const shown = moved.get(workbench);
-    if (shown?.row === row) return;
+    if (shown && shown.row === row) {
+      workbench.dataset.inspecting = narrow.matches ? 'compact' : 'true';
+      return;
+    }
     restore(workbench);
     const body = row?.querySelector('.export-workbench-body');
     const inspector = workbench.querySelector('.export-inspector');
     if (!body || !inspector) return;
     inspector.append(body);
     inspector.hidden = false;
-    workbench.dataset.inspecting = 'true';
+    workbench.dataset.inspecting = narrow.matches ? 'compact' : 'true';
     moved.set(workbench, { row, body, inspector });
     if (focus) {
       const title = body.querySelector('h6');
@@ -100,11 +108,13 @@
     if (!event.target.matches('.report-export-workbench details.report-result-details')) return;
     inspect(event.target.closest('.report-export-workbench'), event.target.open);
   }, true);
-  wide.addEventListener('change', () => {
+  function updateWorkbenches() {
     for (const workbench of workbenches) inspect(workbench, false);
-  });
+  }
+  wide.addEventListener('change', updateWorkbenches);
+  narrow.addEventListener('change', updateWorkbenches);
 
-  const narrowSource = window.matchMedia('(max-width: 36rem)');
+
   const sourceOverrides = new WeakMap();
   function setWrap(preview, wrap) {
     preview.dataset.wrap = String(wrap);
@@ -112,10 +122,10 @@
   }
   function updateSourceWrap() {
     for (const preview of document.querySelectorAll('.report-selected-source')) {
-      setWrap(preview, sourceOverrides.get(preview) ?? narrowSource.matches);
+      setWrap(preview, sourceOverrides.get(preview) ?? narrow.matches);
     }
   }
-  narrowSource.addEventListener('change', updateSourceWrap);
+  narrow.addEventListener('change', updateSourceWrap);
   updateSourceWrap();
 
   document.addEventListener('click', event => {
