@@ -243,50 +243,7 @@ func applyCppcheckMode(doc *obsdoc.Document, in ccInput) {
 		doc.Limitations = append(doc.Limitations, ReasonCompileDBMissing, "reduced_mode_no_build_flags")
 		return
 	}
-	m := in.Mapping
-	doc.RulePack.RepositoryConfig = obsdoc.RepoConfigHonored
-	doc.RulePack.ConfigFiles = append([]obsdoc.ConfigFile{}, in.ConfigFiles...)
-	compileDBProperties(doc, m, len(in.Layout.DBs))
-	doc.Limitations = append(doc.Limitations, m.Limitations()...)
-	if len(in.Layout.DBs) > 1 {
-		doc.Limitations = append(doc.Limitations, LimMultipleDBs)
-	}
-	listed := map[string]bool{}
-	for _, u := range m.Units {
-		listed[u.Rel] = true
-	}
-	for _, src := range in.Layout.Sources {
-		if _, excluded := m.ExcludedSources[src]; !listed[src] && !excluded {
-			doc.Coverage.FilesUnlisted++
-		}
-	}
-	doc.Coverage.FilesSkipped = len(m.ExcludedSources)
-	if doc.Coverage.FilesUnlisted > 0 {
-		doc.Limitations = append(doc.Limitations, LimSourcesNotInDB)
-		doc.Coverage.Units[TUNotInCompileDB] = doc.Coverage.FilesUnlisted
-	}
-	if doc.Coverage.FilesSkipped > 0 {
-		doc.Coverage.Units[TUCompileDBEntryExcluded] = doc.Coverage.FilesSkipped
-	}
-}
-
-func compileDBProperties(doc *obsdoc.Document, m *Mapping, dbs int) {
-	p := doc.Target.Properties
-	p["compile_dbs"] = strconv.Itoa(dbs)
-	p["compile_db_entries"] = strconv.Itoa(m.Total)
-	p["compile_db_units"] = strconv.Itoa(len(m.Units))
-	if v := countText(m.Excluded); v != "" {
-		p["entries_excluded"] = v
-	}
-	if v := m.DroppedText(); v != "" {
-		p["flags_dropped"] = v
-	}
-	if v := strings.Join(m.Drivers, ","); v != "" && len(v) <= 256 {
-		p["drivers"] = v
-	}
-	if v := Std(m.Units); v != "" {
-		p["std"] = v
-	}
+	applyCompileDB(doc, in.Mapping, in.Layout, in.ConfigFiles)
 }
 
 // cppcheck record classes. Coverage records describe what the tool could not

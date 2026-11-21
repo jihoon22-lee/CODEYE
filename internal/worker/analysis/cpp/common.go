@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -470,4 +471,47 @@ func notRun(s *session, doc obsdoc.Document, status domain.TaskStatus, reason, c
 	doc.Outcome = obsdoc.Outcome{TaskStatus: status, Reason: ptr(reason), ExitClass: class}
 	doc.Limitations = append(doc.Limitations, reason)
 	return s.write(doc, nil)
+}
+
+// applyCompileDB records the compile commands and the sources they cover for both C/C++ analyzers.
+func applyCompileDB(doc *obsdoc.Document, m *Mapping, l layout, files []obsdoc.ConfigFile) {
+	doc.RulePack.RepositoryConfig = obsdoc.RepoConfigHonored
+	doc.RulePack.ConfigFiles = append([]obsdoc.ConfigFile{}, files...)
+	p := doc.Target.Properties
+	p["compile_dbs"] = strconv.Itoa(len(l.DBs))
+	p["compile_db_entries"] = strconv.Itoa(m.Total)
+	p["compile_db_units"] = strconv.Itoa(len(m.Units))
+	if v := countText(m.Excluded); v != "" {
+		p["entries_excluded"] = v
+	}
+	if v := m.DroppedText(); v != "" {
+		p["flags_dropped"] = v
+	}
+	if v := strings.Join(m.Drivers, ","); v != "" && len(v) <= 256 {
+		p["drivers"] = v
+	}
+	if v := Std(m.Units); v != "" {
+		p["std"] = v
+	}
+	doc.Limitations = append(doc.Limitations, m.Limitations()...)
+	if len(l.DBs) > 1 {
+		doc.Limitations = append(doc.Limitations, LimMultipleDBs)
+	}
+	listed := map[string]bool{}
+	for _, u := range m.Units {
+		listed[u.Rel] = true
+	}
+	for _, src := range l.Sources {
+		if _, excluded := m.ExcludedSources[src]; !listed[src] && !excluded {
+			doc.Coverage.FilesUnlisted++
+		}
+	}
+	doc.Coverage.FilesSkipped = len(m.ExcludedSources)
+	if doc.Coverage.FilesUnlisted > 0 {
+		doc.Limitations = append(doc.Limitations, LimSourcesNotInDB)
+		doc.Coverage.Units[TUNotInCompileDB] = doc.Coverage.FilesUnlisted
+	}
+	if doc.Coverage.FilesSkipped > 0 {
+		doc.Coverage.Units[TUCompileDBEntryExcluded] = doc.Coverage.FilesSkipped
+	}
 }
