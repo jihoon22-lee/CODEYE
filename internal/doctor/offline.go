@@ -189,6 +189,9 @@ func modelDestination(cfg *instance.Config, menv instance.ModelEnv) Destination 
 			return Destination{Kind: "model_endpoint", Value: p.BaseURL, Origin: "model_key_file"}
 		}
 	}
+	if m.NativeEndpoint != "" {
+		return Destination{Kind: "model_endpoint", Value: m.NativeEndpoint, Origin: "config"}
+	}
 	return Destination{Kind: "model_endpoint", Value: m.Provider(), Origin: "builtin_default"}
 }
 

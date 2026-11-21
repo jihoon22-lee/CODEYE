@@ -26,6 +26,22 @@ func offlineConfig(t *testing.T, extra string) *instance.Config {
 	return cfg
 }
 
+func TestConfiguredOpenCodeEndpointInOfflineReadiness(t *testing.T) {
+	cfg := offlineConfig(t, `,"offline":true`)
+	dir := t.TempDir()
+	profile := filepath.Join(dir, "opencode.jsonc")
+	const endpoint = "https://model.example.test/v1"
+	if err := os.WriteFile(profile, []byte(`{"model":"lab/review","provider":{"lab":{"npm":"@ai-sdk/openai-compatible","options":{"baseURL":"`+endpoint+`"}}}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Agent.Model = &instance.Model{OpenCode: filepath.Join(dir, "opencode"), ConfigFile: profile}
+	got := modelDestination(cfg, instance.ModelEnv{Home: dir})
+	want := Destination{Kind: "model_endpoint", Value: endpoint, Origin: "config"}
+	if got != want {
+		t.Errorf("model destination = %+v, want %+v", got, want)
+	}
+}
+
 func destinationOf(o *Offline, kind string) Destination {
 	for _, d := range o.Destinations {
 		if d.Kind == kind {

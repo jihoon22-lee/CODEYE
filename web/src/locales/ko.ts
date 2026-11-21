@@ -897,6 +897,7 @@ export const ko = {
         failureHint: '실행 파일, 설정 파일과 모델 인증 상태를 확인한 뒤 다시 시도하세요.',
         badPath: (label: string) => `${label}에 / 또는 ~/로 시작하는 서버 경로를 입력하세요.`,
         reasons: {
+          opencode_config_invalid: 'OpenCode 설정 파일이 읽을 수 있는 JSON·JSONC인지, 선택한 모델과 공급자가 있는지 확인하세요.',
           opencode_unavailable: '서비스 계정이 OpenCode 실행 파일과 설정을 사용할 수 있는지 확인하세요.',
           model_not_configured: 'OpenCode 실행 파일과 사용할 모델을 지정하세요.',
           model_credential_unavailable: '서비스 계정이 인증 파일을 읽을 수 있는지, 파일에 지정한 공급자의 인증정보가 있는지 확인하세요.',

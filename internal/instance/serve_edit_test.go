@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -73,5 +74,31 @@ func TestOpenCodeAndSourceRootEditsShareAConfig(t *testing.T) {
 	cleared, err := EditFile(path, tools, ConfigEdit{OpenCode: &OpenCodeEdit{}})
 	if err != nil || cleared.Agent.MaxWorkers != 2 || cleared.Agent.Model == nil || cleared.Agent.Model.TimeoutSeconds != 42 || cleared.Agent.Model.Name != "" || cleared.Agent.Model.ConfigFile != "" {
 		t.Fatalf("clearing the connection changed other settings: %+v, %v", cleared, err)
+	}
+}
+
+func TestLoadModelConfigUsesTheRunningInstallationStateDir(t *testing.T) {
+	dir := t.TempDir()
+	state := filepath.Join(dir, "service-state")
+	t.Setenv("XDG_STATE_HOME", filepath.Join(dir, "isolated-worker-state"))
+	path := filepath.Join(dir, "config.json")
+	if _, err := EnsureFile(path); err != nil {
+		t.Fatal(err)
+	}
+	fromWorker, err := LoadForStateDir(path, tools, state)
+	if err != nil || fromWorker.StateDir != state || fromWorker.FilePath() != path {
+		t.Fatalf("worker resolved the wrong installation: %+v, %v", fromWorker, err)
+	}
+	explicit := filepath.Join(dir, "explicit-state")
+	raw, err := json.Marshal(map[string]string{"schema_version": SchemaVersion, "state_dir": explicit})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	fromFile, err := LoadForStateDir(path, tools, state)
+	if err != nil || fromFile.StateDir != explicit {
+		t.Fatalf("explicit state directory lost: %+v, %v", fromFile, err)
 	}
 }

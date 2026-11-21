@@ -24,6 +24,7 @@ export class ApiError extends Error {
     readonly retryAfter: number | null = null,
     // A refused folder path: the folders this user may read (error.details.readable_folders).
     readonly readableFolders: string[] | null = null,
+    readonly reason: string | null = null,
   ) {
     super(`${kind}:${status}:${code}`);
     this.name = 'ApiError';
@@ -392,6 +393,7 @@ function httpError(status: number, text: string, headers?: Headers): ApiError {
   let message: string | null = null;
   let retryAfter = status === 429 ? seconds(headers?.get('Retry-After') ?? undefined) : null;
   let readable: string[] | null = null;
+  let reason: string | null = null;
   try {
     const body: unknown = JSON.parse(text);
     const error = isRecord(body) && isRecord(body.error) ? body.error : null;
@@ -400,6 +402,7 @@ function httpError(status: number, text: string, headers?: Headers): ApiError {
       if (typeof error.retryable === 'boolean') retryable = error.retryable;
       if (typeof error.request_id === 'string') requestId = error.request_id.slice(0, 80);
       if (typeof error.message === 'string') message = error.message.slice(0, 300);
+      if (isRecord(error.details) && typeof error.details.reason === 'string') reason = error.details.reason.slice(0, 80);
       if (status === 429 && isRecord(error.details)) {
         // Both carry the same seconds; take the longer one if they ever disagree.
         const fromBody = seconds(error.details.retry_after_seconds);
@@ -410,7 +413,7 @@ function httpError(status: number, text: string, headers?: Headers): ApiError {
       }
     }
   } catch { /* non-JSON error body: keep the status-derived defaults */ }
-  return new ApiError('http', status, code, retryable, requestId, message, retryAfter, readable);
+  return new ApiError('http', status, code, retryable, requestId, message, retryAfter, readable, reason);
 }
 
 // ---- response validation: anything unexpected is an invalid_response, never a guess ----

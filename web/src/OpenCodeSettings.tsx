@@ -69,7 +69,9 @@ export function OpenCodeSettings({ api, onForbidden }: { api: Api; onForbidden: 
     } catch (cause) {
       const problem = describeError(cause);
       const message = operation === 'save' ? t.saveFailed : t.probeFailed;
-      setError({ ...problem, message: `${message} ${problem.message}`, detail: null });
+      const hint = cause instanceof ApiError && cause.reason && Object.hasOwn(t.reasons, cause.reason)
+        ? t.reasons[cause.reason] : problem.message;
+      setError({ ...problem, message: `${message} ${hint}`, detail: null });
       if (cause instanceof ApiError && cause.status === 403) onForbidden();
     } finally {
       setBusy(null);

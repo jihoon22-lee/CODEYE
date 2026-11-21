@@ -145,7 +145,7 @@ func TestFolderPathsAndSetup(t *testing.T) {
 	m := v.body["model"].(map[string]any)
 	folders := v.body["readable_folders"].([]any)
 	tools := v.body["tools"].(map[string]any)["tools"].([]any)
-	if m["configured"] != true || m["id"] != "openai/gpt-6.2-sol" || m["probe"] != "verified" || v.body["git"].(map[string]any)["available"] != true ||
+	if m["configured"] != true || m["id"] != nil || m["probe"] != nil || v.body["git"].(map[string]any)["available"] != true ||
 		len(folders) != 0 || len(tools) != 1 || tools[0].(map[string]any)["hint"] != nil {
 		t.Fatalf("setup %s", v.raw)
 	}
@@ -159,7 +159,8 @@ func TestFolderPathsAndSetup(t *testing.T) {
 	// The administrator sees the tool hints and gets the build scripts.
 	admin := e.login(e.newAdminAccount("admin"))
 	v = e.do("GET", "/api/v1/setup", nil, admin.o()).want(t, 200, "")
-	if v.body["is_admin"] != true || v.body["tools"].(map[string]any)["tools"].([]any)[0].(map[string]any)["hint"] != "install cppcheck" ||
+	m = v.body["model"].(map[string]any)
+	if m["id"] != "openai/gpt-6.2-sol" || m["probe"] != "verified" || v.body["is_admin"] != true || v.body["tools"].(map[string]any)["tools"].([]any)[0].(map[string]any)["hint"] != "install cppcheck" ||
 		v.body["analysis_defaults"].(map[string]any)["local"].(map[string]any)["run_build_scripts"] != true || len(v.body["readable_folders"].([]any)) != 0 {
 		t.Fatalf("admin setup %s", v.raw)
 	}

@@ -222,6 +222,7 @@ github.com 저장소 프로젝트는 누가 등록했든 `{"profile":"deep-revie
 
 `GET /setup`은 로그인한 사용자의 분석 기본값, Git 호스트 목록, 모델 상태와 도구 정보를 준다. 도구 경로와 힌트는 관리자에게만 표시한다.
 
+- 관리형 설치의 모델 상태는 저장된 OpenCode 설정을 읽는다. 일반 계정은 모델 검토의 사용 가능 여부를 보고, 관리자는 모델 ID와 최근 연결 확인 결과도 본다.
 - `available`은 `git_url`, `local_path`, `pull_requests`, `model_review`, `build_scripts`, `fetch_dependencies`별 가용 여부와 사유를 담는다. 절대 경로 등록은 해당 경로를 서비스 계정이 실제로 읽을 수 있는지 확인한다.
 - `github_connections`는 호스트별 `enabled`, `host`, `token`(설정 여부), 선택 `account` 및 `reason`이다. 서비스 시작 시 확인한 상태로 토큰 값은 포함하지 않는다. [플랫폼 GitHub 계정](GITHUB.md#플랫폼-github-계정)
 - 오프라인에서는 설정한 사내 GHES가 `git.hosts`에 표시된다. `readable_folders`는 이전 클라이언트용 필드이며 빈 배열이다.
