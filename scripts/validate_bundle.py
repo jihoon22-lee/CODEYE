@@ -24,7 +24,7 @@ except ImportError as exc:
 
 # Other scripts import these names from validate_bundle.
 from bundle_checks.common import ROOT, ensure, expect_invalid, json_file, make_validators, within_root, yaml_file
-from bundle_checks.report import check_analyzer, check_document_comparisons, check_observations, check_plan, check_report
+from bundle_checks.report import check_analyzer, check_analyzer_observations, check_document_comparisons, check_observations, check_plan, check_report
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
 from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_slice_examples, check_workflow_example, pack_selection, slice_examples
 from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_shared_service_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
@@ -150,6 +150,15 @@ def main() -> None:
     check_analyzer(go_vet)
     ensure(go_vet["exit_codes"]["findings"] == [], "go vet -json findings are not an exit-code class")
     check_observations(observations)
+    gofmt_descriptor = yaml_file(ROOT / "examples/analyzer-gofmt.yaml")
+    validators["analyzer.schema.json"].validate(gofmt_descriptor)
+    check_analyzer(gofmt_descriptor)
+    gofmt = json_file(ROOT / "examples/observations-gofmt.json")
+    validators["analyzer-observations.schema.json"].validate(gofmt)
+    check_analyzer_observations(gofmt)
+    ensure(gofmt["analyzer"]["id"] == "go.gofmt" and gofmt["outcome"]["exit_class"] == "success_with_findings"
+           and all(e["command"]["argv"][1:3] == ["-l", "--"] for e in gofmt["executions"])
+           and [o["rule_id"] for o in gofmt["observations"]] == ["format_mismatch"], "Read-only gofmt example")
     staticcheck_negatives = check_staticcheck_pack_contracts(validators)
     print(f"PASS: analyzer pack contracts (staticcheck descriptor, real envelope example, analyzer_tools; {staticcheck_negatives} negative cases)")
     print(f"PASS: C/C++ pack (cppcheck/clang-tidy descriptors, real envelopes bound to the fixture, expected outcomes; {check_cpp_pack_contracts(validators)} negative cases)")
@@ -184,7 +193,7 @@ def main() -> None:
     contract_negatives = check_contract_example(review_validator, pack_doc, role_files)
     print(f"PASS: final contract review bound to accepted documents and overview artifacts; {contract_negatives} negative cases")
     slice_negatives = check_slice_examples(slice_examples(), validators)
-    print(f"PASS: review slices (scope artifact 0.2 and slice records 0.3 bound to the coverage fixture; {slice_negatives} negative cases)")
+    print(f"PASS: review slices (scope and review records bound to the coverage fixture; {slice_negatives} negative cases)")
     # Review 2.0.0 (docs/REVIEW.md#복구-경로): a stage keeps at most three calls (the
     # request, one repair, one retry of a reply that was not JSON).
     retried = copy.deepcopy(role_docs["verify"])
@@ -331,7 +340,7 @@ def main() -> None:
     bad["gaps"] = []
     expect_invalid("flat revision with a sections block", lambda d: check_report(d, ROOT / "fixtures/go-vet"), bad)
     # Review slices and the ledger (docs/REPORT.md#모듈별-검토-장부).
-    ensure("ledger" in slices_report["code_review"] and "ledger" not in report["code_review"], "Ledger presence of the report examples")
+    ensure(all(r["code_review"].get("ledger", {}).get("files") for r in (slices_report, report)), "Line coverage is missing in the report examples")
     store = lambda d: next(m for m in d["code_review"]["ledger"]["modules"] if m["module_id"] == "go:store")
     ledger_cases = {
         "ledger files that do not add up": lambda d: store(d).update(files_sent_to_model=store(d)["files_sent_to_model"] + 1),
@@ -341,8 +350,10 @@ def main() -> None:
         "ledger counts fewer calls than listed": lambda d: d["code_review"]["ledger"].update(calls_used=1),
         "ledger request bytes differ": lambda d: d["code_review"]["ledger"].update(request_bytes_sent=1),
         "review call naming another role's task": lambda d: d["coverage"]["review_calls"][0].update(task_key="review.verify.s001"),
-        "slice finding of an unplanned slice": lambda d: [f.update(id="review_s031_x") for f in d["findings"] if f["id"].startswith("review_s001_")],
+        "slice finding of an unplanned slice": lambda d: [f.update(id="review_s097_x") for f in d["findings"] if f["id"].startswith("review_s001_")],
         "overview scope not from the ledger": lambda d: next(s for s in d["overview"]["sections"] if s["key"] == "code_review")["counts"].update(files_sent_to_model=0),
+        "accepted lines beyond the request": lambda d: d["code_review"]["ledger"]["files"][0].update(reviewed_lines=1_000_000),
+        "requested files total differs from the module": lambda d: store(d).update(files_requested=0),
     }
     for name, edit in ledger_cases.items():
         bad = copy.deepcopy(slices_report)

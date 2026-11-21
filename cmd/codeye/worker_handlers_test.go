@@ -16,10 +16,7 @@ import (
 )
 
 // The production deep-review handler is discovery → the analyzer composite
-// (go vet, then staticcheck and the Python pack planned unsupported when
-// their tools are not given; the secrets task because go.mod is model input
-// the environment role may quote) → review roles. The go-vet and review task
-// specs are unchanged.
+// (Go analysis, structure metrics, and secrets screening) → review roles.
 func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 	exe := "go"
 	if runtime.GOOS == "windows" {
@@ -30,7 +27,7 @@ func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 		t.Skip("go toolchain not found at GOROOT/bin")
 	}
 	hs, missing, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir()}, &executor.Executor{})
-	if err != nil || len(hs) != 1 || strings.Join(missing, ",") != "staticcheck:not_configured,cppcheck:not_configured,clang-tidy:not_configured,ruff:not_configured,mypy:not_configured,pyright:not_configured,bandit:not_configured,eslint:not_configured,tsc:not_configured,eslint-typed:not_configured,cargo-check:not_configured,clippy:not_configured,"+structureNotConfigured {
+	if err != nil || len(hs) != 2 || strings.Join(missing, ",") != "staticcheck:not_configured,cppcheck:not_configured,clang-tidy:not_configured,ruff:not_configured,mypy:not_configured,pyright:not_configured,bandit:not_configured,eslint:not_configured,tsc:not_configured,eslint-typed:not_configured,cargo-check:not_configured,clippy:not_configured,"+structureNotConfigured {
 		t.Fatalf("handlers %d missing %v err %v", len(hs), missing, err)
 	}
 	if info := hs[0].Info(); info.Name != "analyzers" || info.Capability != "analysis:deep-review" {
@@ -38,6 +35,9 @@ func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 	}
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "go.mod"), []byte("module x\n\ngo 1.22\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "x_test.go"), []byte("package x\n\nimport \"testing\"\n\nfunc TestX(t *testing.T) {}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	snap, err := source.AcquireLocal(context.Background(), src, ".", t.TempDir(), source.DefaultLimits())
@@ -50,13 +50,15 @@ func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 	}
 	keys := []string{}
 	for _, p := range plan {
+		if strings.HasPrefix(p.Key, "review.investigate.s") || strings.HasPrefix(p.Key, "review.verify.s") {
+			continue
+		}
 		keys = append(keys, p.Key+"="+string(p.Stage))
-		if p.Key == "staticcheck" && p.Required {
-			t.Fatal("staticcheck is extra depth, not required")
+		if (p.Key == "staticcheck" || p.Key == "gofmt") && p.Required {
+			t.Fatalf("%s must be optional", p.Key)
 		}
 	}
-	// The review plans its five roles.
-	want := []string{"env.discover=environment", "docs.discover=documents", "go-vet=static_analysis", "staticcheck=static_analysis", "gitleaks=static_analysis", "review.environment=environment", "review.documents=documents", "review.investigate=code_review", "review.interpret=code_review", "review.verify=code_review"}
+	want := []string{"env.discover=environment", "docs.discover=documents", "go-vet=static_analysis", "staticcheck=static_analysis", "gofmt=static_analysis", "lizard=static_analysis", "jscpd=static_analysis", "gitleaks=static_analysis", "review.environment=environment", "review.documents=documents", "review.investigate=code_review", "review.interpret=code_review", "review.verify=code_review", "review.scope=code_review"}
 	if len(keys) != len(want) {
 		t.Fatalf("plan %v", keys)
 	}
@@ -64,6 +66,13 @@ func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 		if keys[i] != want[i] {
 			t.Fatalf("plan %v, want %v", keys, want)
 		}
+	}
+	if hs[1].Info().Capability != "analysis:with-tests" {
+		t.Fatalf("with-tests capability %+v", hs[1].Info())
+	}
+	withTests, err := hs[1].Plan(context.Background(), analysis.Job{Profile: "with-tests", Scope: domain.Scope{Kind: "full"}, Snapshot: snap})
+	if err != nil || len(withTests) != len(plan)+1 || withTests[len(plan)].Key != "test.go" || withTests[len(plan)].Stage != domain.StageTest || !withTests[len(plan)].Required {
+		t.Fatalf("with-tests plan %v, error %v", withTests, err)
 	}
 }
 
@@ -83,7 +92,7 @@ func TestWorkerHandlersComposeReview(t *testing.T) {
 		}
 	}
 	hs, _, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir()}, &executor.Executor{})
-	if err != nil || len(hs) != 1 {
+	if err != nil || len(hs) != 2 {
 		t.Fatal(err)
 	}
 	src := t.TempDir()
@@ -125,7 +134,7 @@ func TestWorkerHandlersKnowTheNodeToolchain(t *testing.T) {
 		node, want = p, "staticcheck:not_configured,cppcheck:not_configured,clang-tidy:not_configured,ruff:not_configured,mypy:not_configured,pyright:not_configured,bandit:not_configured,eslint:not_configured,tsc:not_configured,eslint-typed:not_configured,cargo-check:not_configured,clippy:not_configured,"+structureNotConfigured
 	}
 	hs, missing, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), AnalyzerTools: map[string]string{"node": node}}, &executor.Executor{})
-	if err != nil || len(hs) != 1 || strings.Join(missing, ",") != want {
+	if err != nil || len(hs) != 2 || strings.Join(missing, ",") != want {
 		t.Fatalf("handlers %d missing %v err %v", len(hs), missing, err)
 	}
 }

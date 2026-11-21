@@ -73,6 +73,18 @@ function service(over: Record<string, (call: Call) => Response | undefined> = {}
 }
 
 describe('the start screen', () => {
+  it('requests existing tests for a folder when repository execution is enabled', async () => {
+    const app = renderApp(service());
+    await flush();
+    type(t.quick.field, '/home/me/app');
+    const tests = screen.getByLabelText<HTMLInputElement>(t.quick.withTests);
+    expect(tests.disabled).toBe(false);
+    fireEvent.click(tests);
+    fireEvent.click(screen.getByRole('button', { name: t.quick.submit }));
+    await flush();
+    expect(app.calls.find(c => c.method === 'POST' && c.url.endsWith('/runs'))?.body).toMatchObject({ profile: 'with-tests' });
+  });
+
   it('analyzes a folder from one field and opens its run', async () => {
     const app = renderApp(service());
     await flush();

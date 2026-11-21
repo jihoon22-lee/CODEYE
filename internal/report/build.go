@@ -78,9 +78,8 @@ func Build(in Input, reg *Registry) (Report, error) {
 		Attempt: Attempt{ID: in.Attempt.ID, Number: in.Attempt.Number, LeaseEpoch: in.Attempt.Epoch, CompletionStatus: in.Attempt.CompletionStatus, CleanupState: in.Attempt.Cleanup, Reason: in.Attempt.Reason},
 		Tasks:   []Task{}, Executions: []Execution{}, Artifacts: []Artifact{}, Observations: []Observation{}, Findings: []Finding{},
 	}
-	r.Coverage = Coverage{ScopeMode: in.Run.ScopeKind, InventoryFiles: index.files, TestStatus: "not_run", Tools: []ToolCoverage{}}
+	r.Coverage = Coverage{ScopeMode: in.Run.ScopeKind, InventoryFiles: index.files, TestStatus: TestNotRun, Tools: []ToolCoverage{}}
 	notes.add(NoteInventoryAllLanguages)
-	notes.add(NoteNoTestsPlanned)
 
 	states := map[string]*taskState{}
 	keys := []string{}
@@ -291,7 +290,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 	}
 	for _, k := range keys {
 		st := states[k]
-		if !strings.HasPrefix(k, "review.") && !st.decoded {
+		if !strings.HasPrefix(k, "review.") && st.facts.Stage != string(domain.StageTest) && !st.decoded {
 			known = false
 		}
 	}
@@ -330,6 +329,8 @@ func Build(in Input, reg *Registry) (Report, error) {
 
 	// Status from structured facts only.
 	readable, requiredMissing, incompleteResult := false, false, false
+	testRuns := testExecutions(r.Executions)
+	var testTasks []Task
 	analyzerPlanned := false
 	for _, k := range keys {
 		st := states[k]
@@ -350,7 +351,14 @@ func Build(in Input, reg *Registry) (Report, error) {
 		if st.facts.Required && st.facts.Status != string(domain.TaskSucceeded) {
 			requiredMissing = true
 		}
-		if st.facts.Required && st.facts.Status == string(domain.TaskSucceeded) && !st.decoded {
+		if st.facts.Stage == string(domain.StageTest) && testTaskKey(k) {
+			task := Task{Key: k, Status: st.facts.Status, Reason: st.facts.Reason}
+			testTasks = append(testTasks, task)
+			if st.facts.Status == string(domain.TaskSucceeded) && testResult(task, testRuns[k]) != TestPassed {
+				lim.add(LimTestExecutionUnverified + ":" + k)
+				incompleteResult = true
+			}
+		} else if st.facts.Required && st.facts.Status == string(domain.TaskSucceeded) && !st.decoded {
 			lim.add(LimArtifactMissing + ":" + k)
 			incompleteResult = true
 		}
@@ -368,8 +376,14 @@ func Build(in Input, reg *Registry) (Report, error) {
 	if in.Attempt.Cleanup != "confirmed" || (rm != nil && rm.CleanupState != "confirmed") {
 		lim.add(LimCleanupUncertain)
 	}
-	if in.Run.Profile == "with-tests" && r.Coverage.TestStatus == "not_run" {
-		lim.add(LimTestsNotPerformed)
+	if len(testTasks) == 0 {
+		notes.add(NoteNoTestsPlanned)
+	}
+	r.Coverage.TestStatus = overallTestStatus(testTasks, testRuns)
+	if in.Run.Profile == "with-tests" && r.Coverage.TestStatus != TestPassed {
+		if r.Coverage.TestStatus == TestNotRun || r.Coverage.TestStatus == TestPartial {
+			lim.add(LimTestsNotPerformed)
+		}
 		incompleteResult = true
 	}
 	r.Status = decideStatus(in.Run.FinalStatus, readable, requiredMissing || incompleteResult || lim.has(LimCleanupUncertain), r.Coverage.AIReview.Status)

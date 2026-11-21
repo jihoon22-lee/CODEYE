@@ -30,7 +30,8 @@ func comparisonCoversContract(comparisons []DocComparison, contract DocContract)
 		return false
 	}
 	for _, comparison := range comparisons {
-		if comparison.Statement == contract.Statement && comparison.AppliesTo == contract.AppliesTo &&
+		if strings.TrimSpace(comparison.Statement) == strings.TrimSpace(contract.Statement) &&
+			displayDocumentScope(comparison.AppliesTo) == displayDocumentScope(contract.AppliesTo) &&
 			!slices.ContainsFunc(contract.EvidenceIDs, func(id string) bool { return !slices.Contains(comparison.DocumentEvidenceIDs, id) }) {
 			return true
 		}
@@ -40,29 +41,28 @@ func comparisonCoversContract(comparisons []DocComparison, contract DocContract)
 
 // withInsights adds the same evidence-backed assessments to both export layouts.
 func withInsights(v secView) secView {
-	l := v.L
 	for i := range v.Sections {
 		block := &v.Sections[i]
-		var parts []secPart
 		switch block.ID {
 		case SectionDocuments:
-			doc := v.R.Documents
-			for _, q := range doc.Quality {
-				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Heading: l.Label("insight."+q.Aspect) + " · " + l.Label("insight."+q.Assessment), Paras: []string{q.Statement}, Sources: v.sourceCitations(q.EvidenceIDs, doc.Evidence)})
+			lead, records := readingLead(block.Parts)
+			block.Parts = []secPart{lead}
+			if reading := v.documentReading(v.R.Documents); reading != nil {
+				block.Parts = append(block.Parts, secPart{Reading: reading})
 			}
-			for i, c := range doc.Comparisons {
-				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Anchor: comparisonAnchor(i),
-					Heading: l.Label("decision.comparison." + c.Status), Paras: []string{c.Statement},
-					List: v.comparisonDetails(c, doc.Evidence), Workflow: v.workflowCitations(c.RelatedWorkflow, doc.Evidence)})
-			}
+			block.Parts = append(block.Parts, secPart{Fold: v.L.Label("docs.reading_discovery"), Parts: records})
 		case SectionCodeReview:
-			for i, s := range v.R.CodeReview.Strengths {
-				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Anchor: strengthAnchor(i), Heading: l.Label("insight.strength") + " · " + s.Title, Paras: []string{s.Benefit}, Sources: v.sourceCitations(s.EvidenceIDs, v.R.CodeReview.Evidence)})
-			}
+			block.Parts = v.codeReviewReadingOrder(block.Parts)
 		}
-		block.Parts = append(parts, block.Parts...)
 	}
 	return v
+}
+
+func readingLead(parts []secPart) (secPart, []secPart) {
+	records := slices.Clone(parts)
+	lead := secPart{Paras: records[0].Paras[:1]}
+	records[0].Paras = records[0].Paras[1:]
+	return lead, records
 }
 
 type workflowReadingView struct {
@@ -104,6 +104,7 @@ func strengthAnchor(i int) string   { return "code-strength-" + strconv.Itoa(i+1
 
 type sourceCitation struct {
 	File, Range, Location    string
+	ID, Anchor, Jump         string
 	ExcerptLocation, Text    string
 	URL, LinkLabel           string
 	ActionLabel, StoredLabel string
@@ -139,6 +140,7 @@ func (v secView) sourceCitations(ids []string, evidence []SectionEvidence) []sou
 
 func (v secView) citeSectionEvidence(e SectionEvidence) sourceCitation {
 	s := newSourceCitation(v.L, e.Kind, e.Path, e.StartLine, e.EndLine, e.Excerpt)
+	s.ID = e.ID
 	s.URL = snapshotBrowserURL(v.R, e.Path, e.StartLine, e.EndLine)
 	s.LinkLabel = v.L.Label("opening.open_source")
 	return s
@@ -207,11 +209,18 @@ func citeSource(path string, start, end int, excerpt *sourceexcerpt.Excerpt) sou
 // A fence longer than any backtick run in the snapshot keeps its lines literal.
 func mdCitations(p func(...string), sources []sourceCitation) {
 	for _, x := range sources {
+		mdReadingAnchor(p, x.Anchor)
 		if x.Example != nil {
 			p("**", mdText(x.ExampleLabel), "** ", mdCodeSpan(x.Example.Call), " → ", mdCodeSpan(x.Example.Output))
 			p()
 		}
-		if x.URL == "" {
+		if x.Jump != "" {
+			if x.URL != "" {
+				p("[", mdCode(x.Location), "](#", x.Jump, ") · [", mdText(x.LinkLabel), "](<", x.URL, ">)")
+			} else {
+				p("[", mdCode(x.Location), "](#", x.Jump, ")")
+			}
+		} else if x.URL == "" {
 			p(mdCode(x.Location))
 		} else {
 			p(mdCode(x.Location), " · [", mdText(x.LinkLabel), "](<", x.URL, ">)")

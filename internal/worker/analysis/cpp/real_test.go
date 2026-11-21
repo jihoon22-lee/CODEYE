@@ -155,6 +155,71 @@ func TestRealFixtureCases(t *testing.T) {
 	}
 }
 
+type redundantAssignmentCase struct {
+	name, body                 string
+	wantsFinding, wantsOmitted bool
+}
+
+var redundantAssignmentCases = []redundantAssignmentCase{
+	{"overwrite", "    State item;\n    item.left = value * 2;\n    item.left = value + 1;\n    return item.left;\n", true, false},
+	{"fixed", "    State item;\n    item.left = value + 1;\n    return item.left;\n", false, false},
+	{"read_before_overwrite", "    State item;\n    item.left = value * 2;\n    int previous = item.left;\n    item.left = value + 1;\n    return previous + item.left;\n", false, false},
+	{"other_style_rule", "    State item = { value };\n    State *p = &item;\n    return p->left;\n", false, true},
+}
+
+func (tc redundantAssignmentCase) files() map[string]string {
+	return map[string]string{"state.c": "typedef struct { int left; } State;\nint calculate(int value) {\n" + tc.body + "}\n"}
+}
+
+func (tc redundantAssignmentCase) check(t *testing.T, doc obsdoc.Document) {
+	t.Helper()
+	if doc.Outcome.TaskStatus != domain.TaskSucceeded || doc.Target.Properties["style_observation_rule"] != cppcheckRedundantAssignment {
+		t.Fatalf("outcome %+v, target %+v", doc.Outcome, doc.Target)
+	}
+	if tc.wantsFinding {
+		if doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || len(doc.Observations) != 1 {
+			t.Fatalf("expected one overwrite diagnostic: %+v %+v", doc.Outcome, doc.Observations)
+		}
+		o := doc.Observations[0]
+		if o.RuleID != cppcheckRedundantAssignment || o.Location == nil || o.Location.StartLine != 5 || len(o.Related) != 1 || o.Related[0].Location == nil || o.Related[0].Location.StartLine != 4 {
+			t.Fatalf("overwrite diagnostic is missing either assignment: %+v", o)
+		}
+	} else if doc.Outcome.ExitClass != obsdoc.ExitSuccessWithoutFindings || len(doc.Observations) != 0 {
+		t.Fatalf("expected no published diagnostics: %+v %+v", doc.Outcome, doc.Observations)
+	}
+	if tc.wantsOmitted && (doc.Target.Properties["style_diagnostics_omitted"] != "1" || *doc.Executions[1].ExitCode != 2) {
+		t.Fatalf("other style output or raw exit lost: %+v %+v", doc.Target, doc.Executions)
+	}
+}
+
+func TestRealCppcheckRedundantAssignment(t *testing.T) {
+	cc := optionalTool("CODEYE_TEST_CPPCHECK")
+	if cc == "" {
+		t.Skip("set CODEYE_TEST_CPPCHECK to run this real-tool test")
+	}
+	a, err := NewCppcheck(Config{Executable: cc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range redundantAssignmentCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := runReal(t, a, tc.files(), domain.Scope{})
+			tc.check(t, r.doc)
+			r.capture(t, "redundant_assignment."+tc.name)
+		})
+	}
+}
+
+func TestReplayCppcheckRedundantAssignment(t *testing.T) {
+	for _, tc := range redundantAssignmentCases {
+		t.Run(tc.name, func(t *testing.T) {
+			checks := captures(t, "redundant_assignment."+tc.name, CppcheckTool)
+			_, doc, _ := replayCppcheck(t, tc.files(), domain.Scope{}, checks, nil)
+			tc.check(t, doc)
+		})
+	}
+}
+
 func TestRealCompileDBRootInclude(t *testing.T) {
 	// Only the mapped project-root include makes this header reachable from
 	// the nested source file. Acquire and run both tools on a working copy.

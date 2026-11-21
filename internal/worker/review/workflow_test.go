@@ -57,6 +57,9 @@ func TestWorkflowSelectionsReachReview(t *testing.T) {
 				"investigate": func(_ int, q opencode.Request) opencode.Reply {
 					in := decodeAs[investigateInput](t, q)
 					out := map[string]any{"candidates": []any{}}
+					if !in.Scope.WholeRun {
+						return asJSON(out)
+					}
 					if kind != "selected" {
 						if len(in.Scope.WorkflowRoutes) != 0 {
 							t.Fatalf("unexpected workflow references: %+v", in.Scope.WorkflowRoutes)
@@ -188,6 +191,9 @@ func TestLowerAndRead(t *testing.T) {
 		},
 		"investigate": func(_ int, q opencode.Request) opencode.Reply {
 			in := decodeAs[investigateInput](t, q)
+			if !in.Scope.WholeRun {
+				return asJSON(map[string]any{"candidates": []any{}})
+			}
 			i := slices.IndexFunc(in.NavigationCandidates, func(x contractCandidateInput) bool {
 				return x.Path == impl && x.Start > 50 && x.WorkflowRoute == "DELETE /cups/{cup}" &&
 					x.Symbol == "removeFromShelf" && slices.Equal(x.ContractIndices, []int{1})

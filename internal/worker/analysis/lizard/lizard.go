@@ -32,7 +32,7 @@ const (
 	ParserVersion  = "1"
 	// RulePackID/Version name the CODEYE selection below.
 	RulePackID      = "codeye-structure-lizard"
-	RulePackVersion = "1"
+	RulePackVersion = "2"
 	// TestedSeries is the lizard release series the parser is pinned to.
 	TestedSeries = "1.26"
 )
@@ -101,7 +101,8 @@ func Plan(ctx context.Context, job analysis.Job) ([]pack.Task, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return anypack.Plan(job, Descriptor(), "structure: cyclomatic complexity (lizard)", anypack.Files(job, Eligible, true)), nil
+	files, _ := anypack.StructureFiles(job, Eligible)
+	return anypack.Plan(job, Descriptor(), "structure: cyclomatic complexity (lizard)", files), nil
 }
 
 // Config selects the operator-installed lizard. Nothing is searched in PATH.
@@ -173,8 +174,8 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	if failed != nil {
 		return *failed
 	}
-	files := anypack.Files(job, Eligible, true)
-	in := assembleInput{TaskKey: r.Task.Spec.Key, ManifestDigest: job.Snapshot.Digest, Patterns: r.Task.Patterns, Files: files, Excluded: anypack.ExcludedDataDirFiles(job, Eligible)}
+	files, thirdParty := anypack.StructureFiles(job, Eligible)
+	in := assembleInput{TaskKey: r.Task.Spec.Key, ManifestDigest: job.Snapshot.Digest, Patterns: r.Task.Patterns, Files: files, Excluded: anypack.ExcludedDataDirFiles(job, Eligible), ThirdParty: thirdParty}
 	var list strings.Builder
 	for _, f := range files {
 		list.WriteString(f.Path + "\n")

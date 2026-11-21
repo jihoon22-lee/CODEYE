@@ -28,14 +28,16 @@ const (
 	CppcheckAdapterVersion = "1"
 	CppcheckRulePackID     = "codeye-cpp-cppcheck"
 	// CppcheckRulePackVersion names the selection below.
-	CppcheckRulePackVersion = "1"
-	ReasonCppcheckFailed    = "cppcheck_failed"
-	execCppcheckVersion     = "cppcheck.version"
-	execCppcheckCheck       = "cppcheck.check"
+	CppcheckRulePackVersion     = "2"
+	ReasonCppcheckFailed        = "cppcheck_failed"
+	execCppcheckVersion         = "cppcheck.version"
+	execCppcheckCheck           = "cppcheck.check"
+	cppcheckRedundantAssignment = "redundantAssignment"
 )
 
 // CppcheckSelection is the CODEYE rule selection: the error checks (always
-// on) plus warning, performance and portability; style is not run (docs/ANALYZERS.md#cppcheck).
+// on) plus warning, performance and portability. Cppcheck requires the style
+// group to run redundantAssignment. The adapter publishes only that style rule.
 // information and missingInclude are enabled for coverage only: their
 // records (missing headers, configuration limits, the active-checker count)
 // never become observations. The check level and platform are pinned so a
@@ -43,7 +45,7 @@ const (
 // suppressions are not enabled (no --inline-suppr): every diagnostic is
 // reported, so source_suppressions is "disabled" (measured: with
 // --inline-suppr suppressed diagnostics vanish without any record, docs/ANALYZERS.md#cppcheck).
-var CppcheckSelection = []string{"--enable=warning,performance,portability,information,missingInclude", "--check-level=normal", "--platform=native"}
+var CppcheckSelection = []string{"--enable=warning,performance,portability,information,missingInclude,style", "--check-level=normal", "--platform=native"}
 
 // CppcheckArgs is the check argv after the executable. input is
 // "--project=<CODEYE compile DB>" or "--file-list=<list>" (task scratch).
@@ -109,7 +111,7 @@ func cppcheckBase(job analysis.Job, key string, l layout) obsdoc.Document {
 	doc.RulePack = obsdoc.RulePack{ID: CppcheckRulePackID, Version: CppcheckRulePackVersion, Selection: append([]string{}, CppcheckSelection...),
 		RepositoryConfig: obsdoc.RepoConfigNone, SourceSuppressions: obsdoc.SuppressDisabled, ConfigFiles: []obsdoc.ConfigFile{}, UnreportedSuppressionRules: []string{}}
 	doc.Target.Platform = ptr(runtime.GOOS + "/" + runtime.GOARCH)
-	doc.Target.Properties = map[string]string{"platform": "native", "check_level": "normal", "inline_suppressions": "disabled"}
+	doc.Target.Properties = map[string]string{"platform": "native", "check_level": "normal", "inline_suppressions": "disabled", "style_observation_rule": cppcheckRedundantAssignment}
 	doc.Coverage.Unit = "translation_unit"
 	doc.Coverage.FilesInScope = ptr(len(l.Sources))
 	return doc
@@ -281,7 +283,7 @@ func ccKind(r ccRecord) string {
 	return ccObservation
 }
 
-// cppcheckCategory is the policy of codeye-cpp-cppcheck v1: what the check is
+// cppcheckCategory records what the check is
 // about, not its impact.
 func cppcheckCategory(id, severity string) string {
 	switch {
@@ -359,6 +361,7 @@ func assembleCppcheck(doc obsdoc.Document, in ccInput) obsdoc.Document {
 	doc.Parse.Records, doc.Parse.UnparsedBytes, doc.Parse.ShapeErrors, doc.Parse.DecodeError = st.Values, st.UnparsedBytes, st.ShapeErrors, st.DecodeError
 	failedParse, partialInclude, withFindings := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	unattributedParse, headerMissing := false, false
+	styleOmitted := 0
 	ordinals := map[string]int{}
 	addToolError := func(kind, unit string, r ccRecord) {
 		te := obsdoc.ToolError{Execution: execCppcheckCheck, Kind: kind, Unit: unit, Message: mask(r.ID + ": " + r.Msg)}
@@ -417,6 +420,10 @@ func assembleCppcheck(doc obsdoc.Document, in ccInput) obsdoc.Document {
 			doc.Limitations = append(doc.Limitations, "tool_information_messages")
 			continue
 		}
+		if r.Severity == "style" && r.ID != cppcheckRedundantAssignment {
+			styleOmitted++
+			continue
+		}
 		msg := mask(r.Msg)
 		if msg == "" {
 			msg = "(empty message)"
@@ -449,6 +456,9 @@ func assembleCppcheck(doc obsdoc.Document, in ccInput) obsdoc.Document {
 		} else {
 			doc.Limitations = append(doc.Limitations, "unattributed_observation_unit")
 		}
+	}
+	if styleOmitted > 0 {
+		doc.Target.Properties["style_diagnostics_omitted"] = strconv.Itoa(styleOmitted)
 	}
 	// Records removed from the stored stream (a location outside the
 	// workspace copy) still decide the outcome, without their text.

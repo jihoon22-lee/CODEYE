@@ -399,6 +399,20 @@ func (s *roleStage) navigationCatalog(docs record.Record, sent []record.Excerpt,
 
 func (s *roleStage) rankNavigationCode(e source.Entry, content string, lines []string, sent []record.Excerpt, queries []witnessQuery, choices []navigationChoices, maintenance map[string]bool, structural bool) {
 	pathEvidence := record.Excerpt{Path: e.Path, SHA256: e.SHA256, Kind: "code"}
+	for i, w := range goDefaultWitnesses(e, content, queries) {
+		if w.line == 0 || !queries[i].allowsNavigation(e.Path, maintenance) {
+			continue
+		}
+		for line := w.line; line <= w.end; line++ {
+			if record.NewContractEvidenceLine(pathEvidence, line, sent) {
+				loc, ok := s.navigationLocation(e, lines, w.line, "")
+				if ok && loc.End >= w.end {
+					choices[i].addCode(contractNavigationCandidate{location: loc, indices: []int{queries[i].contractIndex}, score: w.score})
+				}
+				break
+			}
+		}
+	}
 	type activity struct {
 		line     int
 		decision bool
@@ -433,7 +447,7 @@ func (s *roleStage) rankNavigationCode(e source.Entry, content string, lines []s
 		first, last := max(0, start-2, line-5), min(len(lines), line+4)
 		context := strings.Join(freshText[first:last], " ")
 		for i, q := range queries {
-			if !q.allowsNavigation(e.Path, maintenance) {
+			if len(q.goDefaults) > 0 && strings.HasSuffix(e.Path, ".go") || !q.allowsNavigation(e.Path, maintenance) {
 				continue
 			}
 			score := q.navigationScore(e.Path, context, symbol)

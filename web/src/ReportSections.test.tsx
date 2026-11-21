@@ -32,6 +32,40 @@ function example(name: 'report.json' | 'report-go-vet.json' | 'report-slices.jso
 }
 
 describe('analysis sections', () => {
+  it('shows primary action zero and accepted model scope without prompting for empty document comparisons', () => {
+    const doc = example('report-slices.json');
+    const report = parseAnalysisReport(doc, doc.run_id);
+    report.findings = [];
+    report.sections!.documents.comparisons = [];
+    const modules = report.sections!.codeReview.ledger!.modules;
+    const eligible = modules.reduce((count, m) => count + m.eligible, 0);
+    const accepted = modules.reduce((count, m) => count + (m.accepted ?? 0), 0);
+    render(<ReportDocument report={report} />);
+    expect(screen.getByText(t.reading.actionCounts(0, 0))).toBeTruthy();
+    expect(screen.getByText(t.reading.modelScope(accepted, eligible))).toBeTruthy();
+    expect(screen.queryByRole('button', { name: t.reading.openDocumentAnalysis })).toBeNull();
+    expect(screen.queryByText(t.reading.noDocumentAssessment)).toBeNull();
+  });
+
+  it('shows verified test exits and the reason for a test that did not run', () => {
+    const doc = example('report.json');
+    doc.inputs.profile = 'with-tests';
+    doc.coverage.test_status = 'partial';
+    doc.tasks.push(
+      { key: 'test.go', status: 'succeeded', required_for_verdict: true, reason: null },
+      { key: 'test.python', status: 'unsupported', required_for_verdict: true, reason: 'test_tool_unavailable' },
+    );
+    doc.executions.push({ task_key: 'test.go', name: 'test.run', status: 'exited', exit_code: 0, cleanup: 'confirmed' });
+    render(<ReportDocument report={parseAnalysisReport(doc, doc.run_id)} />);
+    const results = openDisclosure(screen.getByText(t.tests.summary.partial));
+    const go = within(results).getByText('test.go').closest('tr')!;
+    expect(within(go).getByText(t.tests.statuses.passed)).toBeTruthy();
+    expect(within(go).getByText('0')).toBeTruthy();
+    const python = within(results).getByText('test.python').closest('tr')!;
+    expect(within(python).getByText(t.sections.taskStatus.unsupported)).toBeTruthy();
+    expect(within(python).getByText(t.reasons.test_tool_unavailable)).toBeTruthy();
+  });
+
   it('shows contextual environment and document sources without raw evidence identifiers', () => {
     const doc = example('report.json');
     const commit = 'a'.repeat(40);
@@ -219,7 +253,7 @@ describe('analysis sections', () => {
 
   it('shows one published follow-up result and one independent high priority action', () => {
     const doc = example('report.json');
-    doc.builder.version = '12';
+    doc.builder.version = '16';
     doc.project = { name: 'Billing', source: '/srv/billing' };
     const key = 'review.contract';
     const forOtherTask = (row: { key: string }) => row.key !== key;
@@ -273,7 +307,7 @@ describe('analysis sections', () => {
 
   it('keeps a scoped new source observation with an unresolved comparison', () => {
     const doc = example('report.json');
-    doc.builder.version = '13';
+    doc.builder.version = '16';
     doc.project = { name: 'Callbacks' };
     const key = 'review.contract';
     const keep = (entry: {key: string}) => entry.key !== key;
@@ -415,7 +449,7 @@ describe('analysis sections', () => {
     expect(projected.getByText(t.reading.comparisonStatus.unknown)).toBeTruthy();
     expect(projected.queryByText(queue.statement)).toBeNull();
     fireEvent.click(projected.getByRole('button', { name: t.reading.openDocumentAnalysis }));
-    expect(document.activeElement).toBe(screen.getAllByRole('heading', { name: omitted })[0]);
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: t.documentReading.withheldBehavior(1) }));
   });
 
   it('adds a matched option for the same named behavior and exact code range', () => {
@@ -651,7 +685,7 @@ describe('analysis sections', () => {
     fireEvent.click(screen.getByRole('tab', { name: t.sections.titles.documents }));
     const panel = screen.getByRole('tabpanel', { name: t.sections.titles.documents });
     const comparisonCard = within(panel).getByRole('heading', { name: comparison.statement }).closest('li')!;
-    const control = within(comparisonCard).getByText(t.viewCode, { selector: 'summary' });
+    const control = within(comparisonCard).getByLabelText(t.sourceActionAt(t.viewCode, visibleRange));
     expect(control.closest('details')!.open).toBe(false);
     const details = openDisclosure(control);
     expect(within(details).getByRole('link', { name: t.sourceActionAt(t.openSource, visibleRange) }).getAttribute('href')).toBe(url);
@@ -848,10 +882,13 @@ describe('analysis sections', () => {
     }
     // States are text with an icon, never color alone.
     expect(within(article).getAllByText(/△ 일부 수행/).length).toBeGreaterThan(0);
-    // A tool that did not run is not zero diagnostics, in the analyzer table
-    // and in the per-task table behind the static section's disclosure.
+    // The measurement section explains why jscpd did not run. Its task is
+    // also available in the static section's detailed tool inventory.
     const jscpdRow = () => within(article).getAllByText(/^jscpd/).map((x) => x.closest('tr')!).filter(Boolean);
-    expect(jscpdRow().some((tr) => tr.cells.length === 6 && tr.textContent!.includes(t.sections.notRun))).toBe(true);
+    const measurements = container.querySelector('#report-section-metrics') as HTMLElement;
+    const duplication = within(measurements).getByRole('heading', { name: '코드 중복', hidden: true }).parentElement!;
+    expect(duplication.textContent).toContain(t.sections.taskStatus.unsupported);
+    expect(duplication.textContent).not.toContain('이 범위에서 기준에 해당하는 항목 없음');
     const staticSection = container.querySelector('#report-section-static_analysis') as HTMLElement;
     const all = staticSection.querySelector('details.report-more') as HTMLDetailsElement;
     all.open = true;
@@ -998,22 +1035,27 @@ describe('analysis sections', () => {
     const table = next!.querySelector('table')!;
     for (const m of doc.code_review.ledger.modules) {
       const row = Array.from(table.querySelectorAll('tbody tr')).find((tr) => tr.querySelector('code')?.textContent === m.module_id)!;
-      const cells = Array.from(row.querySelectorAll('td')).map((td) => td.textContent);
+      const cells = Array.from(row.querySelectorAll('td .report-cell-value')).map((cell) => cell.textContent);
       // Builder 8: the class after the module, the secondary files left out
       // within the ceiling after the files not planned.
       expect(cells[1]).toBe(t.sections.ledger.classes[m.class]);
-      expect(cells.slice(3)).toEqual([m.files_eligible, m.files_sent_to_model, m.bytes_sent, m.files_truncated, m.files_withheld, m.files_unreadable,
+      expect(cells.slice(3)).toEqual([m.files_eligible, m.files_sent_to_model, m.files_accepted, m.bytes_sent, m.files_truncated, m.files_withheld, m.files_unreadable,
         m.files_budget_exhausted, m.files_not_planned, m.files_secondary_not_reached ?? 0, m.files_not_sent, m.files_with_completed_review].map(String));
     }
     expect(within(section).getByText(t.sections.ledger.refusedSlots(doc.code_review.ledger.primary_slots_budget_exhausted))).toBeTruthy();
     // The slots fold into runs of one state; every slice task is behind the disclosure.
-    expect(within(section).getByText(t.sections.ledger.slotSpan('s001', 's003', 3))).toBeTruthy();
+    expect(within(section).getByText(t.sections.ledger.slotSpan('s001', 's005', 5))).toBeTruthy();
     expect(within(section).queryByText('review.investigate.s004')).toBeNull();
     const more = within(section).getByText(t.sections.ledger.allModules(doc.code_review.ledger.modules.length)).closest('details') as HTMLDetailsElement;
     more.open = true;
     fireEvent(more, new Event('toggle'));
     expect(within(section).getAllByText('review.investigate.s004').length).toBe(1);
     expect(within(section).getByText(t.sections.ledger.calls(String(doc.code_review.ledger.calls_used), String(doc.code_review.ledger.max_calls)))).toBeTruthy();
+    const lineDetails = within(section).getByText(t.sections.ledger.allFiles(doc.code_review.ledger.files.length)).closest('details')!;
+    lineDetails.open = true;
+    fireEvent(lineDetails, new Event('toggle'));
+    expect(within(lineDetails).getByText(doc.code_review.ledger.files[0].path)).toBeTruthy();
+    expect(within(lineDetails).getByText(t.sections.ledger.lines.remaining)).toBeTruthy();
     expect(section.textContent).not.toMatch(/검증된 범위입니다|verified/);
     // Slice findings are listed once, in the code review section.
     const slice = doc.findings.filter((f: { id: string }) => f.id.startsWith('review_s')).length;
@@ -1030,6 +1072,8 @@ describe('analysis sections', () => {
     const cases: Array<[string, (d: Record<string, any>) => void]> = [
       ['module files do not add up', (d) => d.code_review.ledger.modules[0].files_sent_to_model++],
       ['completed beyond sent', (d) => (d.code_review.ledger.modules[0].files_with_completed_review = 99)],
+      ['accepted file status differs', (d) => (d.code_review.ledger.files[0].investigation = 'not_requested')],
+      ['accepted module file count differs', (d) => d.code_review.ledger.modules[0].files_accepted++],
       ['overview scope differs', (d) => d.overview.sections.find((s: any) => s.key === 'code_review').counts.files_sent_to_model++],
     ];
     for (const [name, edit] of cases) {
@@ -1050,7 +1094,7 @@ describe('analysis sections', () => {
     expect(ledger.status).toBe('complete');
     const { container } = render(<ReportDocument report={r} />);
     const section = container.querySelector('#report-section-code_review') as HTMLElement;
-    expect(within(section).getByText(t.sections.ledger.status.complete)).toBeTruthy();
+    expect(within(section).getByText(t.sections.ledger.lineStatus.complete)).toBeTruthy();
     const gaps = container.querySelector('#report-section-gaps') as HTMLElement;
     expect(within(gaps).getByText(t.sections.gapLabels.model_input_not_screened)).toBeTruthy();
     expect(within(gaps).queryByText(t.sections.gapLabels.review_scope_skipped)).toBeNull();

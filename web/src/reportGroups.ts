@@ -57,7 +57,7 @@ export function places(primary: string[], secondary: string[]): Places {
 }
 
 const SEVERITY: Record<string, number> = { critical: 5, high: 4, medium: 3, low: 2, info: 1 };
-const sevRank = (s: string) => SEVERITY[s] ?? 0;
+export const sevRank = (s: string) => SEVERITY[s] ?? 0;
 
 // RuleGroup is the diagnostics of one rule of one analyzer in one language.
 export type RuleGroup = { analyzer: string; rule: string; count: number; severity: string; message: string | null; primary: string[]; secondary: string[] };
@@ -174,6 +174,25 @@ export function primaryCitation(citation: Citation, kind: 'document' | 'code'): 
 
 export type Decision = { finding: Finding; source: LocatedEvidence; condition?: string; limitation?: string; next?: string };
 const hiddenDispositions = new Set(['accepted_risk', 'false_positive', 'suppressed', 'fixed_by_user']);
+
+export function readingSummary(report: AnalysisReport): string[] {
+  const actionable = report.findings.filter(f => !hiddenDispositions.has(f.disposition) &&
+    (f.validation === 'supported' || f.validation === 'reproduced'));
+  const secondary = actionable.filter(secondaryReviewFinding).length;
+  const modules = report.sections?.codeReview.ledger?.modules ?? [];
+  const eligible = modules.reduce((count, mod) => count + mod.eligible, 0);
+  const requested = modules.reduce((count, mod) => count + mod.sent, 0);
+  const accepted = eligible > 0 && modules.every(mod => typeof mod.accepted === 'number')
+    ? modules.reduce((count, mod) => count + (mod.accepted ?? 0), 0) : null;
+  const required = report.tasks.filter(task => task.required && !task.key.startsWith('test.'));
+  const action = actionable.length > 0 || accepted !== null && accepted > 0 ? [t.reading.actionCounts(actionable.length - secondary, secondary)] : [];
+  const scope = eligible > 0 ? [accepted !== null ? t.reading.modelScope(accepted, eligible) : t.reading.modelSent(requested, eligible)] : [];
+  const incomplete = ['failed', 'timed_out', 'unsupported', 'skipped_policy'].flatMap(status => {
+    const count = required.filter(task => task.status === status).length;
+    return count ? [`${t.sections.taskStatus[status]} ${count}`] : [];
+  });
+  return [...action, ...scope, ...(incomplete.length ? [t.reading.incompleteTasks(incomplete.join(' · '))] : [])];
+}
 
 const genericTitleWords = new Set([
   '코드', '구현', '동작', '보류', '기능', '확인', '확인한다', '오류', '실패', '처리', '검사', '결과', '때문', '조건', '일부', '검증', '관리', '분기', '경로', '예외', '반환', '발생', '가능', '필요', '있음', '없음',

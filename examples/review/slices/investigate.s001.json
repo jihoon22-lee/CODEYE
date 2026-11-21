@@ -29,7 +29,7 @@
     {
       "source": "review.scope",
       "state": "accepted",
-      "sha256": "dc6f8d23f03834df0a8112d59ab7453627d41fc1cbf8a2d0b160b29de36c3b8f"
+      "sha256": "dbf6906f806ea2c29161bca1ad29e19c73cd555aa0c727eda1cd27c1019d3ae3"
     }
   ],
   "evidence": [
@@ -73,6 +73,33 @@
       "id": "ev_bc7f4f502e13fc86cf42cf0a",
       "path": "store/encode.go",
       "sha256": "eb60ec8caf4fda328a1e59584a3a508ef5b17ff0ae5a5a5cd358ba25f5cabae8",
+      "start_line": 1,
+      "end_line": 50,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_1f25f2cbecf97065d701e718",
+      "path": "store/evict.go",
+      "sha256": "bb412f06b5b14efeaa375079e027df3bd5d6c4e766872e647d93c10e96702db7",
+      "start_line": 1,
+      "end_line": 50,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_c4e9ae7a627a9c05e8117d96",
+      "path": "store/flush.go",
+      "sha256": "77252f002872da47ace9a0d0439b028bb7c2405761ba9d6f43a262ea311e5dee",
+      "start_line": 1,
+      "end_line": 50,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_d68b57afbf9eb0a70f5a6167",
+      "path": "store/get.go",
+      "sha256": "74911882fadb23b36c435f9428e10653d7cef92effbf352b050141d24c9600b6",
       "start_line": 1,
       "end_line": 50,
       "kind": "code",
@@ -123,10 +150,10 @@
         "languages/python.md",
         "pack.yaml"
       ],
-      "request_sha256": "38d7b4ac4d542e99e74314e20463ceec932b2d0f6c64fa4020f6bea583556cc7",
-      "request_bytes": 26111,
+      "request_sha256": "b3d72a59cbc32a777328398830d7256ac255a28cc746abe7a546e5aa69f5730d",
+      "request_bytes": 30375,
       "usage": {
-        "input": 10578,
+        "input": 14842,
         "output": 50
       },
       "attempt": 1,

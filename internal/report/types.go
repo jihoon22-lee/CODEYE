@@ -22,7 +22,7 @@ const (
 	BuilderID     = "codeye-report"
 	// Stored revisions keep their original builder and schema. Bump this
 	// version when the same accepted inputs would produce a different report.
-	BuilderVersion = "15"
+	BuilderVersion = "16"
 )
 
 // Report statuses (schemas/report.schema.json).
@@ -308,10 +308,11 @@ type Observation struct {
 // ObservationMetric is the measured value of a metric observation (the
 // envelope's metric, docs/ANALYZERS.md).
 type ObservationMetric struct {
-	Name      string `json:"name"`
-	Value     int    `json:"value"`
-	Threshold int    `json:"threshold"`
-	Unit      string `json:"unit"`
+	Name        string               `json:"name"`
+	Value       int                  `json:"value"`
+	Threshold   int                  `json:"threshold"`
+	Unit        string               `json:"unit"`
+	Counterpart *ObservationLocation `json:"counterpart,omitempty"`
 }
 
 // Evidence states of an observation location (report-level check).

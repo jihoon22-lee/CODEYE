@@ -32,6 +32,23 @@ func readStaticcheckDoc(t *testing.T) map[string]any {
 	return d
 }
 
+func TestGoFmtReportExplainsFormatDifference(t *testing.T) {
+	fixture := analyzerFixture(t, nil, taskSpec{key: "gofmt", status: "succeeded", doc: readExample(t, "gofmt")})
+	r := build(t, fixture.in, DefaultRegistry())
+	if len(r.Observations) != 1 || r.Observations[0].RuleID != "format_mismatch" || r.Observations[0].Location == nil {
+		t.Fatalf("formatter observations %+v", r.Observations)
+	}
+	free := Project(r, false)
+	for _, detail := range []string{DetailSummary, DetailFull} {
+		report := string(RenderMarkdownAt(free, "", Korean, detail))
+		for _, want := range []string{"서식 차이가 있는 파일 1개", "대상 파일 1개 중 1개 처리", "이 실행에 계획된 검사 없음"} {
+			if !strings.Contains(report, want) {
+				t.Fatalf("%s export omitted %q", detail, want)
+			}
+		}
+	}
+}
+
 // notRunDoc is the envelope pack.NotConfigured writes for staticcheck when
 // --staticcheck is not given.
 func notRunDoc(t *testing.T) map[string]any {

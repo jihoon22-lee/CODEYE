@@ -10,6 +10,6 @@
             <location file="[REDACTED]/src/-x.c" line="3" column="12" info="Division by zero"/>
             <location file="[REDACTED]/src/-x.c" line="2" column="11" info="Assignment &apos;z=0&apos;, assigned value is 0"/>
         </error>
-        <error id="checkersReport" severity="information" msg="Active checkers: 125/189 (use --checkers-report=&lt;filename&gt; to see details)" verbose="Active checkers: 125/189 (use --checkers-report=&lt;filename&gt; to see details)"/>
+        <error id="checkersReport" severity="information" msg="Active checkers: 175/189 (use --checkers-report=&lt;filename&gt; to see details)" verbose="Active checkers: 175/189 (use --checkers-report=&lt;filename&gt; to see details)"/>
     </errors>
 </results>

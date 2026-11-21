@@ -132,6 +132,20 @@ func ValidateReport(r Report) error {
 			}
 		}
 	}
+	switch r.Coverage.TestStatus {
+	case TestNotRun, TestPassed, TestFailed, TestPartial, "no_tests":
+	default:
+		return invalidf("test status is invalid")
+	}
+	if r.Inputs.Profile == "with-tests" {
+		if r.Status == StatusCompleted && r.Coverage.TestStatus != TestPassed {
+			return invalidf("completed with-tests report without verified test results")
+		}
+		if slices.ContainsFunc(r.Tasks, func(t Task) bool { return testTaskKey(t.Key) }) &&
+			r.Coverage.TestStatus != overallTestStatus(r.Tasks, testExecutions(r.Executions)) {
+			return invalidf("test status differs from accepted task and execution records")
+		}
+	}
 	obs, suppressed, metrics := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, o := range r.Observations {
 		if obs[o.ID] || !taskKeys[o.TaskKey] || !arts[o.RawRef.ArtifactID] || (o.RawSeverity != nil && !rawSeverityPattern.MatchString(*o.RawSeverity)) {
@@ -153,6 +167,11 @@ func ValidateReport(r Report) error {
 		if m := o.Metric; m != nil {
 			if !codePattern.MatchString(m.Name) || !slices.Contains(obsdoc.MetricUnits, m.Unit) || m.Threshold < 0 || m.Value < m.Threshold || o.Suppressed {
 				return invalidf("observation %s metric is invalid", o.ID)
+			}
+			if l := m.Counterpart; l != nil && (m.Name != "duplicated_lines" || l.SnapshotID != r.Inputs.SnapshotID ||
+				domain.ValidateEvidencePath(l.Path) != nil || l.StartLine < 1 || l.EndLine < l.StartLine || l.StartCol != 0 ||
+				l.EndCol != 0 || l.ColumnUnit != "byte" || !hex64.MatchString(l.BlobSHA256)) {
+				return invalidf("observation %s metric counterpart is invalid", o.ID)
 			}
 			metrics[o.ID] = true
 		}
@@ -456,6 +475,7 @@ var safeTemplates = map[string]bool{
 	textVerification: true, textLimitManual: true, textLimitStaticOnly: true, textEvidenceTool: true, textEvidenceCode: true, textOmitted: true,
 	textToolSeverityReason: true, textToolCondition: true, textToolVerification: true, textToolEvidence: true,
 	textRejectImpact: true, textRejectAction: true, textRejectVerification: true,
+	textFormatImpact: true, textFormatAction: true, textFormatVerification: true, textFormatScope: true,
 }
 
 func safeText(s string) string {

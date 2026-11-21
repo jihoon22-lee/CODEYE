@@ -48,14 +48,15 @@ CODEYE 저장소 자체의 자동 테스트(GitHub Actions)는 위 CI 비목표�
 | 실행 형태 | 상태 디렉터리의 관리형 PostgreSQL(기본) 또는 운영자가 준비한 PostgreSQL, controller(loopback, 또는 다른 머신용 TLS·명시적 평문 HTTP)와 로컬 에이전트. `codeye up`·`open`·`start`·`stop`·`status`(Linux 전용), 한 머신의 여러 워커와 최소·최대 자동 증감, 취소, lease·fencing |
 | 계정 | 이메일·비밀번호 회원가입과 로그인, 기존 사용자 이름·일회용 링크 로그인. 같은 소스를 등록해도 사용자마다 프로젝트·실행·보고서를 소유하고 접근은 프로젝트 ACL로 관리한다 |
 | 입력 | 서비스 Linux 계정이 읽을 수 있는 서버·NFS 폴더, 승인된 HTTPS 호스트의 Git 저장소 브랜치와 GitHub.com/GHES pull request. 저장소 웹훅과 PR 댓글 멘션으로도 분석을 요청한다. 비공개 저장소는 설치에 지정한 플랫폼 GitHub 계정으로 읽는다. 설명 없이 등록하고 문서·환경·모듈을 자동 탐색 |
-| 정적 분석 | Go(go vet·Staticcheck), C/C++(cppcheck·clang-tidy), Python(ruff·mypy·pyright·bandit), JS/TS(ESLint·tsc), Rust(cargo check·clippy) 다섯 언어 팩과 언어 무관 구조·중복 지표(lizard·jscpd)·비밀정보(gitleaks). 도구는 운영자가 설치하고 경로를 지정한다 |
+| 정적 분석 | Go(go vet·Staticcheck·gofmt), C/C++(cppcheck·clang-tidy), Python(ruff·mypy·pyright·bandit), JS/TS(ESLint·tsc), Rust(cargo check·clippy) 다섯 언어 팩과 언어 무관 구조·중복 지표(lizard·jscpd)·비밀정보(gitleaks). 도구는 운영자가 설치하고 경로를 지정한다 |
+| 기존 테스트 | 저장소 코드 실행이 허용된 `with-tests` 분석에서 Linux의 전용 loopback 네트워크를 사용한다. Go·npm 스크립트·Python unittest·Cargo의 기존 테스트 작업과 실행하지 못한 사유를 보고한다. [실행](EXECUTION.md#기존-테스트-실행) |
 | 모델 검토 | 검토 지침 하나(`prompts/review`), 승인된 OpenCode 연결. 모델 없이도 도구 결과 보고서가 나온다 |
 | 보고서 | 종합과 분석 종류별 절(환경·문서·정적 분석·지표·비밀정보·모델 검토·분석 공백), 개별 근거, JSON·Markdown·HTML 내보내기(코드 제외가 기본), 프로젝트별 단계 표시와 가중 진행률, SSE 재접속 |
 | 예약·이력 | 시간대가 있는 예약, 이전 실행과의 비교(absent≠fixed), 사람의 판정(disposition) |
 | 운영 | 저장 영역 상한, 같은 시점 DB·산출물 백업과 새 위치로 복원, `codeye doctor` |
 | 평가 | 품질 평가 runner와 정답 차단 relay([평가](EVALUATION.md)) |
 
-아직 없는 것: 조직 단위 GitHub App, 다중 물리 노드 검증, 실제 폐쇄망 검증, Windows의 up/start/stop과 관리형 PostgreSQL, 빌드·기존 테스트 실행(`with-tests`), 모듈 중심 분석(`focused`), 잔여 시간 추정. 계획과 순서는 [로드맵](ROADMAP.md)에 있다.
+아직 없는 것: 조직 단위 GitHub App, 다중 물리 노드 검증, 실제 폐쇄망 검증, Windows의 up/start/stop과 관리형 PostgreSQL, 별도 빌드 전용 단계, 모듈 중심 분석(`focused`), 잔여 시간 추정. 계획과 순서는 [로드맵](ROADMAP.md)에 있다.
 
 API 권한·프로젝트 소유권·노드 식별·lease는 처음부터 여러 사용자를 전제로 한다. 한 머신의 검증 결과를 여러 물리 머신 배포의 검증이라고 표현하지 않는다.
 
@@ -140,7 +141,7 @@ API 권한·프로젝트 소유권·노드 식별·lease는 처음부터 여러 
 |---|---|
 | REQ-004 | 모듈·런타임 버전 선언·문서·노드 관측은 구현. include·define, 가상환경·stub, features 같은 추가 빌드 조건 수집은 설계 계약(미구현)([아키텍처](ARCHITECTURE.md)) |
 | REQ-006 | 분석기 팩이 task마다 대상 범위와 판정 필수 여부(`required_for_verdict`)를 계획. 예산·완료 기준을 갖는 완전한 계획 DAG는 설계 계약(미구현)([아키텍처](ARCHITECTURE.md)) |
-| REQ-014 | 정적 검사와 Go 모듈·Rust crate·JS/TS 패키지·Python 패키지(wheel만) 의존성 받기(분석 전, 저장소 코드 실행 없음, Rust는 저장소 코드 실행 허가가 있을 때만)는 구현([의존성 준비](ARCHITECTURE.md#의존성-준비)). C/C++ 의존성 받기와 빌드·기존 테스트 실행은 설계 계약(미구현) |
+| REQ-014 | 정적 검사와 Go 모듈·Rust crate·JS/TS 패키지·Python 패키지(wheel만) 의존성 받기(분석 전, 저장소 코드 실행 없음, Rust는 저장소 코드 실행 허가가 있을 때만)는 구현([의존성 준비](ARCHITECTURE.md#의존성-준비)). 승인된 `with-tests` 실행은 작업 사본에서 발견한 기존 테스트 명령을 수행한다. C/C++ 의존성 받기와 전용 빌드 단계는 후속 작업이다 |
 | REQ-016 | 단계·상태·대기 사유·경과 표시는 구현. 개별 task 로그 조회 API는 설계 계약(미구현)([API](API.md)) |
 | REQ-017 | 가중 진행률은 구현. 잔여 시간 범위는 제공하지 않음 |
 | REQ-018 | 작업·노드·pool·전역 자원 상한과 relay의 모델 예산은 구현. endpoint별 모델 동시 요청 상한(`model_max_inflight`)과 전역 모델 semaphore는 설계 계약(미구현)([실행](EXECUTION.md)) |
@@ -157,7 +158,7 @@ API 권한·프로젝트 소유권·노드 식별·lease는 처음부터 여러 
 
 프로필은 범위·예산을 정하며 실행 권한을 높이지 않는다. 기본 프로필이 lint 한 번과 LLM 요약만 실행하면 요구 미충족이다. 프로젝트별 환경 부족은 보고하고, 결과를 볼 수 있는 나머지 검사는 계속한다.
 
-구현 상태: 워커는 `deep-review`만 처리한다(`analysis:deep-review` capability). API와 보고서 schema는 세 값을 모두 받지만 `with-tests`·`focused` run을 처리할 워커가 없다. `with-tests` 보고서에서 테스트를 실행하지 않았으면 제약(`required_tests_not_performed`)으로 표시하고 결과를 불완전으로 둔다.
+워커는 `deep-review`와 `with-tests`를 처리한다. 테스트 포함 분석은 프로젝트의 저장소 코드 실행 설정과 노드의 실행 권한을 따른다. 보고서는 실제 테스트 프로세스의 종료 상태와 정리 결과로 성공·실패를 판정하고, 일부 테스트를 실행할 수 없으면 작업별 사유를 남긴다. `focused` 전용 워커는 후속 작업이다.
 
 ## 비기능 요구
 

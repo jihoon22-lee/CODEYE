@@ -241,7 +241,7 @@ func TestReviewSlicesThroughTheWorker(t *testing.T) {
 		for _, want := range []string{"review.investigate=succeeded/true", "review.verify=succeeded/true", "review.scope=succeeded/false",
 			"review.investigate.s001=succeeded/false", "review.verify.s001=succeeded/false",
 			"review.investigate.s006=budget_exhausted/false:review_budget_exhausted", "review.verify.s006=budget_exhausted/false:review_budget_exhausted",
-			"review.investigate.s008=skipped_policy/false:no_review_scope", "review.verify.s008=skipped_policy/false:no_review_scope"} {
+			"review.investigate.s009=skipped_policy/false:no_review_scope", "review.verify.s009=skipped_policy/false:no_review_scope"} {
 			if !strings.Contains(joined, want) {
 				t.Fatalf("missing %s in %v", want, rows)
 			}
@@ -258,6 +258,10 @@ func TestReviewSlicesThroughTheWorker(t *testing.T) {
 		}
 		if err := report.ValidateReport(r); err != nil {
 			t.Fatal(err)
+		}
+		ledger := r.CodeReview.Ledger
+		if ledger == nil || len(ledger.Files) == 0 || ledger.PrimarySlotsBudgetExhausted == 0 {
+			t.Fatalf("missing file or budget information in ledger: %+v", ledger)
 		}
 		t.Logf("%d calls; report %s, ai review %s, limitations %v", calls, r.Status, r.Coverage.AIReview.Status, r.Limitations)
 		if r.Coverage.AIReview.Status != report.AIReviewPerformed {

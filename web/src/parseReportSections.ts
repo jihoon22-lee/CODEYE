@@ -58,6 +58,10 @@ export type StaticTool = {
   purpose: string | null;
   inScope: number | null;
   processed: number | null;
+  rulePack: string | null;
+  units: Record<string, number>;
+  limitations: string[];
+  paths?: string[];
   observations: string[];
   findings: string[];
   rules: { rule: string; count: number }[];
@@ -158,6 +162,8 @@ export type LedgerModule = {
   discovered: boolean;
   eligible: number;
   sent: number;
+  requested: number | null;
+  accepted: number | null;
   bytesSent: number;
   truncated: number;
   withheld: number;
@@ -186,6 +192,18 @@ export type Ledger = {
   // Slots of primary files the call ceiling refused (builder 8; 0 otherwise).
   primarySlotsRefused: number;
   modules: LedgerModule[];
+  files: LedgerFile[] | null;
+};
+
+type LedgerFile = {
+  path: string;
+  module: string;
+  total: number;
+  sent: number;
+  accepted: number;
+  investigation: string;
+  reason: string | null;
+  remaining: { start: number; end: number; reason: string }[];
 };
 
 function parseLedger(v: unknown): Ledger | null {
@@ -209,6 +227,8 @@ function parseLedger(v: unknown): Ledger | null {
         discovered: bool(x.discovered),
         eligible: count(x.files_eligible),
         sent: count(x.files_sent_to_model),
+        requested: optCount(x.files_requested),
+        accepted: optCount(x.files_accepted),
         bytesSent: count(x.bytes_sent),
         truncated: count(x.files_truncated),
         withheld: count(x.files_withheld),
@@ -227,13 +247,71 @@ function parseLedger(v: unknown): Ledger | null {
         }),
       };
     }),
+    files: l.files == null ? null : array(l.files, (v) => {
+      const f = object(v);
+      return { path: str(f.path), module: str(f.module_id), total: count(f.total_lines), sent: count(f.sent_lines),
+        accepted: count(f.reviewed_lines), investigation: str(f.investigation), reason: nullable(f.reason),
+        remaining: array(f.remaining, (v) => {
+          const r = object(v);
+          return { start: count(r.start_line), end: count(r.end_line), reason: str(r.reason) };
+        }),
+      };
+    }),
   };
   // Each module's files are counted once.
   for (const m of out.modules) {
     if (m.sent + m.withheld + m.unreadable + m.budgetExhausted + m.notPlanned + m.secondaryNotReached + m.notSent !== m.eligible || m.completed > m.sent) invalid();
     if (m.secondary > m.eligible || m.secondarySent > Math.min(m.sent, m.secondary) || (m.cls === null && m.secondary + m.secondaryNotReached > 0)) invalid();
   }
+  validateLedgerFileCoverage(out);
   return out;
+}
+
+const requestNotAccepted = 'requested_without_accepted_response';
+const requestUnconfirmed = 'request_unconfirmed';
+const coverageGaps = new Set([
+  requestNotAccepted, requestUnconfirmed, 'not_requested', 'review_input_trimmed', 'review_budget_exhausted',
+  'review_line_input_limit', 'review_slice_limit', 'source_blank_range',
+]);
+const unreadableReasons = new Set(['secret_file_withheld', 'source_file_unreadable', 'source_file_too_large', 'source_file_empty']);
+
+function validateLedgerFileCoverage(ledger: Ledger) {
+  if (ledger.files === null) {
+    if (ledger.modules.some((m) => m.requested !== null || m.accepted !== null)) invalid();
+    return;
+  }
+  if (ledger.scope.result !== 'accepted') invalid();
+  const modules = new Map(ledger.modules.map((m) => [m.id, { files: 0, sent: 0, accepted: 0, partial: 0 }]));
+  let previous = '';
+  for (const f of ledger.files) {
+    const m = modules.get(f.module) ?? invalid();
+    if (!f.path || f.path <= previous || f.accepted > f.sent || f.sent > f.total || f.total > 512 * 1024 ||
+        (f.reason !== null && !unreadableReasons.has(f.reason)) || (f.total === 0) !== (f.reason !== null)) invalid();
+    previous = f.path;
+    let end = 0;
+    let remaining = 0;
+    let unaccepted = 0;
+    let uncertain = false;
+    for (const r of f.remaining) {
+      if (r.start <= end || r.start > r.end || r.end > f.total || !coverageGaps.has(r.reason)) invalid();
+      end = r.end;
+      const length = r.end - r.start + 1;
+      remaining += length;
+      if (r.reason === requestNotAccepted) unaccepted += length;
+      uncertain ||= r.reason === requestUnconfirmed;
+    }
+    const state = f.accepted > 0 ? 'accepted' : f.sent > 0 ? requestNotAccepted : uncertain ? requestUnconfirmed : 'not_requested';
+    if (f.investigation !== state || remaining !== f.total - f.accepted || unaccepted !== f.sent - f.accepted) invalid();
+    m.files++;
+    if (f.sent > 0) m.sent++;
+    if (f.accepted > 0) m.accepted++;
+    if (f.sent > 0 && f.sent < f.total) m.partial++;
+  }
+  for (const m of ledger.modules) {
+    const counts = modules.get(m.id) ?? invalid();
+    if (m.eligible !== counts.files || m.requested !== counts.sent || m.sent !== counts.sent ||
+        m.accepted !== counts.accepted || m.completed > counts.accepted || m.truncated !== counts.partial) invalid();
+  }
 }
 
 const invalid = (): never => {
@@ -328,6 +406,11 @@ export function parseSections(
   const e = object(r.environment);
   const d = object(r.documents);
   const sa = object(r.static_analysis);
+  const toolCoverage = new Map(array(object(r.coverage).tools ?? [], (v) => {
+    const x = object(v);
+    const units = Object.fromEntries(Object.entries(object(x.packages ?? {})).map(([key, value]) => [key, count(value)]));
+    return [str(x.task_key), { units, limitations: array(x.limitations ?? [], str), paths: array(x.processed_paths ?? [], str) }] as const;
+  }));
   const m = object(r.metrics);
   const sc = object(r.secrets);
   const cr = object(r.code_review);
@@ -458,6 +541,10 @@ export function parseSections(
               purpose: nullable(y.purpose),
               inScope: optCount(y.files_in_scope),
               processed: optCount(y.processed_files),
+              rulePack: nullable(y.rule_pack),
+              units: toolCoverage.get(str(y.task_key))?.units ?? {},
+              limitations: toolCoverage.get(str(y.task_key))?.limitations ?? [],
+              paths: toolCoverage.get(str(y.task_key))?.paths,
               observations: array(y.observation_ids, str),
               findings: array(y.finding_ids, str),
               rules: array(y.rules, (z) => {
@@ -546,6 +633,12 @@ export function parseSections(
   checkContractFollowup(r, out.documents, includesCode);
   checkRelatedWorkflow(r, out.documents);
   const ledger = out.codeReview.ledger;
+  if (ledger?.files !== null && ledger?.files !== undefined) {
+    if (Number(str(object(r.builder).version)) < 16) invalid();
+    const complete = ledger.files.length > 0 && ledger.files.every((f) => f.accepted > 0 && f.accepted === f.total);
+    const sliced = ledger.modules.some((m) => m.slices.some((t) => t.task.startsWith('review.investigate.') && t.status === 'succeeded'));
+    if (ledger.status !== (complete ? 'complete' : sliced ? 'partial' : 'overview_only')) invalid();
+  }
   if (ledger !== null && ledger.modules.length > 0) {
     // The overview's reviewed scope is the ledger's: files sent to the model.
     const sent = ledger.modules.reduce((n, m) => n + m.sent, 0);

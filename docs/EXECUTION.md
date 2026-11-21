@@ -20,6 +20,21 @@
 - 프로젝트별로 읽기·관리된 검사기 실행·프로젝트 설정·플러그인 실행·설치 스크립트·빌드·기존 테스트 권한을 revision 기반으로 저장하는 정책은 설계 계약(미구현)이다. 그 정책에서도 PR이 설정 파일을 바꿔 권한을 올릴 수 없다.
 - 선택 Container·VM 실행기는 설계 계약(미구현)이다. 같은 실행 계약에 이미지 digest·mount·network·user·runtime 필드를 더한다. 모든 실행을 Container로 옮겨야만 쓸 수 있게 만들지 않는다. 컨테이너에서도 원본 쓰기 mount·운영 secret·무제한 자원을 기본 허용하지 않는다. 컨테이너 엔진이 있다고 네트워크 격리와 자원 제한이 적용된다고 보지 않고 실제 능력을 보고한다.
 
+## 기존 테스트 실행
+
+`with-tests`는 기본 분석 뒤 기존 테스트 작업을 추가한다. 프로젝트의 저장소 코드 실행 선택, 노드의 실행 허가, 서비스의 제공 범위가 모두 허용해야 진행한다. 워커는 고정된 스냅샷에서 테스트를 찾고 attempt의 작업 사본에서 실행한다. 실행마다 새 home·temp를 사용하며 소스 등록 경로에서 실행하지 않는다. 이후 작업이 읽는 소스는 작업 사본의 복원 규칙을 따른다.
+
+| 대상 | 실행 범위와 명령 |
+|---|---|
+| Go | `_test.go`가 있는 모듈. `go test -json -vet=off -count=1`에 전체 모듈 또는 선택 패키지 패턴을 넘긴다. `go mod edit -json`으로 사본 밖 모듈 경로를 먼저 확인한다. |
+| JS/TS | `package.json`에 이름이 선언된 `test:unit` 또는 `test`, `test:module` 또는 `test:integration`, `test:e2e` 또는 `e2e`를 각각 `npm run`으로 실행한다. 파일 단위 선택에서 모듈 전체를 실행해야 하는 스크립트는 `test_scope_unsupported`다. |
+| Python | `test*.py`가 있는 모듈에서 `python -B -m unittest discover`를 실행한다. 통상 `tests` 디렉터리를 쓰며 준비된 의존성이 있으면 해당 모듈의 site-packages를 읽는다. |
+| Rust | 선택한 Cargo 모듈에서 `cargo test --workspace --offline`을 실행한다. 작업 사본에 `Cargo.lock`이 있으면 `--locked`를 추가한다. |
+
+모든 테스트 명령은 Linux의 사용자·네트워크·PID namespace 안에서 실행한다. 노드에 `unshare`, `ip`, `sh`가 필요하며 해당 계정으로 namespace와 그 `/proc`을 만들 수 있어야 한다. `test.isolation` 확인 뒤 테스트 명령의 namespace에서 loopback 인터페이스만 올린다. 호스트의 IP 루프백 서비스와 외부 IP 라우트는 이 네트워크에 없다. 테스트 프로세스가 끝나면 PID namespace에 남은 프로세스도 종료한다. 전제 조건을 충족하지 못한 노드에서는 `test_isolation_unavailable`로 남긴다. 파일과 파일 경로의 UNIX 소켓은 여전히 실행 계정 권한 범위에서 접근 가능하므로 신뢰한 소스에만 실행을 허용한다. 실행 환경에 브라우저·데이터베이스·외부 서비스 등 별도 테스트 구성요소를 설치하거나 시작하는 기능은 제공 범위 밖이다.
+
+각 테스트 명령은 최대 10분이며 stdout 8 MiB와 stderr 2 MiB를 기록한다. 프로세스 종료·정리·출력 상태로 작업 성공 여부를 결정한다. Go·Python·Rust에서 통과한 테스트를 출력으로 확인하지 못하면 `no_tests_executed`다. npm은 선언된 스크립트의 종료 코드를 기록하고 개별 검사 수는 추정하지 않는다. 취소·제한시간·정리 불확실 상태는 기존 실행기 규칙을 적용한다.
+
 ## Native 실행기
 
 코드: [`internal/worker/executor`](../internal/worker/executor). zero value `executor.Executor`를 쓰며 동시 `Run`이 안전하다. 분석기는 `executor.Runner` 인터페이스에 의존한다. 결과는 `Result` 하나이고 오류를 따로 반환하지 않는다.

@@ -128,7 +128,7 @@ func TestPullRequestChangedFilesFirst(t *testing.T) {
 // A pull-request run end to end through the review: the overview
 // investigate request offers the changed files first, review.scope records
 // the pull-request order and labels (and the decoder accepts them), and no
-// file is sent twice.
+// source line is sent twice.
 func TestPullRequestRunReviewsChangedFilesFirst(t *testing.T) {
 	j := coverageJob(t)
 	base := planSlices(j.Snapshot.Manifest, j.Scope, record.DefaultSecondary)
@@ -138,7 +138,7 @@ func TestPullRequestRunReviewsChangedFilesFirst(t *testing.T) {
 	f := &scriptedCaller{script: coverageScript(t)}
 	runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
 	var first []string
-	seen := map[string]bool{}
+	seen := map[string]map[int]bool{}
 	for _, q := range f.requests {
 		if q.Role != "investigate" {
 			continue
@@ -147,11 +147,16 @@ func TestPullRequestRunReviewsChangedFilesFirst(t *testing.T) {
 		if first == nil {
 			first = files
 		}
-		for _, p := range files {
-			if seen[p] {
-				t.Fatalf("%s sent twice", p)
+		for _, e := range decodeAs[investigateInput](t, q).Scope.Excerpts {
+			if seen[e.Path] == nil {
+				seen[e.Path] = map[int]bool{}
 			}
-			seen[p] = true
+			for line := e.Start; line <= e.End; line++ {
+				if seen[e.Path][line] {
+					t.Fatalf("%s:%d sent twice", e.Path, line)
+				}
+				seen[e.Path][line] = true
+			}
 		}
 	}
 	if len(first) == 0 || !slices.Contains(first, last) {
@@ -165,7 +170,7 @@ func TestPullRequestRunReviewsChangedFilesFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if doc.Priority.Order != record.PriorityPullRequestFirst {
+	if doc.Priority.Order != record.PriorityChangedCoverageFirst {
 		t.Fatalf("order %s", doc.Priority.Order)
 	}
 	labelled := 0

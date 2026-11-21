@@ -97,7 +97,7 @@ func checkTableWidths(t *testing.T, md string) {
 func TestLedgerRowsShowSecondaryFiles(t *testing.T) {
 	r := storedExample(t, "../../examples/report-slices.json")
 	m := &r.CodeReview.Ledger.Modules[1]
-	// go:store as a secondary module whose 13 files the ceiling refused.
+	// Display the go:store row as a secondary module with its own counts.
 	m.Class, m.FilesSecondary, m.FilesSecondarySent = "secondary", m.FilesEligible, m.FilesSentToModel
 	m.FilesSecondaryNotReached, m.FilesBudgetExhausted = m.FilesBudgetExhausted, 0
 	d := strings.Repeat("0", 64)
@@ -113,7 +113,12 @@ func TestLedgerRowsShowSecondaryFiles(t *testing.T) {
 			t.Fatalf("%s: no secondary ledger row", detail)
 		}
 		line := md[i : i+strings.Index(md[i:], "\n")]
-		if !strings.Contains(line, " | 0 | 0 | 13 | 0 | 17 |") {
+		want := []int{m.FilesBudgetExhausted, m.FilesNotPlanned, m.FilesSecondaryNotReached, m.FilesNotSent, m.FilesWithCompletedReview}
+		var cells []string
+		for _, n := range want {
+			cells = append(cells, strconv.Itoa(n))
+		}
+		if !strings.HasSuffix(line, " | "+strings.Join(cells, " | ")+" |") {
 			t.Fatalf("%s: secondary row %s", detail, line)
 		}
 	}

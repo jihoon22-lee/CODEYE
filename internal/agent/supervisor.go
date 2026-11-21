@@ -153,6 +153,7 @@ func (ag *Agent) startWorker(ctx context.Context, id string) (*workerProc, error
 	hello.ModelConfigFile, hello.ModelSettings = ag.cfg.ModelConfigFile, ag.cfg.ModelSettings
 	hello.AdvertiseWithoutBaseline = ag.cfg.AdvertiseWithoutBaseline
 	hello.Offline, hello.CABundle = ag.cfg.Offline, ag.cfg.CABundle
+	hello.TestPackageManagers = packageManagers(map[string]string{"npm": ag.cfg.PackageManagers["npm"], "python": ag.cfg.PackageManagers["python"]})
 	hello.Dependencies = ag.dependencies()
 	if err := w.conn.Send(hello); err != nil {
 		ag.killWorker(w)

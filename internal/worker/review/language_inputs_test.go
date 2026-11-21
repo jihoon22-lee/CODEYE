@@ -173,7 +173,7 @@ func TestReviewInputsPerLanguage(t *testing.T) {
 			plan, res := runRole(t, j, c.stub(), f, "1.27.4")
 			requireUnusedContract(t, res, f)
 			for _, p := range plan {
-				if p.Key == record.TaskContract {
+				if res[p.Key].Reason == domain.ReasonNoReviewScope && !p.Required {
 					continue
 				}
 				if r := res[p.Key]; strings.HasPrefix(p.Key, "review.") && r.Status != domain.TaskSucceeded && !(p.Key == "review.environment" && r.Reason == ReasonNoEnvironmentGap) {
@@ -411,7 +411,7 @@ func TestSecretScreenOnPython(t *testing.T) {
 					t.Fatal("no review request after an unusable scan")
 				}
 				for _, p := range plan {
-					if p.Key == record.TaskContract {
+					if res[p.Key].Reason == domain.ReasonNoReviewScope && !p.Required {
 						continue
 					}
 					if strings.HasPrefix(p.Key, "review.") && res[p.Key].Status == domain.TaskSkippedPolicy {

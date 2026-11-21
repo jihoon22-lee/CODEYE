@@ -53,7 +53,7 @@ export function ReportReviewStatus({ report }: { report: AnalysisReport }) {
   </>;
 }
 
-function CodeWindow({ excerpt, location }: { excerpt: Excerpt; location: string }) {
+export function CodeWindow({ excerpt, location }: { excerpt: Excerpt; location: string }) {
   return (
     <pre className="source-window" tabIndex={0} aria-label={t.excerptAt(location)}><code>
       {excerpt.text.split('\n').map((line, i) => (
@@ -71,9 +71,9 @@ function SourceAnchor({ href, location, action = t.openSource }: { href: string;
   </a>;
 }
 
-function EvidenceLocation({ location, href, excerpt, path, kind, actionLabel, example }: {
+function EvidenceLocation({ location, href, excerpt, path, kind, actionLabel, example, showLocation }: {
   location: string; href?: string; excerpt?: Excerpt | null; path?: string; kind?: string; actionLabel?: string;
-  example?: DocumentExample;
+  example?: DocumentExample; showLocation?: boolean;
 }) {
   const isDocument = kind === 'document';
   const action = actionLabel ?? (isDocument ? t.viewDocument : kind === 'test' ? t.viewTestCode : kind === 'manifest' ? t.viewManifest : t.viewCode);
@@ -83,14 +83,14 @@ function EvidenceLocation({ location, href, excerpt, path, kind, actionLabel, ex
       <code>{example.call}</code> → <code>{example.output}</code></p>}
     {excerpt ? <details className="report-excerpt">
       <summary className="btn btn-sm btn-ghost-primary" aria-label={t.sourceActionAt(action, location)}>
-        <ReportIcon name={isDocument ? 'file' : 'code'} />{action}<ReportIcon name="chevron" />
+        <ReportIcon name={isDocument ? 'file' : 'code'} />{showLocation ? <code>{location}</code> : action}<ReportIcon name="chevron" />
       </summary>
       <div className="report-evidence-row">
         {file}{href && <SourceAnchor href={href} location={location} />}
       </div>
       <p className="report-excerpt-label">{t.excerptAt(path ? sourceLocation(path, excerpt.start, excerpt.end) : location)}</p>
       <CodeWindow excerpt={excerpt} location={path ? sourceLocation(path, excerpt.start, excerpt.end) : location} />
-    </details> : href ? <SourceAnchor href={href} location={location} action={action} /> : file}
+    </details> : href ? <SourceAnchor href={href} location={location} action={showLocation ? location : action} /> : file}
   </div>;
 }
 
@@ -108,8 +108,8 @@ export function FindingSourceLink({ evidence, actionLabel }: { evidence: Evidenc
   return <EvidenceLocation location={sourceLocation(evidence.path, start, end)} href={href} excerpt={evidence.excerpt} path={evidence.path} kind={evidence.kind} actionLabel={actionLabel} />;
 }
 
-export function Citations({ refs, catalog, actionLabel, example }: {
-  refs: string[]; catalog: Citation[]; actionLabel?: string; example?: DocumentExample & { citationId: string };
+export function Citations({ refs, catalog, actionLabel, example, showLocation }: {
+  refs: string[]; catalog: Citation[]; actionLabel?: string; example?: DocumentExample & { citationId: string }; showLocation?: boolean;
 }) {
   const base = useContext(ReportSourceContext);
   const evidence = new Map<string, Citation>();
@@ -122,7 +122,7 @@ export function Citations({ refs, catalog, actionLabel, example }: {
     const location = sourceLocation(e.path, e.line, e.end);
     const href = sourceEvidenceURL(base, e.path, e.line, e.end);
     return <EvidenceLocation key={e.id} location={location} href={href} excerpt={e.excerpt} path={e.path} kind={e.kind}
-      actionLabel={actionLabel} example={example?.citationId === e.id ? example : undefined} />;
+      actionLabel={actionLabel} showLocation={showLocation} example={example?.citationId === e.id ? example : undefined} />;
   })}</>;
 }
 
@@ -154,7 +154,7 @@ export function TextList({ values }: { values: string[] }) {
 // A finding a reader can scan: the title, severity and validation as words, and where; once
 // opened, the impact and the fix first, then the conditions and how to check, with the claims
 // and evidence behind their own disclosure.
-export function FindingCard({ f, badge, history }: { f: Finding; badge?: string | null; history?: ReactNode }) {
+export function FindingCard({ f, badge, history, showCategory }: { f: Finding; badge?: string | null; history?: ReactNode; showCategory?: boolean }) {
   const known = (labels: Record<string, string>, key: string) => Object.hasOwn(labels, key) ? key : 'unknown';
   const location = f.locations[0];
   return (
@@ -165,6 +165,7 @@ export function FindingCard({ f, badge, history }: { f: Finding; badge?: string 
           <span>
             <span className={'badge pill sev sev-' + known(t.severity, f.severity)}>{t.severityBadge(label(t.severity, f.severity))}</span>
             <span className={'badge pill val val-' + known(t.validation, f.validation)}>{label(t.validation, f.validation)}</span>
+            {showCategory && <span className="badge pill tone-plain">{label(t.categories, f.category)}</span>}
             {badge && <span className="badge pill tone-plain">{badge}</span>}
             {secondaryReviewFinding(f) && <span className="badge pill tone-plain">{t.reading.secondary}</span>}
             {location && <span className="where">{location}{f.locations.length > 1 && t.morePlaces(f.locations.length - 1)}</span>}
@@ -237,7 +238,7 @@ export type ReportHistory = { load: ComparisonLoad; api: Api; reload: () => void
 // FindingList is a searchable list of findings grouped by category. A finding
 // whose loaded current disposition hides it is left out of the list unless
 // asked for; counts elsewhere keep it.
-export function FindingList({ findings, history, empty, reveal }: { findings: Finding[]; history?: ReportHistory; empty: string; reveal?: { id: string } }) {
+export function FindingList({ findings, history, empty, reveal, groupByCategory = true }: { findings: Finding[]; history?: ReportHistory; empty: string; reveal?: { id: string }; groupByCategory?: boolean }) {
   const [filter, setFilter] = useState('');
   const [showHidden, setShowHidden] = useState(false);
   const [dismissed, setDismissed] = useState<{ id: string }>();
@@ -257,9 +258,10 @@ export function FindingList({ findings, history, empty, reveal }: { findings: Fi
         .includes(filter.trim().toLocaleLowerCase())
     )
       continue;
-    const group = grouped.get(item.category);
+    const category = groupByCategory ? item.category : '';
+    const group = grouped.get(category);
     if (group) group.push(item);
-    else grouped.set(item.category, [item]);
+    else grouped.set(category, [item]);
   }
   return (
     <>
@@ -280,9 +282,9 @@ export function FindingList({ findings, history, empty, reveal }: { findings: Fi
       {grouped.size === 0 && (filter ? <p>{t.noMatch}</p> : hidden.length === 0 && <p>{empty}</p>)}
       {Array.from(grouped, ([category, items]) => (
         <section key={category}>
-          <h5>
+          {category && <h5>
             {label(t.categories, category)} ({items.length})
-          </h5>
+          </h5>}
           {items.map((f) => {
             const status = statuses.get(f.id);
             return (
@@ -290,6 +292,7 @@ export function FindingList({ findings, history, empty, reveal }: { findings: Fi
                 key={f.id}
                 f={f}
                 badge={findingBadge(status)}
+                showCategory={!groupByCategory}
                 history={
                   comparison &&
                   status &&

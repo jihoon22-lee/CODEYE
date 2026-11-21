@@ -62,8 +62,8 @@ export function parseCommentPreview(v: unknown): CommentPreview {
 }
 
 // The run request of a pull request: the number and, when the user chose, the comment.
-export function pullRequestRunBody(number: number, comment: boolean | null) {
-  return { profile: 'deep-review', source_policy: 'latest_at_acquire', scope: { kind: 'full' }, pull_request: comment === null ? { number } : { number, comment } } as const;
+export function pullRequestRunBody(number: number, comment: boolean | null, profile: 'deep-review' | 'with-tests' = 'deep-review') {
+  return { profile, source_policy: 'latest_at_acquire', scope: { kind: 'full' }, pull_request: comment === null ? { number } : { number, comment } } as const;
 }
 
 // pullRequestOf reads /OWNER/REPO/pull/N (with an optional /files, /commits or /checks tab) of a

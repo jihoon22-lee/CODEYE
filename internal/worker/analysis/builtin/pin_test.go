@@ -52,8 +52,8 @@ func snapshotJobs(t *testing.T, files map[string]string) (analysis.Job, analysis
 }
 
 // docs/ANALYZERS.md#go-vet: with only --go configured, the composite's go-vet tasks are
-// the go vet handler's (same keys, specs and v0.1 document bytes); staticcheck
-// adds its own tasks after them and never changes go vet's.
+// the go vet handler's (same keys, specs and v0.1 document bytes). Staticcheck
+// and gofmt add their own tasks after them.
 func TestGoVetUnchangedInComposite(t *testing.T) {
 	goExe := goPath(t)
 	ctx := context.Background()
@@ -87,7 +87,7 @@ func TestGoVetUnchangedInComposite(t *testing.T) {
 			other = append(other, p)
 		}
 	}
-	if !reflect.DeepEqual(vet, want) || len(other) != 2 || other[0].Key != "staticcheck" || other[1].Key != "staticcheck.m01" || plan[0].Key != "go-vet" {
+	if !reflect.DeepEqual(vet, want) || len(other) != 3 || other[0].Key != "staticcheck" || other[1].Key != "staticcheck.m01" || other[2].Key != "gofmt" || other[2].Required || plan[0].Key != "go-vet" {
 		t.Fatalf("plan %+v, go vet alone %+v", plan, want)
 	}
 	for _, spec := range want {

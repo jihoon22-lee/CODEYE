@@ -150,6 +150,39 @@ func RecordExclusions(doc *obsdoc.Document, excluded int) []string {
 	return []string{LimDataDirsExcluded}
 }
 
+const (
+	ThirdPartyDirectories            = "third-party,third_party,thirdparty"
+	UnitExcludedThirdPartyDirectory  = "excluded_third_party_directory"
+	LimThirdPartyDirectoriesExcluded = "third_party_directories_excluded"
+)
+
+// ThirdPartyDirectory detects explicit directory names for bundled external
+// source. It does not infer ownership from filename, extension or contents.
+func ThirdPartyDirectory(p string) bool {
+	for _, segment := range strings.Split(path.Dir(p), "/") {
+		switch strings.ToLower(segment) {
+		case "third-party", "third_party", "thirdparty":
+			return true
+		}
+	}
+	return false
+}
+
+func StructureFiles(job analysis.Job, keep func(string) bool) ([]source.Entry, int) {
+	files := Files(job, keep, true)
+	before := len(files)
+	files = slices.DeleteFunc(files, func(e source.Entry) bool { return ThirdPartyDirectory(e.Path) })
+	return files, before - len(files)
+}
+
+func RecordThirdPartyExclusions(doc *obsdoc.Document, excluded int) {
+	doc.Target.Properties["excluded_third_party_directories"] = ThirdPartyDirectories
+	if excluded > 0 {
+		doc.Coverage.Units[UnitExcludedThirdPartyDirectory] = excluded
+		doc.Limitations = append(doc.Limitations, LimThirdPartyDirectoriesExcluded)
+	}
+}
+
 // LanguageInScope reports whether source of a supported language ecosystem
 // is in scope. The "any" analyzers extend a code review: a snapshot without
 // supported source keeps planning no analyzer task (docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백).

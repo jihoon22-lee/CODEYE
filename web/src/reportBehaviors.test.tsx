@@ -127,7 +127,7 @@ it('puts workflows and exact code excerpts before configuration and opens the se
 it('opens three related positions without changing the comparison and keeps only locations in a code-free report', () => {
   const doc: Record<string, any> = structuredClone(example);
   doc.demo = false;
-  doc.builder.version = '15';
+  doc.builder.version = '16';
   const contract = workflowDocuments.contracts[0];
   const { contract_index: _index, ...comparison } = workflowInvestigation.contract_comparisons[0];
   const { read_evidence_id, change_evidence_id, test_evidence_id } = workflowInvestigation.workflow_reading;
@@ -163,6 +163,11 @@ it('opens three related positions without changing the comparison and keeps only
 
   const old = structuredClone(doc);
   old.builder.version = '14';
+  delete old.code_review.ledger.files;
+  for (const m of old.code_review.ledger.modules) {
+    delete m.files_requested;
+    delete m.files_accepted;
+  }
   expect(() => parseAnalysisReport(old, old.run_id)).toThrow();
   delete old.documents.comparisons[0].related_workflow;
   old.artifacts.find((a: Record<string, string>) => a.id === artifact.id).decoder = artifact.media_type + ';schema_version=0.2';

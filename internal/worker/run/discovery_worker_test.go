@@ -16,6 +16,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
@@ -110,6 +111,12 @@ func TestDiscoveryTasksThroughTheWorker(t *testing.T) {
 		if task.Reason != nil {
 			r = *task.Reason
 		}
+		if _, _, slice := record.SliceTask(task.Key); slice {
+			if task.Status != "skipped_policy" || r != "model_source_not_approved" {
+				t.Fatalf("slice reused an unapproved source: %+v", task)
+			}
+			continue
+		}
 		got = append(got, row{task.Key, string(task.Status), r})
 	}
 	want := []row{
@@ -117,6 +124,7 @@ func TestDiscoveryTasksThroughTheWorker(t *testing.T) {
 		{"go-vet", "succeeded", ""}, {"go-vet.m01", "succeeded", ""}, {"go-vet.m02", "failed", govet.ReasonToolchain},
 		{"review.environment", "skipped_policy", "model_source_not_approved"}, {"review.documents", "skipped_policy", "model_source_not_approved"}, {"review.investigate", "skipped_policy", "model_source_not_approved"},
 		{"review.interpret", "skipped_policy", "model_source_not_approved"}, {"review.verify", "skipped_policy", "model_source_not_approved"},
+		{"review.scope", "skipped_policy", "model_source_not_approved"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("tasks %v", got)

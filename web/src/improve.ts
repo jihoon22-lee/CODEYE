@@ -151,11 +151,8 @@ export function operatorHints(setup: Setup | null): boolean {
 // The largest call ceiling (docs/REVIEW.md#호출-상한과-승인).
 export const MAX_REVIEW_CALLS = 207;
 
-// budgetHint: a slot is admitted while at least 6 calls are left, and each
-// admitted slot uses 2 without format repair, so the run's used calls, 2 for
-// every refused slot but the last and 6 for that one admit them all. The
-// refused slots are the ledger's count of primary ones (builder 8) or, for an
-// earlier builder, its refused investigate tasks.
+// Estimate enough calls to admit the remaining slots and verify one reply
+// per slot. Historical file-only scope artifacts reserved all six calls.
 function budgetHint(ledger: Ledger | null): Hint {
   if (!ledger || ledger.callsUsed === null) return { key: 'budget', text: t.improve.budget };
   let slots = ledger.primarySlotsRefused;
@@ -165,6 +162,6 @@ function budgetHint(ledger: Ledger | null): Hint {
     slots = refused.size;
   }
   if (slots === 0) return { key: 'budget', text: t.improve.budget };
-  const needed = ledger.callsUsed + 2 * (slots - 1) + 6;
+  const needed = ledger.callsUsed + 2 * (slots - 1) + (ledger.files === null ? 6 : 2);
   return { key: 'budget', text: needed > MAX_REVIEW_CALLS ? t.improve.budgetCallsMax(ledger.callsUsed, slots, needed) : t.improve.budgetCalls(ledger.callsUsed, slots, needed) };
 }

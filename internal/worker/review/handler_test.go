@@ -53,7 +53,13 @@ func TestReviewPlanOrderStagesAndRequired(t *testing.T) {
 	}
 	want := []spec{{"env.discover", domain.StageEnvironment, true}, {"docs.discover", domain.StageDocuments, true}, {"go-vet", domain.StageStaticAnalysis, true},
 		{"review.environment", domain.StageEnvironment, false}, {"review.documents", domain.StageDocuments, true}, {"review.investigate", domain.StageCodeReview, true},
-		{"review.interpret", domain.StageCodeReview, false}, {"review.verify", domain.StageCodeReview, true}}
+		{"review.interpret", domain.StageCodeReview, false}, {"review.verify", domain.StageCodeReview, true},
+		{record.TaskScope, domain.StageCodeReview, false}}
+	slots := coverageSlots(planSlices(j.Snapshot.Manifest, j.Scope, record.DefaultSecondary))
+	for i := range slots {
+		inv, ver := slotTaskKeys(sliceKey(i))
+		want = append(want, spec{inv, domain.StageCodeReview, false}, spec{ver, domain.StageCodeReview, false})
+	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("plan %v", got)
 	}
@@ -74,7 +80,7 @@ func TestRolesAcceptValidOutputs(t *testing.T) {
 	f := &scriptedCaller{script: validScript(t)}
 	plan, res := runRole(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
 	for _, r := range rows(plan, res) {
-		if r.key == record.TaskContract && r.status == "skipped_policy" && r.reason == domain.ReasonNoReviewScope && !r.required {
+		if r.status == "skipped_policy" && r.reason == domain.ReasonNoReviewScope && !r.required {
 			continue
 		}
 		if r.status != "succeeded" {
@@ -411,7 +417,12 @@ func TestDiscoveryCompositionPlans(t *testing.T) {
 	for _, p := range plan {
 		keys = append(keys, p.Key)
 	}
-	want := []string{"env.discover", "docs.discover", "go-vet", "review.environment", "review.documents", "review.investigate", "review.interpret", "review.verify"}
+	want := []string{"env.discover", "docs.discover", "go-vet", "review.environment", "review.documents", "review.investigate", "review.interpret", "review.verify",
+		record.TaskScope}
+	for i := range coverageSlots(planSlices(j.Snapshot.Manifest, j.Scope, record.DefaultSecondary)) {
+		inv, ver := slotTaskKeys(sliceKey(i))
+		want = append(want, inv, ver)
+	}
 	if !slices.Equal(keys, want) || w.Info() != h.Info() {
 		t.Fatalf("plan %v", keys)
 	}

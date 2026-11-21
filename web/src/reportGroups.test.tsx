@@ -112,8 +112,8 @@ describe('summary grouping', () => {
     const ledger = r.sections!.codeReview.ledger!;
     const runs = slotRuns(ledger);
     expect(runs.map((x) => [x.first, x.last, x.status])).toEqual([
-      ['s001', 's003', 'succeeded'],
-      ['s004', 's006', 'budget_exhausted'],
+      ['s001', 's005', 'succeeded'],
+      ['s006', 's008', 'budget_exhausted'],
     ]);
     const gaps = r.sections!.gaps;
     expect(gapGroups(gaps).reduce((n, g) => n + g.subjects.length, 0)).toBe(gaps.length);
@@ -131,34 +131,36 @@ describe('summary grouping', () => {
     Object.assign(m, { class: 'secondary', files_secondary: m.files_eligible, files_secondary_sent: m.files_sent_to_model, files_secondary_not_reached: m.files_budget_exhausted, files_budget_exhausted: 0 });
     const r = load(doc);
     const ledger = r.sections!.codeReview.ledger!;
-    expect(ledger.modules.find((x) => x.id === 'go:store')).toMatchObject({ cls: 'secondary', secondary: 30, secondarySent: 17, secondaryNotReached: 13, budgetExhausted: 0 });
+    expect(ledger.modules.find((x) => x.id === 'go:store')).toMatchObject({ cls: 'secondary', secondary: m.files_eligible,
+      secondarySent: m.files_sent_to_model, secondaryNotReached: m.files_secondary_not_reached, budgetExhausted: 0 });
     const f = overviewFacts(r, r.sections!);
-    expect(f.scope).toEqual({ primary: 9, primarySent: 6, secondary: 30, secondarySent: 17 });
+    expect(f.scope).toEqual({ primary: 9, primarySent: 9, secondary: m.files_eligible, secondarySent: m.files_sent_to_model });
     const { container } = render(<ReportDocument report={r} />);
     const section = container.querySelector('#report-section-code_review') as HTMLElement;
     const row = within(section).getByText(t.sections.ledger.secondaryModules(1)).closest('tr')!;
-    expect(Array.from(row.querySelectorAll('td')).map((td) => td.textContent)).toEqual([
-      t.sections.ledger.secondaryModules(1), t.sections.ledger.classes.secondary, '—', '30', '17', '20815', '17', '0', '0', '0', '0', '13', '0', '17',
+    expect(Array.from(row.querySelectorAll('td .report-cell-value')).map((cell) => cell.textContent)).toEqual([
+      t.sections.ledger.secondaryModules(1), t.sections.ledger.classes.secondary, '—',
+      ...[m.files_eligible, m.files_sent_to_model, m.files_accepted, m.bytes_sent, m.files_truncated, m.files_withheld, m.files_unreadable, m.files_budget_exhausted,
+        m.files_not_planned, m.files_secondary_not_reached, m.files_not_sent, m.files_with_completed_review].map(String),
     ]);
     // The module table holds the primary modules and the sum row only.
-    expect(Array.from(row.closest('tbody')!.querySelectorAll('tr')).map((tr) => tr.cells[0].textContent)).toEqual(['go:api', 'javascript:web', 'python:worker', t.sections.ledger.secondaryModules(1)]);
+    expect(Array.from(row.closest('tbody')!.querySelectorAll('tr')).map((tr) => tr.cells[0].querySelector('.report-cell-value')!.textContent)).toEqual(['go:api', 'javascript:web', 'python:worker', t.sections.ledger.secondaryModules(1)]);
     // A secondary class with secondary counts on a builder 7 ledger is invalid.
     const bad = structuredClone(doc);
     for (const x of bad.code_review.ledger.modules) delete x.class;
     expect(() => load(bad)).toThrow();
   });
 
-  // A slot is admitted while 6 calls are left and uses 2: the example used 10
-  // of 15 and three primary slots were refused, so 10 + 2·2 + 6 = 20 admit them.
+  // The line ledger admits a slot with two calls remaining.
   it('says how many calls the refused slots need', () => {
     const r = load(withSlices);
     const ledger = r.sections!.codeReview.ledger!;
     const project = { analysis: null } as never;
     const hints = improvementHints(r.sections!.gaps, null, project, ledger);
-    expect(hints.find((h) => h.key === 'budget')!.text).toBe(ko.improve.budgetCalls(10, 3, 20));
+    expect(hints.find((h) => h.key === 'budget')!.text).toBe(ko.improve.budgetCalls(14, 3, 20));
     expect(improvementHints(r.sections!.gaps, null, project).find((h) => h.key === 'budget')!.text).toBe(ko.improve.budget);
     const many = { ...ledger, callsUsed: 99, primarySlotsRefused: 60 };
-    expect(improvementHints(r.sections!.gaps, null, project, many).find((h) => h.key === 'budget')!.text).toBe(ko.improve.budgetCallsMax(99, 60, 99 + 118 + 6));
+    expect(improvementHints(r.sections!.gaps, null, project, many).find((h) => h.key === 'budget')!.text).toBe(ko.improve.budgetCallsMax(99, 60, 99 + 118 + 2));
   });
 
   it('keeps analysis statistics and full gap rows behind keyboard-reachable disclosures', () => {

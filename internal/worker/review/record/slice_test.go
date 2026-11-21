@@ -196,7 +196,7 @@ func validScope() (ScopeDoc, Expect) {
 	}
 	observed := file("a/c.go", "go:a", FilePlanned, RankToolObservations, 50)
 	observed.Observations, observed.Severity = 3, "high"
-	d := ScopeDoc{Schema: ScopeSchemaVersion, Kind: ScopeKind, Pack: PackRef{ID: "review", Version: "2.0.0"}, Snapshot: want.Snapshot, RunID: want.RunID, AttemptID: want.AttemptID,
+	d := ScopeDoc{Schema: ScopeSchemaPriority, Kind: ScopeKind, Pack: PackRef{ID: "review", Version: "2.0.0"}, Snapshot: want.Snapshot, RunID: want.RunID, AttemptID: want.AttemptID,
 		Screen: ScreenApplied, Budget: ScopeBudget{MaxCalls: DefaultMaxCalls, MaxRequestBytes: 40000, WholeRunMaxCalls: WholeRunMaxCalls, SliceReserveCalls: SliceReserveCalls, CallsBeforeSlices: 7, Admission: AdmissionSequentialReserve},
 		Limits:   ScopeLimits{MaxFiles: 8, MaxBytes: 12000, MaxFileBytes: 2400, MaxFileLines: 50, MaxSlices: MaxSlices, Slots: 1},
 		Priority: ScopePriority{Order: PriorityOrder, Secondary: DefaultSecondary},
@@ -284,6 +284,32 @@ func TestScopeArtifactValidation(t *testing.T) {
 	d.Modules[0].FilesSecondary = 2
 	if _, err := MarshalScope(d, want); err != nil {
 		t.Fatalf("generated file: %v", err)
+	}
+}
+
+func TestScopeRejectsOverlappingOrUnaccountedLines(t *testing.T) {
+	d, want := validScope()
+	d.Schema = ScopeSchemaVersion
+	d.Budget.Admission, d.Budget.SliceReserveCalls = AdmissionReserveVerification, SliceMinCalls
+	d.Priority.Order = PriorityCoverageFirst
+	d.Modules = []ScopeModule{{ID: "go:a", Class: ClassPrimary, FilesEligible: 1}}
+	d.Overview = ScopeOverview{Files: []ScopeFile{}, Offered: []string{}}
+	d.Excluded = []ScopeFile{}
+	f := &d.Slices[0].Files[0]
+	f.StartLine, f.BoundBytes = 1, f.PlannedBytes
+	d.Omitted = []ScopeOmission{{Path: f.Path, StartLine: 51, EndLine: 60, Reason: ScopeReasonSlotLimit}}
+	b, err := MarshalScope(d, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeScope(b, want); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ start, end int }{{50, 60}, {52, 60}, {51, 61}} {
+		d.Omitted[0].StartLine, d.Omitted[0].EndLine = tc.start, tc.end
+		if _, err := MarshalScope(d, want); err == nil {
+			t.Fatalf("invalid omitted range %d–%d was accepted", tc.start, tc.end)
+		}
 	}
 }
 

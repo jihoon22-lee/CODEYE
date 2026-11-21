@@ -20,19 +20,14 @@ import (
 // manifest, the scope, the secondary path rule and the constants below,
 // never of the operator's call ceiling or of analysis results, so a retry
 // that resets every task row re-plans exactly the same task keys.
-// review.scope, which runs after static analysis, fills the slots in
-// priority order (packSlots over the files with their tool observations,
-// docs/REVIEW.md#검토-우선순위); the call ceiling then admits slots in that
-// order.
+// The runtime scope uses this estimate and fills its slots with the
+// uncovered source ranges (slice_coverage.go).
 const (
 	sliceMaxFiles = roleMaxCodeFiles
 	sliceMaxBytes = roleMaxCodeBytes
 	// MaxSlices bounds the slots of one run; files beyond them are not
 	// planned (review_slice_limit).
 	MaxSlices = record.MaxSlices
-	// limSliceLimit marks eligible files left out because every slot was
-	// already filled.
-	limSliceLimit = "review_slice_limit"
 )
 
 // excerptBound is the most JSON-encoded excerpt bytes a file of size bytes
@@ -83,9 +78,6 @@ func slotTaskKeys(key string) (string, string) {
 	return "review.investigate." + key, "review.verify." + key
 }
 
-// TaskKeys are the slice's investigate and verify task keys.
-func (s reviewSlice) TaskKeys() (string, string) { return slotTaskKeys(s.Key) }
-
 // planGroup is one module of the corpus with its eligible file count.
 type planGroup struct {
 	Module   string
@@ -114,7 +106,7 @@ func sliceKey(i int) string { return fmt.Sprintf("s%03d", i+1) }
 // slotSlack is the number of slots planned beyond the plan-time packing of
 // n slots: filling them in priority order can need a few more (diagnosed
 // files form chunks of their own), so one more slot per eight, at least
-// two. When the strict packing still needs more, fillSlots relaxes it.
+// two.
 func slotSlack(n int) int { return max(2, (n+7)/8) }
 
 // planSlices is the deterministic slot plan of a snapshot.
@@ -228,37 +220,7 @@ func planSlicesFor(m source.Manifest, scope domain.Scope, rule record.SecondaryR
 //  4. Consecutive chunks of one class share a slot while the caps allow (at
 //     most MaxSliceModules modules), so small modules do not take one slot
 //     each.
-func packSlots(files []plannedFile) []reviewSlice { return packSlotsAt(files, packStrict) }
-
-// Packing levels: strict keeps directories and ranks apart in chunks;
-// packAnyDir drops the directory rule; packAnyRank also lets a chunk run
-// across ranks (its rank is that of its first file). The order of the files
-// is the same at every level; only the chunk boundaries move.
-const (
-	packStrict = iota
-	packAnyDir
-	packAnyRank
-)
-
-// fillSlots packs files into at most n slots in priority order: the strict
-// packing when it fits, else the first relaxed level that fits. When none
-// fits (the files outnumber the slot limit), it is the strict packing, whose
-// slots beyond n the caller counts as not planned (the lowest-priority
-// files): relaxing would only trade cohesion for a few more files.
-func fillSlots(files []plannedFile, n int) []reviewSlice {
-	strict := packSlotsAt(files, packStrict)
-	if len(strict) <= n {
-		return strict
-	}
-	for _, level := range []int{packAnyDir, packAnyRank} {
-		if out := packSlotsAt(files, level); len(out) <= n {
-			return out
-		}
-	}
-	return strict
-}
-
-func packSlotsAt(files []plannedFile, level int) []reviewSlice {
+func packSlots(files []plannedFile) []reviewSlice {
 	byModule := map[int][]plannedFile{}
 	var groups []int
 	for _, f := range files {
@@ -317,8 +279,8 @@ func packSlotsAt(files []plannedFile, level int) []reviewSlice {
 		var cur chunk
 		for i, f := range list {
 			weight[gi][f.Class] += f.Bound
-			newDir := level == packStrict && i > 0 && path.Dir(list[i-1].Path) != path.Dir(f.Path)
-			newRank := level != packAnyRank && cur.rank != record.RankIndex(f.Rank)
+			newDir := i > 0 && path.Dir(list[i-1].Path) != path.Dir(f.Path)
+			newRank := cur.rank != record.RankIndex(f.Rank)
 			if len(cur.files) > 0 && (len(cur.files) >= sliceMaxFiles || cur.bytes+f.Bound > sliceMaxBytes || cur.tier != f.Tier || cur.class != f.Class || newRank ||
 				(newDir && (len(cur.files)+runs[i].files > sliceMaxFiles || cur.bytes+runs[i].bytes > sliceMaxBytes))) {
 				chunks[gi] = append(chunks[gi], cur)

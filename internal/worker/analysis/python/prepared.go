@@ -125,6 +125,15 @@ func preparedTree(job analysis.Job, cfg Config, taskKey, name, moduleDir string)
 	return p
 }
 
+// PreparedSite locates the dependency tree prepared for another consumer of
+// the same module, such as the worker's existing test runner.
+func PreparedSite(job analysis.Job, cacheRoot, taskKey, name, moduleDir string) string {
+	if tree := preparedTree(job, Config{DependencyCacheRoot: cacheRoot}, taskKey, name, moduleDir); tree != nil {
+		return tree.site
+	}
+	return ""
+}
+
 // mypyShim writes the virtual environment mypy's --python-executable
 // points at: pyvenv.cfg naming the operator's interpreter, bin/python
 // linking to it and the site-packages directory linking to the prepared

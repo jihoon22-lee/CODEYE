@@ -178,10 +178,20 @@ func (c sectionContext) addStrengths(s *CodeReviewSection) {
 			if len(s.Strengths) == MaxReportedStrengths {
 				break
 			}
-			if seen[strength.Title] {
+			title := strings.ToLower(strings.Join(strings.Fields(strength.Title), " "))
+			implementation := make([]string, 0, len(strength.EvidenceIDs))
+			for _, e := range rec.Evidence {
+				if e.Kind == "code" && slices.Contains(strength.EvidenceIDs, e.ID) {
+					implementation = append(implementation, e.ID)
+				}
+			}
+			slices.Sort(implementation)
+			evidence := strings.Join(implementation, "\x00")
+			if seen["title\x00"+title] || seen["evidence\x00"+evidence] {
 				continue
 			}
-			seen[strength.Title] = true
+			seen["title\x00"+title] = true
+			seen["evidence\x00"+evidence] = true
 			s.Strengths = append(s.Strengths, strength)
 			ids = append(ids, strength.EvidenceIDs)
 		}

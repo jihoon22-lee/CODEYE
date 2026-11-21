@@ -1,6 +1,7 @@
 package report
 
 import (
+	"crypto/sha256"
 	"embed"
 	"encoding/base64"
 	"html/template"
@@ -25,6 +26,14 @@ var reportThemeCSS string
 
 //go:embed reportui/export.css
 var reportExportCSS string
+
+//go:embed reportui/export-navigation.js
+var reportExportNavigation string
+
+func exportNavigationHash() string {
+	hash := sha256.Sum256([]byte(reportExportNavigation))
+	return base64.StdEncoding.EncodeToString(hash[:])
+}
 
 //go:embed reportui/LICENSE.tabler-core
 var tablerCoreNotice string

@@ -49,7 +49,7 @@ Native 실행은 신뢰된 프로젝트를 편리하게 분석하는 기본 실�
 | 로그인 링크 | 일회용 launch token(32바이트 난수, DB에는 SHA-256만, 10분, 한 번만 교환)을 URL fragment(`#launch=`)로 전달해 HTTP 요청과 서버 로그에 실리지 않게 한다. CLI가 만든 링크 파일은 0600, 같은 디렉터리의 임시 파일을 rename해 만들며 symlink를 따라가지 않는다. 관리자 API가 만든 링크는 응답에 한 번만 나온다 |
 | 세션 | HttpOnly, SameSite=Strict, Path=/, 12시간 절대 만료, sliding 없음. 만료는 DB 시각이다. 로그아웃, 사용자 비활성화, 비밀번호 재설정은 세션을 폐기하고, 비밀번호 변경은 그 세션 밖의 세션을 폐기한다 |
 | 응답 헤더 | CSP `default-src 'self'` 등, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, API는 `Cache-Control: no-store`, 모든 응답에 `X-Request-ID` |
-| 내보낸 HTML | `html/template` 이스케이프, 스크립트·외부 자원 없음, CSP `default-src 'none'; img-src 'none'`. Markdown 내보내기도 동적 값을 이스케이프한다 |
+| 내보낸 HTML | `html/template` 이스케이프, CSP `default-src 'none'; img-src 'none'`. 문서 내부 목차 스크립트만 SHA-256 해시로 허용한다. Markdown 내보내기도 동적 값을 이스케이프한다 |
 
 운영 한계:
 

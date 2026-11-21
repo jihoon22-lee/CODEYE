@@ -569,7 +569,8 @@ def scenarios(base, root, env):
 
         # 운영자 확인: 노드에 그 run의 프로세스가 없음을 보고(위 kill_node 결과) 정리를 확인한다.
         assert not any(alive(p) for p in killed)
-        (paths["fx"] / "kill" / "codeye-fixture-mode").write_text("succeed\n")
+        dead_source = "kill" if dead_run == r_kill else "part"
+        (paths["fx"] / dead_source / "codeye-fixture-mode").write_text("succeed\n")
         try:
             session.request("POST", f"runs/{dead_run}/recover", {"cleanup_confirmed": False})
             raise AssertionError("cleanup_confirmed=false accepted")

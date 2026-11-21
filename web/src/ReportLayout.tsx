@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { sourceEvidenceURL, type AnalysisReport } from './analysisReport';
 import type { Citation } from './parseReportSections';
 import { reportKo as t } from './locales/report-ko';
@@ -43,7 +43,9 @@ export function ReportLayout({ report, rail, children, className = '', purpose }
               {purpose.excerpt.text.trim()}{' '}
               {purposeLink ? <a href={purposeLink} target="_blank" rel="noopener noreferrer">{purposeLocation}</a> : purposeLocation}
             </p>}
-            {report.project?.source && <div className="report-hero-source"><span>{t.target}</span><code>{report.project.source}</code></div>}
+            {report.project?.source && <div className="report-hero-source"><span>{t.target}</span><code>
+              {report.project.source.split(/(?<=\/)/).map((part, i) => <Fragment key={i}>{i > 0 && <wbr />}{part}</Fragment>)}
+            </code></div>}
             <div className="report-verdict">
               <span className="badge"><ReportIcon name={report.status === 'completed' ? 'check' : 'clock'} />
                 {Object.hasOwn(t.executionStatuses, report.status) ? t.executionStatuses[report.status] : t.executionStatus(runStatusLabel(report.status))}</span>

@@ -12,7 +12,7 @@ from .report import ABSOLUTE, check_analyzer, check_analyzer_observations
 
 
 def go_string_constant(path: Path, name: str) -> str:
-    match = re.search(r"^const " + name + r' = "([^"]*)"$', path.read_text(encoding="utf-8"), re.M)
+    match = re.search(r"^\s*(?:const )?" + name + r'\s*=\s*"([^"]*)"$', path.read_text(encoding="utf-8"), re.M)
     ensure(match is not None, "Missing Go constant " + name + " in " + str(path))
     return match.group(1)
 
@@ -206,6 +206,12 @@ def check_cpp_pack_contracts(validators: dict) -> int:
         ensure(rule_pack["source_suppressions"] == ("disabled" if tool == "cppcheck" else "honored") and rule_pack["unreported_suppression_rules"] == [],
                tool + ": cppcheck runs without --inline-suppr; clang-tidy NOLINT cannot be reported (measured)")
         ensure(rule_pack["selection"][:len(selection if tool == "cppcheck" else checks)] == (selection if tool == "cppcheck" else checks), tool + ": envelope selection differs from the Go source")
+        if tool == "cppcheck":
+            ensure(rule_pack["version"] == go_string_constant(package / "cppcheck.go", "CppcheckRulePackVersion"), "cppcheck rule pack version differs from the Go source")
+            style_rule = go_string_constant(package / "cppcheck.go", "cppcheckRedundantAssignment")
+            ensure(doc["target"]["properties"].get("style_observation_rule") == style_rule
+                   and all(o["rule_id"] == style_rule for o in doc["observations"] if o.get("raw_severity") == "style"),
+                   "Only redundantAssignment is published from cppcheck's style group")
         ensure(all(p.endswith(CPP_SOURCE) for p in coverage["processed_paths"] or []), tool + ": processed paths are translation units only (no header claims)")
         ensure(coverage["unit"] == "translation_unit" and doc["target"]["properties"]["mode"] == "compile_db", tool + ": compile DB mode example")
         ensure(not any(ABSOLUTE.match(v) or "/home/" in v or "/tmp/" in v for v in doc["target"]["properties"].values()), tool + ": node path in a target property")
@@ -341,12 +347,7 @@ def check_rust_pack(validators: dict) -> int:
     envelope_validator = validators["analyzer-observations.schema.json"]
     source = ROOT / "internal/worker/analysis/rustpack/assemble.go"
 
-    def go_const(path: Path, name: str) -> str:
-        match = re.search(r"^\s*" + name + r'\s*=\s*"([^"]*)"$', path.read_text(encoding="utf-8"), re.M)
-        ensure(match is not None, "Missing Go constant " + name + " in " + str(path))
-        return match.group(1)
-
-    version = go_const(source, "RulePackVersion")
+    version = go_string_constant(source, "RulePackVersion")
     for name, analyzer_id, required, rule_pack_id_const, tool in (("cargo-check", "rust.cargocheck", True, "CheckRulePackID", "cargo"), ("clippy", "rust.clippy", False, "ClippyRulePackID", "clippy")):
         descriptor = yaml_file(ROOT / f"examples/analyzer-{name}.yaml")
         validators["analyzer.schema.json"].validate(descriptor)
@@ -363,7 +364,7 @@ def check_rust_pack(validators: dict) -> int:
         check_analyzer_observations(envelope)
         ensure(envelope["analyzer"] == {"id": analyzer_id, "ecosystem": "rust", "required": required}, f"{name}: required follows the baseline rule")
         rule_pack = envelope["rule_pack"]
-        ensure(rule_pack["id"] == go_const(source, rule_pack_id_const) and rule_pack["version"] == version, f"{name}: rule pack identity differs from the Go constants")
+        ensure(rule_pack["id"] == go_string_constant(source, rule_pack_id_const) and rule_pack["version"] == version, f"{name}: rule pack identity differs from the Go constants")
         ensure(rule_pack["repository_config"] == "honored" and rule_pack["source_suppressions"] == "honored" and rule_pack["unreported_suppression_rules"] == [],
                f"{name}: repository configuration and in-source suppressions are honored (nothing reports #[allow])")
         ensure(isinstance(rule_pack["config_files"], list), f"{name}: the example enumerates the configuration it read")

@@ -433,7 +433,13 @@ func (v secView) summaryCodeReview(b secBlock, findings map[string]Finding) secB
 	l := v.L
 	c := v.R.CodeReview
 	parts := []secPart{b.Parts[0]}
-	parts = append(parts, v.findingSummaryParts(c.FindingIDs, findings)...)
+	var ordered []Finding
+	for _, id := range c.FindingIDs {
+		if finding, ok := findings[id]; ok {
+			ordered = append(ordered, finding)
+		}
+	}
+	parts = append(parts, v.reviewFindingParts(ordered)...)
 	for _, p := range b.Parts[1:] {
 		switch {
 		case p.Heading == l.Label("ledger.heading"), p.Heading == l.Label("ledger.modules"), p.Heading == l.Label("ledger.slices"):
@@ -448,55 +454,6 @@ func (v secView) summaryCodeReview(b secBlock, findings map[string]Finding) secB
 	}
 	b.Parts = parts
 	return b
-}
-
-// findingSummaryParts are the cards of the supported and reproduced findings
-// and one table row for every other finding.
-func (v secView) findingSummaryParts(ids []string, findings map[string]Finding) []secPart {
-	l := v.L
-	cards := secPart{Heading: l.Label("summary.findings_supported"), Empty: l.Label("summary.findings_supported_none")}
-	head := []string{l.Label("col.finding"), l.Label("col.title"), l.Label("col.validation"), l.Label("col.severity"), l.Label("col.location")}
-	secondary := &secTable{Head: head, RowIDs: []string{}}
-	other := &secTable{Head: head, RowIDs: []string{}}
-	// Findings on primary paths first; a finding whose every location is
-	// below a secondary path (test input, examples) comes after them.
-	var ordered []Finding
-	for _, pass := range []bool{false, true} {
-		for _, id := range ids {
-			if f, ok := findings[id]; ok && findingSecondary(f) == pass {
-				ordered = append(ordered, f)
-			}
-		}
-	}
-	for _, f := range ordered {
-		var locs []string
-		for _, x := range f.Locations {
-			locs = append(locs, sourceRange(x.Path, x.StartLine, x.EndLine))
-		}
-		supported := f.Validation == ValidationSupported || f.Validation == ValidationReproduced
-		if findingSecondary(f) {
-			secondary.RowIDs = append(secondary.RowIDs, f.ID)
-			secondary.Rows = append(secondary.Rows, []secCell{code(f.ID), txt(f.Title), code(f.Validation), code(f.Severity), code(joinOr(locs, "-"))})
-			continue
-		}
-		if supported {
-			cards.Cards = append(cards.Cards, v.findingCard(f))
-			continue
-		}
-		other.RowIDs = append(other.RowIDs, f.ID)
-		other.Rows = append(other.Rows, []secCell{code(f.ID), txt(f.Title), code(f.Validation), code(f.Severity), code(joinOr(locs, "-"))})
-	}
-	if len(secondary.Rows) > 0 {
-		cards.Empty = l.Label("summary.findings_supported_primary_none")
-	}
-	out := []secPart{cards}
-	if len(secondary.Rows) > 0 {
-		out = append(out, secPart{Heading: l.Label("summary.findings_secondary"), Table: secondary})
-	}
-	if len(other.Rows) > 0 {
-		out = append(out, secPart{Heading: l.Label("summary.findings_other"), Table: other})
-	}
-	return out
 }
 
 func (v secView) findingCard(f Finding) secCard {
@@ -583,6 +540,7 @@ func (v secView) summaryLedger(x ReviewLedger) []secPart {
 	mt.Rows = nil
 	var sum LedgerModule
 	secondary := 0
+	accepted := 0
 	for i, m := range x.Modules {
 		if m.Class == record.ClassSecondary || (m.Class == "" && secondaryDir(moduleDir(m.ModuleID))) {
 			secondary++
@@ -597,6 +555,9 @@ func (v secView) summaryLedger(x ReviewLedger) []secPart {
 			sum.FilesNotPlanned += m.FilesNotPlanned
 			sum.FilesNotSent += m.FilesNotSent
 			sum.FilesWithCompletedReview += m.FilesWithCompletedReview
+			if m.FilesAccepted != nil {
+				accepted += *m.FilesAccepted
+			}
 			continue
 		}
 		mt.Rows = append(mt.Rows, parts[1].Table.Rows[i])
@@ -607,6 +568,13 @@ func (v secView) summaryLedger(x ReviewLedger) []secPart {
 		if ledgerClasses(&x) {
 			row = slices.Insert(row, 1, txt(lab(l, "class", record.ClassSecondary)))
 			row = slices.Insert(row, 11, num(sum.FilesSecondaryNotReached))
+		}
+		if x.Files != nil {
+			column := 4
+			if ledgerClasses(&x) {
+				column++
+			}
+			row = slices.Insert(row, column, num(accepted))
 		}
 		mt.Rows = append(mt.Rows, row)
 	}
@@ -670,7 +638,8 @@ func (v secView) summaryLedger(x ReviewLedger) []secPart {
 		}
 		st.Rows = append(st.Rows, []secCell{txt(tf(l, "summary.slot_span", span, r.n)), txt(lab(l, "task_status", r.status)), txt(reason), txt(shortList(l, r.modules))})
 	}
-	return []secPart{head, {Heading: parts[1].Heading, Table: &mt, Empty: l.Label("ledger.none")}, {Heading: parts[2].Heading, Paras: []string{l.Label("summary.slots_lead")}, Table: st, Empty: l.Label("ledger.none")}}
+	out := []secPart{head, {Heading: parts[1].Heading, Table: &mt, Empty: l.Label("ledger.none")}, {Heading: parts[2].Heading, Paras: []string{l.Label("summary.slots_lead")}, Table: st, Empty: l.Label("ledger.none")}}
+	return append(out, parts[3:]...)
 }
 
 // summaryStatic is one tool table per language with one row per analyzer
@@ -689,74 +658,13 @@ func (v secView) summaryStatic(b secBlock, obs map[string]Observation, findings 
 		}
 	}
 	parts := []secPart{b.Parts[0]}
-	for i, lang := range s.Languages {
-		heading := b.Parts[1+i].Heading
-		type tool struct {
-			name                 string
-			tasks, ok, diag, req int
-			failed               []string
-			purpose              string
+	for _, lang := range s.Languages {
+		reading := v.staticInspectionParts(lang, obs)
+		parts = append(parts, reading...)
+		heading := l.Label("static.language_unknown")
+		if len(reading) > 0 {
+			heading = reading[0].Heading
 		}
-		var tools []*tool
-		byName := map[string]*tool{}
-		for _, x := range lang.Tools {
-			name := optText(x.Analyzer, x.TaskKey)
-			if x.Tool != nil {
-				name += " (" + *x.Tool + ")"
-			}
-			t := byName[name]
-			if t == nil {
-				t = &tool{name: name, purpose: optText(x.Purpose, PurposeDiagnostics)}
-				byName[name] = t
-				tools = append(tools, t)
-			}
-			t.tasks++
-			if x.Required {
-				t.req++
-			}
-			if x.TaskStatus == string(domain.TaskSucceeded) && x.Result == DiscoveryAccepted {
-				t.ok++
-			} else {
-				status := lab(l, "task_status", x.TaskStatus)
-				if x.TaskReason != nil {
-					status += " · " + reasonText(l, *x.TaskReason)
-				} else if x.Result != DiscoveryAccepted {
-					status += " · " + lab(l, "result", x.Result)
-				}
-				t.failed = append(t.failed, x.TaskKey+" "+status)
-			}
-			switch t.purpose {
-			case PurposeMetrics:
-				t.diag += x.MetricObservations
-			case PurposeSecrets:
-				t.diag += x.SecretObservations
-			default:
-				for _, id := range x.ObservationIDs {
-					if o, ok := obs[id]; ok && !o.Suppressed && o.Metric == nil {
-						t.diag++
-					}
-				}
-			}
-		}
-		tt := &secTable{Head: []string{l.Label("col.tool"), l.Label("col.tasks"), l.Label("col.required"), l.Label("col.succeeded"), l.Label("col.diagnostics"), l.Label("col.not_succeeded")}}
-		for _, t := range tools {
-			diag := strconv.Itoa(t.diag)
-			switch t.purpose {
-			case PurposeMetrics:
-				diag = tf(l, "static.metric_count", t.diag)
-			case PurposeSecrets:
-				diag = tf(l, "static.secret_count", t.diag)
-			}
-			tt.Rows = append(tt.Rows, []secCell{code(t.name), num(t.tasks), num(t.req), num(t.ok), txt(diag), txt(joinOr([]string{shortList(l, t.failed)}, "-"))})
-			if len(t.failed) == 0 {
-				tt.Rows[len(tt.Rows)-1][5] = txt("-")
-			}
-		}
-		p := secPart{Heading: heading, Table: tt}
-		if lang.Ecosystem != nil && *lang.Ecosystem == "any" {
-			p.Paras = []string{l.Label("summary.static_any_note")}
-		}
-		parts = append(parts, p)
 		groups := v.staticGroups(lang, obs, sevOf)
 		if len(groups) == 0 {
 			continue
@@ -792,54 +700,8 @@ func (v secView) summaryStatic(b secBlock, obs map[string]Observation, findings 
 	return b
 }
 
-// summaryMetrics keeps the tasks and shows each metric with its largest
-// values on primary paths.
 func (v secView) summaryMetrics(b secBlock, obs map[string]Observation) secBlock {
-	l := v.L
-	m := v.R.Metrics
-	parts := []secPart{b.Parts[0], b.Parts[1]}
-	gt := &secTable{Head: []string{l.Label("col.metric"), l.Label("col.unit"), l.Label("col.threshold"), l.Label("col.max"), l.Label("col.count"), l.Label("col.largest")}}
-	for _, g := range m.Metrics {
-		var th []string
-		for _, x := range g.Thresholds {
-			th = append(th, strconv.Itoa(x))
-		}
-		type at struct {
-			loc   string
-			value int
-			sec   bool
-		}
-		var list []at
-		for _, id := range g.ObservationIDs {
-			o := obs[id]
-			x := at{loc: l.Label("none")}
-			if o.Metric != nil {
-				x.value = o.Metric.Value
-			}
-			if o.Location != nil {
-				x.loc, x.sec = o.Location.Path+":"+strconv.Itoa(o.Location.StartLine), secondaryPath(o.Location.Path)
-			}
-			list = append(list, x)
-		}
-		sort.SliceStable(list, func(a, b int) bool {
-			if list[a].sec != list[b].sec {
-				return !list[a].sec
-			}
-			return list[a].value > list[b].value
-		})
-		var primary, secondary []string
-		for _, x := range list {
-			s := x.loc + " (" + strconv.Itoa(x.value) + ")"
-			if x.sec {
-				secondary = append(secondary, s)
-			} else {
-				primary = append(primary, s)
-			}
-		}
-		gt.Rows = append(gt.Rows, []secCell{code(g.Name), code(g.Unit), txt(strings.Join(th, ", ")), num(g.MaxValue), num(len(g.ObservationIDs)), txt(placesText(l, primary, secondary))})
-	}
-	parts = append(parts, secPart{Heading: l.Label("metrics.groups"), Table: gt, Empty: l.Label("metrics.none")})
-	b.Parts = parts
+	b.Parts = append([]secPart{b.Parts[0]}, v.measurementParts(obs, false)...)
 	return b
 }
 
@@ -1163,7 +1025,8 @@ func (v secView) summaryAppendix() []secPart {
 // show (a tool finding among the priorities, an observation row).
 func (v *secView) dropDanglingLinks() {
 	ids := map[string]bool{"appendix": true}
-	visit := func(parts []secPart) {
+	var visit func([]secPart)
+	visit = func(parts []secPart) {
 		for _, p := range parts {
 			if p.Anchor != "" {
 				ids[p.Anchor] = true
@@ -1182,6 +1045,7 @@ func (v *secView) dropDanglingLinks() {
 			for _, f := range p.Findings {
 				ids[f.ID] = true
 			}
+			visit(p.Parts)
 		}
 	}
 	for _, s := range v.Sections {
@@ -1190,7 +1054,8 @@ func (v *secView) dropDanglingLinks() {
 	}
 	visit(v.Appendix)
 	visit(v.OverviewDetail)
-	fix := func(parts []secPart) {
+	var fix func([]secPart)
+	fix = func(parts []secPart) {
 		for i := range parts {
 			p := &parts[i]
 			for j := range p.List {
@@ -1207,6 +1072,7 @@ func (v *secView) dropDanglingLinks() {
 					}
 				}
 			}
+			fix(p.Parts)
 		}
 	}
 	for i := range v.Sections {
@@ -1265,6 +1131,11 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 			mdPart(p, part, l)
 		}
 		if s.ID == "overview" {
+			for _, signal := range v.ReadingSignals() {
+				p(mdText(signal))
+				p()
+			}
+			mdPart(p, v.TestRunPart(), l)
 			mdBehaviors(p, v.Behaviors, l)
 			mdDecision(p, v.Decision, l)
 			p("### ", mdText(l.Label("opening.coverage_details")))
@@ -1368,15 +1239,14 @@ func mdDecision(p func(...string), d projectDecision, l Locale) {
 		}
 		mdCitations(p, []sourceCitation{d.Action.Source.Brief()})
 	}
+	if len(d.ComparisonCounts) == 0 {
+		return
+	}
 	counts := make([]string, 0, len(d.ComparisonCounts))
 	for _, row := range d.ComparisonCounts {
 		counts = append(counts, mdText(row.Label)+" "+row.Value)
 	}
-	summary := mdText(l.Label("decision.no_document_assessment"))
-	if len(counts) > 0 {
-		summary = strings.Join(counts, " · ")
-	}
-	p("**", mdText(d.ComparisonHeading), "** · ", summary)
+	p("**", mdText(d.ComparisonHeading), "** · ", strings.Join(counts, " · "))
 	p()
 	if d.ComparisonExample != "" {
 		p("**", mdText(l.Label("decision.document_claim")), "** ", mdInlineComparison(d.ComparisonExample))

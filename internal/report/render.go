@@ -532,12 +532,14 @@ func mdCodeSpan(s string) string {
 
 // --- HTML --------------------------------------------------------------------
 
-// HTMLContentSecurityPolicy permits inline styles and an embedded font. No
-// script or remote resource is allowed by the header or the saved file.
-const HTMLContentSecurityPolicy = savedHTMLContentSecurityPolicy + "; frame-ancestors 'none'"
+// HTMLContentSecurityPolicy permits inline styles, an embedded font, and the
+// fixed in-page navigation script identified by its exact contents.
+var HTMLContentSecurityPolicy = savedHTMLContentSecurityPolicy + "; frame-ancestors 'none'"
 
 const htmlResourcePolicy = "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'"
-const savedHTMLContentSecurityPolicy = htmlResourcePolicy + "; font-src data:"
+
+var savedHTMLContentSecurityPolicy = htmlResourcePolicy + "; font-src data:; script-src 'sha256-" + exportNavigationHash() + "'"
+
 const legacyHTMLContentSecurityPolicy = htmlResourcePolicy + "; frame-ancestors 'none'"
 
 const exportCSS = `body{box-sizing:border-box;margin:0 auto;max-width:76rem;padding:clamp(1rem,4vw,3rem);font-family:system-ui,sans-serif;line-height:1.65;color:#192b2a;background:#fff;overflow-wrap:anywhere}
@@ -574,6 +576,7 @@ var htmlFuncs = template.FuncMap{
 	"packages":        packages,
 	"artref":          artRef,
 	"pair":            func(l Locale, p secPart) partArgs { return partArgs{L: l, P: p} },
+	"tf":              tf,
 	"reportIcon":      reportIcon,
 	"sectionIcon":     sectionIcon,
 	"groupIcon":       groupIcon,
@@ -681,8 +684,8 @@ var htmlTemplate = template.Must(template.New("report").Funcs(htmlFuncs).Parse(`
 </html>
 `))
 
-// RenderHTML renders a self-contained page with html/template escaping,
-// no script or external resources and navigation to in-page fragments.
+// RenderHTML renders a self-contained page with html/template escaping
+// and navigation to in-page fragments.
 func RenderHTML(r Report, digest string, l Locale) ([]byte, error) {
 	if r.hasSections() {
 		return renderHTMLSections(r, digest, l)

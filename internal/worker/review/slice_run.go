@@ -12,11 +12,8 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
-	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
-	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
-	reviewpack "github.com/jihoon22-lee/CODEYE/prompts/review"
 )
 
 // Running the review slices (docs/REVIEW.md#모듈-단위-검토-분할).
@@ -25,12 +22,10 @@ import (
 // runs its tasks one after another, and every review model call of the
 // attempt appends one line to a counter file in the attempt scratch before
 // the call is made (countCall). A slice investigate is admitted, in plan
-// order, only while the ceiling minus the calls made so far is at least
-// record.SliceReserveCalls (the worst case of its investigate and verify);
-// the decision is written next to the counter and the slice's verify follows
-// it. The whole-run roles run before every slice, so they are never cut and
-// the attempt never makes more than the ceiling. Running slices in parallel
-// inside one attempt would need one shared counter for those tasks.
+// order, when a call for investigation and one for candidate verification
+// remain. An investigation retry preserves the second call. The decision
+// is written next to the counter and the slice's verify follows it. The
+// whole-run roles run before every slice and share the same ceiling.
 const (
 	reasonBudgetExhausted = "review_budget_exhausted"
 	reasonCallCountFailed = "review_call_count_failed"
@@ -80,180 +75,6 @@ func callsUsed(j analysis.Job) (int, error) {
 	return bytes.Count(b, []byte("\n")), nil
 }
 
-// scopeTask is review.scope: no model call. It runs after static analysis
-// and the whole-run roles. It reads the overview investigate's record (the
-// files it actually sent) and the analyzers' observations, checks every file
-// beyond the overview against the secrets screen and the read filters, fills
-// the planned slots in priority order (packSlots,
-// docs/REVIEW.md#검토-우선순위) and writes the scope artifact the slots run
-// from.
-func (s *roleStage) scopeTask() analysis.TaskResult {
-	sel, err := reviewpack.For(record.StageInvestigate, languagesInScope(s.j))
-	if err != nil {
-		return result(domain.TaskFailed, "review_instructions_invalid")
-	}
-	used, err := callsUsed(s.j)
-	if err != nil {
-		return result(domain.TaskFailed, reasonCallCountFailed)
-	}
-	rule := s.h.secondary()
-	plan := planSlicesFor(s.j.Snapshot.Manifest, s.j.Scope, rule, changedPaths(s.j))
-	sent, up := s.overviewOffered()
-	reordered := false
-	for _, windows := range sent {
-		reordered = reordered || len(windows) > 1 || windows[0].Start > 1
-	}
-	for _, f := range plan.Rest {
-		if _, ok := sent[f.Path]; ok {
-			reordered = true
-			break
-		}
-	}
-	files := s.entries()
-	facts := s.priorityFacts(files)
-	// inspect reads the file's excerpt as a review would and settles its
-	// state and its place: a generated header makes it secondary, its tool
-	// diagnostics or a failed analyzer of its module raise its rank.
-	inspect := func(f *plannedFile, state string) (record.ScopeFile, error) {
-		e, ok := files[f.Path]
-		if !ok || e.SHA256 != f.SHA256 {
-			return record.ScopeFile{}, errSnapshotIntegrity
-		}
-		if n := facts.observations[f.Path]; n > 0 {
-			f.Rank, f.Observations, f.Severity = record.RankToolObservations, n, facts.severity[f.Path]
-		} else if facts.failed[f.Module] {
-			f.Rank = record.RankAnalyzerNotSucceeded
-		}
-		sf := record.ScopeFile{Path: f.Path, SHA256: f.SHA256, Module: f.Module, BoundBytes: f.Bound, State: state}
-		if s.secretFiles()[f.Path] {
-			sf.State = record.FileWithheld
-		} else {
-			x, total, ok, err := s.excerpt(e, windowKind(f.Path), "context", 1, roleMaxCodeLines, roleMaxCodeFile)
-			if err != nil {
-				return record.ScopeFile{}, err
-			}
-			switch {
-			case ok:
-				sf.PlannedLines, sf.PlannedBytes, sf.TotalLines = x.End, record.JSONLen(x.Text), total
-				if f.Class == record.ClassPrimary && record.GeneratedHeader([]byte(x.Text)) {
-					f.Class, f.Secondary = record.ClassSecondary, record.ReasonGeneratedFile
-				}
-			case len(sent[f.Path]) == 0:
-				// Not UTF-8, NUL bytes, a sensitive pattern or no text.
-				sf.State = record.FileUnreadable
-			}
-		}
-		if windows := sent[f.Path]; len(windows) != 0 {
-			sf.State = record.FileCoveredByOverview
-			if len(windows) > 1 || windows[0].Start > 1 {
-				sf.PlannedLines, sf.PlannedBytes = 0, 0
-				for _, w := range windows {
-					text, total, ok, err := s.readLines(e, w.Start, w.End)
-					if err != nil || !ok {
-						return record.ScopeFile{}, errSnapshotIntegrity
-					}
-					sf.PlannedLines += w.End - w.Start + 1
-					sf.PlannedBytes += record.JSONLen(text)
-					sf.TotalLines = total
-				}
-			}
-		}
-		sf.Class, sf.Rank, sf.Secondary, sf.Observations, sf.PullRequest = f.Class, f.Rank, f.Secondary, f.Observations, f.Change
-		if f.Observations > 0 {
-			sf.Severity = record.SeverityNames[f.Severity]
-		}
-		return sf, nil
-	}
-	doc := record.ScopeDoc{Schema: record.ScopeSchemaVersion, Kind: record.ScopeKind, Pack: record.PackRef{ID: sel.ID, Version: sel.Version}, Snapshot: s.j.Snapshot.Digest,
-		RunID: s.j.RunID, AttemptID: s.j.AttemptID, Screen: screenOf(s.screen),
-		Budget: record.ScopeBudget{MaxCalls: s.h.maxCalls(), MaxRequestBytes: PromptBudget, WholeRunMaxCalls: record.WholeRunMaxCalls, SliceReserveCalls: record.SliceReserveCalls,
-			CallsBeforeSlices: min(used, record.WholeRunMaxCalls), Admission: record.AdmissionSequentialReserve},
-		Limits:   record.ScopeLimits{MaxFiles: sliceMaxFiles, MaxBytes: sliceMaxBytes, MaxFileBytes: roleMaxCodeFile, MaxFileLines: roleMaxCodeLines, MaxSlices: MaxSlices, Slots: plan.Slots},
-		Priority: record.ScopePriority{Order: priorityOrder(s.j), Secondary: rule},
-		Upstream: []record.Upstream{up}, Modules: []record.ScopeModule{}, Overview: record.ScopeOverview{Files: []record.ScopeFile{}, Offered: sortedKeys(sent)},
-		Slices: []record.ScopeSlice{}, Excluded: []record.ScopeFile{}, Limitations: s.screenLimitation([]string{})}
-	secondary := map[string]int{}
-	count := func(sf record.ScopeFile) {
-		if sf.Class == record.ClassSecondary {
-			secondary[sf.Module]++
-		}
-	}
-	inspected := map[string]record.ScopeFile{}
-	var candidates []plannedFile
-	for _, f := range plan.Overview {
-		sf, err := inspect(&f, record.FileOverviewNotSent)
-		if err != nil {
-			return result(domain.TaskFailed, "review_input_unavailable")
-		}
-		count(sf)
-		// Contract windows can take space from the ordinary overview.
-		// Give the displaced readable files the same chance at a slice
-		// as files outside the planned prefix.
-		if reordered && sf.State == record.FileOverviewNotSent {
-			sf.State = record.FilePlanned
-			inspected[f.Path] = sf
-			candidates = append(candidates, f)
-		} else {
-			doc.Overview.Files = append(doc.Overview.Files, sf)
-		}
-	}
-	// The files beyond the prefix: those the overview sent after all are
-	// covered by it, withheld and unreadable files take no slot, the rest
-	// fill the slots.
-	for _, f := range plan.Rest {
-		sf, err := inspect(&f, record.FilePlanned)
-		if err != nil {
-			return result(domain.TaskFailed, "review_input_unavailable")
-		}
-		count(sf)
-		switch sf.State {
-		case record.FileCoveredByOverview:
-			doc.Overview.Files = append(doc.Overview.Files, sf)
-		case record.FileWithheld, record.FileUnreadable:
-			doc.Excluded = append(doc.Excluded, sf)
-		default:
-			inspected[f.Path] = sf
-			candidates = append(candidates, f)
-		}
-	}
-	notPlanned, secondaryNotPlanned := map[string]int{}, map[string]int{}
-	for i, sl := range fillSlots(candidates, plan.Slots) {
-		if i >= plan.Slots {
-			for _, f := range sl.Files {
-				notPlanned[f.Module]++
-				if f.Class == record.ClassSecondary {
-					secondaryNotPlanned[f.Module]++
-					secondary[f.Module]--
-				}
-			}
-			continue
-		}
-		inv, ver := sl.TaskKeys()
-		out := record.ScopeSlice{Key: sl.Key, InvestigateTask: inv, VerifyTask: ver, Class: sl.Class, Rank: sl.Rank, PullRequest: sl.Change, Modules: sl.Modules, Files: []record.ScopeFile{}}
-		for _, f := range sl.Files {
-			out.Files = append(out.Files, inspected[f.Path])
-		}
-		doc.Slices = append(doc.Slices, out)
-	}
-	discovered := map[string]bool{}
-	mods, _ := discovery.DetectModules(s.j.Snapshot.Manifest, envdoc.Scope{Kind: "full", Paths: []string{}})
-	for _, m := range mods {
-		discovered[m.ID] = true
-	}
-	for _, g := range plan.Groups {
-		doc.Modules = append(doc.Modules, record.ScopeModule{ID: g.Module, Discovered: discovered[g.Module], Class: rule.ModuleClass(g.Module), FilesEligible: g.Eligible,
-			FilesSecondary: secondary[g.Module] + secondaryNotPlanned[g.Module], FilesNotPlanned: notPlanned[g.Module], FilesSecondaryNotPlanned: secondaryNotPlanned[g.Module]})
-		if notPlanned[g.Module] > 0 {
-			doc.Limitations = addLim(doc.Limitations, limSliceLimit)
-		}
-	}
-	art, err := persistScope(s.j, doc)
-	if err != nil {
-		return result(domain.TaskFailed, "review_record_failed")
-	}
-	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}, Limitations: doc.Limitations}
-}
-
 // priorityInputs are what the analyzers say about the files: per path the
 // non-metric diagnostics located in it and their highest severity rank, and
 // the modules (<ecosystem>:<dir>) of required analyzer tasks that did not
@@ -261,6 +82,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 type priorityInputs struct {
 	observations map[string]int
 	severity     map[string]int
+	line         map[string]int
 	failed       map[string]bool
 }
 
@@ -268,7 +90,7 @@ type priorityInputs struct {
 // (the same validated read as the interpret role; an unreadable artifact
 // adds nothing). Suppressed diagnostics and metrics never count.
 func (s *roleStage) priorityFacts(files map[string]source.Entry) priorityInputs {
-	in := priorityInputs{observations: map[string]int{}, severity: map[string]int{}, failed: map[string]bool{}}
+	in := priorityInputs{observations: map[string]int{}, severity: map[string]int{}, line: map[string]int{}, failed: map[string]bool{}}
 	plan, err := s.h.Static.Plan(s.ctx, s.j)
 	if err != nil {
 		return in
@@ -289,8 +111,12 @@ func (s *roleStage) priorityFacts(files map[string]source.Entry) priorityInputs 
 				continue
 			}
 			p := o.Location.Path
+			rank := record.SeverityRank(o.Severity)
+			if line := o.Location.StartLine; line > 0 && (in.line[p] == 0 || rank > in.severity[p] || (rank == in.severity[p] && line < in.line[p])) {
+				in.line[p] = line
+			}
 			in.observations[p]++
-			in.severity[p] = max(in.severity[p], record.SeverityRank(o.Severity))
+			in.severity[p] = max(in.severity[p], rank)
 		}
 	}
 	return in
@@ -304,9 +130,8 @@ func screenOf(sc secretScreen) string {
 	return record.ScreenNotScreened
 }
 
-// overviewOffered returns the code and test files the overview investigate
-// sent to the model (the context excerpts of its record, accepted or failed,
-// when it made a call) and the upstream binding of that record.
+// overviewOffered returns the accepted investigation's code and test
+// excerpts and the upstream binding. Other windows remain eligible.
 func (s *roleStage) overviewOffered() (map[string][]record.Excerpt, record.Upstream) {
 	u := record.Upstream{Source: "review." + record.StageInvestigate}
 	b, err := readBounded(recordPath(s.j, record.StageInvestigate), record.MaxBytes)
@@ -324,7 +149,7 @@ func (s *roleStage) overviewOffered() (map[string][]record.Excerpt, record.Upstr
 	} else {
 		u.State, u.Reason = record.UpstreamFailed, r.FailureReason
 	}
-	sent := slices.ContainsFunc(r.Calls, func(c record.Call) bool { return c.RequestDigest != "" })
+	sent := r.Accepted() && slices.ContainsFunc(r.Calls, func(c record.Call) bool { return c.RequestDigest != "" && c.Outcome == record.OutcomeAccepted })
 	out := map[string][]record.Excerpt{}
 	for _, e := range r.Evidence {
 		if sent && e.Origin == "context" && (e.Kind == "code" || e.Kind == "test") {
@@ -387,6 +212,7 @@ func (s *roleStage) sliceTask(key string) analysis.TaskResult {
 		return result(domain.TaskSkippedPolicy, reasonDependency)
 	}
 	s.slice, s.scopeUp = &doc.Slices[i], up
+	s.sliceReserve = doc.Budget.SliceReserveCalls
 	pending := slices.ContainsFunc(s.slice.Files, func(f record.ScopeFile) bool { return f.State == record.FilePlanned })
 	if s.role == record.StageVerify {
 		b, err := readBounded(admissionPath(s.j, key), 64)
@@ -410,7 +236,7 @@ func (s *roleStage) sliceTask(key string) analysis.TaskResult {
 		return result(domain.TaskFailed, reasonCallCountFailed)
 	}
 	decision := decisionAdmitted
-	if s.h.maxCalls()-used < record.SliceReserveCalls {
+	if s.h.maxCalls()-used < s.sliceReserve {
 		decision = decisionExhausted
 	}
 	if err := os.WriteFile(admissionPath(s.j, key), []byte(decision), 0o600); err != nil {
@@ -422,10 +248,8 @@ func (s *roleStage) sliceTask(key string) analysis.TaskResult {
 	return s.investigate()
 }
 
-// sliceCorpus builds the slice's code and test excerpts the way codeCorpus
-// does (first 50 lines, at most 2,400 bytes each, 12,000 in total), over the
-// slice's files still planned in the scope artifact. The read filters and
-// the secrets screen apply again; a file that no longer reads is skipped.
+// sliceCorpus verifies the assigned line windows against the snapshot
+// again. Older scope artifacts assigned only the first window per file.
 func (s *roleStage) sliceCorpus() ([]record.Excerpt, []string, error) {
 	files := s.entries()
 	var out []record.Excerpt
@@ -440,10 +264,24 @@ func (s *roleStage) sliceCorpus() ([]record.Excerpt, []string, error) {
 		if !ok || e.SHA256 != f.SHA256 {
 			return nil, nil, errSnapshotIntegrity
 		}
-		if len(out) >= roleMaxCodeFiles || remain < 128 {
+		if len(out) >= roleMaxCodeFiles {
 			break
 		}
-		x, total, ok, err := s.excerpt(e, windowKind(f.Path), "context", 1, 50, min(roleMaxCodeFile, remain))
+		if f.StartLine > 0 {
+			end := f.StartLine + f.PlannedLines - 1
+			text, total, ok, err := s.readLines(e, f.StartLine, end)
+			if err != nil || !ok || total != f.TotalLines || record.JSONLen(text) != f.PlannedBytes || f.PlannedBytes > remain {
+				return nil, nil, errSnapshotIntegrity
+			}
+			out = append(out, record.Excerpt{ID: record.ExcerptID(s.j.Snapshot.Digest, e.Path, e.SHA256, f.StartLine, end),
+				Path: e.Path, SHA256: e.SHA256, Start: f.StartLine, End: end, Kind: windowKind(e.Path), Origin: "context", Text: text})
+			remain -= f.PlannedBytes
+			if f.StartLine > 1 || end < total {
+				lims = append(lims, "excerpt_only")
+			}
+			continue
+		}
+		x, total, ok, err := s.excerpt(e, windowKind(f.Path), "context", 1, roleMaxCodeLines, min(roleMaxCodeFile, remain))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -472,7 +310,7 @@ func changedPaths(j analysis.Job) []string {
 // priorityOrder is the order the scope artifact records.
 func priorityOrder(j analysis.Job) string {
 	if j.PullRequest != nil {
-		return record.PriorityPullRequestFirst
+		return record.PriorityChangedCoverageFirst
 	}
-	return record.PriorityOrder
+	return record.PriorityCoverageFirst
 }

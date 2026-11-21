@@ -3,6 +3,7 @@ import type { AnalysisReport } from './analysisReport';
 import { reportKo as t } from './locales/report-ko';
 import { reportSearchKo as s } from './locales/report-search-ko';
 import type { Citation } from './parseReportSections';
+import { documentComparisonHeading } from './reportDocumentGroups';
 import './ReportSearch.css';
 
 export type ReportSearchTarget =
@@ -41,9 +42,9 @@ function searchEntries(report: AnalysisReport): SearchEntry[] {
     const workflowRefs = row.workflow ? [row.workflow.read, row.workflow.change, row.workflow.test] : [];
     const refs = [...new Set([...row.documentRefs, ...row.codeRefs, ...(row.additional?.codeRefs ?? []), ...workflowRefs])]
       .map(id => citations.get(id)).filter((c): c is Citation => !!c);
-    return entry({kind: 'comparison', index}, includesCode ? row.statement : t.reading.comparisonStatus[row.status] ?? s.comparison,
+    return entry({kind: 'comparison', index}, documentComparisonHeading(row, index, includesCode !== false),
       t.sections.titles.documents, refs.flatMap(c => [c.path, ...(c.directivePath ? [c.directivePath] : [])]),
-      includesCode ? [row.reason, row.additional?.reason ?? '', ...refs.map(c => c.excerpt?.text ?? '')] : []);
+      [t.reading.comparisonStatus[row.status] ?? s.comparison, ...(includesCode ? [row.reason, row.additional?.reason ?? '', ...refs.map(c => c.excerpt?.text ?? '')] : [])]);
   }) ?? [];
   for (const f of report.findings) {
     const section = !sections ? 'findings' : codeReview.has(f.id) ? 'code_review' : 'static_analysis';

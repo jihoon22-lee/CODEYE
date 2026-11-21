@@ -1,6 +1,6 @@
 import { ReportPanel } from './ReportPanel';
 import { useEffect, useState } from 'react';
-import { ApiError, type AnalysisChoices, type Api, type Project, type RetryAck, type RunAck, type RunProgress, type RunTrigger, type RunView, type Setup } from './api';
+import { ApiError, RUN_BODY, TEST_RUN_BODY, type AnalysisChoices, type Api, type ManualRunBody, type Project, type RetryAck, type RunAck, type RunProgress, type RunTrigger, type RunView, type Setup } from './api';
 import { improvementHints, operatorHints, type Hint } from './improve';
 import type { AnalysisReport } from './analysisReport';
 import { canCancelRun, describeError, roleLabel, formatClock, formatInstant, isKnownRunStatus, isTerminalRun, runStatusLabel, shorten, stageName, type ErrorText } from './format';
@@ -11,6 +11,7 @@ import { StageList } from './StageView';
 import { CopyText } from './CopyText';
 import { useRunPolling } from './useRunPolling';
 import { PullRequestPanel } from './PullRequestPanel';
+import { requestedRunScope, RunScopeField } from './RunScopeField';
 
 export function ErrorNote({ error }: { error: ErrorText }) {
   return <p role="alert" className="error">{error.message}{error.detail ? <> {error.detail}</> : null}{error.requestId ? <small> {t.errors.requestId(error.requestId)}</small> : null}</p>;
@@ -25,23 +26,30 @@ export function RunPanel({ api, userId, project, idempotency, openRunId = null, 
   const [generation, setGeneration] = useState(0);
   const [retried, setRetried] = useState<RetryAck | null>(null);
   const [pending, setPending] = useState(false);
+  const [lastBody, setLastBody] = useState<ManualRunBody>(RUN_BODY);
+  const [pathsInput, setPathsInput] = useState('');
   const [error, setError] = useState<ErrorText | null>(null);
   const [accepted, setAccepted] = useState<RunAck | null>(null);
   const activeId = runId ?? openRunId;
-  const retrying = error !== null && idempotency.pending(userId, project.id);
   // The server decides; this only keeps a viewer from offering an action it will refuse.
   const canRun = project.can_run;
+  const canTest = project.analysis?.run_build_scripts === true && setup?.available.build_scripts?.available !== false;
+  const scope = requestedRunScope(pathsInput);
+  const retrying = error !== null && JSON.stringify(scope) === JSON.stringify(lastBody.scope) && idempotency.pending(userId, project.id, lastBody);
+  const scoped = scope?.kind === 'paths' ? scope.paths.length : null;
 
-  async function start() {
-    if (pending || !canRun) return;
+  async function start(profile: ManualRunBody['profile']) {
+    if (pending || !canRun || !scope || (profile === TEST_RUN_BODY.profile && !canTest)) return;
+    const body = { ...RUN_BODY, profile, scope };
+    setLastBody(body);
     setPending(true);
     setError(null);
     // The key is created once per (user, project, body) and reused until the server accepts it,
     // so retrying after a lost response returns the same run instead of creating another.
-    const key = idempotency.keyFor(userId, project.id);
+    const key = idempotency.keyFor(userId, project.id, body);
     try {
-      const ack = await api.createRun(project.id, key);
-      idempotency.complete(userId, project.id);
+      const ack = await api.createRun(project.id, key, body);
+      idempotency.complete(userId, project.id, body);
       setAccepted(ack);
       setRunId(ack.id);
       onRunChange?.();
@@ -57,12 +65,20 @@ export function RunPanel({ api, userId, project, idempotency, openRunId = null, 
   return <section className="panel run-panel" aria-labelledby="run-title">
     <div className="run-head">
       <h2 id="run-title">{t.runs.title}</h2>
-      <button type="button" className={activeId ? undefined : 'primary'} onClick={start} disabled={pending || !canRun} aria-busy={pending} aria-describedby={canRun ? undefined : 'run-not-allowed'}>{pending ? t.runs.starting : t.runs.start}</button>
+      <div className="actions">
+        <button type="button" className={activeId ? undefined : 'primary'} onClick={() => start(RUN_BODY.profile)} disabled={pending || !canRun || !scope} aria-busy={pending && lastBody.profile === RUN_BODY.profile} aria-describedby={canRun ? undefined : 'run-not-allowed'}>
+          {pending && lastBody.profile === RUN_BODY.profile ? t.runs.starting : scoped ? t.runs.pathScope.start(scoped) : t.runs.start}
+        </button>
+        {canRun && canTest && <button type="button" onClick={() => start(TEST_RUN_BODY.profile)} disabled={pending || !scope} aria-busy={pending && lastBody.profile === TEST_RUN_BODY.profile}>
+          {pending && lastBody.profile === TEST_RUN_BODY.profile ? t.runs.starting : scoped ? t.runs.pathScope.startTests(scoped) : t.runs.startWithTests}
+        </button>}
+      </div>
     </div>
     {!canRun && <p id="run-not-allowed" className="small">{t.accounts.runNotAllowed(roleLabel(project.role))}</p>}
     <details className="disclosure">
       <summary>{t.runs.settings}</summary>
-      <ul className="plain small"><li>{t.runs.profile}</li><li>{t.runs.policy}</li><li>{t.runs.scope}</li></ul>
+      <ul className="plain small"><li>{t.runs.profile}</li><li>{t.runs.policy}</li></ul>
+      {canRun && <RunScopeField value={pathsInput} onChange={setPathsInput} scope={scope} kind={project.source.kind} disabled={pending} />}
       <p className="small">{t.runs.startNote}</p>
     </details>
     {error && <><ErrorNote error={error} />{retrying && <p className="small">{t.runs.retryNote}</p>}</>}

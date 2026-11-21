@@ -292,7 +292,12 @@ func TestDocumentQuestionBreaksOnlyAnUnambiguousUnknownTie(t *testing.T) {
 			t.Fatal(err)
 		}
 		contents := string(html)
-		if !strings.Contains(contents, `href="#`+wantAnchor+`"`) || !strings.Contains(contents, `id="`+wantAnchor+`" tabindex="-1">`+Korean.Label("decision.comparison.unknown")) {
+		wantTitle := openingText(published.Documents.Comparisons[0].Statement, tf(Korean, "docs.withheld_behavior", 1))
+		if include {
+			wantTitle = published.Documents.Comparisons[1].Statement
+		}
+		if !strings.Contains(contents, `href="#`+wantAnchor+`"`) || !strings.Contains(contents, `id="`+wantAnchor+`" tabindex="-1">`+wantTitle) ||
+			!strings.Contains(contents, `class="badge report-reading-status">`+Korean.Label("decision.comparison.unknown")) {
 			t.Fatal("the overview is missing the exact comparison route or matching status")
 		}
 	}

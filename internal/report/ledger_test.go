@@ -3,6 +3,7 @@ package report
 import (
 	"encoding/json"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -119,9 +120,8 @@ func TestLedgerValidation(t *testing.T) {
 			module(r, "go:store").Slices[0].Status = "failed"
 		},
 		"budget-exhausted files without such a slice": func(r *Report) {
-			// go:api's only slot was refused (s006); without it listed, its
-			// budget-exhausted file has no refused slice.
 			m := module(r, "go:api")
+			m.FilesSentToModel, m.FilesBudgetExhausted = m.FilesSentToModel-1, m.FilesBudgetExhausted+1
 			m.Slices = []LedgerSlice{}
 		},
 		"class missing on one row":            func(r *Report) { module(r, "go:api").Class = "" },
@@ -132,6 +132,8 @@ func TestLedgerValidation(t *testing.T) {
 			module(r, "go:api").FilesSecondarySent = 1
 		},
 		"refused primary files without refused primary slots": func(r *Report) {
+			m := module(r, "go:store")
+			m.FilesSentToModel, m.FilesBudgetExhausted = m.FilesSentToModel-1, m.FilesBudgetExhausted+1
 			r.CodeReview.Ledger.PrimarySlotsBudgetExhausted = 0
 		},
 		"more refused primary slots than refused slots": func(r *Report) {
@@ -144,20 +146,31 @@ func TestLedgerValidation(t *testing.T) {
 			r.CodeReview.Ledger.Scope.TaskStatus = &s
 		},
 		"invalid ceiling": func(r *Report) { n := 9; r.CodeReview.Ledger.MaxCalls = &n },
+		"invalid accepted coverage": func(r *Report) {
+			m := module(r, "go:api")
+			n := *m.FilesAccepted + 1
+			m.FilesAccepted = &n
+		},
+		"incorrect file investigation": func(r *Report) {
+			r.CodeReview.Ledger.Files[0].Investigation = "request_unconfirmed"
+		},
 		"call naming another role's task": func(r *Report) {
 			r.Coverage.ReviewCalls[0].TaskKey = "review.verify.s001"
 		},
 		"call naming an unknown task": func(r *Report) {
-			r.Coverage.ReviewCalls[len(r.Coverage.ReviewCalls)-1].TaskKey = "review.verify.s031"
+			const key = "review.verify.s096"
+			r.Tasks = slices.DeleteFunc(r.Tasks, func(t Task) bool { return t.Key == key })
+			r.Coverage.ReviewCalls[len(r.Coverage.ReviewCalls)-1].TaskKey = key
 		},
 		"modules out of order": func(r *Report) {
 			ms := r.CodeReview.Ledger.Modules
 			ms[0], ms[1] = ms[1], ms[0]
 		},
 		"slice finding of an unplanned slice": func(r *Report) {
+			r.Tasks = slices.DeleteFunc(r.Tasks, func(t Task) bool { return t.Key == "review.investigate.s096" })
 			for i, f := range r.Findings {
 				if sliceFindingID.MatchString(f.ID) {
-					id := "review_s031_" + strings.SplitN(f.ID, "_", 3)[2]
+					id := "review_s096_" + strings.SplitN(f.ID, "_", 3)[2]
 					r.Findings[i].ID = id
 					for j, x := range r.CodeReview.FindingIDs {
 						if x == f.ID {
@@ -188,6 +201,7 @@ func TestLedgerValidation(t *testing.T) {
 	// A builder-5 revision (no slices, no ledger, no task_key) stays valid.
 	old := exampleReport(t)
 	old.Builder.Version = "5"
+	fileOnlyLedgerForTest(&old)
 	for i := range old.Coverage.ReviewCalls {
 		old.Coverage.ReviewCalls[i].TaskKey = ""
 	}

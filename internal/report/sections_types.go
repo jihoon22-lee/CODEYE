@@ -475,10 +475,29 @@ type ReviewLedger struct {
 	// Status is complete, partial or overview_only.
 	Status  string         `json:"status"`
 	Modules []LedgerModule `json:"modules"`
+	Files   []LedgerFile   `json:"files,omitempty"`
 	// PrimarySlotsBudgetExhausted counts the filled slots of primary files
 	// whose investigate the call ceiling refused (builder 8 with a schema 0.2
 	// scope artifact): about two calls each would review them.
 	PrimarySlotsBudgetExhausted int `json:"primary_slots_budget_exhausted,omitempty"`
+}
+
+// LedgerFile records coverage over the snapshot's original line numbers.
+type LedgerFile struct {
+	Path          string        `json:"path"`
+	ModuleID      string        `json:"module_id"`
+	TotalLines    int           `json:"total_lines"`
+	SentLines     int           `json:"sent_lines"`
+	ReviewedLines int           `json:"reviewed_lines"`
+	Investigation string        `json:"investigation"`
+	Remaining     []LedgerRange `json:"remaining"`
+	Reason        string        `json:"reason,omitempty"`
+}
+
+type LedgerRange struct {
+	StartLine int    `json:"start_line"`
+	EndLine   int    `json:"end_line"`
+	Reason    string `json:"reason"`
 }
 
 // LedgerModule is one module of the scope artifact. Every eligible file is
@@ -499,6 +518,8 @@ type LedgerModule struct {
 	FilesSecondarySent       int    `json:"files_secondary_sent,omitempty"`
 	FilesSecondaryNotReached int    `json:"files_secondary_not_reached,omitempty"`
 	FilesEligible            int    `json:"files_eligible"`
+	FilesRequested           *int   `json:"files_requested,omitempty"`
+	FilesAccepted            *int   `json:"files_accepted,omitempty"`
 	FilesSentToModel         int    `json:"files_sent_to_model"`
 	BytesSent                int    `json:"bytes_sent"`
 	FilesTruncated           int    `json:"files_truncated"`
@@ -507,9 +528,9 @@ type LedgerModule struct {
 	FilesBudgetExhausted     int    `json:"files_budget_exhausted"`
 	FilesNotPlanned          int    `json:"files_not_planned"`
 	FilesNotSent             int    `json:"files_not_sent"`
-	// FilesWithCompletedReview are the sent files whose review reached an
-	// accepted verify record (the whole-run verify for the overview's files,
-	// the slice's verify for a slice's).
+	// FilesWithCompletedReview counts accepted investigation files cited by
+	// a candidate's accepted verification. Older ledgers used the verify
+	// task state (including a successful task without a model request).
 	FilesWithCompletedReview int           `json:"files_with_completed_review"`
 	Slices                   []LedgerSlice `json:"slices"`
 }

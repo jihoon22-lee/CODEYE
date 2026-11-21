@@ -14,7 +14,6 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
-	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
 // screenStub is the go vet stub plus the structure and secrets envelopes
@@ -210,7 +209,7 @@ func TestReviewSecretScreenCases(t *testing.T) {
 			plan, res := runRole(t, j, screenStub{mode: mode}, f, "1.27.4")
 			requireUnusedContract(t, res, f)
 			for _, p := range plan {
-				if p.Key == record.TaskContract {
+				if res[p.Key].Reason == domain.ReasonNoReviewScope && !p.Required {
 					continue
 				}
 				if strings.HasPrefix(p.Key, "review.") && res[p.Key].Status == domain.TaskSkippedPolicy {

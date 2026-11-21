@@ -240,7 +240,8 @@ type assembleInput struct {
 	Cancelled               bool
 	ScratchFailed           bool
 	// Excluded: eligible files below a data directory, not measured.
-	Excluded int
+	Excluded   int
+	ThirdParty int
 	// Linked: a listed workspace file is reached through a link; nothing
 	// was started.
 	Linked bool
@@ -358,6 +359,7 @@ func assemble(in assembleInput) obsdoc.Document {
 		stdoutSHA = obsdoc.SHA256Hex(in.Run.Stdout.Data)
 	}
 	ordinals := map[string]int{}
+	functions := 0
 	for i, f := range p.Functions {
 		fn, file, line, ok := functionAt(f.Name, analyzed)
 		if !ok {
@@ -366,7 +368,11 @@ func assemble(in assembleInput) obsdoc.Document {
 			continue
 		}
 		ncss, ccn := f.Values[1], f.Values[2]
-		if ccn < CCNThreshold || skipped[file] {
+		if skipped[file] {
+			continue
+		}
+		functions++
+		if ccn < CCNThreshold {
 			continue
 		}
 		msg := f.Name + ": NCSS " + strconv.Itoa(ncss) + ", CCN " + strconv.Itoa(ccn)
@@ -387,6 +393,9 @@ func assemble(in assembleInput) obsdoc.Document {
 		}
 	}
 	doc.Coverage.Units = map[string]int{UnitAnalyzed: len(processed)}
+	if parseOK && !o.Failed() {
+		doc.Coverage.Units["functions_measured"] = functions
+	}
 	if len(skipped) > 0 {
 		doc.Coverage.Units[UnitNotAnalyzed] = len(skipped)
 	}
@@ -402,6 +411,7 @@ func assemble(in assembleInput) obsdoc.Document {
 		doc.Coverage.FilesSkipped = 0
 	}
 	doc.Limitations = lims
+	anypack.RecordThirdPartyExclusions(&doc, in.ThirdParty)
 	return doc
 }
 

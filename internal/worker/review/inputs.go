@@ -60,26 +60,37 @@ func (s *roleStage) entries() map[string]source.Entry {
 
 // readSource returns a verified snapshot blob that is safe to use as model input.
 func (s *roleStage) readSource(e source.Entry) (string, bool, error) {
-	if *e.Size > maxFileBytes || domain.ValidateEvidencePath(e.Path) != nil {
-		return "", false, nil
+	text, reason, err := s.reviewSource(e)
+	return text, reason == "", err
+}
+
+func (s *roleStage) reviewSource(e source.Entry) (string, string, error) {
+	if *e.Size > maxFileBytes {
+		return "", record.ScopeReasonTooLarge, nil
+	}
+	if domain.ValidateEvidencePath(e.Path) != nil {
+		return "", record.ScopeReasonUnreadable, nil
 	}
 	if s.secretFiles()[e.Path] {
 		s.rec.Limitations = addLim(s.rec.Limitations, limSecretWithheld)
-		return "", false, nil
+		return "", record.ScopeReasonWithheld, nil
 	}
 	root, err := os.OpenRoot(s.j.Snapshot.SnapshotDir)
 	if err != nil {
-		return "", false, err
+		return "", "", err
 	}
 	defer root.Close()
 	b, err := readVerified(root, e)
 	if err != nil {
-		return "", false, err
+		return "", "", err
 	}
-	if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 || record.Sensitive(b) {
-		return "", false, nil
+	if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 {
+		return "", record.ScopeReasonUnreadable, nil
 	}
-	return strings.TrimSuffix(string(b), "\n"), true, nil
+	if record.Sensitive(b) {
+		return "", record.ScopeReasonWithheld, nil
+	}
+	return strings.TrimSuffix(string(b), "\n"), "", nil
 }
 
 // readLines returns lines start..end (1-based, inclusive) of a verified

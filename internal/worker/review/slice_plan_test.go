@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -317,11 +318,9 @@ func TestExcerptBoundNeverBelowRealBytes(t *testing.T) {
 	}
 }
 
-// TC-163: a repository whose eligible files all fit the overview gets no
-// slice: today's plan, request bytes and records (the fixtures pinned by
-// TestGoReviewInputsUnchanged, the language fixtures and the regression
-// inputs, one metrics.go each).
-func TestSmallRepositoriesPlanNoSlices(t *testing.T) {
+// TC-163: even when every file fits the ordinary overview estimate, a
+// contract witness or a long file can leave lines for follow-up.
+func TestSmallRepositoriesPlanCoverageForDisplacedLines(t *testing.T) {
 	jobs := goPinJobs(t)
 	jobs["metrics-regression"] = treeJob(t, map[string]string{"go.mod": "module sample.test/metrics\n\ngo 1.23\n", "metrics.go": "package metrics\n\nfunc Mean() {}\n", "README.md": "# Metrics\n"})
 	for _, c := range langCases {
@@ -336,10 +335,8 @@ func TestSmallRepositoriesPlanNoSlices(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, s := range specs {
-			if strings.HasPrefix(s.Key, "review.") && !slices.Contains([]string{"review.environment", "review.documents", "review.investigate", "review.interpret", "review.verify"}, s.Key) {
-				t.Errorf("%s plans %s", name, s.Key)
-			}
+		if !slices.ContainsFunc(specs, func(s analysis.TaskSpec) bool { return s.Key == record.TaskScope }) || len(sliceKeys(specs)) != coverageSlots(plan) {
+			t.Errorf("%s plan does not allow for displaced lines (%d slots)", name, len(sliceKeys(specs)))
 		}
 	}
 }

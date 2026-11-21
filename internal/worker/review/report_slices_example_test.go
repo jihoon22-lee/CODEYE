@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
@@ -25,9 +27,8 @@ import (
 // real discovery and review handlers run in process with a scripted
 // model caller that answers every task with one call (no model is
 // contacted), a clean synthetic secrets screen and a go vet stand-in without
-// diagnostics. Three slices are admitted and the other four end
-// budget_exhausted, so the ledger shows sent, budget-exhausted and completed
-// files per module. CODEYE_UPDATE_EXAMPLES=1 rewrites both files.
+// diagnostics. Some ranges are left when the call ceiling is reached.
+// CODEYE_UPDATE_EXAMPLES=1 rewrites both files.
 const (
 	sliceExampleJSON = "../../../examples/report-slices.json"
 	sliceExampleMD   = "../../../examples/report-slices.md"
@@ -94,8 +95,13 @@ func TestReportSlicesExample(t *testing.T) {
 // builder.
 func sliceReport(t *testing.T, j analysis.Job, static analysis.Handler, maxCalls int, ids *exampleIDs) report.Report {
 	t.Helper()
+	return sliceReportWithCaller(t, j, static, maxCalls, ids, &scriptedCaller{script: coverageScript(t)})
+}
+
+func sliceReportWithCaller(t *testing.T, j analysis.Job, static analysis.Handler, maxCalls int, ids *exampleIDs, caller *scriptedCaller) report.Report {
+	t.Helper()
 	pinExampleSnapshot(t, &j)
-	h, err := discovery.Wrap(Handler{Static: static, Caller: &scriptedCaller{script: coverageScript(t)}, MaxCalls: maxCalls}, discovery.Config{Observer: exampleObserver{t: t}})
+	h, err := discovery.Wrap(Handler{Static: static, Caller: caller, MaxCalls: maxCalls}, discovery.Config{Observer: exampleObserver{t: t}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,6 +245,164 @@ func TestReportSlicesNotPlanned(t *testing.T) {
 	}
 }
 
+// The line ledger follows the investigation records of a complete synthetic
+// worker run. A file already represented in the overview still gets its tail.
+func TestReportLineCoverageAcrossModules(t *testing.T) {
+	tree := map[string]string{"README.md": "# Review catalogue\n\nEach module publishes a numbered entry.\n"}
+	for i := range 67 {
+		module := fmt.Sprintf("module%02d", i%12)
+		tree[module+"/go.mod"] = "module sample.test/" + module + "\n\ngo 1.23\n"
+		tree[fmt.Sprintf("%s/f%03d.go", module, i)] = fmt.Sprintf("package catalogue\n\nfunc Entry%03d() int { return %d }\n", i, i)
+	}
+	const longFile = "module00/f000.go"
+	const lineLimitFile = "module01/f001.go"
+	tree[longFile] = "package catalogue\n" + strings.Repeat("// module catalogue entry\n", 108) + "func FinalEntry() int { return 108 }\n"
+	tree[lineLimitFile] = "package catalogue\n//" + strings.Repeat("x", 2500) + "\nfunc AfterLongLine() int { return 3 }\n"
+	j := treeJob(t, tree)
+	const tailCandidate = "마지막 항목이 다른 값을 반환"
+	script := coverageScript(t)
+	base := script["investigate"]
+	script["investigate"] = func(n int, q opencode.Request) opencode.Reply {
+		in := decodeAs[investigateInput](t, q)
+		for _, e := range in.Scope.Excerpts {
+			if e.Path == longFile && strings.Contains(e.Text, "func FinalEntry()") {
+				return asJSON(map[string]any{"candidates": []record.CandidateText{{
+					Title: tailCandidate, Condition: "마지막 항목을 읽는다.", Impact: "항목 번호가 달라진다.",
+					Improvement: "마지막 항목의 반환값을 확인한다.", Counterpoint: "별도의 허용 번호가 지정될 수 있다.", Evidence: []string{e.ID},
+				}}})
+			}
+		}
+		return base(n, q)
+	}
+	r := sliceReportWithCaller(t, j, secretsStub{}, 22, &exampleIDs{n: 0x402}, &scriptedCaller{script: script})
+	l := r.CodeReview.Ledger
+	if l == nil || len(l.Modules) != 12 || len(l.Files) != 67 || l.CallsUsed == nil || *l.CallsUsed > 22 {
+		t.Fatalf("coverage ledger missing or over budget: %+v", l)
+	}
+	complete, exposed := 0, 0
+	for _, f := range l.Files {
+		if f.SentLines > 0 {
+			exposed++
+		}
+		if f.ReviewedLines == f.TotalLines {
+			complete++
+		}
+		if f.Path == longFile && (f.TotalLines != 110 || f.ReviewedLines != 110) {
+			t.Fatalf("long file tail not reviewed: %+v", f)
+		}
+		if f.Path == lineLimitFile && (f.SentLines != 2 || f.ReviewedLines != 2 || !slices.Equal(f.Remaining, []report.LedgerRange{{StartLine: 2, EndLine: 2, Reason: record.ScopeReasonLineLimit}})) {
+			t.Fatalf("long single line hid following source: %+v", f)
+		}
+	}
+	t.Logf("synthetic corpus: %d/%d files represented, %d fully covered, %d/%d calls", exposed, len(l.Files), complete, *l.CallsUsed, *l.MaxCalls)
+	if exposed != 67 || complete != 66 || l.Status != report.LedgerPartial {
+		t.Fatalf("coverage %d represented, %d complete, ledger %s", exposed, complete, l.Status)
+	}
+	if !slices.ContainsFunc(r.Findings, func(f report.Finding) bool {
+		return f.Title == tailCandidate && slices.ContainsFunc(f.Evidence, func(e report.Evidence) bool {
+			return e.Location != nil && e.Location.Path == longFile && e.Location.EndLine == 110
+		})
+	}) {
+		t.Fatal("report lost the scripted candidate and its source range at the file tail")
+	}
+	if _, err := report.Marshal(r); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCoverageVisitsSixtySevenModulesWithoutInventingCandidateVerification(t *testing.T) {
+	const modules = 67
+	tree := map[string]string{}
+	for i := range modules {
+		module := fmt.Sprintf("module%02d", i)
+		dir := module
+		if i >= 60 {
+			dir = "examples/" + module
+		}
+		tree[dir+"/go.mod"] = "module sample.test/" + module + "\n\ngo 1.23\n"
+		tree[dir+"/entry.go"] = fmt.Sprintf("package catalogue\n\nfunc Hold%02d() int { return %d }\n", i, i)
+	}
+	for i := range 110 {
+		tree[fmt.Sprintf("module00/extra%03d.go", i)] = "package catalogue\n" + strings.Repeat("// implementation context for the first module\n", 100)
+	}
+	j := treeJob(t, tree)
+	script := coverageScript(t)
+	sent := map[string]bool{}
+	script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[investigateInput](t, q)
+		for _, e := range in.Scope.Excerpts {
+			if strings.Contains(e.Text, "func Hold") {
+				sent[e.Path] = true
+			}
+		}
+		return asJSON(map[string]any{"candidates": []any{}})
+	}
+	caller := &scriptedCaller{script: script}
+	r := sliceReportWithCaller(t, j, secretsStub{}, record.DefaultMaxCalls, &exampleIDs{n: 0x502}, caller)
+	l := r.CodeReview.Ledger
+	if l == nil || len(l.Modules) != modules || l.CallsUsed == nil || *l.CallsUsed > record.DefaultMaxCalls || len(sent) != modules || caller.calls("verify") != 0 {
+		t.Fatalf("ledger missing or over budget, real representative snippets %d/%d, verify calls %d", len(sent), modules, caller.calls("verify"))
+	}
+	for _, m := range l.Modules {
+		if m.FilesRequested == nil || *m.FilesRequested == 0 || m.FilesAccepted == nil || *m.FilesAccepted == 0 || m.FilesWithCompletedReview != 0 {
+			t.Fatalf("module has no accepted source or overstates candidate verification: %+v", m)
+		}
+	}
+	t.Logf("native worker and report builder recorded real source snippets for %d/%d modules in %d/%d calls; zero candidate verification calls", len(sent), modules, *l.CallsUsed, *l.MaxCalls)
+}
+
+func TestCoverageRecordsRejectedRequestAndReschedulesItsLines(t *testing.T) {
+	j := treeJob(t, map[string]string{
+		"go.mod":  "module sample.test/catalogue\n\ngo 1.23\n",
+		"main.go": "package main\n\nfunc Allow() bool { return true }\n",
+	})
+	script := coverageScript(t)
+	script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
+		return opencode.Reply{Reason: "model_unavailable"}
+	}
+	r := sliceReportWithCaller(t, j, secretsStub{}, record.DefaultMaxCalls, &exampleIDs{n: 0x602}, &scriptedCaller{script: script})
+	l := r.CodeReview.Ledger
+	if l == nil || len(l.Modules) != 1 || len(l.Files) != 1 || *l.Modules[0].FilesRequested != 1 || *l.Modules[0].FilesAccepted != 0 {
+		t.Fatalf("request vs accepted coverage: %+v", l)
+	}
+	f := l.Files[0]
+	if f.Investigation != "requested_without_accepted_response" || f.SentLines != 3 || f.ReviewedLines != 0 ||
+		!slices.Equal(f.Remaining, []report.LedgerRange{{StartLine: 1, EndLine: 3, Reason: "requested_without_accepted_response"}}) {
+		t.Fatalf("rejected investigation treated as accepted or counted twice: %+v", f)
+	}
+	if l.CallsUsed == nil || !slices.ContainsFunc(r.Coverage.ReviewCalls, func(c report.ReviewCall) bool { return c.TaskKey == "review.investigate.s001" }) {
+		t.Fatalf("failed overview input was not retried in a slice (ledger %+v)", l)
+	}
+}
+
+func TestInvestigationKeepsCandidateWhenStrengthCitesOnlyImportAndComment(t *testing.T) {
+	j := treeJob(t, map[string]string{
+		"go.mod":     "module sample.test/catalogue\n\ngo 1.23\n",
+		"main.go":    "package main\n\nfunc Allow() bool { return true }\n",
+		"imports.go": "package main\n\nimport \"fmt\"\n\n// return success for every route\n",
+	})
+	script := coverageScript(t)
+	script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[investigateInput](t, q)
+		main := excerptID(in.Scope.Excerpts, "main.go")
+		imports := excerptID(in.Scope.Excerpts, "imports.go")
+		return asJSON(map[string]any{
+			"candidates": []record.CandidateText{{Title: "조건 없이 성공하는 반환", Condition: "Allow를 직접 호출한다.",
+				Impact: "부정 입력을 별도로 확인해야 한다.", Improvement: "호출자가 전달한 상태를 확인한다.",
+				Counterpoint: "모든 호출자가 이미 상태를 확인할 수 있다.", Evidence: []string{main}}},
+			"strengths": []record.Strength{{Title: "라우트 응답 검사", Benefit: "응답 누락을 방지한다.", Scope: ".", EvidenceIDs: []string{imports}}},
+		})
+	}
+	caller := &scriptedCaller{script: script}
+	pinExampleSnapshot(t, &j)
+	r := sliceReportWithCaller(t, j, secretsStub{}, record.DefaultMaxCalls, &exampleIDs{n: 0x702}, caller)
+	rec := readRecord(t, j, record.StageInvestigate)
+	if !rec.Accepted() || len(rec.Calls) != 1 || len(rec.Candidates) != 1 || len(rec.Strengths) != 0 ||
+		!slices.Contains(rec.Limitations, "review_strength_omitted") || len(r.CodeReview.FindingIDs) != 1 {
+		t.Fatalf("candidate or optional evidence status differs: %+v, finding IDs %v", rec.Candidates, r.CodeReview.FindingIDs)
+	}
+}
+
 // writeOrCompare stores r (demo) at p, or compares with the stored file.
 func writeOrCompare(t *testing.T, r report.Report, p string) {
 	t.Helper()
@@ -310,14 +474,15 @@ func checkSliceExample(t *testing.T, r report.Report, calls int) {
 		l.CallsUsed == nil || *l.CallsUsed != calls || calls > sliceExampleCap || l.RequestBytesSent == nil || *l.RequestBytesSent != *cr.RequestBytes {
 		t.Fatalf("ledger header %+v (calls %d)", l, calls)
 	}
-	exhausted, completed, sent, eligible := 0, 0, 0, 0
+	completed, sent := 0, 0
 	for _, m := range l.Modules {
-		exhausted += m.FilesBudgetExhausted
 		completed += m.FilesWithCompletedReview
 		sent += m.FilesSentToModel
-		eligible += m.FilesEligible
 	}
-	if exhausted == 0 || completed == 0 || sent == 0 || sent >= eligible || *r.Coverage.LLMExposedFiles <= 8 {
+	if l.PrimarySlotsBudgetExhausted == 0 || completed == 0 || sent == 0 || *r.Coverage.LLMExposedFiles <= 8 ||
+		!slices.ContainsFunc(l.Files, func(f report.LedgerFile) bool {
+			return slices.ContainsFunc(f.Remaining, func(r report.LedgerRange) bool { return r.Reason == reasonBudgetExhausted })
+		}) {
 		t.Fatalf("ledger rows %+v exposed %d", l.Modules, *r.Coverage.LLMExposedFiles)
 	}
 	slice := 0
@@ -330,15 +495,8 @@ func checkSliceExample(t *testing.T, r report.Report, calls int) {
 	for _, c := range r.Coverage.ReviewCalls {
 		keys[c.TaskKey] = true
 	}
-	if slice == 0 || !keys["review.investigate.s001"] || !keys["review.verify.s003"] || keys["review.investigate.s004"] {
+	if slice == 0 || !keys["review.investigate.s001"] || !keys["review.verify.s001"] {
 		t.Fatalf("slice findings %d, call tasks %v", slice, keys)
-	}
-	gaps := map[string]bool{}
-	for _, g := range r.Gaps {
-		gaps[g.Code] = true
-	}
-	if !gaps["review_scope_budget_exhausted"] {
-		t.Fatalf("gaps %+v", r.Gaps)
 	}
 	for _, task := range r.Tasks {
 		if stage, _, ok := record.SliceTask(task.Key); ok && stage == record.StageInvestigate && task.Status == string(domain.TaskBudgetExhausted) && deref(task.Reason) != "review_budget_exhausted" {

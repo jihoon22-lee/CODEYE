@@ -240,6 +240,7 @@ func withAcceptedContractRole(t *testing.T, full *Report) {
 	full.Coverage.ReviewCalls = append(full.Coverage.ReviewCalls, call)
 	full.CodeReview.Calls++
 	full.CodeReview.AcceptedCalls++
+	countAddedCallForTest(full)
 }
 
 func TestAdditionalUnknownObservationRendersWithoutChangingVerdict(t *testing.T) {
@@ -324,6 +325,7 @@ func TestAdditionalUnknownObservationRendersWithoutChangingVerdict(t *testing.T)
 	t.Run("historical builder", func(t *testing.T) {
 		legacy := full
 		legacy.Builder.Version = "12"
+		fileOnlyLedgerForTest(&legacy)
 		docs := *full.Documents
 		docs.Comparisons = slices.Clone(docs.Comparisons)
 		additional := *row.AdditionalObservation

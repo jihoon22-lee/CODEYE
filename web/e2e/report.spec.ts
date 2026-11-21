@@ -1,5 +1,54 @@
 import { expect, test } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+test('saved report navigation follows scroll and fragment links under CSP', async ({page}, info) => {
+  const assets = new URL('../../internal/report/reportui/', import.meta.url);
+  const css = ['tabler.css', 'report.css', 'export.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
+  const script = readFileSync(new URL('export-navigation.js', assets), 'utf8');
+  const hash = createHash('sha256').update(script).digest('base64');
+  const sections = { overview: '종합', documents: '문서 분석', code_review: '코드 분석', appendix: '부록' };
+  const links = Object.entries(sections).map(([key, name]) => `<li><a href="#${key}" class="nav-link">${name}</a></li>`).join('');
+  const file = info.outputPath('report.html');
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `<!doctype html><html lang="ko"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'">
+    <style>${css}.export-section { min-height: 82vh; }</style>
+    <body class="review-theme report-export"><div class="report-layout export-page">
+    <nav class="report-rail">
+      <div class="export-desktop-nav"><ul class="nav">${links}</ul></div>
+      <details class="export-mobile-nav"><summary>보고서 목차 <span class="export-mobile-current"></span><span>⌄</span></summary><ul class="nav">${links}</ul></details>
+    </nav><main class="report-main">
+    ${Object.entries(sections).map(([key, name]) => `<section class="export-section" id="${key}"><h2>${name}</h2>
+      ${key === 'documents' ? '<details><summary>근거</summary><p id="document-citation">문서 근거</p></details>' : ''}</section>`).join('')}
+    </main></div><script>document.body.classList.add('unexpected-script')</script><script>${script}</script></body></html>`);
+
+  await page.setViewportSize({width: 1280, height: 720});
+  const url = pathToFileURL(file).href;
+  await page.goto(url);
+  const current = page.locator('.export-desktop-nav [aria-current="location"]');
+  await expect(current).toHaveText(sections.overview);
+  expect(await page.locator('body').evaluate(body => body.classList.contains('unexpected-script'))).toBe(false);
+  await page.locator('#documents').evaluate(section => section.scrollIntoView());
+  await expect(current).toHaveText(sections.documents);
+  await page.locator('#code_review').evaluate(section => section.scrollIntoView());
+  await expect(current).toHaveText(sections.code_review);
+  await page.locator('#overview').evaluate(section => section.scrollIntoView());
+  await expect(current).toHaveText(sections.overview);
+  await page.locator('.export-desktop-nav').getByRole('link', {name: sections.appendix}).click();
+  await expect(current).toHaveText(sections.appendix);
+  await expect(page).toHaveURL(url + '#appendix');
+
+  await page.setViewportSize({width: 390, height: 720});
+  await page.goto(url + '#document-citation');
+  await expect(page.locator('#document-citation')).toBeVisible();
+  await expect(page.locator('.export-mobile-current')).toHaveText(sections.documents);
+  await page.locator('#code_review').evaluate(section => section.scrollIntoView());
+  await expect(page.locator('.export-mobile-current')).toHaveText(sections.code_review);
+  await expect(page.locator('.export-mobile-nav [aria-current="location"]')).toHaveText(sections.code_review);
+});
 
 test('long saved source scrolls inside the HTML finding card at mobile and desktop widths', async ({page}) => {
   const assets = new URL('../../internal/report/reportui/', import.meta.url);

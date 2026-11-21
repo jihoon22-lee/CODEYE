@@ -1,12 +1,16 @@
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { AnalysisReport, Finding, Observation } from './analysisReport';
-import type { Citation, Dependency, Ledger, LedgerModule, ModelState, SectionStage, Sections } from './parseReportSections';
-import { ComparisonSection } from './HistoryView';
+import type { Dependency, Ledger, LedgerModule, ModelState, SectionStage, Sections } from './parseReportSections';
+import { ComparisonSection, HIDDEN } from './HistoryView';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
-import { Citations, FindingList, PinnedSourceLink, ReportCalls, ReportCounts, ReportExports, ReportIdentity, ReportReviewStatus, ReportScope, ReportTasks, TextList, WorkflowReading, explainReason, label, sourceLocation, type ReportHistory } from './ReportParts';
+import { inspectionsKo } from './locales/report-inspections-ko';
+import { Citations, FindingList, PinnedSourceLink, ReportCalls, ReportCounts, ReportExports, ReportIdentity, ReportReviewStatus, ReportScope, ReportTasks, TextList, explainReason, label, type ReportHistory } from './ReportParts';
 import { ReportAction, ReportIcon, ReportLayout } from './ReportLayout';
 import { ProjectOverview } from './ProjectOverview';
+import { ReportDocumentReading } from './ReportDocumentReading';
+import { InspectionReading, MeasurementReading } from './ReportInspections';
+import { ReportCodeStrengths } from './ReportCodeStrengths';
 import { ReportSearch, focusReportFinding, focusReportSearchLocation, type ReportSearchTarget } from './ReportSearch';
 import { projectBehaviors } from './reportBehaviors';
 import { cutLine } from './format';
@@ -15,18 +19,16 @@ import {
   locationPath,
   moduleDir,
   moduleSecondary,
-  orderFindings,
   overviewFacts,
+  readingSummary,
   places,
-  primaryCitation,
   ruleGroups,
   secondaryDir,
   secondaryPath,
   secondaryReviewFinding,
-  secondaryReviewScope,
+  sevRank,
   severityOf,
   slotRuns,
-  toolRows,
   SHOWN,
   type Places,
 } from './reportGroups';
@@ -83,12 +85,12 @@ function Table({ head, rows, empty, compact }: { head: string[]; rows: ReactNode
   // Columns of numbers align right in tabular figures.
   const numeric = head.map((_, j) => rows.every((row) => typeof row[j] === 'number'));
   return (
-    <div className={'table' + (compact ? ' compact' : '')}>
-      <table>
+    <div className={'table report-data-table' + (compact ? ' compact' : '')}>
+      <table role="table">
         <thead>
-          <tr>
+          <tr role="row">
             {head.map((h, j) => (
-              <th key={h} scope="col" className={numeric[j] ? 'num' : undefined}>
+              <th key={h} scope="col" role="columnheader" className={numeric[j] ? 'num' : undefined}>
                 {h}
               </th>
             ))}
@@ -96,9 +98,11 @@ function Table({ head, rows, empty, compact }: { head: string[]; rows: ReactNode
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i}>
+            <tr key={i} role="row">
               {row.map((cell, j) => (
-                <td key={j} className={numeric[j] ? 'num' : undefined}>{cell}</td>
+                <td key={j} role="cell" data-label={head[j]} className={numeric[j] ? 'num' : undefined}>
+                  <div className="report-cell-value">{cell}</div>
+                </td>
               ))}
             </tr>
           ))}
@@ -128,6 +132,25 @@ function StageLine({ stage }: { stage: SectionStage }) {
   return <p>{s.stageLine(state(stage.state), stage.tasks, stage.succeeded)}</p>;
 }
 
+function TestRunOverview({ results }: { results: NonNullable<AnalysisReport['testResults']> }) {
+  const reasons = new Set(results.tasks.map(task => task.reason));
+  const reason = results.status === 'not_run' && reasons.size === 1 ? [...reasons][0] : null;
+  const notStarted = results.status === 'not_run' && results.tasks.every(task =>
+    !task.attempted && !['succeeded', 'failed', 'timed_out', 'cancelled'].includes(task.status));
+  return <details className="report-reading-records report-test-results" data-test-status={results.status} aria-label={t.tests.heading}>
+    <summary>{notStarted ? t.tests.notStarted : label(t.tests.summary, results.status)}
+      {reason && <small className="report-test-reason">{explainReason(reason)}</small>}
+    </summary>
+    <Table head={[t.tests.suite, t.tests.directory, s.col.status, t.tests.exit, s.col.reason]} rows={results.tasks.map(task => [
+      <span key="task">{label(t.tests.suites, task.key.split('.')[1])} <small><code>{task.key}</code></small></span>,
+      task.directory ? <code key="dir">{task.directory}</code> : '—',
+      task.result !== 'unverified' ? label(t.tests.statuses, task.result) : task.status === 'succeeded' ? t.tests.unverified : label(s.taskStatus, task.status),
+      task.exit ?? '—',
+      task.reason ? explainReason(task.reason) : '—',
+    ])} />
+  </details>;
+}
+
 function ModelNote({ model }: { model: ModelState }) {
   if (model.performed)
     return (
@@ -136,54 +159,6 @@ function ModelNote({ model }: { model: ModelState }) {
       </p>
     );
   return <p>{s.noModel(label(s.modelReasons, model.reason ?? '') || explainReason(model.reason ?? ''))}</p>;
-}
-
-function ModelReading({ title, children }: { title: string; children: ReactNode }) {
-  const heading = useId();
-  return (
-    <section className="model-reading" aria-labelledby={heading}>
-      <header><h6 id={heading}>{title}</h6><span className="badge">{t.modelReading}</span></header>
-      {children}
-    </section>
-  );
-}
-
-type Reading = {
-  id?: string;
-  title: string;
-  statement: string;
-  scope?: string;
-  status?: string;
-  secondary?: boolean;
-  refs: string[];
-  additional?: { reason: string; codeRefs: string[] };
-  workflow?: Sections['documents']['comparisons'][number]['workflow'];
-};
-
-function ReadingList({ rows, catalog }: { rows: Reading[]; catalog: Citation[] }) {
-  return (
-    <ul className="plain report-cards model-reading-list">
-      {rows.map(({ id, title, statement, scope, status, secondary, refs, additional, workflow }, i) => (
-        <li className="card report-card model-reading-item" key={i}>
-          <div className="card-body">
-            <div className="reading-badges">
-              {status && <span className="badge">{status}</span>}
-              {secondary && <span className="badge">{t.reading.secondary}</span>}
-            </div>
-            <h6 className="card-title" id={id} tabIndex={id ? -1 : undefined}>{title}</h6>
-            <p className="report-card-copy">{statement}</p>
-            {scope && scope !== '.' && <p className="report-card-meta">{t.scopeTitle} <code>{scope}</code></p>}
-            {refs.length > 0 && <div className="reading-refs"><Citations refs={refs} catalog={catalog} /></div>}
-            {additional && <>
-              <p className="report-card-copy"><strong>{t.reading.additionalObservation}</strong>{' '}{additional.reason}</p>
-              <div className="reading-refs"><Citations refs={additional.codeRefs} catalog={catalog} /></div>
-            </>}
-            {workflow && <WorkflowReading workflow={workflow} catalog={catalog} />}
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
 }
 
 function ObservationTable({ ids, byID }: { ids: string[]; byID: Map<string, Observation> }) {
@@ -215,13 +190,18 @@ function LedgerBlock({ ledger }: { ledger: Ledger }) {
   const l = s.ledger;
   const n = (v: number | null) => (v === null ? l.unknown : String(v));
   const classes = ledger.modules.some((m) => m.cls !== null);
-  const head = [s.col.module, ...(classes ? [l.col.cls] : []), l.col.discovered, l.col.eligible, l.col.sent, l.col.bytesSent, l.col.truncated, l.col.withheld, l.col.unreadable, l.col.budgetExhausted, l.col.notPlanned, ...(classes ? [l.col.secondaryNotReached] : []), l.col.notSent, l.col.completed];
+  const withLines = ledger.files !== null;
+  const head = [s.col.module, ...(classes ? [l.col.cls] : []), l.col.discovered, l.col.eligible, l.col.sent,
+    ...(withLines ? [l.col.accepted] : []), l.col.bytesSent, l.col.truncated, l.col.withheld, l.col.unreadable,
+    l.col.budgetExhausted, l.col.notPlanned, ...(classes ? [l.col.secondaryNotReached] : []), l.col.notSent,
+    withLines ? l.col.candidateFollowup : l.col.completed];
   const row = (m: LedgerModule, name: ReactNode, discovered: string) => [
     name,
     ...(classes ? [label(l.classes, m.cls ?? '')] : []),
     discovered,
     m.eligible,
     m.sent,
+    ...(withLines ? [n(m.accepted)] : []),
     m.bytesSent,
     m.truncated,
     m.withheld,
@@ -237,6 +217,7 @@ function LedgerBlock({ ledger }: { ledger: Ledger }) {
   const sum = (k: keyof LedgerModule) => secondary.reduce((a, m) => a + (m[k] as number), 0);
   const total = { ...secondary[0], cls: 'secondary' } as LedgerModule;
   for (const k of ['eligible', 'sent', 'bytesSent', 'truncated', 'withheld', 'unreadable', 'budgetExhausted', 'notPlanned', 'secondaryNotReached', 'notSent', 'completed'] as const) total[k] = sum(k);
+  if (withLines) total.accepted = secondary.reduce((n, m) => n + (m.accepted ?? 0), 0);
   const slices = new Map<string, { status: string; reason: string | null; modules: string[] }>();
   for (const m of ledger.modules) {
     for (const x of m.slices) {
@@ -245,15 +226,21 @@ function LedgerBlock({ ledger }: { ledger: Ledger }) {
       slices.set(x.task, r);
     }
   }
+  const eligible = ledger.modules.reduce((a, m) => a + m.eligible, 0);
+  const sent = ledger.modules.reduce((a, m) => a + m.sent, 0);
+  const accepted = ledger.modules.reduce((a, m) => a + (m.accepted ?? 0), 0);
+  const acceptedModules = ledger.modules.filter((m) => (m.accepted ?? 0) > 0).length;
+  const lineReason = (reason: string) => l.lineReasons[reason] ?? label(l.lineStates, reason);
+  const files = ledger.files;
   return (
     <>
       <h6>{l.heading}</h6>
       <p>
-        <strong>{l.coverage(ledger.modules.length, ledger.modules.reduce((a, m) => a + m.eligible, 0), ledger.modules.reduce((a, m) => a + m.sent, 0))}</strong>
+        <strong>{withLines ? l.lineCoverage(ledger.modules.length, acceptedModules, eligible, sent, accepted) : l.coverage(ledger.modules.length, eligible, sent)}</strong>
       </p>
-      <p className="small">{l.lead}</p>
+      <p className="small">{withLines ? l.lineLead : l.lead}</p>
       <ul>
-        <li>{label(l.status, ledger.status)}</li>
+        <li>{label(withLines ? l.lineStatus : l.status, ledger.status)}</li>
         <li>
           {l.scope} <code>{ledger.scope.key}</code> {label(s.taskStatus, ledger.scope.status ?? '')}
           {ledger.scope.reason ? ' — ' + explainReason(ledger.scope.reason) : ''}
@@ -289,6 +276,17 @@ function LedgerBlock({ ledger }: { ledger: Ledger }) {
           </>
         )}
       </More>
+      {files && files.length > 0 && (
+        <More title={l.allFiles(files.length)}>
+          {() => <Table head={[l.lines.file, s.col.status, l.lines.total, l.lines.requested, l.lines.accepted, l.lines.remaining]}
+            rows={files.map((f) => [
+              <code key={f.path}>{f.path}</code>, label(l.lineStates, f.investigation), f.total > 0 ? f.total : '—',
+              f.sent, f.accepted, f.reason ? lineReason(f.reason) : f.remaining.map((r) =>
+                `${r.start === r.end ? r.start : `${r.start}–${r.end}`} ${lineReason(r.reason)}`).join(' · ') || '—',
+            ])}
+          />}
+        </More>
+      )}
     </>
   );
 }
@@ -368,28 +366,6 @@ function pick(findings: Finding[], ids: string[]) {
   return findings.filter((f) => ids.includes(f.id));
 }
 
-function comparisonReading(row: Sections['documents']['comparisons'][number], catalog: Citation[]): Reading {
-  const hasPrimary = catalog.some(c => row.codeRefs.includes(c.id) && primaryCitation(c, 'code'));
-  return {
-    title: row.statement,
-    scope: row.scope,
-    status: label(t.reading.comparisonStatus, row.status) + (row.followup ? ' · ' + t.reading.followedContract : ''),
-    statement: row.reason,
-    secondary: row.codeRefs.length > 0 ? !hasPrimary : secondaryReviewScope(row.scope),
-    refs: [...row.documentRefs, ...row.codeRefs.filter(id => !row.additional?.codeRefs.includes(id))],
-    additional: row.additional,
-    workflow: row.workflow,
-  };
-}
-
-function strengthReading(row: Sections['codeReview']['strengths'][number], catalog: Citation[]): Reading {
-  return {
-    title: row.title, scope: row.scope, statement: row.benefit,
-    secondary: !catalog.some(c => row.refs.includes(c.id) && primaryCitation(c, 'code')),
-    refs: row.refs,
-  };
-}
-
 // Project reports use tabs. Archived reports without project metadata use
 // the same reading order in native disclosures.
 export function SectionedReport({ report, sections, history }: { report: AnalysisReport; sections: Sections; history?: ReportHistory }) {
@@ -399,13 +375,50 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const id = useId();
   const documentTarget = useRef<string | null>(null);
   const [active,setActive] = useState('overview');
+  const [readingSection, setReadingSection] = useState<string>();
   const [searchTarget, setSearchTarget] = useState<ReportSearchTarget>();
   const findingTarget = searchTarget?.kind === 'finding' ? searchTarget : undefined;
   const tabId = (key:string) => id + '-tab-' + key;
   const comparisonId = (index: number) => id + '-document-comparison-' + (index + 1);
   useLayoutEffect(() => {
+    if (!tabbed) return;
+    const tab = document.getElementById(`${id}-tab-${active}`);
+    const strip = tab?.parentElement;
+    if (!tab || !strip || strip.scrollWidth <= strip.clientWidth) return;
+    const item = tab.getBoundingClientRect();
+    const viewport = strip.getBoundingClientRect();
+    if (item.left < viewport.left) strip.scrollLeft += item.left - viewport.left;
+    if (item.right > viewport.right) strip.scrollLeft += item.right - viewport.right;
+  }, [tabbed, id, active]);
+  useLayoutEffect(() => {
+    if (tabbed) return;
+    const blocks = ORDER.map(key => document.getElementById(anchor(key)));
+    let frame: number | undefined;
+    const schedule = () => {
+      if (frame !== undefined) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = undefined;
+        const readingLine = Math.min(96, window.innerHeight / 5);
+        let section: string | undefined;
+        for (const [index, block] of blocks.entries()) {
+          if (block && block.getBoundingClientRect().top <= readingLine) section = ORDER[index];
+        }
+        setReadingSection(section);
+      });
+    };
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    document.addEventListener('toggle', schedule, true);
+    return () => {
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      document.removeEventListener('toggle', schedule, true);
+    };
+  }, [tabbed, report.runID, report.revision]);
+  useLayoutEffect(() => {
     if (documentTarget.current) {
-      document.getElementById(documentTarget.current)?.focus();
+      focusReportSearchLocation(document.getElementById(documentTarget.current));
       documentTarget.current = null;
     }
   }, [active, open]);
@@ -432,6 +445,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
     if (tabbed) {select(key); return;}
     setSearchTarget(undefined);
     setOpen((prev) => new Set(prev).add(key));
+    setReadingSection(key);
     document.getElementById(anchor(key))?.querySelector('summary')?.focus();
   };
   const toggle = (key: string, isOpen: boolean) =>
@@ -469,29 +483,35 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
     ? sc.tasks.map((k) => report.tasks.find((x) => x.key === k)).find((r) => r && r.status !== 'succeeded' && r.status !== 'unsupported')
     : undefined;
   const cr = sections.codeReview;
+  const investigationRequests = report.calls.filter(call => call.requested && !call.purpose && call.role === 'investigate').length;
+  const verificationRequests = report.calls.filter(call => call.requested && !call.purpose && call.role === 'verify').length;
   const staticFindings = sa.languages.flatMap((l) => l.tools.flatMap((x) => x.findings));
   const sevOf = severityOf(report.findings, staticFindings);
   const facts = overviewFacts(report, sections);
+  const readingSignals = readingSummary(report);
   const modSecondary = (id: string) => secondaryDir(moduleDir(id));
   // Review findings: the supported and reproduced ones on primary paths
   // open the section; the others and those on secondary paths come after.
-  const reviewFindings = orderFindings(pick(report.findings, cr.findings));
+  const reviewFindings = pick(report.findings, cr.findings).sort((a, b) => sevRank(b.severity) - sevRank(a.severity));
   const supported = (f: Finding) => f.validation === 'supported' || f.validation === 'reproduced';
-  const reviewPrimary = reviewFindings.filter((f) => !secondaryReviewFinding(f));
+  const currentDisposition = new Map(history?.load.state === 'ready' ? history.load.value.findings.map(f => [f.findingID, f.current]) : []);
+  const isDisposed = (f: Finding) => {
+    const disposition = currentDisposition.get(f.id) ?? f.disposition;
+    return HIDDEN.has(disposition) || disposition === 'fixed_by_user';
+  };
+  const refuted = reviewFindings.filter(f => f.validation === 'refuted');
+  const disposed = reviewFindings.filter(f => f.validation !== 'refuted' && isDisposed(f));
+  const reviewable = reviewFindings.filter(f => f.validation !== 'refuted' && !isDisposed(f));
+  const reviewPrimary = reviewable.filter(f => !secondaryReviewFinding(f));
   const reviewFirst = reviewPrimary.filter(supported);
-  const reviewRest = reviewPrimary.filter((f) => !supported(f));
-  const reviewSecondary = reviewFindings.filter(secondaryReviewFinding);
+  const reviewRest = reviewPrimary.filter(f => !supported(f));
+  const reviewSecondary = reviewable.filter(secondaryReviewFinding);
+  const hasCodeReview = cr.findings.length > 0 || cr.strengths.length > 0 || cr.roles.some(role =>
+    role.result === 'accepted' && (role.key === 'review.investigate' || role.key === 'review.verify')
+  ) || cr.ledger?.modules.some(module => module.completed > 0);
   const allDiagnostics = sa.languages.flatMap((l) => l.tools.flatMap((x) => x.observations));
   const suppressed = allDiagnostics.filter((id) => byID.get(id)?.suppressed && !byID.get(id)?.metric).length;
-  const largest = (ids: string[]) => {
-    const list = ids.map((id) => {
-      const o = byID.get(id);
-      const sec = !!o?.path && secondaryPath(locationPath(o.path));
-      return { text: (o?.path ?? '—') + ' (' + (o?.metric?.value ?? '—') + ')', value: o?.metric?.value ?? 0, sec };
-    });
-    list.sort((a, b) => Number(a.sec) - Number(b.sec) || b.value - a.value);
-    return placesText(places(list.filter((x) => !x.sec).map((x) => x.text), list.filter((x) => x.sec).map((x) => x.text)));
-  };
+
   const detectionsPrimary = sc.detections.filter((x) => !secondaryPath(locationPath(x.place)));
   const detectionsSecondary = sc.detections.filter((x) => secondaryPath(locationPath(x.place)));
   const detectionRow = (x: (typeof sc.detections)[number]) => [<code key="r">{x.rule}</code>, <code key="p">{x.place}</code>, <code key="f">{or(x.finding)}</code>];
@@ -509,11 +529,6 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const verdictRow = (x: (typeof e.verdicts)[number]) => [<code key="m">{x.module}</code>, x.tool, label(s.verdictStatus, x.status), or(x.reason)];
   const itemRow = (x: (typeof d.items)[number]) => [<code key="p">{x.path}</code>, x.cls, <code key="a">{x.appliesTo}</code>, label(s.docStatus, x.status), x.reason ? explainReason(x.reason) : '—', x.size ?? '—'];
   const docModuleRow = (x: (typeof d.modules)[number]) => [<code key="m">{x.module}</code>, label(s.docState, x.state), or(x.own.join(', ')), or(x.inherited.join(', '))];
-  const docComparisons = d.comparisons.map((c, i) => ({ ...comparisonReading(c, d.citations), id: comparisonId(i) }));
-  const unpairedContracts = d.contracts.filter(contract => !d.comparisons.some(comparison =>
-    comparison.scope === contract.appliesTo && comparison.statement.trim() === contract.statement.trim() &&
-    contract.evidence.every(id => comparison.documentRefs.includes(id))));
-  const strengths = cr.strengths.map(x => strengthReading(x, cr.citations));
   const bodies: Record<string, ReactNode> = {
     environment: (
       <>
@@ -565,17 +580,11 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
     ),
     documents: (
       <>
+        <ReportDocumentReading documents={d} includesCode={report.includesCode !== false} id={id} comparisonId={comparisonId} />
+        {!d.model.performed && <ModelNote model={d.model} />}
+        <details className="report-reading-records" open={d.comparisons.length === 0 && d.quality.length === 0 && !d.model.performed ? true : undefined}>
+          <summary>{t.documentReading.discovery}</summary>
         <StageLine stage={d.stage} />
-        {d.comparisons.length > 0 && (
-          <ModelReading title={t.comparisonsTitle}>
-            <ReadingList rows={docComparisons} catalog={d.citations} />
-          </ModelReading>
-        )}
-        {d.quality.length > 0 && (
-          <ModelReading title={t.qualityTitle}>
-            <ReadingList rows={d.quality.map(q => ({ title: label(t.assessment, q.aspect), status: label(t.assessment, q.assessment), statement: q.statement, refs: q.refs }))} catalog={d.citations} />
-          </ModelReading>
-        )}
         <p>{label(s.discovery, d.discovery)}</p>
         {d.budget && <p>{s.budget(d.budget)}</p>}
         <SectionCounts sections={sections} keyName="documents" />
@@ -603,79 +612,21 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
             )}
           </>
         )}
-        <ModelNote model={d.model} />
-        {d.model.performed && (
-          <>
-            {unpairedContracts.length > 0 && <>
-              <h6>{s.contracts}</h6>
-              <ul>
-                {unpairedContracts.map((x, i) => (
-                  <li key={i}>
-                    {x.appliesTo !== '.' && x.appliesTo && <code>{x.appliesTo}</code>} {x.statement}
-                    <Citations refs={x.evidence} catalog={d.citations} />
-                  </li>
-                ))}
-              </ul>
-            </>}
-            {d.conflicts.length > 0 && <>
-              <h6>{s.conflicts}</h6>
-              <ul>
-                {d.conflicts.map((x, i) => (
-                  <li key={i}>
-                    {x.scope !== '.' && x.scope && <code>{x.scope}</code>} {x.summary} / {x.impact}
-                    <Citations refs={x.evidence} catalog={d.citations} />
-                  </li>
-                ))}
-              </ul>
-            </>}
-            {d.questions.length > 0 && <>
-              <h6>{s.questions}</h6>
-              <ul>
-                {d.questions.map((x, i) => (
-                  <li key={i}>
-                    {x.appliesTo !== '.' && x.appliesTo && <code>{x.appliesTo}</code>} {x.question}
-                    <Citations refs={x.evidence} catalog={d.citations} />
-                  </li>
-                ))}
-              </ul>
-            </>}
-            {d.notes.length > 0 && <>
-              <h6>{s.instructionNotes}</h6>
-              <ul>
-                {d.notes.map((x, i) => (
-                  <li key={i}>
-                    {x.note}
-                    <Citations refs={x.evidence} catalog={d.citations} />
-                  </li>
-                ))}
-              </ul>
-            </>}
-          </>
-        )}
+        </details>
       </>
     ),
     static_analysis: (
       <>
         <StageLine stage={sa.stage} />
-        <p>{s.staticLead}</p>
+        {sa.languages.map(lang => (
+          <InspectionReading key={lang.ecosystem ?? 'unknown'} language={lang} byID={byID} />
+        ))}
+        <details><summary>{inspectionsKo.counts}</summary><SectionCounts sections={sections} keyName="static_analysis" /></details>
         <details><summary>{t.glossary}</summary><Table head={[s.col.tool,s.col.message]} rows={Object.entries(t.tools)} /></details>
-        <SectionCounts sections={sections} keyName="static_analysis" />
         {sa.languages.map((lang) => {
           const groups = ruleGroups(lang.tools, byID, sevOf);
           return (
-            <section key={lang.ecosystem ?? 'unknown'} data-language={lang.ecosystem ?? 'unknown'}>
-              <h6>{s.language(lang.ecosystem)}</h6>
-              {lang.ecosystem === 'any' && <p className="small">{s.anyNote}</p>}
-              <Table
-                head={[s.col.tool, s.col.tasks, s.col.required, s.col.succeeded, s.col.diagnostics, s.col.notSucceeded]}
-                rows={toolRows(lang.tools, byID).map((x) => {
-                  const ran = x.succeeded > 0;
-                  // An analyzer none of whose tasks ran never reads as zero diagnostics.
-                  const diagnostics = !ran ? s.notRun : x.purpose === 'metrics' ? s.metricCount(x.diagnostics) : x.purpose === 'secrets' ? s.secretCount(x.diagnostics) : String(x.diagnostics);
-                  const failed = x.failed.map((f) => f.task + ' ' + label(s.taskStatus, f.status) + (f.reason ? ' · ' + explainReason(f.reason) : f.result !== 'accepted' ? ' · ' + label(s.result, f.result) : ''));
-                  return [<code key="t">{x.name}</code>, x.tasks, x.required, x.succeeded, diagnostics, or(shortList(failed))];
-                })}
-              />
+            <section key={lang.ecosystem ?? 'unknown'}>
               {groups.length > 0 && (
                 // What (the rule and its first message), how many, how severe, where first.
                 <Table
@@ -741,23 +692,8 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       <>
         <StageLine stage={m.stage} />
         <p>{s.metricsLead}</p>
-        <SectionCounts sections={sections} keyName="metrics" />
-        <Table
-          head={[s.col.task, s.col.status, s.col.reason]}
-          rows={m.tasks.map((k) => {
-            const row = report.tasks.find((x) => x.key === k);
-            return [<code key="k">{k}</code>, label(s.taskStatus, row?.status ?? ''), row?.reason ? explainReason(row.reason) : '—'];
-          })}
-          empty={s.gapLabels.not_planned}
-        />
-        <Table
-          head={[s.col.metric, s.col.unit, s.col.threshold, s.col.max, s.col.count, sm.largest]}
-          rows={m.groups.map((g) => [<code key="n">{g.name}</code>, g.unit, g.thresholds.join(', '), g.max, g.observations.length, largest(g.observations)])}
-          empty={s.noMetrics}
-        />
-        {m.groups.length > 0 && (
-          <More title={sm.allMetrics(facts.metrics.observations)}>{() => <ObservationTable ids={m.groups.flatMap((g) => g.observations)} byID={byID} />}</More>
-        )}
+        <MeasurementReading sections={sections} byID={byID} />
+        <details><summary>{inspectionsKo.counts}</summary><SectionCounts sections={sections} keyName="metrics" /></details>
       </>
     ),
     secrets: (
@@ -786,24 +722,49 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
     ),
     code_review: (
       <>
-        <StageLine stage={cr.stage} />
-        <h6>{sm.supported}</h6>
-        <FindingList findings={reviewFirst} history={history} empty={cr.findings.length === 0 ? s.noFindings : sm.supportedNone} reveal={findingTarget} />
+        <p className="small">{t.codeReading.requestCounts(investigationRequests, verificationRequests)}</p>
+        <h6>{t.codeReading.actions}</h6>
+        <FindingList findings={reviewFirst} history={history} empty={hasCodeReview ? t.codeReading.none : t.codeReading.noEvidence} reveal={findingTarget} groupByCategory={false} />
+        <ReportCodeStrengths review={cr} includesCode={report.includesCode !== false} id={id} />
+        {reviewRest.length > 0 && (
+          <More title={t.codeReading.limited(reviewRest.length)} reveal={reviewRest.some(f => f.id === findingTarget?.id) ? findingTarget : undefined}>
+            {() => <FindingList findings={reviewRest} history={history} empty={s.noFindings} reveal={findingTarget} groupByCategory={false} />}
+          </More>
+        )}
         {reviewSecondary.length > 0 && (
           <More title={sm.secondaryFindings(reviewSecondary.length)} reveal={reviewSecondary.some(f => f.id === findingTarget?.id) ? findingTarget : undefined}>
-            {() => <FindingList findings={reviewSecondary} history={history} empty={s.noFindings} reveal={findingTarget} />}
+            {() => <FindingList findings={reviewSecondary} history={history} empty={s.noFindings} reveal={findingTarget} groupByCategory={false} />}
           </More>
         )}
-        {reviewRest.length > 0 && (
-          <More title={sm.otherFindings(reviewRest.length)} reveal={reviewRest.some(f => f.id === findingTarget?.id) ? findingTarget : undefined}>
-            {() => <FindingList findings={reviewRest} history={history} empty={s.noFindings} reveal={findingTarget} />}
+        {refuted.length > 0 && (
+          <More title={t.codeReading.refuted(refuted.length)} reveal={refuted.some(f => f.id === findingTarget?.id) ? findingTarget : undefined}>
+            {() => <FindingList findings={refuted} history={history} empty={s.noFindings} reveal={findingTarget} groupByCategory={false} />}
           </More>
         )}
-        {cr.strengths.length > 0 && (
-          <ModelReading title={t.strengthsTitle}>
-            <ReadingList rows={strengths} catalog={cr.citations} />
-          </ModelReading>
+        {disposed.length > 0 && (
+          <More title={t.codeReading.disposition(disposed.length)} reveal={disposed.some(f => f.id === findingTarget?.id) ? findingTarget : undefined}>
+            {() => <FindingList findings={disposed} history={history} empty={s.noFindings} reveal={findingTarget} groupByCategory={false} />}
+          </More>
         )}
+        {cr.limits.length > 0 && (
+          <>
+            <h6>{s.limits}</h6>
+            <p className="model-note" role="note">
+              {s.model('review.interpret')}
+            </p>
+            <ul>
+              {cr.limits.map((x, i) => (
+                <li key={i}>
+                  {x.statement} <small>{x.observations.join(', ')}</small>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+
+        <details className="report-reading-records">
+          <summary>{t.codeReading.execution}</summary>
+        <StageLine stage={cr.stage} />
         {!cr.planned ? (
           <p>{s.noPack}</p>
         ) : (
@@ -832,21 +793,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
           </>
         )}
         {cr.ledger && <LedgerBlock ledger={cr.ledger} />}
-        {cr.limits.length > 0 && (
-          <>
-            <h6>{s.limits}</h6>
-            <p className="model-note" role="note">
-              {s.model('review.interpret')}
-            </p>
-            <ul>
-              {cr.limits.map((x, i) => (
-                <li key={i}>
-                  {x.statement} <small>{x.observations.join(', ')}</small>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
+        </details>
       </>
     ),
     gaps: (
@@ -882,6 +829,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       }}><ReportIcon name={TAB_ICONS[key]} /><span>{key === 'overview' ? s.overview : label(s.titles, key)}</span></button>)}
   </div> : <nav aria-label={t.title} className="nav report-tabs">
     {ORDER.map(key => <button key={key} type="button" className="nav-link" aria-controls={anchor(key)}
+      aria-current={readingSection === key ? 'location' : undefined}
       onClick={() => go(key)}><ReportIcon name={TAB_ICONS[key]} /><span>{label(s.titles, key)}</span></button>)}
   </nav>;
   return (
@@ -893,10 +841,13 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       <section id={anchor('overview')} role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? tabId('overview') : 'report-overview'} hidden={tabbed && active!=='overview'} tabIndex={tabbed ? 0 : undefined}>
         <h5 id="report-overview" className="visually-hidden">{s.overview}</h5>
         {(!tabbed || active === 'overview') && <>
+          {readingSignals.length > 0 && <ul className="report-reading-signals">{readingSignals.map(signal => <li key={signal}>{signal}</li>)}</ul>}
+          {report.testResults && report.testResults.status !== 'passed' && <TestRunOverview results={report.testResults} />}
           <ProjectOverview report={report} sections={sections} behaviors={behaviors} openDocuments={index => {
             documentTarget.current = index === undefined ? null : comparisonId(index);
             go('documents');
           }} />
+          {report.testResults?.status === 'passed' && <TestRunOverview results={report.testResults} />}
           <More title={t.reading.operations}>{() => <div className="report-more-body">
             <ReportReviewStatus report={report} />
             <ReportCounts report={report} />

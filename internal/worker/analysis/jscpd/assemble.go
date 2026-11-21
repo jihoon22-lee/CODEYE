@@ -172,7 +172,8 @@ type assembleInput struct {
 	ScratchFailed bool
 	Integrity     bool
 	// Excluded: eligible files below a data directory, not compared.
-	Excluded int
+	Excluded   int
+	ThirdParty int
 	// Linked: a listed workspace file is reached through a link; nothing
 	// was started.
 	Linked bool
@@ -302,5 +303,6 @@ func assemble(in assembleInput) obsdoc.Document {
 	doc.Parse.OK = !o.Failed() && parsed
 	o.Apply(&doc, st.Records > 0)
 	doc.Limitations = lims
+	anypack.RecordThirdPartyExclusions(&doc, in.ThirdParty)
 	return doc
 }

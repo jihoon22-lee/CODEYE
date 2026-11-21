@@ -36,24 +36,25 @@ func block(name, token string) string {
 }
 
 // fixtureFiles: src/a.js and lib/b.js share the block; src/ignored.js holds
-// it between jscpd:ignore markers; vendor/ is a data directory the plan
-// leaves out; native/latin1.c is not UTF-8 and big.js is over 1 MiB
+// it between jscpd:ignore markers; vendor/ and third_party/ are excluded;
+// native/latin1.c is not UTF-8 and big.js is over 1 MiB
 // (neither is handed to jscpd); small.py is under the thresholds.
 func fixtureFiles(token string) map[string][]byte {
 	big := "// generated\n" + strings.Repeat("const x = 1; // padding padding padding padding padding\n", 20000)
 	return map[string][]byte{
-		"src/a.js":         []byte(block("alpha", token)),
-		"lib/b.js":         []byte(block("alpha", token)),
-		"src/ignored.js":   []byte("/* jscpd:ignore-start */\n" + block("alpha", token) + "/* jscpd:ignore-end */\n"),
-		"vendor/copy.js":   []byte(block("alpha", token)),
-		"native/latin1.c":  []byte("/* caf\xe9 */\nint main(void) { return 0; }\n"),
-		"gen/big.js":       []byte(big),
-		"tools/small.py":   []byte("def f():\n    return 1\n"),
-		".jscpd.json":      []byte(`{"minLines": 1, "minTokens": 1, "ignore": ["**/*.js"]}`),
-		"package.json":     []byte(`{"name": "fixture", "jscpd": {"threshold": 0}}`),
-		"README.md":        []byte("# fixture\n"),
-		"docs/notes.md":    []byte(block("alpha", token)),
-		"src/types/a.d.ts": []byte("export declare const x: number;\n"),
+		"src/a.js":            []byte(block("alpha", token)),
+		"lib/b.js":            []byte(block("alpha", token)),
+		"src/ignored.js":      []byte("/* jscpd:ignore-start */\n" + block("alpha", token) + "/* jscpd:ignore-end */\n"),
+		"vendor/copy.js":      []byte(block("alpha", token)),
+		"third_party/copy.js": []byte(block("alpha", token)),
+		"native/latin1.c":     []byte("/* caf\xe9 */\nint main(void) { return 0; }\n"),
+		"gen/big.js":          []byte(big),
+		"tools/small.py":      []byte("def f():\n    return 1\n"),
+		".jscpd.json":         []byte(`{"minLines": 1, "minTokens": 1, "ignore": ["**/*.js"]}`),
+		"package.json":        []byte(`{"name": "fixture", "jscpd": {"threshold": 0}}`),
+		"README.md":           []byte("# fixture\n"),
+		"docs/notes.md":       []byte(block("alpha", token)),
+		"src/types/a.d.ts":    []byte("export declare const x: number;\n"),
 	}
 }
 

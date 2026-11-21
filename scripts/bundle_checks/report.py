@@ -64,6 +64,15 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
             ensure(row["role"] in ("stdout", "stderr") and row["sha256"] == raw["sha256"] and row["task_key"] == obs["task_key"], "Incorrect raw stream")
             ensure(0 <= raw["byte_start"] <= raw["byte_end"] <= row["size_bytes"], "Raw byte range invalid")
             ensure((obs["raw_message"] is not None) == report["export"]["include_code"], "Export leaked or omitted diagnostic text")
+            metric = obs.get("metric", {})
+            counterpart = metric.get("counterpart")
+            if counterpart is not None:
+                ensure(metric["name"] == "duplicated_lines", "Counterpart supplied for a non-duplication metric")
+                ensure(counterpart["snapshot_id"] == report["inputs"]["snapshot_id"], "Metric counterpart snapshot mismatch")
+                ensure(counterpart["start_col"] == counterpart["end_col"] == 0 and counterpart["column_unit"] == "byte",
+                       "Metric counterpart must carry a line range")
+                path = source_location(counterpart, source_root)
+                ensure(hashlib.sha256(path.read_bytes()).hexdigest() == counterpart["blob_sha256"], "Metric counterpart hash mismatch")
         # A diagnostic the tool reported as suppressed in source never becomes a finding.
         suppressed = {o["id"] for o in observations if o.get("suppressed")}
         ensure(not any(suppressed & set(f.get("observation_ids", [])) for f in findings), "Finding built from a suppressed observation")
@@ -313,7 +322,8 @@ def check_dependencies(report: dict) -> None:
 
 SLICE_TASK = re.compile(r"^review\.(investigate|verify)\.(s0(?:0[1-9]|[12][0-9]|3[0-2]))$")
 SLICE_FINDING = re.compile(r"^review_(s[0-9]{3})_")
-LEDGER_FILE_COUNTS = ("files_sent_to_model", "files_withheld", "files_unreadable", "files_budget_exhausted", "files_not_planned", "files_not_sent")
+LEDGER_FILE_COUNTS = ("files_sent_to_model", "files_withheld", "files_unreadable", "files_budget_exhausted", "files_not_planned",
+                      "files_secondary_not_reached", "files_not_sent")
 
 
 def check_ledger(report: dict) -> None:
@@ -344,14 +354,43 @@ def check_ledger(report: dict) -> None:
     ensure(ledger["request_bytes_sent"] in (None, report["code_review"]["request_bytes"]), "Ledger request bytes differ from the code review section")
     ids = [m["module_id"] for m in ledger["modules"]]
     ensure(ids == sorted(set(ids)), "Ledger modules repeated or out of order")
+    if "files" in ledger:
+        files = ledger["files"]
+        paths = [f["path"] for f in files]
+        ensure(builder >= 16 and ledger["scope"]["result"] == "accepted" and paths == sorted(set(paths)), "Ledger line inventory out of order or missing its accepted scope")
+        for f in files:
+            ensure(f["module_id"] in ids and 0 <= f["reviewed_lines"] <= f["sent_lines"] <= f["total_lines"], "Ledger file totals: " + f["path"])
+            ensure(bool(f.get("reason")) == (f["total_lines"] == 0), "Ledger excluded file reason: " + f["path"])
+            end = 0
+            for r in f["remaining"]:
+                ensure(end < r["start_line"] <= r["end_line"] <= f["total_lines"], "Ledger file range: " + f["path"])
+                end = r["end_line"]
+            ensure(sum(r["end_line"] - r["start_line"] + 1 for r in f["remaining"]) == f["total_lines"] - f["reviewed_lines"],
+                   "Ledger remaining lines do not add up: " + f["path"])
+            unaccepted = "requested_without_accepted_response"
+            unknown = "request_unconfirmed"
+            ensure(sum(r["end_line"] - r["start_line"] + 1 for r in f["remaining"] if r["reason"] == unaccepted)
+                   == f["sent_lines"] - f["reviewed_lines"], "Ledger requested lines do not add up: " + f["path"])
+            state = ("accepted" if f["reviewed_lines"] else unaccepted if f["sent_lines"]
+                     else unknown if any(r["reason"] == unknown for r in f["remaining"]) else "not_requested")
+            ensure(f["investigation"] == state, "Ledger file request status differs: " + f["path"])
     for module in ledger["modules"]:
-        ensure(sum(module[k] for k in LEDGER_FILE_COUNTS) == module["files_eligible"], "Ledger module files do not add up: " + module["module_id"])
+        ensure(sum(module.get(k, 0) for k in LEDGER_FILE_COUNTS) == module["files_eligible"], "Ledger module files do not add up: " + module["module_id"])
         ensure(module["files_truncated"] <= module["files_sent_to_model"] and module["files_with_completed_review"] <= module["files_sent_to_model"], "Ledger module counts beyond its sent files")
+        if "files" in ledger:
+            own = [f for f in ledger["files"] if f["module_id"] == module["module_id"]]
+            ensure(len(own) == module["files_eligible"]
+                   and sum(f["sent_lines"] > 0 for f in own) == module["files_requested"] == module["files_sent_to_model"]
+                   and sum(f["reviewed_lines"] > 0 for f in own) == module["files_accepted"]
+                   and module["files_with_completed_review"] <= module["files_accepted"], "Ledger file count differs from module")
+        else:
+            ensure("files_requested" not in module and "files_accepted" not in module, "Legacy ledger has no request counts")
         for entry in module["slices"]:
             task = tasks.get(entry["task_key"])
             ensure(task is not None and task["status"] == entry["status"] and task["reason"] == entry["reason"], "Ledger slice differs from its task: " + entry["task_key"])
         ensure(module["files_budget_exhausted"] == 0 or any(e["status"] == "budget_exhausted" for e in module["slices"]), "Ledger budget-exhausted files without such a slice")
-    complete = bool(ledger["modules"]) and all(m["files_with_completed_review"] == m["files_eligible"] for m in ledger["modules"])
+    complete = bool(ledger["modules"]) and (all(0 < f["reviewed_lines"] == f["total_lines"] for f in ledger["files"])
+        if "files" in ledger else all(m["files_with_completed_review"] == m["files_eligible"] for m in ledger["modules"]))
     ran = any(SLICE_TASK.match(k) and k.startswith("review.investigate.") and t["status"] == "succeeded" for k, t in tasks.items())
     ensure(ledger["status"] == ("complete" if complete else "partial" if ran else "overview_only"), "Ledger status differs from its rows")
     counts = next(s for s in report["overview"]["sections"] if s["key"] == "code_review")["counts"]

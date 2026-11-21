@@ -63,6 +63,9 @@ func reviewItem(k string, st *taskState) (AIReviewTask, bool) {
 		item.Result = "not_succeeded"
 	case st.rejected:
 		item.Result = "result_rejected"
+	case k == record.TaskScope && scopeAccepted(st):
+		item.Result = "accepted"
+		return item, true
 	case !st.review:
 		item.Result = "result_missing"
 	default:

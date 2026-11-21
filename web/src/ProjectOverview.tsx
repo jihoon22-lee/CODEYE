@@ -213,10 +213,11 @@ function ProjectBehaviors({ rows, catalog, openDocuments }: {
         const place = preview && <code>{sourceLocation(preview.path, preview.line, preview.end)}</code>;
         const evidence = <>
           <p className="report-behavior-status">{documented} · {label(t.reading.comparisonStatus, row.status)}</p>
-          {preview && <div className="report-behavior-preview">
-            <p>{previewSource} · {previewLink ? <a href={previewLink} target="_blank" rel="noopener noreferrer">{place}</a> : place}</p>
+          {preview && <details className="report-behavior-preview">
+            <summary>{previewSource} · {place}</summary>
+            {previewLink && <p><a href={previewLink} target="_blank" rel="noopener noreferrer">{t.openSource}</a></p>}
             <pre tabIndex={0}><code>{preview.excerpt?.text}</code></pre>
-          </div>}
+          </details>}
           {row.additional && <p className="report-behavior-explanation">
             <strong>{t.reading.additionalObservation}</strong>{' '}{inlineComparisonCode(row.additional)}
           </p>}
@@ -262,6 +263,11 @@ export function ProjectOverview({ report, sections, behaviors, openDocuments }: 
       <div className="card-body">
         {status && <div className="report-executive-status"><strong>{status}</strong>{model && <span>{t.modelReading}</span>}</div>}
         <h6 className="card-title" id="report-judgment">{heading}</h6>
+        {action && <>
+          <p className="report-executive-next"><strong>{action.limitation ? t.reading.priorityReview : t.reading.priorityAction}</strong> {action.state}{action.title && <> · {cutLine(action.title, 165)}</>}</p>
+          {action.limitation && <p className="report-card-copy"><strong>{t.reading.findingLimitation}</strong> {cutLine(action.limitation, 205)}</p>}
+          <div className="report-executive-sources">{action.source}</div>
+        </>}
         {comparisonRows && <dl className="report-comparison-rows">
           {comparisonRows.map(row => <div key={row.label}><dt>{row.label}</dt><dd>
             <p>{inlineComparisonCode(row.text)}</p>
@@ -277,25 +283,18 @@ export function ProjectOverview({ report, sections, behaviors, openDocuments }: 
         {scope && <p className="report-card-meta">{t.scopeTitle} <code>{scope}</code></p>}
         {followedContract && <p className="report-card-meta">{t.reading.followedContract}</p>}
         {sources && <div className="report-executive-sources">{sources}</div>}
-        {action && <>
-          <p className="report-executive-next"><strong>{action.limitation ? t.reading.priorityReview : t.reading.priorityAction}</strong> {action.state}{action.title && <> · {cutLine(action.title, 165)}</>}</p>
-          {action.limitation && <p className="report-card-copy"><strong>{t.reading.findingLimitation}</strong> {cutLine(action.limitation, 205)}</p>}
-          <div className="report-executive-sources">{action.source}</div>
-        </>}
-        <div className="report-document-assessment">
+        {comparisonCount > 0 && <div className="report-document-assessment">
           <div className="report-document-assessment-header">
-            <strong>{comparisonCount ? t.reading.documentAssessmentTotal(comparisonCount) : t.reading.documentAssessment}</strong>
-            {readings.comparisonCounts.length > 0
-              ? <dl>{readings.comparisonCounts.map(({status, count}) => <div key={status}>
-                <dt>{label(t.reading.comparisonCount, status)}</dt><dd data-comparison-status={status}>{t.reading.comparisonItems(count)}</dd>
-              </div>)}</dl>
-              : <p>{t.reading.noDocumentAssessment}</p>}
+            <strong>{t.reading.documentAssessmentTotal(comparisonCount)}</strong>
+            <dl>{readings.comparisonCounts.map(({status, count}) => <div key={status}>
+              <dt>{label(t.reading.comparisonCount, status)}</dt><dd data-comparison-status={status}>{t.reading.comparisonItems(count)}</dd>
+            </div>)}</dl>
           </div>
           {showExample && <p className="report-document-assessment-example">
             <strong>{t.reading.documentClaim}</strong>{' '}{inlineComparisonCode(cutLine(showExample, 165))}
           </p>}
           <ReportAction onClick={() => openDocuments(comparisonIndex)}>{t.reading.openDocumentAnalysis}</ReportAction>
-        </div>
+        </div>}
         <ReportGlossary text={[heading, claim, detail, condition ?? '', boundary, limitationText, nextStep, ...(comparisonRows?.map(row => row.text) ?? [])]}
           hasSources={Boolean(sources || action || comparisonRows?.some(row => row.sources))} />
       </div>

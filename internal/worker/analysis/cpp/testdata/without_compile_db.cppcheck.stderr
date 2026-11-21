@@ -28,6 +28,10 @@
             <location file="[REDACTED]/src/ring.c" line="20" column="15" info="Assignment &apos;slot=0&apos;, assigned value is 0"/>
             <symbol>slot</symbol>
         </error>
+        <error id="constVariablePointer" severity="style" msg="Variable &apos;slot&apos; can be declared as pointer to const" verbose="Variable &apos;slot&apos; can be declared as pointer to const" cwe="398" hash="7524397522439835924" file0="[REDACTED]/src/ring.c">
+            <location file="[REDACTED]/src/ring.c" line="20" column="8" info="Variable &apos;slot&apos; can be declared as pointer to const"/>
+            <symbol>slot</symbol>
+        </error>
         <error id="zerodiv" severity="error" msg="Division by zero." verbose="Division by zero." cwe="369" hash="788798651419197743" file0="[REDACTED]/src/standalone.c">
             <location file="[REDACTED]/src/standalone.c" line="4" column="16" info="Division by zero"/>
             <location file="[REDACTED]/src/standalone.c" line="3" column="15" info="Assignment &apos;parts=0&apos;, assigned value is 0"/>
@@ -43,6 +47,6 @@
             <location file="[REDACTED]/src/util.cpp" line="18" column="17"/>
             <symbol>counts</symbol>
         </error>
-        <error id="checkersReport" severity="information" msg="Active checkers: 125/189 (use --checkers-report=&lt;filename&gt; to see details)" verbose="Active checkers: 125/189 (use --checkers-report=&lt;filename&gt; to see details)"/>
+        <error id="checkersReport" severity="information" msg="Active checkers: 175/189 (use --checkers-report=&lt;filename&gt; to see details)" verbose="Active checkers: 175/189 (use --checkers-report=&lt;filename&gt; to see details)"/>
     </errors>
 </results>

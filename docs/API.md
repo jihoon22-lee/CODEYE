@@ -175,6 +175,8 @@
 ```
 
 - `profile`은 `deep-review`, `with-tests`, `focused`다. `scope.kind`는 `full` 또는 `paths`다. 형식은 OpenAPI가 정한다.
+- `scope.kind=paths`에는 다음 실행이 확보할 스냅샷의 파일이나 폴더를 `scope.paths`에 최대 100개까지 적는다. 경로는 프로젝트 기준이며 고정한 시점의 로컬 사본 또는 등록 브랜치의 Git 커밋에서 찾는다. 기존 보고서 리비전은 이전 실행의 스냅샷과 범위를 보존한다.
+- `with-tests`는 코드 실행 권한과 도구를 확인한 뒤 작업 사본에서 지원하는 기존 테스트를 실행한다. 게시 결과의 `coverage.test_status`와 `test.*` 작업, `test.run` 실행 행에서 확인한 범위와 종료 결과를 읽을 수 있다. [보고서 판정](REPORT.md#상태와-판정)
 - 클라이언트는 raw shell 명령이나 임의 자격증명을 run 요청에 넣지 못한다. 프로젝트에 저장된 승인 설정을 서버가 해석한다.
 - 요청은 영속 큐에 들어가고 202를 반환한다. 202는 실행이 시작됐다는 뜻이 아니다. 등록된 노드가 없으면 run은 `queued`에 머물고 `waiting_reason`이 `execution_unavailable`이다.
 - 배정 시점(claim)에 서버가 요청자의 권한을 다시 확인한다.
@@ -380,6 +382,8 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 
 ## 보고서 경로
 
+`observations[].metric.counterpart`는 중복 쌍의 두 번째 블록을 가리킨다. 첫 블록은 같은 관찰의 `location`이다. 두 위치는 고정 스냅샷의 경로·줄 범위·파일 해시로 구성되며 코드 미포함 응답에도 남는다. 예전 리비전 또는 상대 위치를 확인할 수 없는 관찰은 선택 필드를 생략한다.
+
 보고서의 `documents.quality`, `documents.comparisons`, `code_review.strengths`는 수락된 모델 해석과 근거 ID를 담는 선택 필드다. `findings[].evidence[]`와 분석 절 근거의 `excerpt`에는 고정 스냅샷에서 저장한 실제 줄 범위와 원문이 들어간다. 도구 진단의 문맥은 최대 9줄이며 새 모델 발췌는 인용 시작 줄부터 최대 50줄이다. JSON 인코딩 1,800바이트에 닿으면 마지막으로 저장할 수 있는 완전한 줄까지 담는다. `include_code=false`에서는 발췌 필드를 생략하고 모델 문장을 생략 문구로 바꾼다. 이전 보고서에는 이 필드가 없을 수 있다.
 
 수락된 최종 대조가 기존 미확인 계약 하나의 판정을 갱신한 경우, 해당 비교에 선택 필드 `followup: true`가 있다. 계약 문서와 적용 범위는 기존과 같고 새 근거는 `code_evidence_ids`에 들어간다. 근거의 종류는 `documents.evidence[].kind`에서 코드와 테스트를 구별한다. `coverage.review_calls[].task_key`가 `review.contract`이면 이 작업의 호출 기록이다. 최종 대조가 여전히 미확인이면서 새 구현을 인용한 경우에는 `additional_observation`의 `reason`에 확인한 범위를 담는다. 그 안의 `code_evidence_ids`는 처음 조사에서 읽은 호출부와 함께 인용한 테스트를 포함해 최종 대조의 인용 순서를 유지한다. 원래 비교의 `status`, `reason`, `code_evidence_ids`는 그대로다. 이전 리비전은 선택 필드 없이 읽을 수 있다. 코드 미포함 응답은 상태와 근거 ID를 유지하고 추가 관찰의 `reason`도 다른 모델 문장과 같은 생략 문구로 바꾼다.
@@ -432,7 +436,7 @@ Python API docstring 근거는 `documents.evidence[]`에서 선택 필드 `direc
 | `ETag` | 실제로 보낸 응답 바이트의 SHA-256 |
 | `Content-Type` | `application/json`, `text/markdown`, `text/html`(모두 `charset=utf-8`) |
 | `Content-Disposition` | Markdown·HTML은 첨부 파일 `codeye-report-<run>-r<N>[-nocode][-full].md|.html` |
-| `Content-Security-Policy` | HTML은 스크립트·외부 로딩을 막는 보고서 전용 정책 |
+| `Content-Security-Policy` | HTML은 외부 자산을 차단하고 절 목차 스크립트의 SHA-256 해시를 허용하는 보고서 전용 정책 |
 
 `include_code=true`는 게시된 발췌, 도구 메시지, 검토 문구를 반환한다. 조회 시에는 스냅샷이나 Git에서 소스 파일을 다시 읽지 않는다.
 

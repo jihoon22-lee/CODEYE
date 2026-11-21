@@ -288,6 +288,54 @@ describe('project registration', () => {
 });
 
 describe('starting a run', () => {
+  it('shows and submits normalized selected paths, with a separate key from a full run', async () => {
+    let attempt = 0;
+    const { calls } = renderApp(backend({ 'POST /api/v1/projects/p1/runs': () => (++attempt === 1 ? 'network' : undefined) }));
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: /sample/ }));
+    const field = screen.getByLabelText<HTMLInputElement>(t.runs.pathScope.label);
+    fireEvent.change(field, { target: { value: '../outside' } });
+    expect(screen.getByText(t.runs.pathScope.invalid)).toBeTruthy();
+    expect((screen.getByRole('button', { name: t.runs.start }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(field, { target: { value: 'web/\n./internal/report\nweb' } });
+    click(t.runs.pathScope.start(2));
+    await flush();
+    fireEvent.change(field, { target: { value: 'internal/report/\nweb' } });
+    click(t.runs.pathScope.start(2));
+    await flush();
+    fireEvent.change(field, { target: { value: '' } });
+    click(t.runs.start);
+    await flush();
+    const posts = calls.filter(c => c.method === 'POST');
+    expect(posts.map(p => p.url)).toEqual(Array(3).fill('/api/v1/projects/p1/runs'));
+    expect(posts[0].body).toMatchObject({ scope: { kind: 'paths', paths: ['internal/report', 'web'] } });
+    expect(posts[1].headers['idempotency-key']).toBe(posts[0].headers['idempotency-key']);
+    expect(posts[2].body).toMatchObject({ scope: { kind: 'full' } });
+    expect(posts[2].headers['idempotency-key']).not.toBe(posts[0].headers['idempotency-key']);
+  });
+
+  it('keeps the test run request separate from a normal run and retries its own request', async () => {
+    let attempt = 0;
+    const project = { ...PROJECT, analysis: { send_source_to_model: true, run_build_scripts: true, fetch_dependencies: true } };
+    const { calls } = renderApp(backend({
+      'GET /api/v1/projects': () => json(200, { items: [project], next_cursor: null }),
+      'POST /api/v1/projects/p1/runs': () => (++attempt === 1 ? 'network' : undefined),
+    }));
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: /sample/ }));
+    click(t.runs.startWithTests);
+    await flush();
+    expect(screen.getByText(t.runs.retryNote)).toBeTruthy();
+    click(t.runs.start);
+    await flush();
+    click(t.runs.startWithTests);
+    await flush();
+    const posts = calls.filter(c => c.method === 'POST' && c.url === '/api/v1/projects/p1/runs');
+    expect(posts.map(p => (p.body as { profile: string }).profile)).toEqual(['with-tests', 'deep-review', 'with-tests']);
+    expect(posts[0].headers['idempotency-key']).toBe(posts[2].headers['idempotency-key']);
+    expect(posts[0].headers['idempotency-key']).not.toBe(posts[1].headers['idempotency-key']);
+  });
+
   it('retries a lost request with the same Idempotency-Key, then uses a new key for a new request', async () => {
     let attempt = 0;
     const { calls } = renderApp(backend({ 'POST /api/v1/projects/p1/runs': () => (++attempt === 1 ? 'network' : undefined) }));

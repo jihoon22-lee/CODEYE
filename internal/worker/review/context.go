@@ -6,10 +6,11 @@ import (
 	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
 // maxFileBytes bounds a snapshot file the review reads.
-const maxFileBytes = 512 << 10
+const maxFileBytes = record.MaxSourceBytes
 
 // inScope reports whether a snapshot path lies in the run scope.
 

@@ -120,6 +120,7 @@ func TestReplayClones(t *testing.T) {
 		t.Fatalf("config %+v (%v)", cfg, rel)
 	}
 	if p.doc.Coverage.Units[UnitCompared] != 5 || p.doc.Coverage.Units[SkipTooLarge] != 1 || p.doc.Coverage.Units[SkipNotUTF8] != 1 || *p.doc.Coverage.FilesInScope != 7 ||
+		p.doc.Coverage.Units[anypack.UnitExcludedThirdPartyDirectory] != 1 || !slices.Contains(p.doc.Limitations, anypack.LimThirdPartyDirectoriesExcluded) ||
 		p.doc.Coverage.Units[anypack.UnitExcludedDataDir] != 1 || !slices.Contains(p.doc.Limitations, anypack.LimDataDirsExcluded) {
 		t.Fatalf("coverage %+v", p.doc.Coverage)
 	}

@@ -11,11 +11,11 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-00000000056d",
+      "id": "0195f3a0-0000-7000-8000-00000000057d",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "eff99b730f78e13bda5553689f032403abb89735c744068a2d4987915d1049a9",
-      "size_bytes": 21622,
+      "sha256": "89abcd633d69ef58fa9f8d3c7fcbbd35b234e8181f7e3b76bbc4ee63dbb7c0d7",
+      "size_bytes": 24792,
       "task_key": null
     },
     {
@@ -755,6 +755,15 @@
       "sha256": "df4384b0ee18ff27d69dc8421271ae926adb92503a5052ecdea3b9d7829fd037",
       "size_bytes": 4666,
       "task_key": "review.verify"
+    },
+    {
+      "decoder": "application/vnd.codeye.review-scope+json;schema_version=0.3",
+      "id": "0195f3a0-0000-7000-8000-00000000056d",
+      "media_type": "application/vnd.codeye.review-scope+json",
+      "role": "other",
+      "sha256": "cd44e3ca0f28388c91f4f4963d52ce98fdf1fb028f88cfec9aff92e0a6fcf5a5",
+      "size_bytes": 2463,
+      "task_key": "review.scope"
     }
   ],
   "attempt": {
@@ -767,9 +776,9 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "2f0a58c72c7cf1217e7735b0a189996c7aaa79578813b7f945e9a95d00e1144c",
+    "input_digest": "eac5a8b02e8ae37187f5d498e3c018d6a8e294164f5888c39599d88cadb52f4f",
     "result_manifest_artifact_id": null,
-    "version": "15"
+    "version": "16"
   },
   "code_review": {
     "accepted_calls": 5,
@@ -803,6 +812,104 @@
       }
     ],
     "inventory_files": 10,
+    "ledger": {
+      "calls_used": 5,
+      "files": [
+        {
+          "investigation": "accepted",
+          "module_id": "go:.",
+          "path": "gateway.go",
+          "remaining": [],
+          "reviewed_lines": 16,
+          "sent_lines": 16,
+          "total_lines": 16
+        },
+        {
+          "investigation": "accepted",
+          "module_id": "go:svc/a",
+          "path": "svc/a/normalize.go",
+          "remaining": [],
+          "reviewed_lines": 10,
+          "sent_lines": 10,
+          "total_lines": 10
+        },
+        {
+          "investigation": "not_requested",
+          "module_id": "go:svc/b",
+          "path": "svc/b/charge.go",
+          "reason": "secret_file_withheld",
+          "remaining": [],
+          "reviewed_lines": 0,
+          "sent_lines": 0,
+          "total_lines": 0
+        }
+      ],
+      "max_calls": 99,
+      "max_request_bytes": 40000,
+      "modules": [
+        {
+          "bytes_sent": 568,
+          "class": "primary",
+          "discovered": true,
+          "files_accepted": 1,
+          "files_budget_exhausted": 0,
+          "files_eligible": 1,
+          "files_not_planned": 0,
+          "files_not_sent": 0,
+          "files_requested": 1,
+          "files_sent_to_model": 1,
+          "files_truncated": 0,
+          "files_unreadable": 0,
+          "files_with_completed_review": 1,
+          "files_withheld": 0,
+          "module_id": "go:.",
+          "slices": []
+        },
+        {
+          "bytes_sent": 293,
+          "class": "primary",
+          "discovered": true,
+          "files_accepted": 1,
+          "files_budget_exhausted": 0,
+          "files_eligible": 1,
+          "files_not_planned": 0,
+          "files_not_sent": 0,
+          "files_requested": 1,
+          "files_sent_to_model": 1,
+          "files_truncated": 0,
+          "files_unreadable": 0,
+          "files_with_completed_review": 0,
+          "files_withheld": 0,
+          "module_id": "go:svc/a",
+          "slices": []
+        },
+        {
+          "bytes_sent": 0,
+          "class": "primary",
+          "discovered": true,
+          "files_accepted": 0,
+          "files_budget_exhausted": 0,
+          "files_eligible": 1,
+          "files_not_planned": 0,
+          "files_not_sent": 0,
+          "files_requested": 0,
+          "files_sent_to_model": 0,
+          "files_truncated": 0,
+          "files_unreadable": 0,
+          "files_with_completed_review": 0,
+          "files_withheld": 1,
+          "module_id": "go:svc/b",
+          "slices": []
+        }
+      ],
+      "request_bytes_sent": 73094,
+      "scope": {
+        "key": "review.scope",
+        "result": "accepted",
+        "task_status": "succeeded"
+      },
+      "status": "overview_only"
+    },
     "pack_id": "review",
     "pack_version": "2.5.2",
     "request_bytes": 73094,
@@ -831,15 +938,15 @@
     ],
     "stage": {
       "counts": {
-        "skipped_policy": 1
+        "skipped_policy": 15
       },
       "reasons": [
         "no_review_scope"
       ],
       "stage": "code_review",
       "state": "succeeded",
-      "succeeded": 3,
-      "tasks": 4
+      "succeeded": 4,
+      "tasks": 19
     },
     "strengths": [
       {
@@ -867,6 +974,95 @@
         },
         {
           "key": "review.contract",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s001",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s002",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s003",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s004",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s005",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s006",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.investigate.s007",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.scope",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.verify.s001",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.s002",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.s003",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.s004",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.s005",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.s006",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.s007",
           "reason": "no_review_scope",
           "result": "skipped",
           "task_status": "skipped_policy"
@@ -3114,6 +3310,12 @@
       "subject": "gitleaks"
     },
     {
+      "code": "review_scope_withheld",
+      "detail": null,
+      "section": "code_review",
+      "subject": "go:svc/b"
+    },
+    {
       "code": "tests_not_run",
       "detail": null,
       "section": "report",
@@ -3330,13 +3532,18 @@
         "section": "documents"
       },
       {
+        "code": "review_scope_not_sent",
+        "count": 1,
+        "section": "code_review"
+      },
+      {
         "code": "pending_candidates",
         "count": 3,
         "section": "static_analysis"
       },
       {
         "code": "analysis_gaps",
-        "count": 6,
+        "count": 7,
         "section": "gaps"
       }
     ],
@@ -3404,6 +3611,8 @@
         "counts": {
           "actionable": 1,
           "calls": 5,
+          "files_not_sent_to_model": 1,
+          "files_sent_to_model": 2,
           "findings": 2,
           "pending": 0,
           "refuted": 1
@@ -3413,7 +3622,7 @@
       },
       {
         "counts": {
-          "gaps": 6
+          "gaps": 7
         },
         "key": "gaps",
         "state": null
@@ -3808,7 +4017,7 @@
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000056c",
+      "id": "0195f3a0-0000-7000-8000-00000000057c",
       "key": "review.contract",
       "reason": "no_review_scope",
       "required_for_verdict": false,
@@ -3843,11 +4052,116 @@
       "status": "succeeded"
     },
     {
+      "id": "0195f3a0-0000-7000-8000-00000000056e",
+      "key": "review.investigate.s001",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000570",
+      "key": "review.investigate.s002",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000572",
+      "key": "review.investigate.s003",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000574",
+      "key": "review.investigate.s004",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000576",
+      "key": "review.investigate.s005",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000578",
+      "key": "review.investigate.s006",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000057a",
+      "key": "review.investigate.s007",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000056c",
+      "key": "review.scope",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
       "id": "0195f3a0-0000-7000-8000-00000000056a",
       "key": "review.verify",
       "reason": null,
       "required_for_verdict": true,
       "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000056f",
+      "key": "review.verify.s001",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000571",
+      "key": "review.verify.s002",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000573",
+      "key": "review.verify.s003",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000575",
+      "key": "review.verify.s004",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000577",
+      "key": "review.verify.s005",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000579",
+      "key": "review.verify.s006",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000057b",
+      "key": "review.verify.s007",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000544",

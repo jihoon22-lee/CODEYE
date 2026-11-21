@@ -463,10 +463,10 @@ func upstreamSources(r Record) []string {
 }
 
 // AnalyzerTaskKey reports whether key can name an analyzer task: a valid
-// task key outside the discovery tasks, the dependency tasks (deps.*) and
-// the review.* roles.
+// task key outside discovery, dependencies, test execution and model review.
 func AnalyzerTaskKey(key string) bool {
-	return taskKey.MatchString(key) && key != "env.discover" && key != "docs.discover" && !strings.HasPrefix(key, "review.") && !strings.HasPrefix(key, "deps.")
+	return taskKey.MatchString(key) && key != "env.discover" && key != "docs.discover" &&
+		!strings.HasPrefix(key, "review.") && !strings.HasPrefix(key, "deps.") && !strings.HasPrefix(key, "test.")
 }
 
 func checkUpstream(r Record) error {

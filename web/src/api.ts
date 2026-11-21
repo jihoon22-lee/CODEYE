@@ -129,6 +129,12 @@ export type RunView = {
 };
 
 export const RUN_BODY = { profile: 'deep-review', source_policy: 'latest_at_acquire', scope: { kind: 'full' } } as const;
+export const TEST_RUN_BODY = { ...RUN_BODY, profile: 'with-tests' } as const;
+export type ManualRunBody = {
+  profile: 'deep-review' | 'with-tests';
+  source_policy: 'latest_at_acquire';
+  scope: { kind: 'full' } | { kind: 'paths'; paths: string[] };
+};
 
 // Either a declared source, or an absolute folder path on the server that it maps onto a folder
 // the user may read. open_existing: the same folder or repository again opens its project.
@@ -345,11 +351,11 @@ export function createApi(options: ApiOptions = {}) {
     retryRun: (id: string) => json({ method: 'POST', path: `${run(id)}/retry` }, parseRetryAck),
     // A recovery_required run: the user states that no process of its attempt is left on the node.
     recoverRun: (id: string) => json({ method: 'POST', path: `${run(id)}/recover`, body: { cleanup_confirmed: true } }, parseRecoveryAck),
-    createRun: (projectId: string, idempotencyKey: string) =>
-      json({ method: 'POST', path: `/api/v1/projects/${encodeURIComponent(projectId)}/runs`, body: RUN_BODY, headers: { 'Idempotency-Key': idempotencyKey } }, parseAck),
+    createRun: (projectId: string, idempotencyKey: string, body: ManualRunBody = RUN_BODY) =>
+      json({ method: 'POST', path: `/api/v1/projects/${encodeURIComponent(projectId)}/runs`, body, headers: { 'Idempotency-Key': idempotencyKey } }, parseAck),
     // A pull-request run; comment null follows the project's remembered choice.
-    createPullRequestRun: (projectId: string, idempotencyKey: string, number: number, comment: boolean | null) =>
-      json({ method: 'POST', path: `/api/v1/projects/${encodeURIComponent(projectId)}/runs`, body: pullRequestRunBody(number, comment), headers: { 'Idempotency-Key': idempotencyKey } }, parseAck),
+    createPullRequestRun: (projectId: string, idempotencyKey: string, number: number, comment: boolean | null, profile?: 'deep-review' | 'with-tests') =>
+      json({ method: 'POST', path: `/api/v1/projects/${encodeURIComponent(projectId)}/runs`, body: pullRequestRunBody(number, comment, profile), headers: { 'Idempotency-Key': idempotencyKey } }, parseAck),
     // The comment the run posts or would post; nothing is posted.
     previewPullRequestComment: (id: string, signal?: AbortSignal) => json({ method: 'GET', path: `${run(id)}/pull-request-comment`, signal }, parseCommentPreview),
     getRun: (id: string, signal?: AbortSignal) => json({ method: 'GET', path: run(id), signal }, parseRun),

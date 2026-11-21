@@ -42,6 +42,9 @@ type secBlock struct {
 // paragraphs, the model-interpretation label, counts, table, list, findings.
 type secPart struct {
 	Sources  []sourceCitation
+	Reading  *sectionReading
+	Fold     string
+	Parts    []secPart
 	Heading  string
 	Anchor   string
 	Paras    []string
@@ -87,11 +90,12 @@ type secCell struct {
 
 // secItem is one list entry: text followed by code spans.
 type secItem struct {
-	Label   string
-	Text    string
-	Codes   []string
-	Link    string // in-page anchor of the entry's subject
-	Sources []sourceCitation
+	Label         string
+	Text          string
+	Codes         []string
+	Link          string // in-page anchor of the entry's subject
+	ObservationID string
+	Sources       []sourceCitation
 }
 
 func txt(s string) secCell  { return secCell{Text: s} }
@@ -398,33 +402,6 @@ func newSecView(r Report, digest string, l Locale) secView {
 		}
 	}
 	docs.Parts = append(docs.Parts, modelPart(l, d.Model))
-	if d.Model.State == ModelPerformed {
-		var items []secItem
-		for _, x := range d.Contracts {
-			if !comparisonCoversContract(d.Comparisons, x) {
-				items = append(items, secItem{Text: scopedDocumentText(x.AppliesTo, x.Statement), Sources: v.sourceCitations(x.EvidenceIDs, d.Evidence)})
-			}
-		}
-		if len(items) > 0 {
-			docs.Parts = append(docs.Parts, listPart(l.Label("docs.contracts"), items, ""))
-		}
-		items = nil
-		for _, x := range d.Conflicts {
-			items = append(items, secItem{Text: scopedDocumentText(x.Scope, tf(l, "docs.conflict_detail", x.Summary, x.Impact)),
-				Sources: v.sourceCitations(append(slices.Clone(x.FirstEvidence), x.SecondEvidence...), d.Evidence)})
-		}
-		docs.Parts = append(docs.Parts, listPart(l.Label("docs.conflicts"), items, l.Label("none")))
-		items = nil
-		for _, x := range d.Questions {
-			items = append(items, secItem{Text: scopedDocumentText(x.AppliesTo, x.Question), Sources: v.sourceCitations(x.EvidenceIDs, d.Evidence)})
-		}
-		docs.Parts = append(docs.Parts, listPart(l.Label("docs.questions"), items, l.Label("none")))
-		items = nil
-		for _, x := range d.InstructionNotes {
-			items = append(items, secItem{Text: x.Note, Sources: v.sourceCitations(x.EvidenceIDs, d.Evidence)})
-		}
-		docs.Parts = append(docs.Parts, listPart(l.Label("docs.instruction_notes"), items, l.Label("none")))
-	}
 	v.Sections = append(v.Sections, docs)
 
 	// Static analysis.
@@ -433,51 +410,12 @@ func newSecView(r Report, digest string, l Locale) secView {
 	st.Parts = append(st.Parts, secPart{Paras: []string{stageLine(l, s.Stage), l.Label("static.lead")}, Counts: countsOf(l, SectionStaticAnalysis, overviewCounts(r, SectionStaticAnalysis), countOrder[SectionStaticAnalysis])})
 	var diag []string
 	for _, lang := range s.Languages {
-		heading := l.Label("static.language_unknown")
-		if lang.Ecosystem != nil {
-			heading = tf(l, "static.language", *lang.Ecosystem)
-			if *lang.Ecosystem == "any" {
-				heading = l.Label("static.language_any")
-			}
+		st.Parts = append(st.Parts, v.staticInspectionParts(lang, obs)...)
+		for _, tool := range lang.Tools {
+			diag = append(diag, tool.ObservationIDs...)
 		}
-		tt := &secTable{Head: []string{l.Label("col.task"), l.Label("col.tool"), l.Label("col.required"), l.Label("col.status"), l.Label("col.result"), l.Label("col.version"), l.Label("col.files"), l.Label("col.diagnostics"), l.Label("col.rules")}}
-		for _, x := range lang.Tools {
-			status := lab(l, "task_status", x.TaskStatus)
-			if x.TaskReason != nil {
-				status += " · " + reasonText(l, *x.TaskReason)
-			}
-			result := lab(l, "result", x.Result)
-			if x.ExitClass != nil {
-				result += " · " + *x.ExitClass
-			}
-			files := optInt(x.FilesInScope, l.Label("unknown")) + " / " + optInt(x.ProcessedFiles, l.Label("unknown"))
-			var rules []string
-			for _, rt := range x.Rules {
-				rules = append(rules, rt.RuleID+" "+strconv.Itoa(rt.Count))
-			}
-			diagnostics := strconv.Itoa(len(x.ObservationIDs))
-			switch {
-			case x.TaskStatus != string(domain.TaskSucceeded) || x.Result != DiscoveryAccepted:
-				// Not run or not accepted: nothing was analyzed, never "0".
-				diagnostics = l.Label("not_run")
-			case optText(x.Purpose, "") == PurposeMetrics:
-				diagnostics = tf(l, "static.metric_count", x.MetricObservations)
-			case optText(x.Purpose, "") == PurposeSecrets:
-				diagnostics = tf(l, "static.secret_count", x.SecretObservations)
-			}
-			tool := optText(x.Analyzer, "-")
-			if x.Tool != nil {
-				tool += " (" + *x.Tool + ")"
-			}
-			tt.Rows = append(tt.Rows, []secCell{code(x.TaskKey), code(tool), txt(lab(l, "required", strconv.FormatBool(x.Required))), txt(status), txt(result), code(optText(x.ToolVersion, "-")), txt(files), txt(diagnostics), code(joinOr(rules, "-"))})
-			diag = append(diag, x.ObservationIDs...)
-		}
-		p := secPart{Heading: heading, Table: tt}
-		if lang.Ecosystem != nil && *lang.Ecosystem == "any" {
-			p.Paras = []string{l.Label("static.any_note")}
-		}
-		st.Parts = append(st.Parts, p)
 	}
+
 	st.Parts = append(st.Parts, v.observationsPart(l.Label("static.observations"), diag, obs, l.Label("static.no_observations")))
 	st.Parts = append(st.Parts, secPart{Heading: l.Label("static.findings"), Findings: pick(StaticFindingIDs(r)), Empty: l.Label("static.no_findings")})
 	v.Sections = append(v.Sections, st)
@@ -486,21 +424,7 @@ func newSecView(r Report, digest string, l Locale) secView {
 	m := r.Metrics
 	mb := secBlock{ID: SectionMetrics, Title: title(SectionMetrics), State: states[SectionMetrics]}
 	mb.Parts = append(mb.Parts, secPart{Paras: []string{stageLine(l, m.Stage), l.Label("metrics.lead")}, Counts: countsOf(l, SectionMetrics, overviewCounts(r, SectionMetrics), countOrder[SectionMetrics])})
-	mb.Parts = append(mb.Parts, v.tasksPart(l.Label("metrics.tasks"), m.TaskKeys))
-	gt := &secTable{Head: []string{l.Label("col.metric"), l.Label("col.unit"), l.Label("col.threshold"), l.Label("col.max"), l.Label("col.count")}}
-	var mobs []string
-	for _, g := range m.Metrics {
-		var th []string
-		for _, x := range g.Thresholds {
-			th = append(th, strconv.Itoa(x))
-		}
-		gt.Rows = append(gt.Rows, []secCell{code(g.Name), code(g.Unit), txt(strings.Join(th, ", ")), num(g.MaxValue), num(len(g.ObservationIDs))})
-		mobs = append(mobs, g.ObservationIDs...)
-	}
-	mb.Parts = append(mb.Parts, secPart{Heading: l.Label("metrics.groups"), Table: gt, Empty: l.Label("metrics.none")})
-	if len(mobs) > 0 {
-		mb.Parts = append(mb.Parts, v.observationsPart(l.Label("metrics.observations"), mobs, obs, ""))
-	}
+	mb.Parts = append(mb.Parts, v.measurementParts(obs, true)...)
 	v.Sections = append(v.Sections, mb)
 
 	// Secrets.
@@ -563,7 +487,7 @@ func newSecView(r Report, digest string, l Locale) secView {
 
 	// Gaps.
 	gb := secBlock{ID: SectionGaps, Title: title(SectionGaps)}
-	gt = &secTable{Head: []string{l.Label("col.section"), l.Label("col.gap"), l.Label("col.subject"), l.Label("col.detail")}}
+	gt := &secTable{Head: []string{l.Label("col.section"), l.Label("col.gap"), l.Label("col.subject"), l.Label("col.detail")}}
 	for _, g := range r.Gaps {
 		detail := "-"
 		if g.Detail != nil {
@@ -604,6 +528,25 @@ func ledgerParts(l Locale, x ReviewLedger) []secPart {
 		mt.Head = slices.Insert(mt.Head, 1, l.Label("col.module_class"))
 		mt.Head = slices.Insert(mt.Head, 11, l.Label("col.secondary_not_reached"))
 	}
+	acceptedColumn := 4
+	if classes {
+		acceptedColumn++
+	}
+	if x.Files != nil {
+		modules, eligible, requested, accepted := 0, 0, 0, 0
+		for _, m := range x.Modules {
+			eligible += m.FilesEligible
+			requested += m.FilesSentToModel
+			if m.FilesAccepted != nil && *m.FilesAccepted > 0 {
+				modules++
+				accepted += *m.FilesAccepted
+			}
+		}
+		head.Paras[0] = tf(l, "ledger.line_coverage", len(x.Modules), modules, eligible, requested, accepted)
+		head.Paras[1] = l.Label("ledger.line_status." + x.Status)
+		mt.Head[len(mt.Head)-1] = l.Label("col.candidate_followup")
+		mt.Head = slices.Insert(mt.Head, acceptedColumn, l.Label("col.investigation_accepted"))
+	}
 	var order []string
 	slicesOf := map[string]LedgerSlice{}
 	modulesOf := map[string][]string{}
@@ -613,6 +556,9 @@ func ledgerParts(l Locale, x ReviewLedger) []secPart {
 		if classes {
 			row = slices.Insert(row, 1, txt(lab(l, "class", m.Class)))
 			row = slices.Insert(row, 11, num(m.FilesSecondaryNotReached))
+		}
+		if x.Files != nil {
+			row = slices.Insert(row, acceptedColumn, txt(optInt(m.FilesAccepted, unknown)))
 		}
 		mt.Rows = append(mt.Rows, row)
 		for _, s := range m.Slices {
@@ -633,7 +579,39 @@ func ledgerParts(l Locale, x ReviewLedger) []secPart {
 		}
 		st.Rows = append(st.Rows, []secCell{code(k), txt(lab(l, "task_status", s.Status)), txt(reason), code(strings.Join(modulesOf[k], ", "))})
 	}
-	return []secPart{head, {Heading: l.Label("ledger.modules"), Table: mt, Empty: l.Label("ledger.none")}, {Heading: l.Label("ledger.slices"), Table: st, Empty: l.Label("ledger.none")}}
+	parts := []secPart{head, {Heading: l.Label("ledger.modules"), Table: mt, Empty: l.Label("ledger.none")}, {Heading: l.Label("ledger.slices"), Table: st, Empty: l.Label("ledger.none")}}
+	if len(x.Files) > 0 {
+		parts = append(parts, ledgerFilePart(l, x.Files))
+	}
+	return parts
+}
+
+func ledgerFilePart(l Locale, files []LedgerFile) secPart {
+	table := &secTable{Head: []string{l.Label("col.path"), l.Label("col.status"), l.Label("ledger.lines.total"),
+		l.Label("ledger.lines.requested"), l.Label("ledger.lines.accepted"), l.Label("ledger.lines.remaining")}}
+	for _, f := range files {
+		total := "-"
+		if f.TotalLines > 0 {
+			total = strconv.Itoa(f.TotalLines)
+		}
+		info := "-"
+		if f.Reason != "" {
+			info = l.Label("ledger.line_reason." + f.Reason)
+		} else if len(f.Remaining) > 0 {
+			ranges := make([]string, 0, len(f.Remaining))
+			for _, r := range f.Remaining {
+				span := strconv.Itoa(r.StartLine)
+				if r.EndLine != r.StartLine {
+					span += "–" + strconv.Itoa(r.EndLine)
+				}
+				ranges = append(ranges, span+" "+l.Label("ledger.line_reason."+r.Reason))
+			}
+			info = strings.Join(ranges, " · ")
+		}
+		table.Rows = append(table.Rows, []secCell{code(f.Path), txt(l.Label("ledger.line_reason." + f.Investigation)),
+			txt(total), num(f.SentLines), num(f.ReviewedLines), txt(info)})
+	}
+	return secPart{Fold: tf(l, "ledger.files", len(files)), Table: table}
 }
 
 func detectionPlace(l Locale, x SecretDetection) string {
@@ -747,6 +725,11 @@ func renderMarkdownSections(r Report, digest string, l Locale) []byte {
 		p("## ", mdText(s.Title))
 		p()
 		if s.ID == "overview" {
+			for _, signal := range v.ReadingSignals() {
+				p(mdText(signal))
+				p()
+			}
+			mdPart(p, v.TestRunPart(), l)
 			mdBehaviors(p, v.Behaviors, l)
 			mdDecision(p, v.Decision, l)
 		}
@@ -776,9 +759,21 @@ func mdCell(c secCell) string {
 }
 
 func mdPart(p func(...string), part secPart, l Locale) {
+	if part.Fold != "" {
+		p("<details>")
+		p("<summary>", mdText(part.Fold), "</summary>")
+		p()
+		defer func() {
+			p("</details>")
+			p()
+		}()
+	}
 	if part.Heading != "" {
 		p("### ", mdText(part.Heading))
 		p()
+	}
+	if part.Reading != nil {
+		mdReading(p, part.Reading, l)
 	}
 	for _, x := range part.Paras {
 		p(mdText(x))
@@ -828,6 +823,9 @@ func mdPart(p func(...string), part secPart, l Locale) {
 		p(mdText(part.Empty))
 		p()
 	}
+	for _, child := range part.Parts {
+		mdPart(p, child, l)
+	}
 }
 
 func mdItem(p func(...string), it secItem) {
@@ -843,7 +841,12 @@ func mdItem(p func(...string), it secItem) {
 	}
 	var sources []sourceCitation
 	for _, source := range it.Sources {
-		if source.URL != "" && source.Text == "" {
+		if source.Jump != "" {
+			line += " [" + mdCode(source.Location) + "](#" + source.Jump + ")"
+			if source.URL != "" {
+				line += " [" + mdText(source.LinkLabel) + "](<" + source.URL + ">)"
+			}
+		} else if source.URL != "" && source.Text == "" {
 			line += " [" + mdCode(source.Location) + "](<" + source.URL + ">)"
 		} else {
 			sources = append(sources, source)
@@ -885,7 +888,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <nav class="report-rail" aria-label="{{.L.Label "report.navigation"}}">
 <div class="export-desktop-nav"><p class="report-rail-label">{{.L.Label "report.navigation"}}</p>{{template "report_navigation" .}}</div>
 <details class="export-mobile-nav">
-<summary>{{reportIcon "menu-2"}} {{.L.Label "report.navigation"}} {{reportIcon "chevron-down"}}</summary>
+<summary>{{reportIcon "menu-2"}} {{.L.Label "report.navigation"}} <span class="export-mobile-current"></span> {{reportIcon "chevron-down"}}</summary>
 {{template "report_navigation" .}}
 </details>
 </nav>
@@ -909,6 +912,8 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{$l := .L}}{{range .Sections}}<section id="{{.ID}}" data-section="{{.ID}}" class="export-section">
 <h2>{{.Title}}</h2>
 {{if eq .ID "overview"}}
+{{with $.ReadingSignals}}<ul class="report-reading-signals">{{range .}}<li>{{.}}</li>{{end}}</ul>{{end}}
+{{template "part" (pair $l $.TestRunPart)}}
 {{if $.Summary}}{{range .Parts}}{{template "part" (pair $l .)}}{{end}}{{end}}
 {{if $.Behaviors.Rows}}
 {{if $.PriorityDecision}}{{template "decision" $}}{{end}}
@@ -978,6 +983,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 </details>
 </main>
 </div>
+<script id="report-export-navigation">` + reportExportNavigation + `</script>
 </body>
 </html>
 {{define "report_navigation"}}<ul class="nav nav-vertical">
@@ -989,6 +995,9 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <div class="card-body">
 <div class="report-decision-state"><span class="report-group-mark">{{reportIcon (groupIcon .Tone)}}</span><span class="decision-label">{{.State}}</span>{{if and .Review (or (and (not .DocumentClaim) (not .ComparisonRows)) .AdditionalObservation)}}<span class="report-group-note" role="note">{{$l.Label "insight.interpretation"}}</span>{{end}}</div>
 <h3>{{.Title}}</h3>
+{{if .Action}}<p class="report-decision-next"><strong>{{if .Action.Limitation}}{{$l.Label "decision.priority_review"}}{{else}}{{$l.Label "decision.priority_action"}}{{end}}</strong> {{.Action.State}}{{if .Action.Title}} · {{.Action.Title}}{{end}}</p>
+{{if .Action.Limitation}}<p class="report-decision-copy"><strong>{{$l.Label "decision.finding_limitation"}}</strong> {{.Action.Limitation}}</p>{{end}}
+<div class="report-decision-sources">{{template "citation" .Action.Source}}</div>{{end}}
 {{if .ComparisonRows}}<dl class="report-comparison-rows">{{range .ComparisonRows}}<div><dt>{{.Label}}</dt><dd>
 <p>{{range inlineCodeParts .Text}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{end}}</p>
 {{if .Sources}}<div class="report-decision-sources">{{range .Sources}}{{template "citation" .}}{{end}}</div>{{end}}
@@ -1002,15 +1011,11 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{if .Scope}}<p class="report-decision-copy report-decision-scope">{{$l.Label "col.applies_to"}} <code>{{.Scope}}</code></p>{{end}}
 {{if .Followup}}<p class="report-decision-copy">{{$l.Label "decision.followup"}}</p>{{end}}
 {{if .Sources}}<div class="report-decision-sources">{{range .Sources}}{{template "citation" .}}{{end}}</div>{{end}}
-{{if .Action}}<p class="report-decision-next"><strong>{{if .Action.Limitation}}{{$l.Label "decision.priority_review"}}{{else}}{{$l.Label "decision.priority_action"}}{{end}}</strong> {{.Action.State}}{{if .Action.Title}} · {{.Action.Title}}{{end}}</p>
-{{if .Action.Limitation}}<p class="report-decision-copy"><strong>{{$l.Label "decision.finding_limitation"}}</strong> {{.Action.Limitation}}</p>{{end}}
-<div class="report-decision-sources">{{template "citation" .Action.Source}}</div>{{end}}
-<div class="report-document-assessment">
+{{if .ComparisonCounts}}<div class="report-document-assessment">
 <div class="report-document-assessment-header"><strong>{{.ComparisonHeading}}</strong>
-{{if .ComparisonCounts}}<dl>{{range .ComparisonCounts}}<div><dt>{{.Label}}</dt><dd data-comparison-status="{{.Name}}">{{.Value}}</dd></div>{{end}}</dl>
-{{else}}<p>{{$l.Label "decision.no_document_assessment"}}</p>{{end}}</div>
+<dl>{{range .ComparisonCounts}}<div><dt>{{.Label}}</dt><dd data-comparison-status="{{.Name}}">{{.Value}}</dd></div>{{end}}</dl></div>
 {{if .ComparisonExample}}<p class="report-document-assessment-example"><strong>{{$l.Label "decision.document_claim"}}</strong> {{range inlineCodeParts .ComparisonExample}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{end}}</p>{{end}}
-<a href="#{{or .ComparisonAnchor "documents"}}" class="btn btn-sm btn-ghost-primary report-card-action">{{$l.Label "decision.documents"}}{{reportIcon "chevron-right"}}</a></div>
+<a href="#{{or .ComparisonAnchor "documents"}}" class="btn btn-sm btn-ghost-primary report-card-action">{{$l.Label "decision.documents"}}{{reportIcon "chevron-right"}}</a></div>{{end}}
 {{if .Glossary}}<details class="report-glossary"><summary>{{reportIcon "chevron-down"}} {{$l.Label "decision.glossary"}}</summary><dl>
 {{range .Glossary}}<div><dt>{{.Name}}</dt><dd>{{.Definition}}</dd></div>{{end}}
 </dl></details>{{end}}
@@ -1026,9 +1031,10 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <h4>{{template "behavior_claim" .}}</h4>
 {{else}}<details class="report-behavior"><summary>{{template "behavior_claim" .}}</summary>{{end}}
 <p class="report-behavior-status">{{$l.Label "behavior.documented"}} · {{$l.Label (printf "decision.comparison.%s" .Status)}}</p>
-{{with .Preview}}<div class="report-behavior-preview">
-<p>{{$l.Label "behavior.preview_source"}} · {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer"><code>{{.Location}}</code></a>{{else}}<code>{{.Location}}</code>{{end}}</p>
-<pre tabindex="0"><code>{{.Text}}</code></pre></div>{{end}}
+{{with .Preview}}<details class="report-behavior-preview">
+<summary>{{$l.Label "behavior.preview_source"}} · <code>{{.Location}}</code></summary>
+{{if .URL}}<p><a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.LinkLabel}}</a></p>{{end}}
+<pre tabindex="0"><code>{{.Text}}</code></pre></details>{{end}}
 {{if .Additional}}<p class="report-behavior-explanation"><strong>{{$l.Label "decision.additional_observation"}}</strong> {{range inlineCodeParts .Additional}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{end}}</p>{{end}}
 {{if .Explanation}}<p class="report-behavior-explanation"><strong>{{$l.Label "behavior.recorded_comparison"}}</strong> {{range inlineCodeParts .Explanation}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{end}}</p>{{end}}
 <div class="report-behavior-links">
@@ -1047,10 +1053,40 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <summary>{{.Heading}}</summary><p>{{.Context}}</p>
 <ul>{{range .Items}}<li>{{template "item" .}}</li>{{end}}</ul>
 </details>{{end}}{{end}}
-{{define "part"}}{{$l := .L}}{{with .P}}{{if .Cards}}<section class="report-group" data-tone="{{.Tone}}">
+{{define "section_reading"}}{{$l := .L}}{{with .P.Reading}}<div class="report-reading-groups">
+<p class="model" role="note">{{.Model}}</p>
+{{if and .IndexLabel (gt (len .Groups) 1)}}<nav aria-label="{{.IndexLabel}}"><ul class="report-reading-index">
+{{range .Groups}}<li><a href="#{{.ID}}"><code>{{.Title}}</code></a></li>{{end}}
+</ul></nav>{{end}}
+{{$sources := .SourcesLabel}}{{range .Groups}}<section class="report-reading-group">
+<h4{{if .ID}} id="{{.ID}}" tabindex="-1"{{end}}><code>{{.Title}}</code></h4>
+{{range .Categories}}<div class="report-reading-category">
+{{if .Title}}<h5>{{.Title}}</h5>{{end}}
+<ul class="report-reading-list">{{range .Rows}}
+{{if .SharedPath}}<li><a href="#{{.ID}}">{{.Title}}</a> <small>{{tf $l "docs.reading_shared" .SharedPath}}</small></li>
+{{else}}<li class="report-reading-row">
+{{range .Aliases}}<span id="{{.}}" tabindex="-1"></span>{{end}}
+<h5 id="{{.ID}}" tabindex="-1">{{.Title}}</h5>
+{{if .Status}}<span class="badge report-reading-status">{{.Status}}</span>{{end}}
+{{if .Type}}<span class="badge report-reading-status">{{.Type}}</span>{{end}}
+{{if .Details}}<ul>{{range .Details}}<li>{{template "item" .}}</li>{{end}}</ul>{{end}}
+{{range .Sources}}{{template "citation" .}}{{end}}
+{{template "workflow_reading" .Workflow}}
+</li>{{end}}{{end}}</ul>
+</div>{{end}}
+{{if .Sources}}<details class="report-reading-sources"><summary>{{$sources}}</summary>
+{{range .Sources}}<div id="{{.Anchor}}" tabindex="-1">
+<p class="report-excerpt-label">{{.StoredLabel}} <code>{{.ExcerptLocation}}</code></p>
+{{if .URL}}<a href="{{.URL}}" class="btn btn-sm btn-ghost-primary report-source-action" target="_blank" rel="noopener noreferrer">{{reportIcon "external-link"}}{{.LinkLabel}}</a>{{end}}
+<pre tabindex="0" aria-label="{{.ExcerptLocation}}"><code>{{.Text}}</code></pre>
+</div>{{end}}</details>{{end}}
+</section>{{end}}</div>{{end}}{{end}}
+{{define "part"}}{{$args := .}}{{$l := .L}}{{with .P}}
+{{if .Fold}}<details class="report-reading-records"><summary>{{.Fold}}</summary>{{end}}
+{{if .Cards}}<section class="report-group" data-tone="{{.Tone}}">
 <div class="report-group-title"><span class="report-group-mark">{{reportIcon (groupIcon .Tone)}}</span><h3>{{.Heading}}</h3>{{if .Model}}<p class="report-group-note" role="note">{{.Model}}</p>{{end}}</div>
 {{else if .Heading}}<h3{{if .Anchor}} id="{{.Anchor}}" tabindex="-1"{{end}}>{{.Heading}}</h3>
-{{end}}{{range .Paras}}<p>{{.}}</p>
+{{end}}{{template "section_reading" $args}}{{range .Paras}}<p>{{.}}</p>
 {{end}}{{if and .Model (not .Cards)}}<p class="model" role="note">{{.Model}}</p>
 {{end}}{{if .Counts}}<table><tr><th>{{$l.Label "col.item"}}</th><th>{{$l.Label "col.count"}}</th></tr>
 {{range .Counts}}<tr><td>{{.Label}}</td><td data-count="{{.Name}}">{{.Value}}</td></tr>
@@ -1058,7 +1094,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{end}}{{if and .Table .Table.Rows}}<div class="scroll"><table><tr>{{range .Table.Head}}<th scope="col">{{.}}</th>{{end}}</tr>
 {{$t := .Table}}{{range $i, $row := $t.Rows}}<tr{{if $t.ObservationIDs}} id="{{index $t.ObservationIDs $i}}" data-observation="{{index $t.ObservationIDs $i}}"{{end}}{{if $t.RowIDs}} id="{{index $t.RowIDs $i}}"{{end}}>{{range $row}}<td>{{if .Anchor}}<a href="#{{.Anchor}}">{{end}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{if .Anchor}}</a>{{end}}</td>{{end}}</tr>
 {{end}}</table></div>
-{{end}}{{if .List}}<ul>{{range .List}}<li>{{template "item" .}}</li>{{end}}</ul>
+{{end}}{{if .List}}<ul>{{range .List}}<li{{with .ObservationID}} id="{{.}}" data-observation="{{.}}"{{end}}>{{template "item" .}}</li>{{end}}</ul>
 {{end}}{{template "workflow_reading" .Workflow}}{{range .Sources}}{{template "citation" .}}{{end}}{{range .Findings}}<section class="card export-full-finding" id="{{.ID}}" data-finding="{{.ID}}">
 <h4>{{.Title}}</h4>
 <ul>
@@ -1084,12 +1120,15 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 </div>
 </article>
 {{end}}</div></section>
-{{end}}{{if .ShowEmpty}}<p>{{.Empty}}</p>
-{{end}}{{end}}{{end}}
+{{end}}{{if .ShowEmpty}}<p>{{.Empty}}</p>{{end}}
+{{range .Parts}}{{template "part" (pair $l .)}}{{end}}
+{{if .Fold}}</details>{{end}}{{end}}{{end}}
 {{define "item"}}{{if .Label}}<strong>{{.Label}}</strong> {{end}}{{if .Link}}<a href="#{{.Link}}">{{.Text}}</a>{{else}}{{.Text}}{{end}}{{range .Codes}} <code>{{.}}</code>{{end}}{{range .Sources}}{{template "citation" .}}{{end}}{{end}}
 {{define "citation"}}<div class="report-evidence">
 {{if .Example}}<p class="report-document-example"><strong>{{.ExampleLabel}}</strong> <code>{{.Example.Call}}</code> → <code>{{.Example.Output}}</code></p>{{end}}
-{{if .Text}}<details class="report-excerpt">
+{{if .Jump}}<a href="#{{.Jump}}" class="report-reading-reference">{{template "citation_file" .}}</a>
+{{if .URL}}<a class="report-reading-source-link" href="{{.URL}}" target="_blank" rel="noopener noreferrer" aria-label="{{.LinkLabel}} · {{.Location}}" title="{{.LinkLabel}}">{{reportIcon "external-link"}}</a>{{end}}
+{{else if .Text}}<details class="report-excerpt">
 <summary class="btn btn-sm btn-ghost-primary export-evidence-control" aria-label="{{.ActionLabel}} · {{.Location}}">{{template "citation_action" .}}{{reportIcon "chevron-down"}}</summary>
 {{if .URL}}<a href="{{.URL}}" class="btn btn-sm btn-ghost-primary report-source-action" target="_blank" rel="noopener noreferrer">{{reportIcon "external-link"}}{{.LinkLabel}}</a>{{end}}
 <p class="report-excerpt-label">{{.StoredLabel}} <code>{{.ExcerptLocation}}</code></p>

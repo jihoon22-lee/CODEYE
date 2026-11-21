@@ -145,7 +145,7 @@ func TestRecordsShowLanguageGuides(t *testing.T) {
 	plan, res := runRole(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
 	requireUnusedContract(t, res, f)
 	for _, p := range plan {
-		if p.Key == record.TaskContract {
+		if res[p.Key].Reason == domain.ReasonNoReviewScope && !p.Required {
 			continue
 		}
 		if strings.HasPrefix(p.Key, "review.") && res[p.Key].Status != domain.TaskSucceeded {

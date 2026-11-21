@@ -43,14 +43,14 @@ const (
 	latin1C = "/* caf\xe9 */\nint main(void) { return 0; }\n"
 )
 
-// fixtureFiles is the measured snapshot; vendor/ and testdata/ are data
-// directories the plan leaves out, README.md has no reader.
+// fixtureFiles includes complex code in local, data, and external directories.
 func fixtureFiles(token string, withLatin1 bool) map[string][]byte {
 	files := map[string][]byte{
 		"src/complex.py":      []byte(pyComplex(token)),
 		"src/route/route.go":  []byte(goComplex()),
 		"web/add.js":          []byte(jsSimple),
 		"vendor/dep/dep.py":   []byte(pyComplex("vendored")),
+		"Third-Party/dep.py":  []byte(pyComplex("external")),
 		"testdata/gen.py":     []byte(pyComplex("data")),
 		"README.md":           []byte("# fixture\n"),
 		"whitelizard.txt":     []byte("classify\n"),

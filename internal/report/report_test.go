@@ -700,6 +700,11 @@ func TestRenderingEscapesHostileText(t *testing.T) {
 		}
 	}
 	h = strings.Replace(h, font, "", 1)
+	navigation := `<script id="report-export-navigation">` + reportExportNavigation + `</script>`
+	if strings.Count(h, navigation) != 1 || !strings.Contains(h, `script-src 'sha256-`+exportNavigationHash()+`'`) {
+		t.Fatal("saved HTML does not authorize exactly the embedded navigation script")
+	}
+	h = strings.Replace(h, navigation, "", 1)
 	for _, bad := range []string{"<script", "<img", "<iframe", "<link", "<object", "url("} {
 		if strings.Contains(strings.ToLower(h), bad) {
 			t.Fatalf("html contains %q", bad)
