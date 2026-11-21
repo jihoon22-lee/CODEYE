@@ -155,7 +155,7 @@ describe('existing test results', () => {
     const { container } = render(<ReportDocument report={parseAnalysisReport(doc, doc.run_id)} />);
     fireEvent.click(screen.getByRole('button', { name: t.reading.viewArea(t.reading.testsOutcome) }));
     const results = container.querySelector<HTMLDetailsElement>('.report-test-results')!;
-    expect(within(results).getByText(`${failure.path}:${failure.line}`)).toBeTruthy();
+    expect(results.querySelector('.report-test-line')?.closest('code')?.textContent).toBe(`${failure.path}:${failure.line}`);
     expect(within(results).getByText(t.tests.nameWithheld)).toBeTruthy();
     expect(within(results).queryByText(failure.name)).toBeNull();
     expect(within(results).queryByRole('link')).toBeNull();
@@ -181,7 +181,7 @@ describe('analysis sections', () => {
     const tab = screen.getByRole('tab', { name: t.sections.titles.documents });
     fireEvent.click(tab);
     const panel = screen.getByRole('tabpanel', { name: t.sections.titles.documents });
-    const row = within(panel).getByRole('heading', { name: comparison.statement, exact: true }).closest('details')!;
+    const row = within(panel).getByRole('heading', { name: comparison.statement }).closest('details')!;
     row.open = true;
     expect(within(row).getByText('인용 1–16행 · 저장 발췌 1–13행')).toBeTruthy();
     expect(within(row).getByText('last stored line')).toBeTruthy();
