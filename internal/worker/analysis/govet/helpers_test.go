@@ -56,7 +56,7 @@ func (m *mutatingRunner) Run(ctx context.Context, spec executor.Spec) executor.R
 
 func readDoc(t *testing.T, res analysis.TaskResult) (Document, []byte) {
 	t.Helper()
-	if len(res.Artifacts) != 1 || res.Artifacts[0].Role != analysis.RoleObservations || res.Artifacts[0].MediaType != analysis.MediaObservations {
+	if len(res.Artifacts) == 0 || res.Artifacts[0].Role != analysis.RoleObservations || res.Artifacts[0].MediaType != analysis.MediaObservations {
 		t.Fatalf("observations artifact missing: %+v", res.Artifacts)
 	}
 	raw, err := os.ReadFile(res.Artifacts[0].Path)

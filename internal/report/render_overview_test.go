@@ -588,8 +588,8 @@ func TestReportCoverUsesOnlyRegisteredSourceAndRecordedTime(t *testing.T) {
 			}
 			cover, _, _ := strings.Cut(rest, "</header>")
 			for _, want := range []string{r.Project.Name, source, "일부 검사 미완료로 종료",
-				`시작 시각</dt><dd><time datetime="2026-11-20T21:00:20&#43;09:00">2026-11-20 12:00 UTC`,
-				`종료 시각</dt><dd><time datetime="2026-11-20T21:01:52&#43;09:00">2026-11-20 12:01 UTC`,
+				`시작 시각</dt><dd><time datetime="2026-11-20T21:00:20&#43;09:00">2026-11-20 12:00:20 UTC`,
+				`종료 시각</dt><dd><time datetime="2026-11-20T21:01:52&#43;09:00">2026-11-20 12:01:52 UTC`,
 				"소요 시간</dt><dd>1분 32초"} {
 				if !strings.Contains(cover, want) {
 					t.Fatalf("cover lacks %q", want)
@@ -697,5 +697,46 @@ func TestSnapshotBrowserLinksRespectExportProjection(t *testing.T) {
 	overview, _, _ := strings.Cut(contents, `<details class="card report-disclosure"`)
 	if !strings.Contains(overview, `<a href="`+want+`"`) || strings.Contains(overview, `class="report-excerpt"`) {
 		t.Fatal("overview did not fall back to the verified link when the excerpt was absent")
+	}
+}
+
+func TestSecretOverviewSeparatesDetectionsFromScreeningState(t *testing.T) {
+	r := storedExample(t, "../../examples/report.json")
+	detection := r.Secrets.Detections[0]
+	cases := []struct {
+		state, status, tone, value string
+		detected                   bool
+	}{
+		{"succeeded", "탐지 있음", "attention", "검사에서 보고한 탐지 1건", true},
+		{"partial", "탐지 있음", "attention", "검사에서 보고한 탐지 1건 · 일부 수행", true},
+		{"partial", "일부 수행", "partial", "탐지 결과 미확정", false},
+		{"failed", "실패", "failed", "탐지 결과 미확정", false},
+		{"skipped", "제외", "neutral", "탐지 결과 미확정", false},
+		{"succeeded", "탐지 없음", "ready", "검사에서 보고한 탐지 0건", false},
+	}
+	for _, version := range []string{"16", BuilderVersion} {
+		r.Builder.Version = version
+		for _, tc := range cases {
+			r.Secrets.Stage.State = tc.state
+			r.Secrets.Detections = nil
+			if tc.detected {
+				r.Secrets.Detections = []SecretDetection{detection}
+			}
+			v := secView{view: view{L: Korean, R: r}}
+			rows := v.ReadingOverview()
+			i := slices.IndexFunc(rows, func(row overviewReadingRow) bool { return row.Section == SectionSecrets })
+			if i < 0 {
+				t.Fatal("missing secrets row")
+			}
+			row := rows[i]
+			if row.Status != tc.status || row.Tone != tc.tone || row.Value != tc.value+" · Git 이력 미검사" {
+				t.Fatalf("builder %s, %s, detected=%t: %+v", version, tc.state, tc.detected, row)
+			}
+		}
+	}
+	r = storedExample(t, "testdata/report-unscreened.json")
+	v := secView{view: view{L: Korean, R: r}}
+	if slices.ContainsFunc(v.ReadingOverview(), func(row overviewReadingRow) bool { return row.Section == SectionSecrets }) {
+		t.Fatal("reports with no detection task should not display a scan result")
 	}
 }

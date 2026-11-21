@@ -167,7 +167,7 @@
       "path": "src/ring.c",
       "raw_message": "Potential leak of memory pointed to by 'r'",
       "raw_ref": {
-        "byte_end": 225,
+        "byte_end": 603,
         "byte_start": 115,
         "execution": "clang-tidy.check.1",
         "json_pointer": "",
@@ -189,7 +189,12 @@
           },
           "location_state": "resolved",
           "path": "src/ring.c",
-          "raw_message": "Memory is allocated"
+          "raw_message": "Memory is allocated",
+          "kind": "tool_note",
+          "raw_span": {
+            "byte_start": 225,
+            "byte_end": 279
+          }
         },
         {
           "location": {
@@ -203,7 +208,12 @@
           },
           "location_state": "resolved",
           "path": "src/ring.c",
-          "raw_message": "Assuming 'r' is not equal to null"
+          "raw_message": "Assuming 'r' is not equal to null",
+          "kind": "condition_assumption",
+          "raw_span": {
+            "byte_start": 279,
+            "byte_end": 346
+          }
         },
         {
           "location": {
@@ -217,7 +227,12 @@
           },
           "location_state": "resolved",
           "path": "src/ring.c",
-          "raw_message": "Taking false branch"
+          "raw_message": "Taking false branch",
+          "kind": "assumed_branch",
+          "raw_span": {
+            "byte_start": 346,
+            "byte_end": 399
+          }
         },
         {
           "location": {
@@ -231,7 +246,12 @@
           },
           "location_state": "resolved",
           "path": "src/ring.c",
-          "raw_message": "Assuming field 'data' is equal to null"
+          "raw_message": "Assuming field 'data' is equal to null",
+          "kind": "condition_assumption",
+          "raw_span": {
+            "byte_start": 399,
+            "byte_end": 472
+          }
         },
         {
           "location": {
@@ -245,7 +265,12 @@
           },
           "location_state": "resolved",
           "path": "src/ring.c",
-          "raw_message": "Taking true branch"
+          "raw_message": "Taking true branch",
+          "kind": "assumed_branch",
+          "raw_span": {
+            "byte_start": 472,
+            "byte_end": 525
+          }
         },
         {
           "location": {
@@ -259,7 +284,12 @@
           },
           "location_state": "resolved",
           "path": "src/ring.c",
-          "raw_message": "Potential leak of memory pointed to by 'r'"
+          "raw_message": "Potential leak of memory pointed to by 'r'",
+          "kind": "tool_note",
+          "raw_span": {
+            "byte_start": 525,
+            "byte_end": 603
+          }
         }
       ],
       "rule_id": "clang-analyzer-unix.Malloc",
@@ -283,7 +313,7 @@
       "path": "src/ring.c",
       "raw_message": "Dereference of null pointer (loaded from variable 'slot')",
       "raw_ref": {
-        "byte_end": 737,
+        "byte_end": 1024,
         "byte_start": 603,
         "execution": "clang-tidy.check.1",
         "json_pointer": "",
@@ -305,7 +335,12 @@
           },
           "location_state": "resolved",
           "path": "src/ring.c",
-          "raw_message": "'slot' initialized to a null pointer value"
+          "raw_message": "'slot' initialized to a null pointer value",
+          "kind": "tool_note",
+          "raw_span": {
+            "byte_start": 737,
+            "byte_end": 814
+          }
         },
         {
           "location": {
@@ -319,7 +354,12 @@
           },
           "location_state": "resolved",
           "path": "src/ring.c",
-          "raw_message": "Assuming field 'len' is <= 0"
+          "raw_message": "Assuming field 'len' is <= 0",
+          "kind": "condition_assumption",
+          "raw_span": {
+            "byte_start": 814,
+            "byte_end": 877
+          }
         },
         {
           "location": {
@@ -333,7 +373,12 @@
           },
           "location_state": "resolved",
           "path": "src/ring.c",
-          "raw_message": "Taking false branch"
+          "raw_message": "Taking false branch",
+          "kind": "assumed_branch",
+          "raw_span": {
+            "byte_start": 877,
+            "byte_end": 931
+          }
         },
         {
           "location": {
@@ -347,7 +392,12 @@
           },
           "location_state": "resolved",
           "path": "src/ring.c",
-          "raw_message": "Dereference of null pointer (loaded from variable 'slot')"
+          "raw_message": "Dereference of null pointer (loaded from variable 'slot')",
+          "kind": "tool_note",
+          "raw_span": {
+            "byte_start": 931,
+            "byte_end": 1024
+          }
         }
       ],
       "rule_id": "clang-analyzer-core.NullDereference",
@@ -371,7 +421,7 @@
       "path": "src/util.cpp",
       "raw_message": "'a' used after it was moved",
       "raw_ref": {
-        "byte_end": 1117,
+        "byte_end": 1172,
         "byte_start": 1024,
         "execution": "clang-tidy.check.1",
         "json_pointer": "",
@@ -393,7 +443,12 @@
           },
           "location_state": "resolved",
           "path": "src/util.cpp",
-          "raw_message": "move occurred here"
+          "raw_message": "move occurred here",
+          "kind": "tool_note",
+          "raw_span": {
+            "byte_start": 1117,
+            "byte_end": 1172
+          }
         }
       ],
       "rule_id": "bugprone-use-after-move",
@@ -417,7 +472,7 @@
       "path": "src/util.cpp",
       "raw_message": "Memory allocated by 'new[]' should be deallocated by 'delete[]', not 'delete'",
       "raw_ref": {
-        "byte_end": 1333,
+        "byte_end": 1504,
         "byte_start": 1172,
         "execution": "clang-tidy.check.1",
         "json_pointer": "",
@@ -439,7 +494,12 @@
           },
           "location_state": "resolved",
           "path": "src/util.cpp",
-          "raw_message": "Memory is allocated"
+          "raw_message": "Memory is allocated",
+          "kind": "tool_note",
+          "raw_span": {
+            "byte_start": 1333,
+            "byte_end": 1390
+          }
         },
         {
           "location": {
@@ -453,7 +513,12 @@
           },
           "location_state": "resolved",
           "path": "src/util.cpp",
-          "raw_message": "Memory allocated by 'new[]' should be deallocated by 'delete[]', not 'delete'"
+          "raw_message": "Memory allocated by 'new[]' should be deallocated by 'delete[]', not 'delete'",
+          "kind": "tool_note",
+          "raw_span": {
+            "byte_start": 1390,
+            "byte_end": 1504
+          }
         }
       ],
       "rule_id": "clang-analyzer-unix.MismatchedDeallocator",

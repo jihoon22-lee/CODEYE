@@ -542,7 +542,11 @@ func assembleClangTidy(doc obsdoc.Document, in ctInput) obsdoc.Document {
 					break
 				}
 				rp, rl, rst := rs.resolve(n.File, n.Line, n.Col)
-				o.Related = append(o.Related, obsdoc.Related{RawMessage: mask(n.Message), Path: rp, Location: rl, LocationState: rst})
+				o.RawRef.ByteEnd = max(o.RawRef.ByteEnd, n.ByteEnd)
+				o.Related = append(o.Related, obsdoc.Related{
+					Kind: clangRelatedKind(rule, n.Message), RawSpan: &obsdoc.ByteSpan{Start: n.ByteStart, End: n.ByteEnd},
+					RawMessage: mask(n.Message), Path: rp, Location: rl, LocationState: rst,
+				})
 			}
 			doc.Observations = append(doc.Observations, o)
 			if unit != "" {
@@ -641,4 +645,16 @@ func assembleClangTidy(doc obsdoc.Document, in ctInput) obsdoc.Document {
 	}
 	o.finish(&doc, processed, partial, parsed)
 	return doc
+}
+
+func clangRelatedKind(rule, message string) string {
+	if strings.HasPrefix(rule, "clang-analyzer-") {
+		switch {
+		case strings.HasPrefix(message, "Assuming "):
+			return obsdoc.RelatedAssumption
+		case message == "Taking true branch" || message == "Taking false branch":
+			return obsdoc.RelatedBranch
+		}
+	}
+	return obsdoc.RelatedNote
 }

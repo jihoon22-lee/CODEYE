@@ -260,6 +260,16 @@ func attachExcerpts(r *Report, snippets map[sourceexcerpt.Key][]sourceexcerpt.Ex
 		return get(l.Path, l.BlobSHA256, l.StartLine, l.EndLine, false)
 	}
 	for _, o := range r.Observations {
+		for i := range o.Related {
+			related := &o.Related[i]
+			if l := related.Location; l != nil {
+				if withheld[l.Path] {
+					related.RawMessage = nil
+					continue
+				}
+				related.Excerpt = get(l.Path, l.BlobSHA256, l.StartLine, l.EndLine, false)
+			}
+		}
 		if o.Metric == nil || o.EvidenceState != EvidenceVerified {
 			continue
 		}

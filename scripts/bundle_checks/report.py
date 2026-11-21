@@ -64,6 +64,23 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
             ensure(row["role"] in ("stdout", "stderr") and row["sha256"] == raw["sha256"] and row["task_key"] == obs["task_key"], "Incorrect raw stream")
             ensure(0 <= raw["byte_start"] <= raw["byte_end"] <= row["size_bytes"], "Raw byte range invalid")
             ensure((obs["raw_message"] is not None) == report["export"]["include_code"], "Export leaked or omitted diagnostic text")
+            related_end = raw["byte_start"]
+            for note in obs.get("related_locations", []):
+                ensure(obs["tool"] in ("cpp.cppcheck", "cpp.clang_tidy") and "metric" not in obs,
+                       "Related note is not a C/C++ diagnostic")
+                ensure(report["export"]["include_code"] or not ("raw_message" in note or "excerpt" in note),
+                       "Code-free export has related tool text")
+                if ref := note.get("raw_ref"):
+                    ensure(ref["artifact_id"] == raw["artifact_id"] and ref["sha256"] == raw["sha256"] and
+                           ref["stream_index"] == raw["stream_index"] and
+                           related_end <= ref["byte_start"] < ref["byte_end"] <= raw["byte_end"],
+                           "Related note is outside its diagnostic raw range")
+                    related_end = ref["byte_end"]
+                if loc := note.get("location"):
+                    path = source_location(loc, source_root)
+                    ensure(hashlib.sha256(path.read_bytes()).hexdigest() == loc["blob_sha256"],
+                           "Related note snapshot hash mismatch")
+                    check_excerpt(note, path, loc, report["export"]["include_code"], False)
             metric = obs.get("metric", {})
             counterpart = metric.get("counterpart")
             if counterpart is not None:
@@ -85,6 +102,18 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
         ensure(not any(suppressed & set(f.get("observation_ids", [])) for f in findings), "Finding built from a suppressed observation")
         if report["coverage"]["ai_review"]["status"] != "performed":
             ensure(report["status"] != "completed" and report["quality_verdict"] != "no_actionable_findings", "Incomplete AI review marked clean")
+    for graph in report.get("metrics", {}).get("go_package_dependencies", []):
+        ensure(graph["snapshot_manifest_digest"] == report["inputs"]["manifest_sha256"],
+               "Go package graph snapshot mismatch")
+        nodes = {package["import_path"]: package["directory"] for package in graph["packages"]}
+        ensure(graph["scope"] != "selected_packages" or graph["status"] != "complete",
+               "Selected package graph claims complete coverage")
+        for edge in graph["edges"]:
+            point = edge["witness"]
+            ensure(edge["from"] in nodes and edge["to"] in nodes, "Unbound graph package")
+            loc = {"path": point["path"], "start_line": point["line"], "end_line": point["line"]}
+            path = source_location(loc, source_root)
+            ensure(hashlib.sha256(path.read_bytes()).hexdigest() == point["blob_sha256"], "Go import witness hash mismatch")
     for row in report["coverage"].get("tools", []):
         context = row.get("rule_context")
         if context is None:

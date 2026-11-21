@@ -2,11 +2,12 @@ import { Fragment, type ReactNode } from 'react';
 import { sourceEvidenceURL, type AnalysisReport } from './analysisReport';
 import type { Citation } from './parseReportSections';
 import { reportKo as t } from './locales/report-ko';
-import { formatInstant, runStatusLabel } from './format';
+import { formatReportInstant, runStatusLabel } from './format';
 import '../../internal/report/reportui/font.css';
 import '../../internal/report/reportui/tabler.css';
 import '../../internal/report/reportui/report.css';
 import './report.css';
+import '../../internal/report/reportui/workbench.css';
 
 type IconName = 'alert' | 'chart' | 'check' | 'chevron' | 'clock' | 'code' | 'external' | 'file' | 'findings' | 'jump' | 'mark' | 'overview' | 'secret' | 'server' | 'terminal';
 
@@ -46,11 +47,11 @@ export function ReportLayout({ report, rail, children, className = '', purpose }
             {report.project?.source && <div className="report-hero-source"><span>{t.target}</span><code>
               {report.project.source.split(/(?<=\/)/).map((part, i) => <Fragment key={i}>{i > 0 && <wbr />}{part}</Fragment>)}
             </code></div>}
-            <div className="report-verdict">
+            <div className="report-verdict" data-status={report.status}>
               <span className="badge"><ReportIcon name={report.status === 'completed' ? 'check' : 'clock'} />
                 {Object.hasOwn(t.executionStatuses, report.status) ? t.executionStatuses[report.status] : t.executionStatus(runStatusLabel(report.status))}</span>
-              {start && Number.isFinite(startedAt) && <span className="report-hero-time"><b>{t.start}</b> <time dateTime={start}>{formatInstant(start)}</time></span>}
-              {end && <span className="report-hero-time"><b>{end.label}</b> <time dateTime={end.time}>{formatInstant(end.time)}</time></span>}
+              {start && Number.isFinite(startedAt) && <span className="report-hero-time"><b>{t.start}</b> <time dateTime={start}>{formatReportInstant(start)}</time></span>}
+              {end && <span className="report-hero-time"><b>{end.label}</b> <time dateTime={end.time}>{formatReportInstant(end.time)}</time></span>}
               {duration !== null && <span className="report-hero-time"><b>{t.duration}</b> {t.durationValue(duration)}</span>}
               {report.commit && <span className="report-hero-time"><b>{t.commit}</b> <code title={report.commit}>{report.commit.slice(0, 12)}</code></span>}
             </div>

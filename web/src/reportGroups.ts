@@ -4,6 +4,7 @@
 import type { AnalysisReport, Evidence, Finding, Observation } from './analysisReport';
 import type { Citation, Ledger, Sections, StaticTool } from './parseReportSections';
 import { reportKo as t } from './locales/report-ko';
+import { label } from './format';
 
 // The default secondary path rule of review priority (docs/REVIEW.md#검토-우선순위,
 // record.DefaultSecondary). A test checks it against the rule the scope
@@ -231,7 +232,17 @@ export function duplicateReadingFindings(findings: Finding[], observations: Obse
   return duplicates;
 }
 
-export type ReadingSummaryRow = { section: string; label: string; value: string; status?: string };
+export type ReportTone = 'ready' | 'partial' | 'attention' | 'failed' | 'neutral';
+export type ReadingSummaryRow = { section: string; label: string; value: string; status?: string; tone?: ReportTone; count?: string };
+
+export function reportStageTone(value: string | undefined): ReportTone {
+  switch (value) {
+    case 'succeeded': return 'ready';
+    case 'partial': return 'partial';
+    case 'failed': case 'cancelled': return 'failed';
+    default: return 'neutral';
+  }
+}
 
 export function readingSummary(report: AnalysisReport): ReadingSummaryRow[] {
   const recorded = report.findings.filter(f => !hiddenDispositions.has(f.disposition) &&
@@ -247,13 +258,16 @@ export function readingSummary(report: AnalysisReport): ReadingSummaryRow[] {
   const required = report.tasks.filter(task => task.required && !task.key.startsWith('test.'));
   const rows: ReadingSummaryRow[] = [];
   const sections = report.sections;
-  const stage = (value: string | undefined) => value === undefined ? undefined : t.sections.states[value] ?? value;
+  const stage = (value: string | undefined) => value === undefined ? undefined : label(t.sections.states, value).replace(/^[^\p{L}\p{N}]+/u, '');
+  const number = new Intl.NumberFormat('ko-KR');
+  const fraction = (part: number, total: number) => number.format(part) + '/' + number.format(total);
   if (actionable.length > 0 || accepted !== null && accepted > 0) {
-    rows.push({ section: 'code_review', label: t.reading.codeOutcome, status: stage(sections?.codeReview.stage.state), value: t.reading.actionCounts(actionable.length - secondary, secondary) });
+    rows.push({ section: 'code_review', label: t.reading.codeOutcome, status: stage(sections?.codeReview.stage.state), tone: reportStageTone(sections?.codeReview.stage.state), count: number.format(actionable.length - secondary), value: t.reading.actionCounts(actionable.length - secondary, secondary) });
   }
   if (eligible > 0) {
     const lines = sections?.codeReview.ledger?.files?.reduce((sum, file) => ({ accepted: sum.accepted + file.accepted, total: sum.total + file.total }), { accepted: 0, total: 0 });
-    rows.push({ section: 'code_review', label: t.reading.modelScopeLabel, value: accepted !== null ? t.reading.modelScope(accepted, eligible, lines) : t.reading.modelSent(requested, eligible) });
+    rows.push({ section: 'code_review', label: t.reading.modelScopeLabel, status: accepted === null ? t.reading.requestedState : accepted === eligible ? t.reading.availableState : t.reading.partialInvestigation,
+      tone: accepted === null ? 'neutral' : accepted === eligible ? 'ready' : 'partial', count: fraction(accepted ?? requested, eligible), value: accepted !== null ? t.reading.modelScope(accepted, eligible, lines) : t.reading.modelSent(requested, eligible) });
   }
   const staticTools = sections ? regularStaticLanguages(sections).flatMap(language => language.tools) : [];
   if (staticTools.length > 0) {
@@ -262,18 +276,20 @@ export function readingSummary(report: AnalysisReport): ReadingSummaryRow[] {
     const primary = report.observations.filter(o => observed.has(o.id) && !o.suppressed && !o.metric && o.location &&
       o.evidenceState === 'verified_against_source_manifest' && !secondaryReviewPath(o.location.path));
     rows.push({ section: 'static_analysis', label: t.sections.titles.static_analysis,
+      status: stage(successful.length === staticTools.length ? 'succeeded' : successful.length > 0 ? 'partial' : sections?.staticAnalysis.stage.state),
+      tone: successful.length === staticTools.length ? 'ready' : successful.length > 0 ? 'partial' : reportStageTone(sections?.staticAnalysis.stage.state), count: fraction(successful.length, staticTools.length),
       value: t.reading.staticResults(successful.length, staticTools.length) + ' · ' + t.reading.staticDiagnostics(primary.length) });
   }
   if (report.testResults) {
     const results = report.testResults;
-    rows.push({ section: 'tests', label: t.reading.testsOutcome, value: results.status === 'not_run' && results.tasks.every(task =>
+    rows.push({ section: 'tests', label: t.reading.testsOutcome, tone: results.status === 'passed' ? 'ready' : results.status === 'failed' ? 'failed' : results.status === 'partial' ? 'partial' : 'neutral', value: results.status === 'not_run' && results.tasks.every(task =>
       !task.attempted && !['succeeded', 'failed', 'timed_out', 'cancelled'].includes(task.status)) ? t.tests.notStarted : (t.tests.summary[results.status] ?? results.status) });
   }
   const incomplete = ['failed', 'timed_out', 'unsupported', 'skipped_policy'].flatMap(status => {
     const count = required.filter(task => task.status === status).length;
     return count ? [`${t.reading.outcomeStatus[status]} ${count}건`] : [];
   });
-  if (incomplete.length > 0) rows.push({ section: 'gaps', label: t.reading.requiredOutcome, value: incomplete.join(' · ') });
+  if (incomplete.length > 0) rows.push({ section: 'gaps', label: t.reading.requiredOutcome, status: t.reading.incompleteState, tone: required.some(task => task.status === 'failed') ? 'failed' : 'attention', count: number.format(required.filter(task => ['failed', 'timed_out', 'unsupported', 'skipped_policy'].includes(task.status)).length), value: incomplete.join(' · ') });
   if (sections) {
     const d = sections.documents;
     const considered = d.comparisons.filter(c => c.status !== 'unknown').length;
@@ -281,20 +297,50 @@ export function readingSummary(report: AnalysisReport): ReadingSummaryRow[] {
     const read = d.items.filter(item => item.status === 'selected').length;
     if (d.items.length || d.comparisons.length) rows.push({ section: 'documents', label: t.sections.titles.documents,
       status: unknown > 0 ? t.reading.documentsPending : read > 0 ? t.reading.documentsRead : stage(d.stage.state),
+      tone: unknown > 0 ? 'attention' : reportStageTone(d.stage.state), count: number.format(read),
       value: t.reading.documentsOutcome(read, considered, unknown) });
     const mismatch = sections.environment.verdicts.filter(v => v.status === 'mismatch').length;
     if (sections.environment.modules.length) rows.push({ section: 'environment', label: t.sections.titles.environment,
       status: mismatch > 0 ? t.reading.environmentMismatch : stage(sections.environment.stage.state),
+      tone: mismatch > 0 ? 'attention' : reportStageTone(sections.environment.stage.state), count: number.format(sections.environment.modules.length),
       value: t.reading.environmentOutcome(sections.environment.modules.length, mismatch) });
     if (sections.metrics.tasks.length) {
-      const measures = sections.metrics.groups.map(({ name, observations }) => name === 'cyclomatic_complexity'
-        ? t.reading.complexityOutcome(observations.length) : name === 'duplicated_lines'
-          ? t.reading.duplicationOutcome(observations.length) : t.reading.metricOutcome(name, observations.length));
-      rows.push({ section: 'metrics', label: t.sections.titles.metrics, status: stage(sections.metrics.stage.state),
-        value: measures.join(' · ') || t.reading.metricsEmpty });
+      const tone = reportStageTone(sections.metrics.stage.state);
+      const status = tone === 'ready' ? t.reading.measuredState : stage(sections.metrics.stage.state);
+      for (const { name, observations } of sections.metrics.groups) {
+        const [label, value] = name === 'cyclomatic_complexity' ? [t.reading.complexityLabel, t.reading.complexityOutcome(observations.length)] :
+          name === 'duplicated_lines' ? [t.reading.duplicationLabel, t.reading.duplicationOutcome(observations.length)] :
+            [name, t.reading.metricOutcome(name, observations.length)];
+        rows.push({ section: 'metrics', label, status, tone, value, count: number.format(observations.length) });
+      }
+      if (!sections.metrics.groups.length) rows.push({ section: 'metrics', label: t.sections.titles.metrics, status, tone, value: t.reading.metricsEmpty });
     }
-    if (sections.secrets.tasks.length) rows.push({ section: 'secrets', label: t.sections.titles.secrets, status: stage(sections.secrets.stage.state),
-      value: t.reading.secretsOutcome(sections.secrets.detections.length) });
+    const graphs = sections.metrics.goDependencies ?? [];
+    if (graphs.length) {
+      const complete = graphs.every(graph => graph.status === 'complete');
+      const available = graphs.some(graph => graph.status !== 'unavailable');
+      const packages = graphs.reduce((count, graph) => count + graph.packages.length, 0);
+      rows.push({ section: 'metrics', label: t.reading.goGraphLabel,
+        status: complete ? t.reading.graphReady : available ? t.reading.graphPartial : t.reading.graphUnavailable,
+        tone: complete ? 'ready' : available ? 'partial' : 'neutral',
+        count: number.format(graphs.length), value: t.reading.graphOutcome(graphs.length, packages,
+          graphs.some(graph => graph.scope === 'selected_packages')) });
+    }
+    const secrets = sections.secrets;
+    if (secrets.tasks.length) {
+      const count = secrets.detections.length;
+      const state = secrets.stage.state;
+      const complete = state === 'succeeded';
+      const phase = stage(state);
+      const values = [complete || count > 0 ? t.reading.secretsOutcome(count) : t.reading.secretsUndetermined];
+      if (count > 0 && !complete && phase) values.push(phase);
+      if (sections.gaps.some(gap => gap.section === 'secrets' && gap.code === 'history_not_scanned')) {
+        values.push(t.reading.secretsWorkspaceScope);
+      }
+      rows.push({ section: 'secrets', label: t.sections.titles.secrets,
+        status: count > 0 ? t.reading.secretsDetected : complete ? t.reading.secretsClear : phase,
+        tone: count > 0 ? 'attention' : reportStageTone(state), count: number.format(count), value: values.join(' · ') });
+    }
   }
   const flow = ['environment', 'documents', 'static_analysis', 'metrics', 'secrets', 'code_review', 'tests', 'gaps'];
   return rows.sort((a, b) => flow.indexOf(a.section) - flow.indexOf(b.section));

@@ -9,7 +9,7 @@ import { improvementHints } from './improve';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
 import { ReportDocument } from './ReportPanel';
-import { SECONDARY_NOT_FOR_GO, SECONDARY_SEGMENTS, gapGroups, overviewFacts, places, projectReadings, ruleGroups, secondaryPath, secondaryReviewPath, severityOf, slotRuns } from './reportGroups';
+import { SECONDARY_NOT_FOR_GO, SECONDARY_SEGMENTS, gapGroups, overviewFacts, places, projectReadings, readingSummary, ruleGroups, secondaryPath, secondaryReviewPath, severityOf, slotRuns } from './reportGroups';
 
 afterEach(cleanup);
 
@@ -20,6 +20,46 @@ function load(doc: unknown) {
 }
 
 describe('summary grouping', () => {
+  it('links only recorded Go dependency graphs from the summary with their measured scope', () => {
+    const report = load(sectioned);
+    const metrics = report.sections!.metrics;
+    metrics.goDependencies = [];
+    const graph = () => readingSummary(report).find(row => row.label === t.reading.goGraphLabel);
+    expect(graph()).toBeUndefined();
+    metrics.goDependencies.push({
+      task: 'go-vet', module: 'example.test/module', platform: 'linux/amd64',
+      scope: 'selected_packages', status: 'partial', parsed: 2, ignored: 0,
+      incomplete: 1, unresolved: 1, unparsed: 0, limitations: ['go_package_scope_limited'],
+      packages: ['example.test/module/main', 'example.test/module/worker'], edges: [],
+    });
+    expect(graph()).toMatchObject({ section: 'metrics', status: t.reading.graphPartial, count: '1',
+      value: t.reading.graphOutcome(1, 2, true) });
+  });
+
+  it.each(['16', '17'])('distinguishes detections from successful screening in builder %s reports', version => {
+    const report = load({ ...sectioned, builder: { ...sectioned.builder, version } });
+    const secrets = report.sections!.secrets;
+    const row = () => readingSummary(report).find(result => result.section === 'secrets');
+    expect(row()).toMatchObject({ status: t.reading.secretsDetected, tone: 'attention', count: '1',
+      value: t.reading.secretsOutcome(1) + ' · ' + t.reading.secretsWorkspaceScope });
+    secrets.stage.state = 'partial';
+    expect(row()).toMatchObject({ status: t.reading.secretsDetected, tone: 'attention',
+      value: expect.stringContaining('일부 수행') });
+    secrets.detections = [];
+    expect(row()).toMatchObject({ status: '일부 수행', tone: 'partial',
+      value: t.reading.secretsUndetermined + ' · ' + t.reading.secretsWorkspaceScope });
+    secrets.stage.state = 'failed';
+    expect(row()).toMatchObject({ status: '실패', tone: 'failed' });
+    secrets.stage.state = 'skipped';
+    expect(row()).toMatchObject({ status: '제외', tone: 'neutral' });
+    secrets.stage.state = 'succeeded';
+    expect(row()).toMatchObject({ status: t.reading.secretsClear, tone: 'ready', count: '0' });
+    report.sections!.gaps = [];
+    expect(row()?.value).toBe(t.reading.secretsOutcome(0));
+    secrets.tasks = [];
+    expect(row()).toBeUndefined();
+  });
+
   // The screen classifies paths with a copy of the default secondary rule;
   // the scope artifact records the rule the worker used.
   it('uses the secondary path rule the review scope records', () => {
@@ -69,13 +109,18 @@ describe('summary grouping', () => {
     const { container } = render(<ReportDocument report={report} />);
     if (report.project) fireEvent.click(within(container).getByRole('tab', { name: t.sections.titles.code_review }));
     const section = within(container.querySelector('#report-section-code_review') as HTMLElement);
-    expect(section.getByText(supported.title, { selector: 'summary > strong' })).toBeTruthy();
+    const selected = section.getByRole('button', { name: supported.title });
     for (const title of [example.title, test.title]) {
-      const summary = section.getByText(title, { selector: 'summary > strong' }).parentElement!;
-      expect(summary.closest('tr')).not.toBeNull();
-      expect(within(summary).getByText(t.reading.secondary)).toBeTruthy();
-      expect(summary.closest('details')!.open).toBe(false);
+      const row = section.getByText(title, { selector: 'button.report-finding-select' }).closest('tr')!;
+      expect(within(row).getByText(t.reading.secondary)).toBeTruthy();
+      expect(row.dataset.active).toBe('false');
     }
+    fireEvent.click(selected);
+    const detail = section.getByRole('region', { name: t.evidence });
+    expect(within(detail).getByRole('heading', { name: supported.title })).toBe(document.activeElement);
+    expect(selected.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(within(detail).getByRole('button', { name: new RegExp(t.codeReading.resultList) }));
+    expect(selected.getAttribute('aria-pressed')).toBe('false');
   });
 
   it('counts every diagnostic once in the rule groups and shows five places with the rest counted', () => {

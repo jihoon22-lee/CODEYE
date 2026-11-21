@@ -1,0 +1,50 @@
+{
+  "schema_version": "0.1",
+  "task_key": "go-vet",
+  "snapshot_manifest_digest": "462797c26ec020cf0ce1ebe198aa7a3d9d0cda29107ff6020de0e51310480f47",
+  "go_list_sha256": "53432a0951bf44d8ad0c14913e4fe4c1b18023707fce7dddea67939d913184f5",
+  "module": "example.test/probe",
+  "module_dir": ".",
+  "platform": "linux/amd64",
+  "scope": "all_module_packages",
+  "status": "complete",
+  "parsed_files": 3,
+  "ignored_variant_files": 1,
+  "unlisted_files": 0,
+  "incomplete_packages": 0,
+  "unresolved_internal_imports": 0,
+  "unparsed_files": 0,
+  "limitations": [],
+  "packages": [
+    {
+      "import_path": "example.test/probe/a",
+      "directory": "a"
+    },
+    {
+      "import_path": "example.test/probe/b",
+      "directory": "b"
+    }
+  ],
+  "edges": [
+    {
+      "from": "example.test/probe/b",
+      "to": "example.test/probe/a",
+      "kind": "external_test",
+      "witness": {
+        "path": "b/b_test.go",
+        "line": 3,
+        "blob_sha256": "0668f4f3c1f1ad183d5d6104e43141ee068ee4369a55f1ad535b6ebeb7cc98a9"
+      }
+    },
+    {
+      "from": "example.test/probe/b",
+      "to": "example.test/probe/a",
+      "kind": "production",
+      "witness": {
+        "path": "b/b.go",
+        "line": 3,
+        "blob_sha256": "ffd0fdac5a54ca4e77860e68917493623ac82a895d6272784a40606896876f66"
+      }
+    }
+  ]
+}

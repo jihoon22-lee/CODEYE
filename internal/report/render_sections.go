@@ -79,17 +79,24 @@ type secTable struct {
 }
 
 type secTableDetail struct {
-	ID, Label, Text string
-	Sources         []sourceCitation
+	ID, Label, Text  string
+	Sources          []sourceCitation
+	Notes            []inspectionNote
+	OtherDiagnostics []secTableDetail
+}
+
+type inspectionNote struct {
+	Label, Text string
+	Source      *sourceCitation
 }
 
 func (t secTable) DetailColumns() int { return len(t.Head) + 1 }
 
 // secCard is one finding of the summary layout: its title and a few lines.
 type secCard struct {
-	ID, Title, State, Location string
-	Lines                      []secItem
-	Preview                    *sourcePreview
+	ID, Title, State, Severity, Location, ShortLocation, Tone string
+	Lines, Context                                            []secItem
+	Preview                                                   *sourcePreview
 }
 
 // secCell is plain text or a code span; Anchor links to an in-page id.
@@ -461,6 +468,7 @@ func newSecView(r Report, digest string, l Locale) secView {
 	m := r.Metrics
 	mb := secBlock{ID: SectionMetrics, Title: title(SectionMetrics), State: states[SectionMetrics]}
 	mb.Parts = append(mb.Parts, secPart{Paras: []string{stageLine(l, m.Stage), l.Label("metrics.lead")}, Counts: countsOf(l, SectionMetrics, overviewCounts(r, SectionMetrics), countOrder[SectionMetrics])})
+	mb.Parts = append(mb.Parts, v.goDependencyParts(true)...)
 	mb.Parts = append(mb.Parts, v.measurementParts(obs, true)...)
 	v.Sections = append(v.Sections, mb)
 
@@ -792,6 +800,30 @@ func mdCell(c secCell) string {
 	return mdText(c.Text)
 }
 
+func mdInspectionDetail(p func(...string), d secTableDetail) {
+	mdReadingAnchor(p, d.ID)
+	p("<details>")
+	p("<summary>", mdText(d.Label), "</summary>")
+	p()
+	mdCitations(p, d.Sources)
+	for _, note := range d.Notes {
+		p("**", mdText(note.Label), "** ", mdText(note.Text))
+		p()
+		if note.Source != nil {
+			mdCitations(p, []sourceCitation{*note.Source})
+		}
+	}
+	if d.Text != "" {
+		p(mdText(d.Text))
+		p()
+	}
+	for _, diagnostic := range d.OtherDiagnostics {
+		mdInspectionDetail(p, diagnostic)
+	}
+	p("</details>")
+	p()
+}
+
 func mdPart(p func(...string), part secPart, l Locale) {
 	if part.Fold != "" {
 		p("<details>")
@@ -847,17 +879,7 @@ func mdPart(p func(...string), part secPart, l Locale) {
 		}
 		p()
 		for _, d := range t.Details {
-			mdReadingAnchor(p, d.ID)
-			p("<details>")
-			p("<summary>", mdText(d.Label), "</summary>")
-			p()
-			mdCitations(p, d.Sources)
-			if d.Text != "" {
-				p(mdText(d.Text))
-				p()
-			}
-			p("</details>")
-			p()
+			mdInspectionDetail(p, d)
 		}
 	}
 	if len(part.List) > 0 {
@@ -950,8 +972,8 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{if and .R.Project .R.Project.Name}}<h1 class="report-name">{{.R.Project.Name}}</h1>{{else}}<h1 class="report-name">{{.L.Label "title"}}</h1>{{end}}
 {{if .Behaviors.Description}}<details class="report-purpose"><summary>{{.L.Label "behavior.project_intro"}}</summary><p>{{.Behaviors.Description}} {{with .Behaviors.Source}}
 {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer"><code>{{.Location}}</code></a>{{else}}<code>{{.Location}}</code>{{end}}{{end}}</p></details>{{end}}
-{{with .HeaderSource}}<p class="export-target"><strong>{{$.L.Label "report.target"}}</strong><code>{{.}}</code></p>{{end}}
-<div class="report-verdict">
+{{with .HeaderSource}}<p class="export-target"><strong>{{$.L.Label "report.target"}}</strong><code title="{{.}}">{{range $i, $segment := pathSegments .}}{{if $i}}<wbr>{{end}}{{$segment}}{{end}}</code></p>{{end}}
+<div class="report-verdict" data-status="{{.R.Status}}">
 <span class="badge">{{if .HasStatusBanner}}{{reportIcon "clock"}}{{else}}{{reportIcon "circle-check"}}{{end}} {{.ReportStatus}}</span>
 </div>
 {{$timing := .HeaderTiming}}{{if or $timing.Times .R.Inputs.CommitSHA}}<dl class="export-hero-meta">
@@ -1038,11 +1060,11 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 </html>
 {{define "reading_overview"}}{{$l := .L}}{{with .ReadingOverview}}<section class="report-overview-results" aria-label="{{$l.Label "reading.outcome"}}">
 <h3>{{$l.Label "reading.outcome"}}</h3>
-<table><thead><tr><th scope="col">{{$l.Label "reading.area"}}</th><th scope="col">{{$l.Label "reading.result"}}</th><th scope="col">{{$l.Label "reading.details"}}</th></tr></thead>
-<tbody>{{range .}}<tr><th scope="row">{{.Label}}{{if .Status}}<small>{{.Status}}</small>{{end}}</th><td>{{.Value}}</td><td><a class="btn btn-sm btn-ghost-primary overview-result-action" href="#{{.Section}}" aria-label="{{tf $l "reading.view_area" .Label}}"><span>{{$l.Label "reading.view"}}</span>{{reportIcon "chevron-right"}}</a></td></tr>{{end}}</tbody></table>
+<table><thead><tr><th scope="col">{{$l.Label "reading.area"}}</th><th scope="col">{{$l.Label "col.status"}}</th><th scope="col">{{$l.Label "reading.result"}}</th></tr></thead>
+<tbody>{{range .}}<tr><th scope="row"><a class="report-overview-link" href="#{{.Section}}" aria-label="{{tf $l "reading.view_area" .Label}}">{{.Label}}{{reportIcon "chevron-right"}}</a></th><td class="report-result-status">{{if .Status}}<span class="report-status-badge" data-tone="{{.Tone}}">{{.Status}}</span>{{end}}</td><td class="report-result-value">{{range .ValueParts}}{{if .Code}}<span class="report-result-number">{{.Text}}</span>{{else}}{{.Text}}{{end}}{{end}}</td></tr>{{end}}</tbody></table>
 </section>{{end}}{{end}}
-{{define "report_navigation"}}<ul class="nav nav-vertical">
-{{range .Sections}}<li><a href="#{{.ID}}" class="nav-link">{{reportIcon (sectionIcon .ID)}}<span>{{.Title}}</span></a></li>{{end}}
+{{define "report_navigation"}}{{$rows := .ReadingOverview}}{{$codeCount := .CodeIndexCount}}<ul class="nav nav-vertical">
+{{range .Sections}}{{$id := .ID}}<li><a href="#{{.ID}}" class="nav-link">{{reportIcon (sectionIcon .ID)}}<span>{{.Title}}</span>{{if and (eq $id "code_review") $codeCount}}<small class="report-rail-count" aria-hidden="true">{{$codeCount}}</small>{{else}}{{range $rows}}{{if and (eq .Section $id) .Count}}<small class="report-rail-count" aria-hidden="true">{{.Count}}</small>{{break}}{{end}}{{end}}{{end}}</a></li>{{end}}
 <li><a href="#appendix" class="nav-link">{{reportIcon "list-details"}}<span>{{.L.Label "section.appendix"}}</span></a></li>
 </ul>{{end}}
 {{define "decision"}}{{$l := .L}}{{with .Decision}}
@@ -1131,6 +1153,13 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <pre tabindex="0" aria-label="{{.ExcerptLocation}}"><code>{{.Text}}</code></pre>
 </div>{{end}}</details>{{end}}
 </section>{{end}}</div>{{end}}{{end}}
+{{define "inspection_detail"}}{{$l := .L}}{{with .D}}
+{{range .Sources}}<div class="report-evidence">{{with .InspectionPreview}}{{template "source_preview" .}}{{else}}{{template "citation_file" .}}{{end}}{{if .URL}} <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.LinkLabel}}</a>{{end}}</div>{{end}}
+{{if .Text}}<p>{{.Text}}</p>{{end}}
+{{if .Notes}}{{$detail := .}}<ol class="report-inspection-notes">{{range .Notes}}<li><strong>{{.Label}}</strong>{{if .Text}} <span>{{.Text}}</span>{{end}}
+{{with .Source}}<div class="report-evidence">{{template "citation_file" .}}{{if .URL}} <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.LinkLabel}}</a>{{end}}{{with .InspectionPreview}}<details name="note-source-{{$detail.ID}}"><summary>{{$l.Label "inspection.related_source"}}</summary>{{template "source_preview" .}}</details>{{end}}</div>{{end}}</li>{{end}}</ol>{{end}}
+{{range .OtherDiagnostics}}<details class="report-related-diagnostic" id="{{.ID}}"><summary>{{.Label}}</summary>
+{{template "inspection_detail" (inspectionPair $l .)}}</details>{{end}}{{end}}{{end}}
 {{define "part"}}{{$args := .}}{{$l := .L}}{{with .P}}
 {{if .Fold}}<details class="report-reading-records"><summary>{{.Fold}}</summary>{{end}}
 {{if .Cards}}<section class="report-group" data-tone="{{.Tone}}">
@@ -1144,8 +1173,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{end}}{{if and .Table .Table.Rows}}<div class="scroll"><table{{if eq .Table.DetailGroup "metrics-detail"}} class="report-measurement-table"{{end}}><tr>{{range .Table.Head}}<th scope="col">{{.}}</th>{{end}}{{if .Table.Details}}<th scope="col">{{$l.Label "inspection.detail_column"}}</th>{{end}}</tr>
 {{$t := .Table}}{{range $i, $row := $t.Rows}}<tr{{if $t.ObservationIDs}} id="{{index $t.ObservationIDs $i}}" data-observation="{{index $t.ObservationIDs $i}}"{{end}}{{if $t.RowIDs}} id="{{index $t.RowIDs $i}}"{{end}}>{{range $row}}<td>{{if .Anchor}}<a href="#{{.Anchor}}">{{end}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{if .Anchor}}</a>{{end}}</td>{{end}}{{if $t.Details}}<td><details class="report-row-toggle" name="{{$t.DetailGroup}}"><summary aria-controls="{{(index $t.Details $i).ID}}" aria-label="{{(index $t.Details $i).Label}}">{{$l.Label "inspection.open_detail"}}</summary></details></td>{{end}}</tr>
 {{if $t.Details}}{{with index $t.Details $i}}<tr class="report-row-detail" id="{{.ID}}"><td colspan="{{$t.DetailColumns}}">
-{{range .Sources}}<div class="report-evidence">{{with .InspectionPreview}}{{template "source_preview" .}}{{else}}{{template "citation_file" .}}{{end}}{{if .URL}} <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.LinkLabel}}</a>{{end}}</div>{{end}}
-{{if .Text}}<p>{{.Text}}</p>{{end}}</td></tr>{{end}}{{end}}
+{{template "inspection_detail" (inspectionPair $l .)}}</td></tr>{{end}}{{end}}
 {{end}}</table></div>
 {{end}}{{if .List}}<ul>{{range .List}}<li{{with .ObservationID}} id="{{.}}" data-observation="{{.}}"{{end}}>{{template "item" .}}</li>{{end}}</ul>
 {{end}}{{template "workflow_reading" .Workflow}}{{range .Sources}}{{template "citation" .}}{{end}}{{range .Findings}}<section class="card export-full-finding" id="{{.ID}}" data-finding="{{.ID}}">
@@ -1165,13 +1193,23 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{range .Verification}}<li>verification: {{.}}</li>{{end}}
 {{range .Limitations}}<li>limitation: {{.}}</li>{{end}}
 </ul></section>
-{{end}}{{if .Cards}}<div class="scroll report-detail-index"><table><thead><tr><th scope="col">{{$l.Label "col.item"}}</th><th scope="col">{{$l.Label "col.status"}}</th><th scope="col">{{$l.Label "col.location"}}</th></tr></thead><tbody>
-{{range .Cards}}<tr><td colspan="3"><details class="report-result-details" name="report-finding-rows"{{if .ID}} data-finding="{{.ID}}"{{end}}>
-<summary{{if .ID}} id="{{.ID}}"{{end}}><strong>{{.Title}}</strong><span class="report-index-status">{{.State}}</span><span class="report-index-location"><code>{{.Location}}</code></span></summary>
+{{end}}{{if .Cards}}<div class="report-export-workbench">
+<div class="report-workbench-index">
+<table class="report-workbench-table export-workbench-table"><thead><tr><th scope="col">{{$l.Label "col.item"}}</th><th scope="col">{{$l.Label "col.location"}}</th><th scope="col">{{$l.Label "col.validation"}}</th><th scope="col">{{$l.Label "col.severity"}}</th></tr></thead><tbody>
+{{range .Cards}}<tr><td colspan="4"><details class="report-result-details" name="report-finding-rows"{{if .ID}} data-finding="{{.ID}}"{{end}}>
+<summary{{if .ID}} id="{{.ID}}"{{end}} class="export-workbench-select"><strong>{{.Title}}</strong><code class="report-index-path" title="{{.Location}}" aria-label="{{.Location}}">{{.ShortLocation}}</code><span class="report-status-badge" data-tone="{{.Tone}}">{{.State}}</span><small>{{.Severity}}</small></summary>
+<div class="export-workbench-body">
+<button class="report-plain-action export-workbench-close" type="button" data-report-inspector-close>← {{$l.Label "reading.result_list"}}</button>
+<h6 class="report-finding-heading" tabindex="-1">{{.Title}}</h6>
+<div class="report-workbench-meta"><span class="report-status-badge" data-tone="{{.Tone}}">{{.State}}</span> <span class="report-detail-severity">{{.Severity}}</span>{{if not .Preview}}<code class="report-index-path report-path-text">{{range $i, $segment := pathSegments .Location}}{{if $i}}<wbr>{{end}}{{$segment}}{{end}}</code>{{end}}</div>
 {{template "source_preview" .Preview}}
 {{if .Lines}}<ul class="export-card-points">{{range .Lines}}<li>{{template "item" .}}</li>{{end}}</ul>{{end}}
+{{if .Context}}<details class="report-finding-context"><summary>{{$l.Label "opening.finding_basis"}}</summary><ul class="export-card-points">{{range .Context}}<li>{{template "item" .}}</li>{{end}}</ul></details>{{end}}
+</div>
 </details></td></tr>
-{{end}}</tbody></table></div></section>
+{{end}}</tbody></table></div>
+<aside class="report-workbench-detail export-inspector" aria-label="{{$l.Label "col.evidence_state"}}" hidden></aside>
+</div></section>
 {{end}}{{if .ShowEmpty}}<p>{{.Empty}}</p>{{end}}
 {{range .Parts}}{{template "part" (pair $l .)}}{{end}}
 {{if .Fold}}</details>{{end}}{{end}}{{end}}
@@ -1188,9 +1226,25 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{else if .URL}}<a href="{{.URL}}" class="btn btn-sm btn-ghost-primary report-source-action export-evidence-control" target="_blank" rel="noopener noreferrer" aria-label="{{.ActionLabel}} · {{.Location}}">{{template "citation_action" .}}{{reportIcon "external-link"}}</a>
 {{else}}{{template "citation_file" .}}{{end}}
 </div>{{end}}
-{{define "source_preview"}}{{with .}}<div class="report-selected-source"><p class="report-excerpt-label">{{.Label}} <code>{{.Location}}</code></p>{{if .Citation}}<p class="report-excerpt-label">{{.CitationLabel}} <code>{{.Citation}}</code></p>{{end}}<pre class="source-window" tabindex="0" aria-label="{{.Location}}"><code>{{range .Lines}}<span class="source-line"{{if .Focus}} data-focus="true"{{end}}><span class="source-line-number" aria-hidden="true">{{.Number}}</span><span class="source-line-code">{{.Text}}</span></span>{{end}}</code></pre></div>{{end}}{{end}}
+{{define "source_preview"}}{{with .}}<div class="report-selected-source">
+<p class="report-excerpt-label"><code class="report-path-text">{{range $i, $segment := pathSegments .File}}{{if $i}}<wbr>{{end}}{{$segment}}{{end}}</code></p>
+<div class="report-source-toolbar">
+{{if .FullLines}}<button type="button" data-report-source-mode="short" aria-pressed="true">{{.PreviewLabel}} {{.PreviewRange}}</button><button type="button" data-report-source-mode="full" aria-pressed="false">{{.FullLabel}} {{.FullRange}}</button>{{else}}<span>{{.PreviewLabel}} {{.PreviewRange}}</span>{{end}}
+{{if and .Citation (ne .FullLabel .CitationLabel)}}<span>{{.CitationLabel}} <code>{{.Citation}}</code></span>{{end}}
+<button type="button" data-report-source-wrap aria-pressed="false">{{.WrapLabel}}</button>
+</div>
+<p class="report-print-ranges">{{.Label}} <code>{{.Location}}</code>{{if .Citation}} · {{.CitationLabel}} <code>{{.Citation}}</code>{{end}}</p>
+<pre class="source-window" tabindex="0" aria-label="{{.Location}}" data-mode="short"><code>{{range .Lines}}{{template "preview_line" .}}{{end}}</code></pre>
+{{if .FullLines}}<pre class="source-window" tabindex="0" aria-label="{{.FullLocation}}" data-mode="full" hidden><code>{{range .FullLines}}{{template "preview_line" .}}{{end}}</code></pre>{{end}}
+</div>{{end}}{{end}}
+{{define "preview_line"}}<span class="source-line"{{if .Focus}} data-focus="true"{{end}}><span class="source-line-number" aria-hidden="true">{{.Number}}</span><span class="source-line-code">{{.Text}}</span></span>{{end}}
 {{define "citation_action"}}<span class="export-evidence-label">{{.ActionLabel}}</span>{{template "citation_file" .}}{{end}}
-{{define "citation_file"}}<span class="report-file" title="{{.Location}}">{{reportIcon "file-description"}}<code class="report-file-name">{{.File}}</code><code class="report-file-lines">:{{.Range}}</code></span>{{end}}`))
+{{define "citation_file"}}<span class="report-file" title="{{.Location}}">{{reportIcon "file-description"}}<code class="report-file-name report-path-text">{{range $i, $segment := pathSegments .File}}{{if $i}}<wbr>{{end}}{{$segment}}{{end}}</code><code class="report-file-lines">:{{.Range}}</code></span>{{end}}`))
+
+type inspectionDetailArgs struct {
+	L Locale
+	D secTableDetail
+}
 
 type partArgs struct {
 	L Locale

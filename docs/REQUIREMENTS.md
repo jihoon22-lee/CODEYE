@@ -48,7 +48,7 @@ CODEYE 저장소 자체의 자동 테스트(GitHub Actions)는 위 CI 비목표�
 | 실행 형태 | 상태 디렉터리의 관리형 PostgreSQL(기본) 또는 운영자가 준비한 PostgreSQL, controller(loopback, 또는 다른 머신용 TLS·명시적 평문 HTTP)와 로컬 에이전트. `codeye up`·`open`·`start`·`stop`·`status`(Linux 전용), 한 머신의 여러 워커와 최소·최대 자동 증감, 취소, lease·fencing |
 | 계정 | 이메일·비밀번호 회원가입과 로그인, 기존 사용자 이름·일회용 링크 로그인. 같은 소스를 등록해도 사용자마다 프로젝트·실행·보고서를 소유하고 접근은 프로젝트 ACL로 관리한다 |
 | 입력 | 서비스 Linux 계정이 읽을 수 있는 서버·NFS 폴더, 승인된 HTTPS 호스트의 Git 저장소 브랜치와 GitHub.com/GHES pull request. 저장소 웹훅과 PR 댓글 멘션으로도 분석을 요청한다. 비공개 저장소는 설치에 지정한 플랫폼 GitHub 계정으로 읽는다. 설명 없이 등록하고 문서·환경·모듈을 자동 탐색 |
-| 정적 분석 | Go(go vet·Staticcheck·gofmt), C/C++(cppcheck·clang-tidy), Python(ruff·mypy·pyright·bandit), JS/TS(ESLint·tsc), Rust(cargo check·clippy) 다섯 언어 팩과 언어 무관 구조·중복 지표(lizard·jscpd)·비밀정보(gitleaks). 도구는 운영자가 설치하고 경로를 지정한다 |
+| 정적 분석 | Go(go vet·Staticcheck·gofmt), C/C++(cppcheck·clang-tidy), Python(ruff·mypy·pyright·bandit), JS/TS(ESLint·tsc), Rust(cargo check·clippy) 다섯 언어 팩과 구조·중복 지표(lizard·jscpd), 비밀정보 검사(gitleaks). Go 패키지의 내부 import와 C/C++ 진단에 연결된 위치를 코드 줄까지 확인할 수 있다. 도구는 운영자가 설치하고 경로를 지정한다 |
 | 기존 테스트 | 저장소 코드 실행이 허용된 `with-tests` 분석에서 Linux의 전용 loopback 네트워크를 사용한다. Go·npm 스크립트·Python unittest·Cargo의 기존 테스트 작업과 실행하지 못한 사유를 보고한다. [실행](EXECUTION.md#기존-테스트-실행) |
 | 모델 검토 | 검토 지침 하나(`prompts/review`), 승인된 OpenCode 연결. 모델 없이도 도구 결과 보고서가 나온다 |
 | 보고서 | 종합과 분석 종류별 절(환경·문서·정적 분석·지표·비밀정보·모델 검토·분석 공백), 개별 근거, JSON·Markdown·HTML 내보내기(코드 제외가 기본), 프로젝트별 단계 표시와 가중 진행률, SSE 재접속 |

@@ -22,7 +22,8 @@ const (
 	BuilderID     = "codeye-report"
 	// Stored revisions keep their original builder and schema. Bump this
 	// version when the same accepted inputs would produce a different report.
-	BuilderVersion = "16"
+	BuilderVersion        = "17"
+	AnalysisEvidenceSince = 17
 )
 
 // Report statuses (schemas/report.schema.json).
@@ -294,6 +295,7 @@ type Observation struct {
 	LocationState   string               `json:"location_state"`
 	EvidenceState   string               `json:"evidence_state"`
 	RawRef          RawRef               `json:"raw_ref"`
+	Related         []RelatedObservation `json:"related_locations,omitempty"`
 	SuggestedFixes  int                  `json:"suggested_fix_count"`
 	// Suppressed marks a diagnostic the tool reported as hidden by an
 	// in-source suppression (builder 4). It is never a finding; a comparison
@@ -303,6 +305,16 @@ type Observation struct {
 	// never a defect: it is never a finding. Its numbers hold no code, so
 	// the code-free export keeps them.
 	Metric *ObservationMetric `json:"metric,omitempty"`
+}
+
+// RelatedObservation carries a tool-reported position or note of one diagnostic.
+type RelatedObservation struct {
+	Kind          string                 `json:"kind"`
+	RawMessage    *string                `json:"raw_message,omitempty"`
+	Location      *ObservationLocation   `json:"location,omitempty"`
+	LocationState string                 `json:"location_state"`
+	RawRef        *RawRef                `json:"raw_ref,omitempty"`
+	Excerpt       *sourceexcerpt.Excerpt `json:"excerpt,omitempty"`
 }
 
 // ObservationMetric is the measured value of a metric observation (the

@@ -7,6 +7,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/gograph"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/deps/depdoc"
@@ -141,6 +142,9 @@ func Build(in Input, reg *Registry) (Report, error) {
 	findSeen := map[string]bool{}
 	var snippets map[sourceexcerpt.Key][]sourceexcerpt.Excerpt
 	var legacyExcerpts bool
+	var goGraphs []gograph.Document
+	graphTasks := map[string]bool{}
+	graphBudget := gograph.MaxBytes
 	if rm != nil {
 		for _, k := range keys {
 			st := states[k]
@@ -170,6 +174,20 @@ func Build(in Input, reg *Registry) (Report, error) {
 			for _, ma := range st.manifest.Artifacts {
 				art := artByID[ma.ArtifactID]
 				body := in.Bodies[art.ID]
+				if art.MediaType == gograph.MediaType {
+					list, found := ctx.Executions["go.list"]
+					if found && list.Stdout != nil && len(body) <= graphBudget && art.Role == "other" && !graphTasks[k] && (k == "go-vet" || strings.HasPrefix(k, "go-vet.m")) {
+						if graph, err := gograph.Decode(body, k, in.Snapshot.ManifestDigest, list.Stdout.SHA256, index.Lookup); err == nil {
+							goGraphs = append(goGraphs, graph)
+							graphBudget -= len(body)
+							graphTasks[k] = true
+							decoderOf[art.ID] = gograph.MediaType + ";schema_version=" + gograph.Version
+							continue
+						}
+					}
+					lim.add("go_package_graph_rejected:" + k)
+					continue
+				}
 				if art.MediaType == sourceexcerpt.MediaType {
 					if doc, ok := sourceexcerpt.Decode(body, in.Run.ID, in.Attempt.ID, in.Snapshot.ManifestDigest, index.Lookup); ok && art.Role == "other" && snippets == nil {
 						legacyExcerpts = doc.SchemaVersion == sourceexcerpt.LegacyVersion
@@ -405,6 +423,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 	// The sections read the finished report and the task states; they never
 	// change a limitation, note, count, status or verdict.
 	composeSections(&r, in, states, keys, rm != nil)
+	r.Metrics.GoDependencies = goGraphs
 	r.QualityVerdict = reportVerdict(r)
 	attachExcerpts(&r, snippets, legacyExcerpts)
 	// The pull-request section counts changed files sent to the model only

@@ -29,9 +29,10 @@ var (
 
 // ctNote is a note attached to the preceding diagnostic.
 type ctNote struct {
-	File      string
-	Line, Col int
-	Message   string
+	File               string
+	Line, Col          int
+	Message            string
+	ByteStart, ByteEnd int64
 }
 
 // ctDiag is one warning or error with its notes. ByteStart/ByteEnd cover the
@@ -110,7 +111,7 @@ func parseClangTidyStdout(stdout []byte) ctStream {
 				out.UnparsedBytes += next - lineStart
 				continue
 			}
-			out.Diags[cur].Notes = append(out.Diags[cur].Notes, ctNote{File: file, Line: ln, Col: col, Message: msg})
+			out.Diags[cur].Notes = append(out.Diags[cur].Notes, ctNote{File: file, Line: ln, Col: col, Message: msg, ByteStart: lineStart, ByteEnd: next})
 			inNote = true
 			continue
 		}

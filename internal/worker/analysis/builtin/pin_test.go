@@ -11,6 +11,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/gograph"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
@@ -52,7 +53,7 @@ func snapshotJobs(t *testing.T, files map[string]string) (analysis.Job, analysis
 }
 
 // docs/ANALYZERS.md#go-vet: with only --go configured, the composite's go-vet tasks are
-// the go vet handler's (same keys, specs and v0.1 document bytes). Staticcheck
+// the go vet handler's (same keys, specs, diagnostics and package graph). Staticcheck
 // and gofmt add their own tasks after them.
 func TestGoVetUnchangedInComposite(t *testing.T) {
 	goExe := goPath(t)
@@ -93,13 +94,18 @@ func TestGoVetUnchangedInComposite(t *testing.T) {
 	for _, spec := range want {
 		got := c.Run(ctx, j1, spec, &executor.Executor{})
 		exp := direct.Run(ctx, j2, spec, &executor.Executor{})
-		if got.Status != exp.Status || got.Reason != exp.Reason || !slices.Equal(got.Limitations, exp.Limitations) || len(got.Artifacts) != 1 || len(exp.Artifacts) != 1 || len(got.Executions) != len(exp.Executions) {
+		if got.Status != exp.Status || got.Reason != exp.Reason || !slices.Equal(got.Limitations, exp.Limitations) || len(got.Artifacts) != 2 || len(exp.Artifacts) != 2 || len(got.Executions) != len(exp.Executions) {
 			t.Fatalf("%s: composite %+v, go vet alone %+v", spec.Key, got, exp)
 		}
-		a, _ := os.ReadFile(got.Artifacts[0].Path)
-		b, _ := os.ReadFile(exp.Artifacts[0].Path)
-		if string(a) != string(b) || !strings.Contains(string(a), `"kind":"go_vet_observations"`) || got.Artifacts[0].MediaType != exp.Artifacts[0].MediaType {
-			t.Fatalf("%s: go vet document differs through the composite", spec.Key)
+		for i, media := range []string{analysis.MediaObservations, gograph.MediaType} {
+			a, erra := os.ReadFile(got.Artifacts[i].Path)
+			b, errb := os.ReadFile(exp.Artifacts[i].Path)
+			if erra != nil || errb != nil || string(a) != string(b) || got.Artifacts[i].MediaType != media || exp.Artifacts[i].MediaType != media {
+				t.Fatalf("%s: go vet artifact %s differs through the composite (%v, %v)", spec.Key, media, erra, errb)
+			}
+			if i == 0 && !strings.Contains(string(a), `"kind":"go_vet_observations"`) {
+				t.Fatalf("%s: go vet document identity lost", spec.Key)
+			}
 		}
 	}
 	// The staticcheck tasks finish unsupported without starting a process.

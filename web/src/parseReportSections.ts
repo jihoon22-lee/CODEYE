@@ -91,6 +91,31 @@ export type Dependency = {
   failedItems: { name: string; reason: string | null }[];
   limitations: string[];
 };
+export type GoImportEdge = { from: string; to: string; kind: string; path: string; line: number };
+export type GoPackageGraph = {
+  task: string; module: string; directory?: string; platform: string; scope: string; status: string;
+  parsed: number; ignored: number; unlisted?: number; incomplete: number; unresolved: number; unparsed: number;
+  limitations: string[]; packages: string[]; edges: GoImportEdge[];
+};
+
+function goPackageGraph(value: unknown): GoPackageGraph {
+  const g = object(value);
+  const packages = array(g.packages, entry => str(object(entry).import_path));
+  const names = new Set(packages);
+  const edges = array(g.edges, entry => {
+    const e = object(entry), witness = object(e.witness);
+    const from = str(e.from), to = str(e.to), kind = str(e.kind), path = str(witness.path), line = count(witness.line);
+    if (!names.has(from) || !names.has(to) || !['production', 'internal_test', 'external_test'].includes(kind) ||
+      path.split('/').some(part => !part || part === '.' || part === '..') || /[:\\\u0000-\u001f\u007f]/.test(path) || line < 1) invalid();
+    return { from, to, kind, path, line };
+  });
+  if (packages.length > 1024 || names.size !== packages.length || edges.length > 12000) invalid();
+  return { task: str(g.task_key), module: str(g.module), directory: str(g.module_dir), platform: str(g.platform), scope: str(g.scope), status: str(g.status),
+    parsed: count(g.parsed_files), ignored: count(g.ignored_variant_files),
+    unlisted: g.unlisted_files === undefined ? undefined : count(g.unlisted_files), incomplete: count(g.incomplete_packages),
+    unresolved: count(g.unresolved_internal_imports), unparsed: count(g.unparsed_files), limitations: array(g.limitations, str), packages, edges };
+}
+
 export type Sections = {
   overview: { key: string; state: string | null; counts: Record<string, number> }[];
   attention: { section: string; code: string; count: number }[];
@@ -129,6 +154,7 @@ export type Sections = {
     stage: SectionStage;
     tasks: string[];
     groups: { name: string; unit: string; thresholds: number[]; max: number; observations: string[] }[];
+    goDependencies?: GoPackageGraph[];
   };
   secrets: {
     stage: SectionStage;
@@ -564,6 +590,7 @@ export function parseSections(
     metrics: {
       stage: stage(m.stage),
       tasks: array(m.task_keys, str),
+      goDependencies: array(m.go_package_dependencies ?? [], goPackageGraph),
       groups: array(m.metrics, (v) => {
         const x = object(v);
         return {

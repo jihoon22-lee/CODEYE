@@ -85,6 +85,9 @@
         "location_state": {"$ref": "#/$defs/location_state"},
         "related": {"type": "array", "maxItems": 64, "items": {"type": "object", "additionalProperties": false, "required": ["raw_message", "path", "location", "location_state"], "properties": {
           "raw_message": {"type": "string"},
+          "kind": {"enum": ["reported_position", "tool_note", "condition_assumption", "assumed_branch"]},
+          "raw_span": {"type": "object", "additionalProperties": false, "required": ["byte_start", "byte_end"],
+            "properties": {"byte_start": {"type": "integer", "minimum": 0}, "byte_end": {"type": "integer", "minimum": 1}}},
           "path": {"anyOf": [{"$ref": "#/$defs/relpath"}, {"type": "null"}]},
           "location": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/location"}]},
           "location_state": {"$ref": "#/$defs/location_state"}},

@@ -35,6 +35,7 @@ type contractExcerpt struct {
 	excerpt      record.Excerpt
 	sources      []record.Upstream
 	fromStrength bool
+	selectedPath bool
 }
 
 type contractModelComparison struct {
@@ -158,6 +159,11 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 	}
 	for _, e := range later {
 		if e.fromStrength {
+			add(e)
+		}
+	}
+	for _, e := range later {
+		if e.selectedPath {
 			add(e)
 		}
 	}
@@ -423,16 +429,32 @@ func (s *roleStage) contractSliceExcerpts(probe record.ContractProbe, prior reco
 		named         bool
 		strengthTerms []string
 	}
-	var strengths, ordinary []candidate
+	slots := slices.Clone(scope.Slices)
+	namedSlots := map[string]bool{}
+	for _, slot := range slots {
+		namedSlots[slot.Key] = slices.ContainsFunc(slot.Files, func(f record.ScopeFile) bool { return paths[f.Path] })
+	}
+	slices.SortStableFunc(slots, func(a, b record.ScopeSlice) int {
+		if namedSlots[a.Key] == namedSlots[b.Key] {
+			return 0
+		}
+		if namedSlots[a.Key] {
+			return -1
+		}
+		return 1
+	})
+	var named, strengths, ordinary []candidate
+	queued := map[string]bool{}
 	var groups codeGroups
 	if len(strengthTerms) > 0 {
 		groups = planCodeGroupsFor(s.j.Snapshot.Manifest, s.j.Scope, s.h.secondary(), changedPaths(s.j))
 	}
-	for _, slot := range scope.Slices {
+	for _, slot := range slots {
 		if err := s.ctx.Err(); err != nil {
 			return nil, err
 		}
-		if len(ordinary) >= maxContractSliceReads && (len(strengthTerms) == 0 || len(strengths) >= maxContractSliceReads) {
+		if (len(named) >= maxContractSliceReads || (!namedSlots[slot.Key] && len(ordinary) >= maxContractSliceReads)) &&
+			(len(strengthTerms) == 0 || len(strengths) >= maxContractSliceReads) {
 			break
 		}
 		inv, iUp := s.prior(record.StageInvestigate + "." + slot.Key)
@@ -460,16 +482,25 @@ func (s *roleStage) contractSliceExcerpts(probe record.ContractProbe, prior reco
 					})) {
 					continue
 				}
-				named := paths[e.Path] || (e.Kind == "test" && stems[maintenanceStem(e.Path)])
-				item := candidate{contractExcerpt: contractExcerpt{excerpt: e, sources: upstreams[i]}, named: named}
+				matchesPath := paths[e.Path] || (e.Kind == "test" && stems[maintenanceStem(e.Path)])
+				item := candidate{contractExcerpt: contractExcerpt{excerpt: e, sources: upstreams[i], selectedPath: paths[e.Path]},
+					named: matchesPath}
 				if len(strengths) < maxContractSliceReads && len(cited[e.ID]) > 0 && contractRuntimePath(e.Path, e.Kind) &&
 					record.HasNewContractEvidence(e, overview) && s.navigationEligible(groups, e.Path) {
 					item.strengthTerms = cited[e.ID]
 					strengths = append(strengths, item)
 				}
-				if len(ordinary) < maxContractSliceReads && (named || len(terms) > 0) {
+				if queued[e.ID] {
+					continue
+				}
+				if matchesPath && len(named) < maxContractSliceReads {
+					item.strengthTerms = nil
+					named = append(named, item)
+					queued[e.ID] = true
+				} else if !matchesPath && len(terms) > 0 && len(ordinary) < maxContractSliceReads {
 					item.strengthTerms = nil
 					ordinary = append(ordinary, item)
+					queued[e.ID] = true
 				}
 			}
 		}
@@ -478,7 +509,7 @@ func (s *roleStage) contractSliceExcerpts(probe record.ContractProbe, prior reco
 	var seenSources []record.Upstream
 	seenIDs := map[string]bool{}
 	reads, fromStrength := 0, 0
-	for _, candidate := range append(strengths, ordinary...) {
+	for _, candidate := range slices.Concat(strengths, named, ordinary) {
 		if err := s.ctx.Err(); err != nil {
 			return nil, err
 		}

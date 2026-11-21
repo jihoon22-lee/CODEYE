@@ -62,7 +62,7 @@ describe('analysis sections', () => {
     sections.secrets.tasks = ['gitleaks'];
     render(<ReportDocument report={report} />);
     expect(screen.getByText('결과 확보 73/119개 작업')).toBeTruthy();
-    expect(screen.getByText('결과 확보 73/119개 작업 · 주요 코드 진단 0건')).toBeTruthy();
+    expect(screen.getByRole('cell', { name: '결과 확보 73/119개 작업 · 주요 코드 진단 0건' })).toBeTruthy();
     expect(screen.queryByText(/작업 122개 중 76개 성공/)).toBeNull();
   });
 
@@ -73,7 +73,7 @@ describe('analysis sections', () => {
     ];
     const preview = (text: string[]) => <ReportPreview path="src/lib.rs" start={1} end={10} title="`danger` 검토" excerpt={{ start: 1, end: 10, text: text.join('\n') }} />;
     const { container, rerender } = render(preview(lines));
-    expect(screen.getByText('src/lib.rs:5–9')).toBeTruthy();
+    expect(screen.getByLabelText(t.excerptAt('src/lib.rs:5–9'))).toBeTruthy();
     expect(container.querySelector('.source-line[data-focus="true"]')?.textContent).toContain(lines[5]);
     expect(container.querySelector('.source-window')?.textContent).toContain(lines[6]);
     expect(container.querySelector('.source-window')?.textContent).not.toContain(lines[1]);
@@ -92,8 +92,8 @@ describe('analysis sections', () => {
     const accepted = modules.reduce((count, m) => count + (m.accepted ?? 0), 0);
     const lines = report.sections!.codeReview.ledger!.files?.reduce((sum, f) => ({ accepted: sum.accepted + f.accepted, total: sum.total + f.total }), { accepted: 0, total: 0 });
     render(<ReportDocument report={report} />);
-    expect(screen.getByText(t.reading.actionCounts(0, 0))).toBeTruthy();
-    expect(screen.getByText(t.reading.modelScope(accepted, eligible, lines))).toBeTruthy();
+    expect(screen.getByRole('cell', { name: t.reading.actionCounts(0, 0) })).toBeTruthy();
+    expect(screen.getByRole('cell', { name: t.reading.modelScope(accepted, eligible, lines) })).toBeTruthy();
     expect(screen.queryByRole('button', { name: t.reading.openDocumentAnalysis })).toBeNull();
     expect(screen.queryByText(t.reading.noDocumentAssessment)).toBeNull();
   });

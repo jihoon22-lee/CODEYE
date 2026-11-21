@@ -52,6 +52,12 @@ export function formatInstant(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${formatClock(d)}`;
 }
 
+export function formatReportInstant(iso: string): string {
+  const time = new Date(iso);
+  if (!Number.isFinite(time.getTime())) return iso;
+  return time.toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
+}
+
 // A past instant in words ("3분 전"); the exact time is shown next to it on hover.
 export function formatRelative(iso: string, now: Date): string {
   const d = new Date(iso);
@@ -95,4 +101,8 @@ export function cutLine(text: string | null, n = 100) {
   const one = (text ?? '').split(/\s+/).filter(Boolean).join(' ');
   const chars = Array.from(one);
   return chars.length <= n ? one : chars.slice(0, n).join('') + '…';
+}
+
+export function label(labels: Record<string, string>, key: string) {
+  return Object.hasOwn(labels, key) ? labels[key] : key;
 }

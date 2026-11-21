@@ -121,18 +121,18 @@ test('comparison rows keep the example and opened document within the web report
   }
 });
 
-test('focused source wraps inside the mobile excerpt while context stays scrollable', async ({page}) => {
+test('mobile source wraps every code line and can scroll complete unwrapped code', async ({page}) => {
   const assets = new URL('../../internal/report/reportui/', import.meta.url);
-  const css = ['tabler.css', 'report.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
+  const css = ['tabler.css', 'report.css', 'workbench.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
   const line = '    fmt.Printf("the report records this format expression", firstArgument, secondArgument)';
   await page.setViewportSize({width:390,height:844});
   await page.setContent(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style>
-    <article class="report-document review-theme"><div class="report-selected-source"><pre class="source-window" tabindex="0"><code>
+    <article class="report-document review-theme web-report"><div class="report-selected-source"><pre class="source-window" tabindex="0"><code>
     <span class="source-line"><span class="source-line-number" aria-hidden="true">4</span><span class="source-line-code">${'long_context_'.repeat(34)}</span></span>
     <span class="source-line" data-focus="true"><span class="source-line-number" aria-hidden="true">5</span><span class="source-line-code">${line}</span></span>
     </code></pre></div></article>`);
   const source = page.locator('.source-window');
-  expect(await source.evaluate(pre => pre.scrollWidth > pre.clientWidth)).toBe(true);
+  expect(await source.evaluate(pre => pre.scrollWidth - pre.clientWidth)).toBeLessThanOrEqual(1);
   const selection = await source.locator('[data-focus] .source-line-code').evaluate(element => {
     const range = document.createRange();
     range.selectNodeContents(element);
@@ -142,6 +142,37 @@ test('focused source wraps inside the mobile excerpt while context stays scrolla
   });
   expect(selection.count).toBeGreaterThan(1);
   expect(selection.contained).toBe(true);
+  expect(await source.locator('.source-line:first-child .source-line-code').evaluate(line => line.getBoundingClientRect().height)).toBeGreaterThan(20);
+  await page.locator('.report-selected-source').evaluate(preview => { preview.dataset.wrap = 'false'; });
+  expect(await source.evaluate(pre => pre.scrollWidth > pre.clientWidth)).toBe(true);
+  expect(await source.evaluate(pre => {
+    pre.scrollLeft = pre.scrollWidth;
+    return pre.scrollLeft > 0 && Math.abs(pre.scrollWidth - pre.clientWidth - pre.scrollLeft) < 2;
+  })).toBe(true);
+});
+
+test('selected HTML findings keep their heading and the full source within the page', async ({page}) => {
+  const assets = new URL('../../internal/report/reportui/', import.meta.url);
+  const css = ['tabler.css', 'report.css', 'workbench.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
+  await page.setViewportSize({width:390,height:844});
+  await page.setContent(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style>
+    <article class="report-export review-theme report-scroll-navigation">
+    <div class="report-export-workbench"><div class="report-workbench-index">
+    <table class="report-workbench-table export-workbench-table"><tbody><tr><td colspan="4">
+    <details class="report-result-details" open><summary class="export-workbench-select"><strong>결과 제목</strong></summary>
+    <div class="export-workbench-body"><h6 class="report-finding-heading" tabindex="-1">결과 제목</h6>
+    <div class="report-selected-source" data-wrap="false"><pre class="source-window"><code>
+    <span class="source-line"><span class="source-line-number">18</span><span class="source-line-code">${'long_source_line_'.repeat(25)}</span></span>
+    </code></pre></div></div></details>
+    </td></tr></tbody></table></div></div></article>`);
+  const heading = page.locator('.report-finding-heading');
+  expect(await heading.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+  const source = page.locator('.source-window');
+  expect(await source.evaluate(pre => pre.scrollWidth > pre.clientWidth)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.emulateMedia({media:'print'});
+  await expect(page.getByText('결과 제목', {exact:true}).filter({visible:true})).toHaveCount(1);
+  expect((await heading.evaluate(element => parseFloat(getComputedStyle(element).fontSize))) * .75).toBeGreaterThanOrEqual(11);
 });
 
 test('published report exposes the same counts, evidence and revision in the browser and exports', async ({page}) => {
@@ -281,8 +312,12 @@ test('published report exposes the same counts, evidence and revision in the bro
     const more = report.locator('details.report-more:not([open]) > summary:visible');
     while (await more.count() > 0) await more.first().click();
     const item = doc.findings[0];
-    const card = report.locator('#report-section-' + key).locator('details.finding-card').filter({has: page.locator('summary > strong').getByText(item.title, {exact:true})}).first();
-    await card.locator('summary').first().click();
+    const section = report.locator('#report-section-' + key);
+    const indexed = section.locator('button.report-finding-select').filter({ hasText: item.title }).first();
+    const card = await indexed.count() ? section.locator('.report-workbench-detail') :
+      section.locator('details.finding-card').filter({has: page.locator('summary > strong').getByText(item.title, {exact:true})}).first();
+    if (await indexed.count()) await indexed.press('Enter');
+    else await card.locator('summary').first().click();
     await expect(card.getByText(item.impact, {exact:true}).first()).toBeVisible();
     // The claims and evidence sit behind the card's own disclosure.
     await card.locator('details.finding-evidence > summary').click();

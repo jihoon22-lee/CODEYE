@@ -211,7 +211,8 @@ func TestRegularStaticOutcomeExcludesMeasurementsAndSecretScans(t *testing.T) {
 			t.Fatal(err)
 		}
 		md := RenderMarkdownAt(r, "digest", Korean, level)
-		for _, contents := range [][]byte{body, md} {
+		numberSpan := regexp.MustCompile(`<span class="report-result-number">([0-9/.,]+)</span>`)
+		for _, contents := range [][]byte{numberSpan.ReplaceAll(body, []byte("$1")), md} {
 			if bytes.Count(contents, []byte("결과 확보 73/119개 작업")) != 2 ||
 				bytes.Contains(contents, []byte("작업 122개")) {
 				t.Fatalf("%s did not give regular diagnostics the same summary and headline", level)

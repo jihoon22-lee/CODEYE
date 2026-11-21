@@ -155,7 +155,12 @@
           },
           "location_state": "resolved",
           "path": "src/parse.cpp",
-          "raw_message": "Assuming that condition 'i<=4' is not redundant"
+          "raw_message": "Assuming that condition 'i<=4' is not redundant",
+          "kind": "reported_position",
+          "raw_span": {
+            "byte_start": 953,
+            "byte_end": 1086
+          }
         }
       ],
       "rule_id": "arrayIndexOutOfBounds",
@@ -232,7 +237,12 @@
           },
           "location_state": "resolved",
           "path": "src/ring.c",
-          "raw_message": "Assuming condition is false"
+          "raw_message": "Assuming condition is false",
+          "kind": "reported_position",
+          "raw_span": {
+            "byte_start": 2595,
+            "byte_end": 2692
+          }
         },
         {
           "location": {
@@ -246,7 +256,12 @@
           },
           "location_state": "resolved",
           "path": "src/ring.c",
-          "raw_message": "Assignment 'slot=0', assigned value is 0"
+          "raw_message": "Assignment 'slot=0', assigned value is 0",
+          "kind": "reported_position",
+          "raw_span": {
+            "byte_start": 2705,
+            "byte_end": 2825
+          }
         }
       ],
       "rule_id": "nullPointer",
@@ -292,7 +307,12 @@
           },
           "location_state": "resolved",
           "path": "src/util.cpp",
-          "raw_message": ""
+          "raw_message": "",
+          "kind": "reported_position",
+          "raw_span": {
+            "byte_start": 4527,
+            "byte_end": 4591
+          }
         }
       ],
       "rule_id": "mismatchAllocDealloc",

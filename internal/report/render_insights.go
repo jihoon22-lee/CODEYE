@@ -104,20 +104,22 @@ func comparisonAnchor(i int) string { return "document-comparison-" + strconv.It
 func strengthAnchor(i int) string   { return "code-strength-" + strconv.Itoa(i+1) }
 
 type sourceCitation struct {
-	File, Range, Location            string
-	ID, Anchor, Jump                 string
-	ExcerptLocation, Text            string
-	URL, LinkLabel                   string
-	ActionLabel, StoredLabel         string
-	CitationLabel                    string
-	Example                          *documentExample
-	ExampleLabel                     string
-	StartLine, EndLine, ExcerptStart int
+	File, Range, Location                             string
+	ID, Anchor, Jump                                  string
+	ExcerptLocation, Text                             string
+	URL, LinkLabel                                    string
+	ActionLabel, StoredLabel                          string
+	CitationLabel, PreviewLabel, FullLabel, WrapLabel string
+	Example                                           *documentExample
+	ExampleLabel                                      string
+	StartLine, EndLine, ExcerptStart                  int
 }
 
 type sourcePreview struct {
-	Location, Label, Citation, CitationLabel string
-	Lines                                    []sourcePreviewLine
+	Location, Label, Citation, CitationLabel    string
+	File, PreviewRange, FullRange, FullLocation string
+	PreviewLabel, FullLabel, WrapLabel          string
+	Lines, FullLines                            []sourcePreviewLine
 }
 
 type sourcePreviewLine struct {
@@ -152,7 +154,21 @@ func (s sourceCitation) previewFor(title string) *sourcePreview {
 		first = max(0, min(focus-1, len(lines)-5))
 		last = min(first+5, len(lines))
 	}
-	preview := &sourcePreview{Location: sourceRange(s.File, s.ExcerptStart+first, s.ExcerptStart+last-1), Label: s.StoredLabel}
+	preview := &sourcePreview{
+		Location: sourceRange(s.File, s.ExcerptStart+first, s.ExcerptStart+last-1), Label: s.StoredLabel,
+		File: s.File, PreviewRange: strconv.Itoa(s.ExcerptStart+first) + "–" + strconv.Itoa(s.ExcerptStart+last-1),
+		PreviewLabel: s.PreviewLabel, FullLabel: s.FullLabel, WrapLabel: s.WrapLabel,
+	}
+	if first > 0 || last < len(lines) {
+		preview.FullRange = strconv.Itoa(s.ExcerptStart) + "–" + strconv.Itoa(s.ExcerptStart+len(lines)-1)
+		preview.FullLocation = s.ExcerptLocation
+		if s.StartLine == s.ExcerptStart && s.EndLine == s.ExcerptStart+len(lines)-1 {
+			preview.FullLabel = s.CitationLabel
+		}
+		for index, text := range lines {
+			preview.FullLines = append(preview.FullLines, sourcePreviewLine{s.ExcerptStart + index, text, index == focus})
+		}
+	}
 	if s.EndLine-s.StartLine >= 5 && preview.Location != s.Location {
 		preview.Citation, preview.CitationLabel = s.Location, s.CitationLabel
 	}
@@ -250,6 +266,9 @@ func newSourceCitation(l Locale, kind, path string, start, end int, excerpt *sou
 	}
 	s.StoredLabel = l.Label("evidence.stored_excerpt")
 	s.CitationLabel = l.Label("evidence.cited_range")
+	s.PreviewLabel = l.Label("evidence.preview")
+	s.FullLabel = l.Label("evidence.full_saved")
+	s.WrapLabel = l.Label("evidence.wrap")
 	return s
 }
 

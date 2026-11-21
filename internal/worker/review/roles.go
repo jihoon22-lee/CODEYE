@@ -988,6 +988,12 @@ func (s *roleStage) interpret() analysis.TaskResult {
 					o.EvidenceIDs = append(o.EvidenceIDs, id)
 				}
 			}
+			o.Related = nil
+			for _, r := range obs[i].Related {
+				if _, ok := kept[r.EvidenceID]; ok {
+					o.Related = append(o.Related, r)
+				}
+			}
 			x.Observations[i] = o
 		}
 		return x
