@@ -116,6 +116,7 @@ func (d *document) bytes() ([]byte, error) {
 
 // ConfigEdit is one change `codeye up` makes to the configuration file.
 type ConfigEdit struct {
+	OpenCode *OpenCodeEdit
 	// AddRoot appends a source root.
 	AddRoot *SourceRoot
 	// PostgresBinDir sets database.postgres_bin_dir.
@@ -132,6 +133,48 @@ type ConfigEdit struct {
 	PublicOrigins []string
 }
 
+// OpenCodeEdit contains only the connection fields a service administrator edits.
+type OpenCodeEdit struct {
+	Executable, ConfigFile, CredentialFile, Model string
+}
+
+func (e OpenCodeEdit) apply(doc *document) error {
+	agent := map[string]json.RawMessage{}
+	if raw := doc.values["agent"]; len(raw) > 0 && string(raw) != "null" {
+		if err := json.Unmarshal(raw, &agent); err != nil {
+			return errors.New("config is not valid: agent must be an object")
+		}
+	}
+	model := map[string]json.RawMessage{}
+	if raw := agent["model"]; len(raw) > 0 && string(raw) != "null" {
+		if err := json.Unmarshal(raw, &model); err != nil {
+			return errors.New("config is not valid: agent.model must be an object")
+		}
+	}
+	for name, value := range map[string]string{
+		"opencode": e.Executable, "config_file": e.ConfigFile, "credential_file": e.CredentialFile, "name": e.Model,
+	} {
+		if value == "" {
+			delete(model, name)
+		} else {
+			model[name], _ = json.Marshal(value)
+		}
+	}
+	if e.ConfigFile != "" || e.CredentialFile != "" {
+		delete(model, "relay_file")
+	}
+	if len(model) == 0 {
+		delete(agent, "model")
+	} else {
+		agent["model"], _ = json.Marshal(model)
+	}
+	if len(agent) == 0 {
+		doc.unset("agent")
+		return nil
+	}
+	return doc.set("agent", agent)
+}
+
 // ServeEdit is the listening part of the configuration.
 type ServeEdit struct {
 	Listen, TLSCert, TLSKey string
@@ -143,6 +186,21 @@ type ServeEdit struct {
 // replaces the file atomically (0600). The returned configuration is the
 // validated new one.
 func EditFile(path string, knownTools []string, e ConfigEdit) (*Config, error) {
+	absolutePath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, errors.New("config path cannot be resolved")
+	}
+	// Atomic replacement changes the inode. Lock a stable sibling of the
+	// resolved target so the CLI and web process serialize read/modify/write.
+	path, err = filepath.EvalSymlinks(absolutePath)
+	if err != nil {
+		return nil, errors.New("cannot resolve the configuration file")
+	}
+	unlock, err := lockConfigFile(path)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, errors.New("cannot read the configuration file")
@@ -150,6 +208,11 @@ func EditFile(path string, knownTools []string, e ConfigEdit) (*Config, error) {
 	doc, err := parseDocument(raw)
 	if err != nil {
 		return nil, err
+	}
+	if e.OpenCode != nil {
+		if err := e.OpenCode.apply(doc); err != nil {
+			return nil, err
+		}
 	}
 	if e.PostgresBinDir != "" {
 		db := map[string]json.RawMessage{}
@@ -221,12 +284,9 @@ func EditFile(path string, knownTools []string, e ConfigEdit) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	// A symlinked configuration (dotfiles) is written through to its target.
-	if target, err := filepath.EvalSymlinks(path); err == nil {
-		path = target
-	}
 	if err := writePrivate(path, out); err != nil {
 		return nil, errors.New("cannot write the configuration file")
 	}
+	cfg.filePath = absolutePath
 	return cfg, nil
 }

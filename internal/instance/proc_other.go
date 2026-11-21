@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"sync"
 )
 
 // ErrUnsupported: service process management is Linux-only. Windows and
@@ -29,6 +30,15 @@ var ErrBusy = errors.New("another codeye start, stop, backup or restore is runni
 
 // Lock is unsupported outside Linux.
 func (l Layout) Lock() (func(), error) { return nil, ErrUnsupported }
+
+// Managed operation is Linux-only. Still serialize local config edits on
+// platforms that use the parsing and editing helpers without a service.
+var configEditMu sync.Mutex
+
+func lockConfigFile(string) (func(), error) {
+	configEditMu.Lock()
+	return configEditMu.Unlock, nil
+}
 
 // AgentLockHeld is unsupported outside Linux.
 func (l Layout) AgentLockHeld() (bool, error) { return false, ErrUnsupported }
