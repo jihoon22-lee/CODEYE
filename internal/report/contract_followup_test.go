@@ -142,7 +142,7 @@ func TestFinalContractReportRequiresAcceptedLineage(t *testing.T) {
 
 			base.Coverage.TestStatus = "not_run"
 			r, ai, limits := compose(states, base)
-			wantCalls, wantFiles := 5, 7
+			wantCalls, wantFiles := 5, moduleFixtureExposedFiles
 			if tc.sent {
 				wantCalls++
 				wantFiles += 2

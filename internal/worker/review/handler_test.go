@@ -88,7 +88,7 @@ func TestRolesAcceptValidOutputs(t *testing.T) {
 	}
 	env := readRecord(t, j, "environment")
 	if len(env.EnvironmentNotes) != 1 || env.EnvironmentNotes[0].Module != "go:svc/b" || env.Upstream[0].Source != "env.discover" || env.Upstream[0].State != record.UpstreamAccepted ||
-		env.Pack.ID != "review" || env.Calls[0].PackID != "review" || env.Calls[0].PackVersion != "2.5.1" {
+		env.Pack.ID != "review" || env.Calls[0].PackID != "review" || env.Calls[0].PackVersion != "2.5.2" {
 		t.Fatalf("environment %+v", env)
 	}
 	docs := readRecord(t, j, "documents")
@@ -99,7 +99,7 @@ func TestRolesAcceptValidOutputs(t *testing.T) {
 	for _, e := range docs.Evidence {
 		paths = append(paths, e.Path)
 	}
-	if !slices.Equal(paths, []string{"AGENTS.md", "README.md", "svc/b/README.md"}) {
+	if !slices.Equal(paths, []string{"AGENTS.md", "README.md", "svc/b/README.md", "docs/design.md"}) {
 		t.Fatalf("documents given %v", paths)
 	}
 	inv := readRecord(t, j, "investigate")
@@ -305,9 +305,10 @@ func TestReviewSkipReasons(t *testing.T) {
 	}
 	// Guidance documents exist but none can be selected (all too large):
 	// the required role is skipped with its own reason, not no_documents.
-	big := strings.Repeat("긴 설계 문서 줄.\n", 3000)
+	const line = "긴 설계 문서 줄.\n"
+	big := strings.Repeat(line, int(discovery.DefaultBudget.PerDocumentBytes)/len(line)+1)
 	j = modulesJob(t, func(root string) {
-		for _, name := range []string{"README.md", "AGENTS.md", "svc/b/README.md"} {
+		for _, name := range []string{"README.md", "AGENTS.md", "svc/b/README.md", "docs/design.md"} {
 			writeFile(t, root, name, big)
 		}
 	})

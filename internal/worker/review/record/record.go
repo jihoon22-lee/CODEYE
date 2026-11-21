@@ -39,7 +39,7 @@ const (
 type Excerpt struct {
 	ID     string `json:"id"`
 	Path   string `json:"path"`
-	SHA256 string `json:"sha256"`
+	SHA256 string `json:"sha256,omitempty"`
 	Start  int    `json:"start_line"`
 	End    int    `json:"end_line"`
 	Kind   string `json:"kind"`

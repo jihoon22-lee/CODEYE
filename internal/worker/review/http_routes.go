@@ -29,6 +29,9 @@ type workflowRoute struct {
 	DecisionSymbol                    string
 	Registration, Handler             record.Excerpt
 	DecisionCall, Decision            record.Excerpt
+	OutcomeCall, Outcome              record.Excerpt
+	OutcomeSymbol                     string
+	OutcomeDepth                      int
 	Test                              record.Excerpt
 }
 
@@ -66,6 +69,10 @@ type httpRouteIndex struct {
 }
 
 func (s *roleStage) workflowRoutes() ([]workflowRoute, error) {
+	return s.workflowRoutesFor(nil)
+}
+
+func (s *roleStage) workflowRoutesFor(needsOutcome func(workflowRoute) bool) ([]workflowRoute, error) {
 	idx, err := s.httpRouteIndex()
 	if err != nil || len(idx.files) == 0 {
 		return nil, err
@@ -93,7 +100,7 @@ func (s *roleStage) workflowRoutes() ([]workflowRoute, error) {
 		if err := s.ctx.Err(); err != nil {
 			return nil, err
 		}
-		if r, ok := s.httpRouteWindows(idx, registration); ok {
+		if r, ok := s.httpRouteWindows(idx, registration, needsOutcome); ok {
 			out = append(out, r)
 		}
 	}
@@ -236,6 +243,8 @@ func httpRouteImports(f *ast.File) map[string]string {
 		name := path.Base(p)
 		if i.Name != nil {
 			name = i.Name.Name
+		} else if p == "github.com/jackc/pgx/v4" || p == "github.com/jackc/pgx/v5" {
+			name = "pgx"
 		}
 		if name != "." && name != "_" {
 			imports[name] = p
@@ -354,7 +363,7 @@ func (s *roleStage) httpRouteExcerptLines(f *httpRouteFile, start, end, maxLines
 	return x
 }
 
-func (s *roleStage) httpRouteWindows(idx *httpRouteIndex, r httpRouteRegistration) (workflowRoute, bool) {
+func (s *roleStage) httpRouteWindows(idx *httpRouteIndex, r httpRouteRegistration, needsOutcome func(workflowRoute) bool) (workflowRoute, bool) {
 	x := workflowRoute{
 		Method: r.method, Path: r.pattern, PatternKind: r.patternKind,
 		Registration: s.httpRouteExcerpt(r.file, r.call, 8, 800, true),
@@ -385,6 +394,9 @@ func (s *roleStage) httpRouteWindows(idx *httpRouteIndex, r httpRouteRegistratio
 			x.DecisionCall, x.Decision = call, decision
 			if name := d.target.decl.Name.Name; record.ValidContractLiteral(name) {
 				x.DecisionSymbol = name
+			}
+			if needsOutcome != nil && needsOutcome(x) {
+				x.OutcomeCall, x.Outcome, x.OutcomeSymbol, x.OutcomeDepth = s.httpRouteOutcome(idx, d.target, decision, r.method)
 			}
 			break
 		}

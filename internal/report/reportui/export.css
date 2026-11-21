@@ -435,6 +435,20 @@
   }
 }
 
+@container codeye-report (max-width: 35rem) {
+  .report-decision h3 { margin-block-start: .6rem; }
+  .report-decision .report-decision-scope { margin-block: .3rem; font-size: .85rem; }
+  .report-decision-sources { margin-block-start: .5rem; }
+  .review-theme .report-decision .report-document-assessment {
+    margin-block-start: .55rem;
+    padding-block-start: .45rem;
+  }
+  .report-export .report-decision .report-file-name {
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+}
+
 @media print {
   .export-brand-bar {
     display: none;

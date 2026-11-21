@@ -1318,10 +1318,17 @@ func mdDecision(p func(...string), d projectDecision, l Locale) {
 		p("**", mdText(l.Label("decision.unconfirmed")), "** ", mdText(d.Boundary))
 		p()
 	}
+	if d.Limitation != "" {
+		p("**", mdText(l.Label("decision.finding_limitation")), "** ", mdText(d.Limitation))
+		p()
+	}
 	if d.Next != "" {
 		label := "opening.verification"
 		if d.Tone == "action" {
 			label = "decision.next"
+			if d.Limitation != "" {
+				label = "decision.conditional_action"
+			}
 		}
 		p("**", mdText(l.Label(label)), "** ", mdText(d.Next))
 		p()
@@ -1342,8 +1349,16 @@ func mdDecision(p func(...string), d projectDecision, l Locale) {
 		if d.Action.Title != "" {
 			line += " · " + d.Action.Title
 		}
-		p("**", mdText(l.Label("decision.priority_action")), "** ", mdText(line))
+		label := "decision.priority_action"
+		if d.Action.Limitation != "" {
+			label = "decision.priority_review"
+		}
+		p("**", mdText(l.Label(label)), "** ", mdText(line))
 		p()
+		if d.Action.Limitation != "" {
+			p("**", mdText(l.Label("decision.finding_limitation")), "** ", mdText(d.Action.Limitation))
+			p()
+		}
 		mdCitations(p, []sourceCitation{d.Action.Source.Brief()})
 	}
 	counts := make([]string, 0, len(d.ComparisonCounts))
@@ -1354,7 +1369,7 @@ func mdDecision(p func(...string), d projectDecision, l Locale) {
 	if len(counts) > 0 {
 		summary = strings.Join(counts, " · ")
 	}
-	p("**", mdText(l.Label("decision.document_assessment")), "** · ", summary)
+	p("**", mdText(d.ComparisonHeading), "** · ", summary)
 	p()
 	if d.ComparisonExample != "" {
 		p("**", mdText(l.Label("decision.document_claim")), "** ", mdInlineComparison(d.ComparisonExample))

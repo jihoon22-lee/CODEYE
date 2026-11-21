@@ -2,7 +2,7 @@
   "schema_version": "0.2",
   "pack": {
     "id": "review",
-    "version": "2.5.1"
+    "version": "2.5.2"
   },
   "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
   "run_id": "0195f3a0-0000-7000-8000-000000000025",
@@ -13,7 +13,7 @@
     {
       "source": "docs.discover",
       "state": "accepted",
-      "sha256": "a6371d7912755a94ad477223d39a102b514b9988778abd45f807364d2fddf74b"
+      "sha256": "d31e354af9fdaf3fc44133c339413d32c4089987d57d5b5c981ff4fdaf257982"
     }
   ],
   "evidence": [
@@ -39,6 +39,14 @@
       "sha256": "49ae0cef2ada45c8a3959ef394af12aa0a7d2067310d5c6eed71f021cda99744",
       "start_line": 1,
       "end_line": 5,
+      "kind": "document"
+    },
+    {
+      "id": "ev_9d0d96ca9dd81f03c93782c0",
+      "path": "docs/design.md",
+      "sha256": "1277473f2b983254cfe0fb4f81b55ac24d0f7d53e7d5fd7c344bda3298f3d952",
+      "start_line": 1,
+      "end_line": 34,
       "kind": "document"
     }
   ],
@@ -77,6 +85,7 @@
     }
   ],
   "limitations": [
+    "document_excerpt_only",
     "model_input_not_secret_screened"
   ],
   "calls": [
@@ -85,8 +94,8 @@
       "model": "fake/scripted",
       "opencode_version": "1.19.5",
       "pack_id": "review",
-      "pack_version": "2.5.1",
-      "pack_sha256": "52b3eac8c59fb7bbf5acfeae310e65952a168358f8c32242218961d35d03d33c",
+      "pack_version": "2.5.2",
+      "pack_sha256": "fed289ac5d4b2e35ae127f7935b313fd9adb25afa9936f03db0264bd7494089b",
       "pack_files": [
         "00-core.md",
         "documents.md",
@@ -94,10 +103,10 @@
         "languages/go.md",
         "pack.yaml"
       ],
-      "request_sha256": "67ffcf4dd22c512381a2aa5a87cae710a3dfc0e694f444afa0cdf98395dfb786",
-      "request_bytes": 16432,
+      "request_sha256": "e505cc5092bbddde40d82015fa7206e403e912364841ea01a0111b7aed9ff1e1",
+      "request_bytes": 17974,
       "usage": {
-        "input": 2416,
+        "input": 4215,
         "output": 50
       },
       "attempt": 1,

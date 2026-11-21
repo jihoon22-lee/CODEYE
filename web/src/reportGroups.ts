@@ -172,7 +172,7 @@ export function primaryCitation(citation: Citation, kind: 'document' | 'code'): 
   return citation.kind === kind && Boolean(citation.path) && citation.line > 0 && citation.end >= citation.line && !secondaryReviewPath(citation.path);
 }
 
-export type Decision = { finding: Finding; source: LocatedEvidence; condition?: string; next?: string };
+export type Decision = { finding: Finding; source: LocatedEvidence; condition?: string; limitation?: string; next?: string };
 const hiddenDispositions = new Set(['accepted_risk', 'false_positive', 'suppressed', 'fixed_by_user']);
 
 const genericTitleWords = new Set([
@@ -243,6 +243,11 @@ function nextVerification(steps: string[]) {
   return steps.find(step => observable.test(step) && !abstract.test(step)) ?? steps.find(step => step.trim());
 }
 
+function findingLimitation(finding: Finding) {
+  if (finding.validation !== 'supported' && finding.validation !== 'inconclusive') return;
+  return finding.limitations.find(note => note.trim() && note !== '원문 생략(코드 미포함 내보내기).' && !/^[a-z][a-z0-9_]{0,63}$/.test(note));
+}
+
 export function projectReadings(report: AnalysisReport, sections: Sections) {
   const reviewed = new Set(sections.codeReview.findings);
   const actions: Decision[] = [];
@@ -256,11 +261,12 @@ export function projectReadings(report: AnalysisReport, sections: Sections) {
     ].find(row => row.statement.trim() && sources.some(e => row.evidence.includes(e.id)));
     const source = basis && sources.find(e => basis.evidence.includes(e.id));
     if (!source) continue;
+    const limitation = report.includesCode === false ? undefined : findingLimitation(finding);
     if (finding.validation === 'supported' || finding.validation === 'reproduced') {
-      actions.push({ finding, source });
+      actions.push({ finding, source, limitation });
     } else if (finding.validation === 'inconclusive' || finding.validation === 'unreviewed') {
       const next = nextVerification(finding.verification);
-      if (next && basis) followups.push({ finding, source, condition: basis.statement, next });
+      if (next && basis) followups.push({ finding, source, condition: basis.statement, limitation, next });
     }
   }
   const severity = (a: Decision, b: Decision) => sevRank(b.finding.severity) - sevRank(a.finding.severity);
@@ -281,9 +287,10 @@ export function projectReadings(report: AnalysisReport, sections: Sections) {
   let unresolvedComparison: typeof documents.comparisons[number] | undefined;
   let exampleComparison: typeof documents.comparisons[number] | undefined;
   for (const status of ['mismatch', 'partial', 'match', 'unknown']) {
+    const count = documents.comparisons.filter(row => row.status === status).length;
+    if (count > 0) comparisonCounts.push({ status, count });
     const rows = productRows.filter(row => row.status === status && (status === 'unknown' || hasProductCode(row)));
     if (rows.length === 0) continue;
-    comparisonCounts.push({ status, count: rows.length });
     if (status !== 'unknown') {
       comparisons.push(...rows.sort((a, b) => Number(Boolean(b.followup)) - Number(Boolean(a.followup))).slice(0, 2));
     } else if (comparisons.length === 0) {

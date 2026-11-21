@@ -38,6 +38,19 @@ type verifyInput struct {
 // limVerifyBudget marks candidates left unreviewed because the verifier
 // request could not carry them within PromptBudget.
 const limVerifyBudget = "verification_budget_exceeded"
+const limVerifyHashesOmitted = "verification_excerpt_hashes_omitted"
+
+func marshalVerifyInput(in verifyInput, omitHashes bool) ([]byte, error) {
+	if omitHashes {
+		// The worker already verifies the blobs. Keep citable IDs, paths,
+		// lines, text, and the original artifact evidence at every size.
+		in.Scope.Excerpts = slices.Clone(in.Scope.Excerpts)
+		for i := range in.Scope.Excerpts {
+			in.Scope.Excerpts[i].SHA256 = ""
+		}
+	}
+	return marshal(in)
+}
 
 func verificationClaimsExecution(v record.Verification) bool {
 	for _, t := range append(append(append([]string{v.SeverityReason, v.Impact}, v.ValidConditions...), v.InvalidConditions...), append(v.UnresolvedAssumptions, v.NextVerification...)...) {
@@ -150,6 +163,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 	var sent []record.Excerpt
 	verified := 0
 	fitted := false
+	omitHashes := false
 	for n := len(candidates); n >= 1 && !fitted; n-- {
 		citedBy := map[string]bool{}
 		for _, c := range candidates[:n] {
@@ -173,16 +187,21 @@ func (s *roleStage) verify() analysis.TaskResult {
 		if len(ordered) > 40 {
 			ordered = ordered[:max(keep, 40)]
 		}
-		for _, withContracts := range []bool{true, false} {
+		for _, variant := range []struct{ withContracts, omitHashes bool }{
+			{true, false}, {false, false}, {true, true}, {false, true},
+		} {
 			x := in
 			x.Candidates, x.Contracts = candidates[:n], []record.Contract{}
-			if withContracts {
+			if variant.withContracts {
 				x.Contracts = contracts
 			}
 			build := func(list []record.Excerpt) ([]byte, error) {
 				y := x
 				y.Scope.Excerpts, y.Scope.Limitations = list, s.rec.Limitations
-				return marshal(y)
+				if variant.omitHashes {
+					y.Scope.Limitations = addLim(y.Scope.Limitations, limVerifyHashesOmitted)
+				}
+				return marshalVerifyInput(y, variant.omitHashes)
 			}
 			list, trimmed, err := s.fitExcerpts(instructions, keep, ordered, build)
 			if errors.Is(err, errTooLarge) {
@@ -195,10 +214,14 @@ func (s *roleStage) verify() analysis.TaskResult {
 			if trimmed {
 				s.rec.Limitations = addLim(s.rec.Limitations, limInputTrimmed, limCallersOutside)
 			}
-			if !withContracts && len(contracts) > 0 {
+			if !variant.withContracts && len(contracts) > 0 {
 				s.rec.Limitations = addLim(s.rec.Limitations, limInputTrimmed, "contracts_outside_verify_input")
 			}
+			if variant.omitHashes {
+				s.rec.Limitations = addLim(s.rec.Limitations, limVerifyHashesOmitted)
+			}
 			in, sent, verified, fitted = x, list, n, true
+			omitHashes = variant.omitHashes
 			break
 		}
 	}
@@ -248,7 +271,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 		}
 		x := in
 		x.Candidates, x.Repair = pending, repair
-		query, err := marshal(x)
+		query, err := marshalVerifyInput(x, omitHashes)
 		if err != nil {
 			return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
 		}

@@ -13,6 +13,9 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
+// The module fixture sends four documents, one manifest and three source files.
+const moduleFixtureExposedFiles = 8
+
 // exampleStages decodes the five review example records
 // (examples/review, written by the worker for the modules fixture with a
 // scripted caller) the way the builder does, and adds the discovery and
@@ -182,11 +185,14 @@ func TestRequiredRolesFromPlan(t *testing.T) {
 	if got := taskKeys(ai.OptionalTasks); !slices.Equal(got, []string{"review.environment=accepted", "review.interpret=accepted"}) {
 		t.Fatalf("optional %v", got)
 	}
-	if len(r.Coverage.ReviewCalls) != 5 || r.Coverage.LLMExposedFiles == nil || *r.Coverage.LLMExposedFiles != 7 {
+	if len(r.Coverage.ReviewCalls) != 5 || r.Coverage.LLMExposedFiles == nil || *r.Coverage.LLMExposedFiles != moduleFixtureExposedFiles {
 		t.Fatalf("calls %d exposed %v", len(r.Coverage.ReviewCalls), r.Coverage.LLMExposedFiles)
 	}
+	if !sentPaths(states, reviewRecordKeys(states))["docs/design.md"] {
+		t.Fatal("the newly eligible design document did not count as exposed")
+	}
 	for _, c := range r.Coverage.ReviewCalls {
-		if c.PackID != "review" || c.PackVersion != "2.5.1" || len(c.PackDigest) != 64 {
+		if c.PackID != "review" || c.PackVersion != "2.5.2" || len(c.PackDigest) != 64 {
 			t.Fatalf("call %+v", c)
 		}
 	}

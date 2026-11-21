@@ -126,6 +126,16 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 		add(contractExcerpt{excerpt: e})
 	}
 	for _, link := range workflow {
+		windows := link.route.outcomeWindows()
+		if len(windows) == 0 {
+			continue
+		}
+		add(contractExcerpt{excerpt: link.route.DecisionCall})
+		for _, e := range windows {
+			add(contractExcerpt{excerpt: e})
+		}
+	}
+	for _, link := range workflow {
 		for _, e := range []record.Excerpt{link.route.Decision, link.route.DecisionCall, link.route.Handler, link.route.Registration} {
 			if e.ID != "" {
 				add(contractExcerpt{excerpt: e})

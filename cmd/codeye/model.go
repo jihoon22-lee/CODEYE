@@ -71,7 +71,7 @@ func probeStage(reply opencode.Reply) string {
 		return probeStageConfig
 	case opencode.ReasonCredentialUnavailable, "model_relay_unavailable":
 		return probeStageCredential
-	case "opencode_version_unsupported":
+	case "opencode_version_unsupported", opencode.ReasonVersionTimeout:
 		return probeStageOpenCode
 	case "model_output_invalid", "model_output_incomplete", "workspace_unreachable", "policy_blocked":
 		if reply.Version != "" {
@@ -79,7 +79,7 @@ func probeStage(reply opencode.Reply) string {
 		}
 	}
 	if reply.Version == "" {
-		// The --version call itself failed: the executable did not run.
+		// The probe did not obtain an OpenCode version.
 		return probeStageOpenCode
 	}
 	return probeStageRequest
@@ -91,6 +91,7 @@ var probeHints = map[string]string{
 	opencode.ReasonCredentialUnavailable: "the API key file is missing, readable by others (needs mode 0600) or has no key for this provider",
 	"model_relay_unavailable":            "the relay ready file is missing or does not match the model",
 	"opencode_version_unsupported":       "the executable did not answer --version like an OpenCode release",
+	opencode.ReasonVersionTimeout:        "OpenCode did not answer --version within its startup limit",
 	opencode.ReasonAuthFailed:            "the provider rejected the API key",
 	opencode.ReasonModelNotFound:         "the provider does not serve this model (check agent.model.name)",
 	"model_rate_limited":                 "the provider's rate or usage limit was reached",

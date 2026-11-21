@@ -470,6 +470,7 @@ export const ko = {
       model_not_found: '모델 공급자에 그 모델이 없음 (agent.model.name 확인)',
       model_unavailable: '모델 공급자가 응답하지 않았거나 오류를 냄',
       model_timeout: '모델 호출이 제한시간 안에 끝나지 않음 (agent.model.timeout_seconds)',
+      opencode_version_timeout: '모델 호출 전 OpenCode 버전 확인이 제한시간을 넘김',
       model_rate_limited: '모델 공급자의 사용량 제한에 걸림',
       no_documents: '스냅샷 범위에 문서가 없어 문서 검토를 생략함 (모델 검토 성공으로 세지 않음)',
       no_tool_observations: '해석할 도구 관찰이 없어 진단 해석을 생략함 (모델 검토 성공으로 세지 않음)',

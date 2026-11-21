@@ -46,9 +46,9 @@
   "documents": {
     "budget": {
       "total_bytes": 262144,
-      "per_document_bytes": 32768,
+      "per_document_bytes": 65536,
       "max_documents": 1000,
-      "read_bytes": 1112
+      "read_bytes": 42538
     },
     "items": [
       {
@@ -75,11 +75,11 @@
         "path": "docs/design.md",
         "applies_to": ".",
         "class": "design",
-        "status": "budget_exceeded",
-        "reason": "document_too_large",
+        "status": "selected",
+        "reason": null,
         "size_bytes": 41426,
         "sha256": "1277473f2b983254cfe0fb4f81b55ac24d0f7d53e7d5fd7c344bda3298f3d952",
-        "line_count": null
+        "line_count": 731
       },
       {
         "path": "svc/b/README.md",
@@ -149,7 +149,6 @@
     ]
   },
   "limitations": [
-    "document_budget_exceeded",
     "semantic_conflicts_not_assessed"
   ]
 }

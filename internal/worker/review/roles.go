@@ -243,7 +243,7 @@ const docsEvidenceContract = ` Each evidence_ids list in contracts, questions, a
 
 const docsPackageContract = ` A contract about a shown API call may use a cited excerpt's verified package_reference.scope if the statement names its callable. Keep each other item inside its cited excerpts' applies_to.`
 
-const docsWorkflowContract = ` With input.workflow_routes, optionally add "workflow_selections":[{"contract_index":1,"route_ids":["R1"]}] to the same object. An index is the one-based position in this response's contracts. Copy only offered route IDs; use at most four in total. Route IDs are not evidence IDs.`
+const docsWorkflowContract = ` With input.workflow_routes, optionally include workflow_selections, an array of objects. Each object has contract_index (integer, the one-based position of the relevant contract in this response) and route_ids (array of exact IDs from input.workflow_routes). Use at most four route IDs across the response. Route IDs are not evidence IDs.`
 
 type docInput struct {
 	EvidenceID       string           `json:"evidence_id"`
