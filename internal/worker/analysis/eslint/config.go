@@ -55,11 +55,13 @@ func lit(v any) string {
 	return string(b)
 }
 
-// baselineConfig is the codeye-js-eslint v1 configuration: @eslint/js
+// baselineConfig is the codeye-js-eslint configuration: @eslint/js
 // recommended on JS and TS files, typescript-eslint recommended on TS files
 // (its eslint-recommended part turns off the core rules TypeScript itself
 // checks), no-undef off everywhere (TS: tsc reports it; JS: the globals come
 // from the repository's executable configuration, which is not loaded).
+// The core rejection rule runs on JS only; the type-aware task already
+// checks rejection reasons on TS.
 func baselineConfig(p plugins, mod jsts.Module) string {
 	var b strings.Builder
 	b.WriteString("\"use strict\";\n")
@@ -74,6 +76,7 @@ func baselineConfig(p plugins, mod jsts.Module) string {
 	b.WriteString("  { ...js.configs.recommended, name: \"codeye/eslint-js-recommended\", files: [...JS, ...TS] },\n")
 	b.WriteString("  ...tseslint.configs.recommended.map((c) => ({ ...c, files: TS })),\n")
 	b.WriteString("  { name: \"codeye/no-undef-off\", files: [...JS, ...TS], rules: { \"no-undef\": \"off\" } },\n")
+	b.WriteString("  { name: \"codeye/promise-rejections\", files: JS, rules: { " + lit(promiseRejectRule) + ": [\"warn\", { allowEmptyReject: true }] } },\n")
 	b.WriteString("];\n")
 	return b.String()
 }

@@ -6,6 +6,7 @@
 export type Excerpt = { start: number; end: number; text: string };
 export type Citation = { id: string; kind: string; path: string; line: number; end: number; excerpt: Excerpt | null; directivePath?: string };
 type AdditionalObservation = { reason: string; codeRefs: string[] };
+export type RelatedWorkflow = { read: string; change: string; test: string };
 
 const diagnosticExcerptLines = 9;
 const modelExcerptLines = 50;
@@ -106,7 +107,7 @@ export type Sections = {
   documents: {
     citations: Citation[];
     quality: {aspect: string; assessment: string; statement: string; refs: string[]}[];
-    comparisons: {statement: string; scope: string; status: string; reason: string; documentRefs: string[]; codeRefs: string[]; followup?: true; additional?: AdditionalObservation}[];
+    comparisons: {statement: string; scope: string; status: string; reason: string; documentRefs: string[]; codeRefs: string[]; followup?: true; additional?: AdditionalObservation; workflow?: RelatedWorkflow}[];
     stage: SectionStage;
     discovery: string;
     budget: { perDocument: number; total: number; read: number } | null;
@@ -387,7 +388,10 @@ export function parseSections(
         const followup = x.followup === undefined ? undefined : x.followup === true ? true : invalid();
         const extra = x.additional_observation === undefined ? undefined : object(x.additional_observation);
         const additional = extra && { reason: str(extra.reason), codeRefs: array(extra.code_evidence_ids, str) };
-        return { statement: str(x.statement), scope: str(x.applies_to), status: str(x.status), reason: str(x.reason), followup, additional,
+        const related = x.related_workflow === undefined ? undefined : object(x.related_workflow);
+        if (related && Object.keys(related).length !== 3) invalid();
+        const workflow = related && { read: str(related.read_evidence_id), change: str(related.change_evidence_id), test: str(related.test_evidence_id) };
+        return { statement: str(x.statement), scope: str(x.applies_to), status: str(x.status), reason: str(x.reason), followup, additional, workflow,
           documentRefs: array(x.document_evidence_ids, str), codeRefs: array(x.code_evidence_ids, str) };
       }),
       stage: stage(d.stage),
@@ -540,6 +544,7 @@ export function parseSections(
   if (sectionCount('static_analysis', 'findings') + sectionCount('code_review', 'findings') !== totalFindings) invalid();
   if (sectionCount('gaps', 'gaps') !== out.gaps.length) invalid();
   checkContractFollowup(r, out.documents, includesCode);
+  checkRelatedWorkflow(r, out.documents);
   const ledger = out.codeReview.ledger;
   if (ledger !== null && ledger.modules.length > 0) {
     // The overview's reviewed scope is the ledger's: files sent to the model.
@@ -548,6 +553,34 @@ export function parseSections(
     if (sectionCount('code_review', 'files_sent_to_model') !== sent || sectionCount('code_review', 'files_not_sent_to_model') !== eligible - sent) invalid();
   }
   return out;
+}
+
+function checkRelatedWorkflow(r: Record<string, unknown>, documents: Sections['documents']) {
+  const rows = documents.comparisons.filter(row => row.workflow);
+  if (rows.length === 0) return;
+  const [row] = rows;
+  const contract = documents.contracts[documents.comparisons.indexOf(row)];
+  const refs = [row.workflow!.read, row.workflow!.change, row.workflow!.test];
+  const kinds = ['code', 'code', 'test'];
+  if (rows.length !== 1 || !contract || row.statement !== contract.statement ||
+    row.documentRefs.length !== contract.evidence.length || row.documentRefs.some((id, i) => id !== contract.evidence[i]) ||
+    new Set(refs).size !== refs.length ||
+    refs.some((id, i) => {
+      const citations = documents.citations.filter(e => e.id === id);
+      const e = citations[0];
+      return citations.length !== 1 || e.kind !== kinds[i] || e.line < 1 || e.end < e.line || !e.path.endsWith('.go') ||
+        (e.path.toLowerCase().endsWith('_test.go') !== (i === 2)) ||
+        (contract.appliesTo !== '.' && !e.path.startsWith(contract.appliesTo + '/'));
+    })) invalid();
+  const key = 'review.investigate';
+  const version = str(object(r.builder).version);
+  const mediaType = 'application/vnd.codeye.review+json';
+  if (!/^(1[5-9]|[2-9][0-9]|[1-9][0-9]{2,})$/.test(version) ||
+    !array(r.tasks, object).some(task => task.key === key && task.status === 'succeeded') ||
+    !array(object(r.code_review).roles, object).some(role =>
+      role.key === key && role.result === 'accepted' && role.task_status === 'succeeded') ||
+    !array(r.artifacts, object).some(artifact => artifact.task_key === key && artifact.role === 'other' &&
+      artifact.media_type === mediaType && artifact.decoder === mediaType + ';schema_version=0.6')) invalid();
 }
 
 function checkContractFollowup(r: Record<string, unknown>, documents: Sections['documents'], includesCode: boolean) {

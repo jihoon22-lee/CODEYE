@@ -21,7 +21,15 @@ const (
 	textToolCondition      = "정적 분석 도구가 이 snapshot 위치에 진단을 보고했다."
 	textToolVerification   = "수정 뒤 이 보고서의 실행 기록과 같은 argv로 같은 도구를 다시 실행해 진단이 사라지는지 확인한다."
 	textToolEvidence       = "도구 출력 stream의 원시 진단(레코드 순번과 byte 범위로 위치 지정)."
+	textRejectImpact       = "문자열·숫자·일반 객체처럼 Error가 아닌 값을 Promise의 거부 사유로 쓰면, 오류 처리부가 Error의 메시지와 스택을 기대할 때 실패 원인을 추적하기 어려울 수 있다."
+	textRejectAction       = "근거에 표시된 거부 호출의 인자와 호출부의 오류 처리 계약을 확인한다. 호출부가 원래 값을 읽는다면 그 동작을 보존하면서 Error 객체를 전달할 수 있는지 검토한다. 이미 받은 Error 객체는 메시지와 스택을 보존하도록 그대로 전달한다."
+	textRejectVerification = "해당 실패 경로를 실행해 기존 오류 처리 계약과 사용자 안내 문구가 유지되고 오류 처리부가 메시지와 스택을 얻는지 확인한다."
 )
+
+func isPromiseRejectDiagnostic(analyzerID, ruleID string) bool {
+	return analyzerID == "javascript.eslint" && ruleID == "prefer-promise-reject-errors" ||
+		analyzerID == "javascript.eslint_typed" && ruleID == "@typescript-eslint/prefer-promise-reject-errors"
+}
 
 // Limitation codes of the generic decoder.
 const (
@@ -199,6 +207,11 @@ func toolFinding(ctx DecodeContext, analyzerID, category string, obs []Observati
 		CounterevidenceIDs: []string{}, ObservationIDs: []string{}, Fingerprint: fp, FingerprintBasis: &basis,
 		Recommendation: Recommendation{Summary: textRecommendation, Tradeoffs: []string{}}, Verification: []string{textToolVerification},
 		Limitations: []string{textLimitManual, textLimitStaticOnly}}
+	if isPromiseRejectDiagnostic(analyzerID, first.RuleID) {
+		f.Impact = textRejectImpact
+		f.Recommendation.Summary = textRejectAction
+		f.Verification = []string{textRejectVerification}
+	}
 	var toolIDs []string
 	for _, o := range obs {
 		evID := "ev_" + strings.TrimPrefix(o.ID, "obs_") + "_tool"

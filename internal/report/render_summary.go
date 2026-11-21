@@ -250,7 +250,7 @@ func newSummaryView(r Report, digest string, l Locale) secView {
 
 	// Separate the opening review from the structured coverage and totals.
 	ov := byID["overview"]
-	v.Decision = v.projectDecision()
+	v.buildProjectOpening()
 	ov.Parts = nil
 	if r.PullRequest != nil {
 		ov.Parts = []secPart{{Paras: pullRequestParas(r, l)[:1]}}
@@ -763,7 +763,13 @@ func (v secView) summaryStatic(b secBlock, obs map[string]Observation, findings 
 		}
 		gt := &secTable{Head: []string{l.Label("col.tool"), l.Label("col.rule"), l.Label("col.count"), l.Label("col.severity"), l.Label("col.message"), l.Label("col.location")}}
 		for _, g := range groups {
-			gt.Rows = append(gt.Rows, []secCell{code(g.Analyzer), code(g.Rule), num(g.Count), code(joinOr([]string{g.Severity}, "-")), txt(g.Message), txt(placesText(l, g.Primary, g.Secondary))})
+			message := g.Message
+			if isPromiseRejectDiagnostic(g.Analyzer, g.Rule) {
+				if description := l.Labels["rule.promise_rejection"]; description != "" {
+					message = description
+				}
+			}
+			gt.Rows = append(gt.Rows, []secCell{code(g.Analyzer), code(g.Rule), num(g.Count), code(joinOr([]string{g.Severity}, "-")), txt(message), txt(placesText(l, g.Primary, g.Secondary))})
 		}
 		parts = append(parts, secPart{Heading: tf(l, "summary.static_rules", heading), Table: gt})
 	}
@@ -1255,10 +1261,11 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 		p("## ", mdText(s.Title))
 		p()
 		for _, part := range s.Parts {
-			mdComparisonAnchor(p, v.Decision, part.Anchor)
+			mdComparisonAnchor(p, v.Decision, v.Behaviors, part.Anchor)
 			mdPart(p, part, l)
 		}
 		if s.ID == "overview" {
+			mdBehaviors(p, v.Behaviors, l)
 			mdDecision(p, v.Decision, l)
 			p("### ", mdText(l.Label("opening.coverage_details")))
 			p()
@@ -1402,8 +1409,10 @@ func mdSectionAnchor(p func(...string), section string) {
 	}
 }
 
-func mdComparisonAnchor(p func(...string), d projectDecision, anchor string) {
-	if anchor != "" && anchor == d.ComparisonAnchor {
+func mdComparisonAnchor(p func(...string), d projectDecision, behaviors projectBehaviors, anchor string) {
+	if anchor != "" && (anchor == d.ComparisonAnchor || slices.ContainsFunc(behaviors.Rows, func(row projectBehavior) bool {
+		return row.Anchor == anchor
+	})) {
 		p("<a id=\"", anchor, "\"></a>")
 		p()
 	}

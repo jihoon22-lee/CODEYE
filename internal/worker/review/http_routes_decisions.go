@@ -79,6 +79,7 @@ func (idx *httpRouteIndex) indexInjections(ctx context.Context) error {
 	if len(constructors) == 0 {
 		return nil
 	}
+	idx.constructors = constructors
 	idx.injections = map[httpRouteField]httpRouteInjection{}
 	for _, f := range idx.files {
 		if err := ctx.Err(); err != nil {

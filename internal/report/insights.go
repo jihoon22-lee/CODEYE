@@ -17,11 +17,24 @@ type DocComparison struct {
 	CodeEvidenceIDs       []string                   `json:"code_evidence_ids"`
 	Followup              bool                       `json:"followup,omitempty"`
 	AdditionalObservation *AdditionalCodeObservation `json:"additional_observation,omitempty"`
+	RelatedWorkflow       *RelatedWorkflow           `json:"related_workflow,omitempty"`
 }
 
 type AdditionalCodeObservation struct {
 	Reason          string   `json:"reason"`
 	CodeEvidenceIDs []string `json:"code_evidence_ids"`
+}
+
+// RelatedWorkflow is context retained from the investigation request. Its
+// citations do not count as a document verdict or a test execution.
+type RelatedWorkflow struct {
+	ReadEvidenceID   string `json:"read_evidence_id"`
+	ChangeEvidenceID string `json:"change_evidence_id"`
+	TestEvidenceID   string `json:"test_evidence_id"`
+}
+
+func (w RelatedWorkflow) evidenceIDs() [3]string {
+	return [3]string{w.ReadEvidenceID, w.ChangeEvidenceID, w.TestEvidenceID}
 }
 
 func (c sectionContext) addComparisons(s *DocumentsSection, doc *record.Record) {
@@ -44,8 +57,13 @@ func (c sectionContext) addComparisons(s *DocumentsSection, doc *record.Record) 
 	}
 	var followupIndex, observationIndex int
 	var observation *AdditionalCodeObservation
+	var reading *record.WorkflowReading
 	if reviewAccepted(st) {
 		rec := st.reviewResult.Record
+		reading = rec.WorkflowReading
+		if reading != nil {
+			addEvidence(rec, reading.EvidenceIDs())
+		}
 		for _, x := range rec.ContractComparisons {
 			byContract[x.ContractIndex] = x
 		}
@@ -83,6 +101,11 @@ func (c sectionContext) addComparisons(s *DocumentsSection, doc *record.Record) 
 			comparison.Followup = i+1 == followupIndex
 			if i+1 == observationIndex {
 				comparison.AdditionalObservation = observation
+			}
+		}
+		if reading != nil && reading.ContractIndex == i+1 {
+			comparison.RelatedWorkflow = &RelatedWorkflow{
+				ReadEvidenceID: reading.ReadEvidenceID, ChangeEvidenceID: reading.ChangeEvidenceID, TestEvidenceID: reading.TestEvidenceID,
 			}
 		}
 		s.Comparisons = append(s.Comparisons, comparison)

@@ -243,6 +243,16 @@ describe('report history view', () => {
     expect(screen.getByText('future_reason')).toBeTruthy();
   });
 
+  it('explains a vanished finding whose tool observation remains active', () => {
+    const doc = clone(example);
+    const gone = doc.entries.find(e => e.state === 'resolved_observed')!;
+    gone.state = 'absent_unverified';
+    (gone as Record<string, unknown>).reason = 'active_observation_remains';
+    doc.counts = { ...doc.counts, resolved_observed: 0, absent_unverified: 1 };
+    show(parseComparison(doc, RUN));
+    expect(screen.getByText('현재 실행의 원시 도구 관찰에 같은 진단이 남아 있습니다.')).toBeTruthy();
+  });
+
   it('says when there is no baseline instead of inventing states', () => {
     const doc = clone(example) as Record<string, unknown> & typeof example;
     (doc as Record<string, unknown>).baseline = null;

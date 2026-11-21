@@ -166,6 +166,44 @@ func TestCompileDBExclusions(t *testing.T) {
 	}
 }
 
+func TestCompileDBRootIncludeDirectories(t *testing.T) {
+	files := snapshotFiles("src/service.c", "src/worker.c", "src/rejected.c", "include/config.h", "build/local.h")
+	db := `[
+{"directory":"/build/project", "file":"src/service.c", "arguments":["cc","-I.","-iquote",".","-isystem","/build/project","-idirafter","./","-I","include","-I../outside","-I","/usr/include","-I","","-I=","-Ibad\u0000/..","-Ibad\t/..","-Ibad\n/..","-c","src/service.c"]},
+{"directory":"/build/project/build", "file":"../src/worker.c", "arguments":["cc","-I",".","-iquote","..","-c","../src/worker.c"]},
+{"directory":"/build/project", "file":"src/rejected.c", "arguments":["cc","-include",".","-c","src/rejected.c"]},
+{"directory":"/build/project", "file":".", "arguments":["cc","-I.","-c","."]}
+]`
+	m := mapOne(t, db, files, all)
+	if len(m.Units) != 2 || m.Excluded[ExclUnsafeArgument] != 1 || m.Excluded[ExclOutsideRoot] != 1 ||
+		m.Dropped[DropIncludeOutside] != 2 || m.Dropped[DropPositional] != 5 || m.DirsMissing != 0 {
+		t.Fatalf("unexpected mapping %+v", m)
+	}
+	ws := absWS("scratch", "project")
+	renderedDB, err := RenderDB(ws, m.Units)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entries []struct {
+		Directory string   `json:"directory"`
+		File      string   `json:"file"`
+		Arguments []string `json:"arguments"`
+	}
+	if err := json.Unmarshal(renderedDB, &entries); err != nil {
+		t.Fatal(err)
+	}
+	wants := [][]string{
+		{"clang", "-I" + ws, "-iquote" + ws, "-isystem" + ws, "-idirafter" + ws,
+			"-I" + filepath.Join(ws, "include"), filepath.Join(ws, "src", "service.c")},
+		{"clang", "-I" + filepath.Join(ws, "build"), "-iquote" + ws, filepath.Join(ws, "src", "worker.c")},
+	}
+	for i, ent := range entries {
+		if ent.Directory != ws || ent.File != wants[i][len(wants[i])-1] || !slices.Equal(ent.Arguments, wants[i]) {
+			t.Fatalf("unit %d rendered outside the working copy or with changed arguments: %+v", i, ent)
+		}
+	}
+}
+
 // The original root is the prefix that maps the most entry files onto the
 // snapshot; a DB that matches nothing has no root and excludes every entry.
 // Windows build paths are slash-normalized.
@@ -312,7 +350,14 @@ func TestCompileDBValuesCannotInjectArguments(t *testing.T) {
 		{Rel: "src/a.c", Driver: "cc", Args: []Arg{{Flag: "-Xclang"}, {Flag: "-load"}}},
 		{Rel: "src/a.c", Driver: "@cc"},
 		{Rel: "src/../../etc/x.c", Driver: "cc"},
+		{Rel: ".", Driver: "cc", Args: []Arg{{Flag: "-I", Path: ".", Joined: true}}},
 		{Rel: "src/a.c", Driver: "cc", Args: []Arg{{Flag: "-include", Path: "../outside.h"}}},
+		{Rel: "src/a.c", Driver: "cc", Args: []Arg{{Flag: "-imacros", Path: ".", Joined: true}}},
+		{Rel: "src/a.c", Driver: "cc", Args: []Arg{{Flag: "-I.", Path: ".", Joined: true}}},
+		{Rel: "src/a.c", Driver: "cc", Args: []Arg{{Flag: "-I", Path: "."}}},
+		{Rel: "src/a.c", Driver: "cc", Args: []Arg{{Flag: "-I", Path: ".", Value: "c", Joined: true}}},
+		{Rel: "src/a.c", Driver: "cc", Args: []Arg{{Flag: "-I", Path: "./", Joined: true}}},
+		{Rel: "src/a.c", Driver: "cc", Args: []Arg{{Flag: "-I", Path: "src/..", Joined: true}}},
 	} {
 		if bad.safe() {
 			t.Fatalf("unit %+v is safe", bad)

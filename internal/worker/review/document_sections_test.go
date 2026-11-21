@@ -162,6 +162,36 @@ func TestDocumentationContinuationUsesSectionStructure(t *testing.T) {
 	}
 }
 
+func TestRepresentativeDocumentSectionDoesNotIncludeAnOrphanHeading(t *testing.T) {
+	lines := []string{
+		"# Project", "",
+		"## Usage", "", "The filter returns records only when the selector is active.", "",
+		"### Alternate device", "", strings.Repeat("This paragraph describes an unexpected limitation. ", 10),
+	}
+	start, end := representativeDocumentSection(lines, ".md", 105, []documentRange{{0, 2}})
+	if start != 2 || end != 5 {
+		t.Fatalf("range %d..%d, want Usage heading and its body only", start, end)
+	}
+}
+
+func TestBuildInstructionsRemainInGeneralDocumentCoverage(t *testing.T) {
+	lines := []string{"# Generator", "", "## Building", "", "Run the bundled build script to compile the generator."}
+	ranges := uncoveredDocumentRanges(lines, ".md", []documentRange{{0, 2}})
+	if !slices.Equal(ranges, []documentRange{{2, 5}}) {
+		t.Fatalf("general document gaps: %+v", ranges)
+	}
+}
+
+func TestCompactDocumentSectionRetainsWholeExamples(t *testing.T) {
+	lines := []string{"## Set the destination", "", "Select an existing route.", "", "```text", "route open", "```"}
+	if end := compactDocumentEnd(lines, 0, len(lines), 100); end != len(lines) {
+		t.Fatalf("complete example ends at %d", end)
+	}
+	if end := compactDocumentEnd(lines, 0, len(lines)-1, 100); end != 3 {
+		t.Fatalf("incomplete example ends at %d, want only the preceding prose", end)
+	}
+}
+
 func TestDocumentEvidenceRepairReportsTheInvalidField(t *testing.T) {
 	files := map[string]string{
 		"README.md": "The project stores values.\n",

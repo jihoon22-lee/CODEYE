@@ -695,6 +695,7 @@ export const ko = {
       rule_context_unknown: '규칙 문맥(규칙 묶음·선택·저장소 설정·소스 안 억제 처리)을 확인할 수 없습니다.',
       rule_context_changed: '규칙 묶음·선택·저장소 설정·소스 안 억제 처리가 달라 같은 규칙으로 검사했는지 알 수 없습니다.',
       suppressed_in_source: '도구가 이 진단을 소스 안 억제로 숨겨진 것으로 보고했습니다(억제는 수정이 아닙니다).',
+      active_observation_remains: '현재 실행의 원시 도구 관찰에 같은 진단이 남아 있습니다.',
       source_suppressions_hidden: '도구가 소스 안 억제를 따르고 숨긴 진단을 보고하지 않아, 고쳐졌는지 억제됐는지 알 수 없습니다.',
     } as Record<string, string>,
     newBecause: (reason: string) => `기준 실행은 이 위치를 같은 방식으로 볼 수 없었습니다: ${reason}`,

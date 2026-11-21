@@ -153,7 +153,7 @@ TC-01의 등록과 TC-04의 정상 소스 확보 경로를 읽기 전용 NFS에�
 | TC-101 | 각 분석기 팩. 도구 경로 없음, 잘못된 경로·버전, 필요한 toolchain(`--go`, 공유 `--node`) 없음·검증 실패 | 작업은 계획되고 `unsupported`(`tool_not_configured`·`tool_unavailable`·`toolchain_not_configured`)로 끝난다. 처리 파일 0이 알려지고 성공·0건 통과로 세지 않는다. 공유 toolchain은 시작 시 한 번 검증하고 그 핸들로만 도구 스크립트를 실행한다(`#!` 해석 없음). 탐색은 `not_probed`·`probe_failed`를 기록하고 PATH 검색·다운로드가 없다. | REQ-007,012,013,015 |
 | TC-102 | 같은 스냅샷에서 두 분석 엔진이 같은 줄·같은 구성을 보고, 같은 행에 다른 메시지 | 중복 검사는 규칙 선택에서 제외하고 남은 관찰은 도구별로 분리한다. 같은 분석기·규칙·위치·메시지만 한 finding으로 묶는다. 처리 파일은 합집합으로 센다. | REQ-007,008,009,013; TC-09,13 |
 | TC-103 | 각 분석기 팩. 저장소 코드(build script·설정 프로그램·plugin·proc macro)를 실행하는 분석 작업, 노드 허가 없음·있음, 도구 미설정 동시 발생, Git 소스 | 허가 없으면 `Composite.Run`이 dispatch 전에 `unsupported`(`repository_code_not_allowed`)로 끝내고 프로세스를 시작하지 않는다. not-run envelope는 처리 파일 0을 기록한다. 도구 사유는 제약으로 남는다. 허가는 노드 설정의 local source root에서만 오고 Git 소스·스냅샷·저장소 설정은 올릴 수 없다. | REQ-002,015 |
-| TC-105 | C/C++. 다른 머신의 compile DB: 원래 루트·build 디렉터리 경로, 상대 경로, compiler wrapper, 같은 파일의 두 항목, 스냅샷 밖·헤더·MSVC·nvcc 항목, plugin·응답 파일·driver 설정 flag, 값에 넣은 `@file`, 옵션처럼 보이는 파일 이름(`-x.c`, `--help.cpp`), compile DB 없음 | 경로는 추정한 원래 루트 기준으로 작업 사본에 매핑하고 항목의 compiler는 실행하지 않는다. 제외 항목과 버린 flag는 사유별 수로 남는다. 허용 목록 밖 flag, `@` 원소, 코드 적재 옵션은 CODEYE compile DB에 없다. 도구가 받는 위치 인자는 모두 절대 경로다. compile DB가 없으면 clang-tidy는 `unsupported`(`compile_db_missing`)이고 cppcheck 축소 모드는 제약으로 표시되며 정밀 분석 완료가 아니다. | REQ-002,006,007,015 |
+| TC-105 | C/C++. 다른 머신의 compile DB: 원래 루트·build 디렉터리 경로, 루트 include(`-I.`·`-iquote .`), 상대 경로, compiler wrapper, 같은 파일의 두 항목, 스냅샷 밖·헤더·MSVC·nvcc 항목, plugin·응답 파일·driver 설정 flag, 값에 넣은 `@file`, 옵션처럼 보이는 파일 이름(`-x.c`, `--help.cpp`), compile DB 없음 | 위치는 원래 루트를 기준으로 작업 사본의 절대 경로에 매핑하고 항목의 compiler는 실행하지 않는다. 루트를 쓰는 검색 디렉터리는 두 도구에서 번역 단위가 루트 헤더를 찾게 한다. 루트는 소스·강제 include 파일이 될 수 없다. 빈 값·제어 문자가 들어간 경로와 루트 밖 include는 버린다. 제외 항목과 버린 flag는 사유별 수로 남는다. 허용 목록 밖 flag, `@` 원소, 코드 적재 옵션은 CODEYE compile DB에 없다. compile DB가 없으면 clang-tidy는 `unsupported`(`compile_db_missing`)이고 cppcheck 축소 모드는 제약으로 표시되며 정밀 분석 완료가 아니다. | REQ-002,006,007,015 |
 | TC-106 | C/C++. 생성 헤더(configure가 만드는 `config.h`)가 없음·있음, 한 batch의 두 단위 실패, 단위별 batch, 헤더만 있는 범위, 결함 없는 단위 | 찾지 못한 헤더는 결함이 아니며 그 단위는 부분·실패 범위다. 작업은 `missing_include_files`로 실패하고 다른 단위의 관찰은 남는다. clang-tidy의 누적 오류 수로 실패 단위를 가른다. 처리 파일은 성공한 작업의 번역 단위만이며 헤더를 주장하지 않는다. | REQ-006,007,008,013 |
 | TC-107 | C/C++. cppcheck·clang-tidy 정규화: 종료 코드와 출력 불일치, 잘린·손상 출력, 버전 계열, 저장소 `.clang-tidy`·cwd의 cppcheck 설정·clang driver 설정 파일, NOLINT와 `cppcheck-suppress`, 두 엔진의 같은 줄 보고, 작업 사본 밖 파일을 include하는 소스 | 성공은 종료 코드·출력·단위 처리가 모두 맞을 때만이다. 저장소 도구 설정은 결과를 바꾸지 못한다. 규칙 문맥은 compile DB digest를 기록하고 cppcheck 억제는 `disabled`, clang-tidy NOLINT는 `honored`다. 기준 분석기와 같은 구성만 보고한 clang-tidy 검사는 선택하지 않고 남은 같은 줄 보고는 도구별 finding이다. 밖 파일의 내용은 저장 stream·envelope·보고서에 없다. | REQ-007,008,009,013,028; TC-102,104 |
 | TC-108 | Python 스냅샷: ruff·mypy·pyright·bandit 설정·미설정, 하위 모듈, 선언된·없는 Python 버전, 구문 오류, 도구 실패·잘림·버전 미인식 | ruff는 필수 기준이고 나머지는 추가 깊이다. 모듈마다 task를 계획하고 `pack-gap.python`은 없다. 대상 버전과 출처(`requires_python`·`python_requires`·`python_version_file`·`codeye_default`)를 명시 전달·기록한다. 구문 분석하지 못한 파일은 처리 파일에서 빠지고(`syntax_error` 단위, `unparsable_files_not_analyzed`) 나머지 결과로 성공한다. 도구가 위치를 주는 구문 오류는 그 파일의 관찰이다. 처리 파일은 도구 자신의 기록으로 확인한 성공 task에만 센다. 두 타입 검사기 동시 실행은 `--python-both-type-checkers` 없이는 agent 사용법 오류다. | REQ-007,008,012,013,015; TC-101 |
@@ -171,6 +171,14 @@ TC-01의 등록과 TC-04의 정상 소스 확보 경로를 읽기 전용 NFS에�
 | TC-191 | Python: 구문 오류 파일(`def broken(:`)과 Python 2 `print` 파일 옆에 실제 결함이 있는 정상 파일(`fixtures/python/syntaxmix`), 네 도구 각각, 실도구와 재생 | ruff·mypy·pyright·bandit 모두 성공하고 정상 파일의 결함(E722·`return-value`·`reportReturnType`·B602)이 남는다. 두 파일은 `syntax_error` 단위이고 처리 파일에 없으며 제약 `unparsable_files_not_analyzed`가 남고 tool error가 없다. 위치를 주는 도구의 구문 오류는 파일마다 한 관찰이다. 파일 이름은 대상 속성 `unparsable_files`에 있다. mypy는 구문 오류 파일을 하나씩 빼고 다시 실행하며(`mypy.check.r01`…), 정상 파일이 그 파일을 import해도(`fixtures/python/syntaximport`) 재실행이 그 모듈을 건너뛰어 정상 파일의 결함이 남는다 | REQ-007,008,013; TC-108 |
 | TC-192 | mypy 재실행이 작업 제한시간 안에서 시간이 남음·다 씀 | 첫 실행과 재실행이 제한시간 하나를 나눠 쓰고 재실행은 남은 시간만 받는다. 시간이 없으면 재실행을 시작하지 않고 찾은 구문 오류를 남긴 채 `timed_out`(`timeout`, `mypy_reruns_time_limit_reached`)이다 | REQ-007,013; TC-08 |
 | TC-193 | ESLint: 해석하지 못하는 파일과 정상 파일, 해석하지 못하는 파일만 있음 | 정상 파일의 관찰로 성공하고 해석하지 못한 파일은 `parse-error` 관찰 하나, `parse_error` 단위, `unparsable_files_not_analyzed`다. 해석할 수 있는 파일이 없으면 `parse_errors`로 실패한다 | REQ-007,008,013; TC-108 |
+
+`TestRealESLintPromiseRejections`와 `TestReplayESLintPromiseRejections`는 TC-111의 관리 규칙 범위를 확인한다. JS의 문자열·숫자 거부 두 곳만 `warning`으로 잡히고 도구가 exit 0을 내도 발견이 남는다. `Error` 객체·인자 없는 거부·타입이 불명확한 값·프로젝트가 정의한 동명 함수는 경고하지 않는다. TS의 문자열 거부는 기준선에서 나오지 않고 type-aware 작업에서 한 번 잡힌다.
+
+`TestRealESLintManagedJavaScriptRejections`와 `TestReplayESLintManagedJavaScriptRejections`는 격리된 보강 작업의 범위와 원시 진단을 확인한다(TC-111, TC-102). 응답 본문과 XHR 상태 문자열은 확인하고, 다른 모듈·범위 밖 선언·현 작업 사본에 설치된 ambient 타입·불명확한 인자·`Error`를 포함한 타입·인자 없는 호출은 보강 진단으로 내지 않는다. 한 줄에 있는 별도 두 호출도 열로 구분한다. 벤더 디렉터리만 경로로 지정하거나 입력 한도를 넘거나 스냅샷 경로가 링크이면 보강 도구를 실행하지 않는다.
+
+`TestManagedJavaScriptRejectionsDeduplicateOnlyAcceptedBaseline`은 같은 호출의 기준선 진단을 수락했을 때만 보강 발견이 접히는지 확인한다. 기준선이 실패하거나 결과를 받지 못하면 보강 발견을 유지한다. 보강 발견이 접힌 경우에도 보강 작업의 관찰 수와 원시 근거가 보존되고 해석과 검증 역할이 해당 관찰을 참조할 수 있다.
+
+Linux의 ESLint 10.15.0과 Node 24.18.0으로 PicoShare의 두 모듈을 세 번 검사했다. 기준선은 JS·TS 25개 파일을 처리하며 순차 합계 3.00~3.91초와 프로세스당 최대 RSS 약 233 MiB를 썼다. 보강은 JS 12개 파일에 순차 합계 3.94~4.47초와 프로세스당 최대 RSS 약 289 MiB를 썼다. 기준선의 거부 진단 8개와 보강의 19개는 서로 겹치는 8개 호출을 포함한다. 두 작업이 성공하면 최종 발견은 19개다. 모델 호출과 웹 서비스를 제외한 분석기 작업의 측정값이다.
 
 분석기 계약과 도구별 규칙은 [분석기](ANALYZERS.md)에 있다. 실도구 시험은 도구 경로 환경변수가 있을 때만 실행하고, CI에서는 캡처한 실제 출력을 재생하는 시험이 같은 판정 경로를 검사한다([시험 실행 방법](#시험-실행-방법)).
 
@@ -269,6 +277,8 @@ TC-271은 문서 검토에서 고른 경로만 후속 구현 탐색 대상으로
 
 TC-271의 HTTP 테스트 발췌 시험은 리터럴 요청과 짧은 요청 생성 함수, 경로 변수, 변경 후 조회, 상태·본문 기대값을 대조한다. 테스트 원문의 스냅샷과 줄 범위를 확인한다. 다른 메서드·경로, recorder 재사용, 요청 경로 재할당, 단순 로그, 생성·보류·범위 밖·미변경 테스트와 여러 등록에 맞는 요청은 연결하지 않는다(`TestGoHTTPWorkflowUsesOneReadAfterChangeTestWindow`, `TestGoHTTPWorkflowTestRequiresMatchingExecutedRequestAndAssertion`, `TestGoHTTPWorkflowTestMatchesOnlyConcretePathShape`).
 
+TC-271은 관련 조회·변경 처리기와 테스트를 보낸 전체 조사에서 모델이 조회만 인용한 경우도 확인한다. 선택 경로와 일치하는 최신 문서 기록 및 실제 전송한 세 발췌는 별도 맥락으로 남고 모델의 미확인 판정과 인용은 유지한다. 일부 발췌가 요청에서 빠졌거나 경로 선택·적용 범위·근거 종류·스냅샷이 맞지 않으면 이 묶음을 저장하거나 게시하지 않는다(`TestAcceptedWorkflowReadingRetainsSubmittedContextWithoutModelCitations`, `validate_bundle.py`).
+
 TC-270의 목록 시험은 첫 발췌 바로 다음 줄에 마지막 항목이 있는 Markdown 순서 목록과 글머리 목록, 중첩·코드 블록, 남은 발췌 자리나 바이트가 없는 경우를 다룬다. 마지막 항목까지 전달할 수 있으면 연속한 원문 줄을 보내고, 실제 요청에 목록 일부만 남으면 `incomplete_list`를 붙인다(`TestDocumentRequestPreservesListBoundary`, `TestDocumentListBoundaryReflectsFittedWindows`).
 
 TC-267의 `TestNavigationReachesNestedTestAssertions`는 한 디렉터리에 읽기 상한보다 많은 테스트 파일이 있어도 중첩 디렉터리에 읽기 차례를 준다. 테스트 본문에 있는 단언으로 위치를 고르고 준비 함수에만 단언이 있으면 일반 위치를 유지한다. 요청 한도로 빠진 `L` 별칭과 그 정식 ID는 모두 거부하며 나머지 별칭은 같은 위치에 묶인다. 선택 누락·`null`과 유효하지 않은 객체의 차이는 검토 원시 기록에만 남는다.
@@ -365,6 +375,8 @@ TC-135는 계약에 연결해 선택한 짧은 구현이 앞쪽의 반환 분기
 
 TC-135는 수락한 계약과 지역 안내가 같은 Python 공개 함수 호출을 인용할 때 기존 구현·테스트와 함께 여러 줄 기본값 및 반환 타입의 실제 선언을 보내는지 확인한다. 파일·줄·바이트 한도와 스냅샷 근거 ID를 보존한다. 문서에 호출이 없거나 중복·가려진 이름·동적 바인딩·지역 함수·보류·범위 밖·PR 비변경·테스트 경로이면 추가 발췌가 생기지 않는다(`TestDocumentedPythonCallSuppliesCompleteScopedSignature`, `TestPythonSignatureRejectsAmbiguousOrNonRuntimeText`, `TestPythonSignatureKeepsReviewScopeAndCitation`).
 
+TC-135의 C 함수군 시험은 인용된 안내에 코드로 표시한 접미사와 실제 C 호출 예시가 있을 때 유일한 기본 함수와 변형 함수, 둘이 공유하는 내부 함수의 조건 분기를 함께 보낸다. 선언·주석만 있는 예시, 함수 형태·호출 대상 불일치, 모호한 정의, 같은 값·변경된 인자, 조건부 구현, 발췌 한도 초과, 보류·PR 미변경 구현은 기존 코드 선택을 사용한다(`TestDocumentedCApiFamilySuppliesBothWrappersAndModeBranch`).
+
 TC-92·TC-98의 공유 실행 링크 시험은 게시 보고서를 불러온 뒤 제목과 종합 시작으로 한 번 이동하는지 확인한다. 일반 프로젝트 선택, 실행 중 상태, 조회 오류, 늦은 응답 전에 사용자가 고른 화면이나 양식 초점, 숨겨진 브라우저 탭, URL fragment 보존을 함께 검사한다(`ProjectsView.test.tsx`).
 모델 요청의 멤버 연결은 두 발췌의 정확한 ID를 담는다. 요청 축소로 한 발췌가 빠지거나 계약 범위가 한쪽을 제외하면 연결을 생략한다. 연결을 받은 모델이 미확인으로 응답하면 기록도 미확인이다(`TestMemberTestHintFollowsRequestTrimming`, `TestMemberTestHintSelectionRespectsContractScope`).
 
@@ -372,6 +384,10 @@ TC-135에서 1~24줄을 인용한 모델 발췌를 열면 13줄의 입력 처리
 긴 사용 안내의 후반 발췌를 여러 API 제목에서 나눌 때 원래 줄 범위·바이트와 다른 문서의 첫 발췌를 보존하며, 해당 제목의 개별 ID를 인용한 보고서가 같은 위치를 가리키는지도 확인한다(`TestDocumentSectionSplitsPreserveRangeAndBudget`, `TestDocumentContinuationReachesReport`).
 
 TC-134·TC-135에서 종합의 같은 파일과 주제에 속하는 확인된 동작과 후보는 각자의 줄 범위로 이동한다. 후보는 기록된 확인 방법을 보이고 발견을 확정한 상태로 바꾸지 않는다. 같은 호출과 정확히 같은 코드 줄을 인용한 일치 대조에서만 이름 있는 옵션의 조건을 함께 보인다. Git URL과 긴 NFS 경로가 표지에서 빠짐없이 보이며 사본 경로는 나타나지 않는다. 분석 대상 경로, 종합의 상태, 상세 근거의 파일·줄 범위와 발췌 조작은 390px·1280px Chromium에서도 확인한다. 코드 미포함 상태에서는 서술 생략을 밝히고 구조화된 상태와 위치를 유지한다.
+
+TC-134의 웹 보고서 검색은 분리된 한글 자모와 영문 기호·규칙·경로를 찾고, 다른 탭이나 접힌 목록에 있는 원래 대조·발견의 제목에 초점을 둔다. 현재 판정이나 목록 필터에 가려진 발견을 선택하면 그 항목을 펼치고 필터와 판정을 유지한다. 코드 미포함·이전 배치에서도 위치와 규칙을 찾고 숨긴 원문, 도구 원시 메시지, 이전 실행의 비교 자료와 내부 ID는 결과에 나오지 않는다. 검색 결과 없음과 Esc 초점 복귀, 리비전 전환, 390px의 검색 입력과 결과 너비를 확인한다(`ReportSearch.test.tsx`, REQ-012·031, NFR-005).
+
+TC-134의 프로젝트 사용 흐름은 네 개의 미확인 설명 뒤에 저장된 반환식이 있는 다섯 번째 대조를 앞에 표시한다. 일반적인 사용법 제목이 없는 README에서 동작을 설명한 경우도 포함한다. 가져오기만 인용한 항목, 배포 설명, 동률의 저장 순서, 불일치·부분 일치·일치의 우선순위, 우선 판단과 중복을 뺀 뒤 네 건을 선택하는지 확인한다. 짧은 인용이 일부일 때 같은 웹·HTML 카드에서 저장된 발췌를 한 번에 펼치고 범위가 같으면 중복을 생략한다. 다시 렌더링해도 순서가 같으며 저장된 대조와 코드 미포함 집계·위치는 그대로다(`TestProjectBehaviorsRankStoredComparisonsBeforeTakingFour`, `TestProjectBehaviorsRetainDocumentAndConditionalResponse`, `reportBehaviors.test.tsx`).
 
 미확인 대조를 종합의 첫 판단으로 보여 줄 때 같은 우선순위에서는 저장된 문서 질문과 적용 범위·문서 인용·구체어가 모두 일치하고 후보가 하나일 때 그 대조를 먼저 보여 준다. 모호한 질문, 문장 없는 이전 보고서 및 코드 미포함에서는 저장 순서를 유지한다. 선택된 미확인 대조는 설명서와 코드 두 행에 실제 동작과 기존 이유 또는 추가 관찰을 표시한다. 웹·HTML·Markdown에서 링크가 같은 대조에 연결되며 코드 인용과 상세의 상태·집계를 보존한다. 짝을 이룬 백틱 안의 내용은 인라인 코드로 보이고 짝 없는 백틱과 태그처럼 보이는 문장은 평문으로 표시된다. 표지에서는 각각의 라벨로 시작·종료 시각과 작성 시각 대체 표시를 확인하고, 실제 고정 커밋과 시작·종료를 기록한 경우의 소요 시간만 표시되는지 확인한다.
 
@@ -389,12 +405,18 @@ TC-269는 한 미확인 문서 계약의 추가 대조 기록을 게시할 때 �
 
 보고서 계약은 [보고서와 화면](REPORT.md)에 있다.
 
+TC-134·TC-135의 문서 대조에서 같은 동작의 조회·변경 처리기와 테스트 단언을 함께 읽은 경우, 해당 위치를 종합과 대조 상세에서 연다. 웹·Markdown·HTML에서 문서 대조의 판정과 이유, 테스트 실행 상태는 기록된 값을 쓰며, 코드 미포함 내보내기는 세 위치와 용도를 남긴다. 구버전, 수락되지 않은 조사, 누락되거나 종류가 다른 근거는 해당 위치를 게시할 수 없다. `TestRelatedWorkflowReportKeepsFindingsAndTestStatus`와 `reportBehaviors.test.tsx`에서 확인한다.
+
 ## 이력·비교
 
 | TC | 조건 | 기대 결과 | 요구 |
 |---|---|---|---|
 | TC-14 | 이전 finding이 이번 도구 실패로 안 보임 | resolved가 아니라 absent_unverified | REQ-028,029 |
 | TC-104 | 각 분석기 팩. 이전 run에 있던 도구 finding이 사라짐: 규칙 선택·규칙 팩 버전·저장소 설정 파일 변경, 규칙 문맥이 없는 이전 builder 보고서, 소스 안 억제 주석 추가, 억제를 보고하지 않는 도구 | 양쪽 규칙 문맥이 알려지고 같을 때만 `resolved_observed`다. 그 밖은 `absent_unverified`와 `rule_context_unknown`·`rule_context_changed`·`suppressed_in_source`·`source_suppressions_hidden`이다. 억제된 진단은 관찰로 남고 finding이 아니다. go vet 문맥은 합성되어 이전 builder와도 해결이 유지된다. 코드 제외 export에는 설정 경로·digest가 없다. | REQ-028; TC-14,31 |
+
+TC-104는 혼합 프로젝트에서 기존 TS 검사에 관리 JS가 추가되거나 48개 파일 상한으로 건너뛴 경우도 확인한다. 설정이 같은 TS 검사에서 사라진 TS 발견은 `resolved_observed`이고 새 TS 발견은 이전 검사 가능 여부를 그대로 반영한다. 검사하지 않은 JS와 설정이 바뀐 TS는 미확인으로 남는다. 이전 보고서와 처리 경로가 일부만 기록된 행의 문맥도 확인한다.
+
+TC-104는 구문 검사와 관리 JS가 중복 진단을 내어 목록에서 관리 JS 발견만 사라지는 경우를 포함한다. 이전과 같은 활성 원시 진단이 수락된 행에 남으면 `absent_unverified`와 `active_observation_remains`가 표시된다. 다른 규칙의 관찰이나 수락되지 않은 결과는 이 사유를 만들지 않는다.
 
 사람의 판정(disposition)과 권한은 TC-31·TC-49의 권한 조건과 함께 시험한다.
 

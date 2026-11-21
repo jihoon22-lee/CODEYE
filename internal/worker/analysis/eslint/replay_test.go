@@ -29,6 +29,8 @@ func replayFiles(t *testing.T, name string) map[string]string {
 		return jststest.MonorepoFiles(t, 4)
 	case name == "clean":
 		return caseFiles(map[string]string{"index.js": fixClean})
+	case name == "promise-rejection":
+		return promiseRejectionFiles()
 	case name == "parse-error":
 		return caseFiles(map[string]string{"index.js": fixBroken, "ok.js": "const unused = 1;\n"})
 	case name == "suppressions":
@@ -94,6 +96,35 @@ func TestReplayESLintCaptures(t *testing.T) {
 			}
 			checkSpecs(t, a, fx, r.Specs)
 		})
+	}
+}
+
+func TestReplayESLintPromiseRejections(t *testing.T) {
+	_, _, _, doc := replayRun(t, "promise-rejection", false, "eslint", nil)
+	checkPromiseRejections(t, doc)
+}
+
+func TestReplayESLintManagedJavaScriptRejections(t *testing.T) {
+	a := fakeAnalyzer(t, true)
+	fx := packtest.NewFixture(t, "", managedJSFixtureFiles(), managedJSScope)
+	runner := &jststest.Replay{T: t, Steps: jststest.LoadCapture(t, "managed-js-rejections")}
+	res := packtest.RunTask(t, a, fx.Job, TypedName, runner)
+	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
+	assertManagedJavaScript(t, doc)
+}
+
+func TestReplayESLintManagedJavaScriptFailureIsReported(t *testing.T) {
+	a := fakeAnalyzer(t, true)
+	fx := packtest.NewFixture(t, "", managedJSFixtureFiles(), managedJSScope)
+	runner := &jststest.Replay{T: t, Steps: jststest.LoadCapture(t, "managed-js-rejections"), Mutate: func(step jststest.Recorded, res *executor.Result) {
+		if step.Name == execCheck {
+			res.ExitCode, res.Stdout = ptr(2), executor.Stream{}
+		}
+	}}
+	res := packtest.RunTask(t, a, fx.Job, TypedName, runner)
+	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
+	if res.Status != domain.TaskFailed || res.Reason != ReasonFailed || doc.Coverage.ProcessedPaths != nil || len(doc.Observations) != 0 {
+		t.Fatalf("managed JavaScript tool failure: %+v, coverage %+v", doc.Outcome, doc.Coverage)
 	}
 }
 

@@ -16,11 +16,13 @@ var takesValue = map[string]bool{
 	"-ivfsoverlay": true, "--serialize-diagnostics": true, "-dependency-file": true, "-D": true, "-U": true,
 }
 
-// pathFlags take an include directory or file, joined ("-Idir") or separate.
-var pathFlags = []struct {
+type includePathFlag struct {
 	name string
 	file bool
-}{{"-isystem", false}, {"-iquote", false}, {"-idirafter", false}, {"-imacros", true}, {"-include", true}, {"-I", false}}
+}
+
+// pathFlags take an include directory or file, joined ("-Idir") or separate.
+var pathFlags = []includePathFlag{{"-isystem", false}, {"-iquote", false}, {"-idirafter", false}, {"-imacros", true}, {"-include", true}, {"-I", false}}
 
 // keepF are the -f options that change how the code parses (language
 // dialect, character signedness, predefined macros); every other -f option
@@ -130,6 +132,10 @@ func mapFlags(args []string, dir, root, fileArg, fileAbs string, files map[strin
 				}
 			}
 			value = strings.TrimPrefix(value, "=")
+			if value == "" || strings.ContainsFunc(value, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+				m.Dropped[DropPositional]++
+				break
+			}
 			p, ok := absOn(dir, value)
 			rel := ""
 			if ok {

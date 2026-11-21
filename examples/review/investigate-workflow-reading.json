@@ -1,0 +1,133 @@
+{
+  "schema_version": "0.6",
+  "pack": {
+    "id": "review",
+    "version": "2.5.2"
+  },
+  "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+  "run_id": "0195f3a0-0000-7000-8000-000000000025",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000026",
+  "stage": "investigate",
+  "outcome": "accepted",
+  "upstream": [
+    {
+      "source": "review.environment",
+      "state": "skipped",
+      "reason": "no_environment_gap"
+    },
+    {
+      "source": "review.documents",
+      "state": "accepted",
+      "sha256": "c8a2d6b50aeb09865901d43a39ce3f9e7b49bcb439e01a0092aae41a584e78a2"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_6de50b26e09a4a13b5a3ee60",
+      "path": "archive/routes.go",
+      "sha256": "96d0bc5078bc088a5fdf5d9905b3ad22c546c7885c1759c6d5a7f9d01ee5a1a1",
+      "start_line": 26,
+      "end_line": 34,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_6d00d0e0de8a4b217203784d",
+      "path": "archive/routes.go",
+      "sha256": "96d0bc5078bc088a5fdf5d9905b3ad22c546c7885c1759c6d5a7f9d01ee5a1a1",
+      "start_line": 20,
+      "end_line": 20,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_d8c2833bb7f0d017d94f0eb0",
+      "path": "archive/routes_test.go",
+      "sha256": "520959041506ba0d3769c9dd3861d13d1234030882b750a5fd040b57eaf6a1b0",
+      "start_line": 19,
+      "end_line": 33,
+      "kind": "test",
+      "origin": "context"
+    },
+    {
+      "id": "ev_a960e56bf22c43f2163e9f0d",
+      "path": "archive/routes.go",
+      "sha256": "96d0bc5078bc088a5fdf5d9905b3ad22c546c7885c1759c6d5a7f9d01ee5a1a1",
+      "start_line": 35,
+      "end_line": 42,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_0f72815fc03fcce51c3a7cb6",
+      "path": "archive/routes.go",
+      "sha256": "96d0bc5078bc088a5fdf5d9905b3ad22c546c7885c1759c6d5a7f9d01ee5a1a1",
+      "start_line": 22,
+      "end_line": 22,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_6244889ca0294819d9af7e2b",
+      "path": "archive/README.md",
+      "sha256": "ed3ba8cd595b898ab336cec0f8b3b699ef8a552aaeac5b1fff8ac1c3f7c2e9ef",
+      "start_line": 1,
+      "end_line": 3,
+      "kind": "document"
+    }
+  ],
+  "observations": [],
+  "workflow_reading": {
+    "contract_index": 1,
+    "route_digest": "ef05391d7077f9fbbc28c464204430e837e46f10066ff9d873fafbe0ad79bad0",
+    "read_evidence_id": "ev_6de50b26e09a4a13b5a3ee60",
+    "change_evidence_id": "ev_a960e56bf22c43f2163e9f0d",
+    "test_evidence_id": "ev_d8c2833bb7f0d017d94f0eb0"
+  },
+  "contract_comparisons": [
+    {
+      "contract_index": 1,
+      "applies_to": "archive",
+      "status": "unknown",
+      "reason": "빈 결과에 오류 응답을 내는 조회 처리기를 확인했다.",
+      "document_evidence_ids": [
+        "ev_6244889ca0294819d9af7e2b"
+      ],
+      "code_evidence_ids": [
+        "ev_6de50b26e09a4a13b5a3ee60"
+      ]
+    }
+  ],
+  "limitations": [
+    "excerpt_only",
+    "model_input_not_secret_screened",
+    "navigation_no_choice",
+    "upstream_environment_skipped"
+  ],
+  "calls": [
+    {
+      "role": "investigate",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_id": "review",
+      "pack_version": "2.5.2",
+      "pack_sha256": "c474486de4bf11ef85796d5f8cc30571c36ff6540fa9d7c61abce2c06f89f686",
+      "pack_files": [
+        "00-core.md",
+        "domains.md",
+        "investigate.md",
+        "languages/go.md",
+        "pack.yaml"
+      ],
+      "request_sha256": "8a9d0022224b4bf7f366373eccc82d185b2cffb4876d13e8caf9d011445f461a",
+      "request_bytes": 16056,
+      "usage": {
+        "input": 3578,
+        "output": 50
+      },
+      "attempt": 1,
+      "outcome": "accepted",
+      "output_errors": []
+    }
+  ]
+}

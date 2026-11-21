@@ -401,6 +401,8 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 
 Python API docstring 근거는 `documents.evidence[]`에서 선택 필드 `directive_path`로 원래 Markdown 페이지를 가리킨다. `path`, 줄 범위, `blob_sha256`는 docstring이 담긴 스냅샷의 실제 Python 파일을 가리킨다. 코드 미포함 내보내기에도 출처 경로가 남는다.
 
+보고서 생성기 15부터 수락된 전체 검토에 조회·변경 코드와 실행 결과를 확인하는 테스트 단언이 함께 기록되면 연결된 문서 대조 행에 `related_workflow`가 생긴다. 이 객체의 `read_evidence_id`, `change_evidence_id`, `test_evidence_id`는 각각 `documents.evidence[]`의 코드·코드·테스트 위치를 참조한다. 예를 들어 `{"read_evidence_id":"ev_6de50b26e09a4a13b5a3ee60","change_evidence_id":"ev_a960e56bf22c43f2163e9f0d","test_evidence_id":"ev_d8c2833bb7f0d017d94f0eb0"}`는 합성 검토 예시의 값을 참조한다. 이 위치로 `status`, `reason`, `code_evidence_ids`, `coverage.test_status`를 바꾸지 않는다. 코드 미포함 내보내기는 위치와 ID를 남긴다. [검토 예시](../examples/review/investigate-workflow-reading.json)
+
 문서의 호출 예제를 로컬 npm 패키지와 연결하면 `documents.evidence[].package_reference`에 `manifest_path`, `manifest_sha256`, `entry_path`, `entry_sha256`을 기록한다. 코드 포함 JSON은 패키지의 `name`, 사용 예제의 `callable`, 대응하는 `export`도 담는다. 문서 근거 자체의 `path`, 줄 범위와 `blob_sha256`는 안내 원문을 가리킨다. 계약의 구현 근거는 `code_evidence_ids`에서 읽는다.
 
 계약이나 질문은 확인된 호출 예제와 같은 문서에서 바로 이어진 설명을 함께 인용할 수 있다. 확인하지 못한 범위의 항목을 제외한 보고서는 `gaps[]`에 문서 분석의 `document_scope_items_omitted`를 남긴다.
@@ -447,6 +449,7 @@ Python API docstring 근거는 `documents.evidence[]`에서 선택 필드 `direc
 - query는 `revision`(생략 시 최신), `baseline`(run ID), `baseline_revision`(생략 시 기준 run의 최신)이다. 모르는 parameter·반복 parameter는 400, `baseline` 없이 `baseline_revision`만 있으면 400이다.
 - 권한은 프로젝트 읽기(viewer 포함)다. 비구성원 404, 게시 보고서가 없는 run 404, 기준 run이 다른 프로젝트이거나 없으면 404, 자기 자신을 기준으로 주면 422다.
 - 비교는 요청마다 저장된 게시 보고서에서 다시 계산한다. 응답은 현재 리비전의 `run_id`·`project_id`·`revision`·`report_created_at`, `baseline`(`run_id`, `revision`, `report_created_at`, `selection`) 또는 null, 비교 결과(`comparable`, `not_comparable_reason`, `differences`, `counts`, `entries`, `unidentified`), 판정 오버레이(`findings`, `summary.at_publication`, `summary.current`), `can_review`, `checked_at`(DB 시각)을 담는다.
+- 발견 목록에서 사라진 도구 진단이 현재 실행의 원시 관찰에 남아 있으면 `{"state":"absent_unverified","reason":"active_observation_remains"}`로 표시한다.
 
 ### GET /projects/{id}/finding-reviews
 

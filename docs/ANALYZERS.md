@@ -27,9 +27,9 @@
 | `python.mypy` | `mypy`, `mypy.mNN` | 아니오 | `--mypy` | 아니오 | `codeye-python-mypy` v1 | `overridden` / `honored` |
 | `python.pyright` | `pyright`, `pyright.mNN` | 아니오 | `--pyright` + `--node` | 아니오 | `codeye-python-pyright` v1 | `overridden` / `honored` |
 | `python.bandit` | `bandit`, `bandit.mNN` | 아니오 | `--bandit` | 아니오 | `codeye-python-bandit` v1 | `overridden` / `reported` |
-| `javascript.eslint` | `eslint`, `eslint.mNN` | 예 | `--eslint` + `--node` | 아니오 | `codeye-js-eslint` v1 | `overridden` / `disabled` |
+| `javascript.eslint` | `eslint`, `eslint.mNN` | 예 | `--eslint` + `--node` | 아니오 | `codeye-js-eslint` v2 | `overridden` / `disabled` |
 | `javascript.tsc` | `tsc`, `tsc.mNN` | 아니오 | `--tsc` + `--node` | 아니오 | `codeye-ts-tsc` v1 | `honored` / `honored` |
-| `javascript.eslint_typed` | `eslint-typed`, `eslint-typed.mNN` | 아니오 | `--eslint` + `--node` | 아니오 | `codeye-ts-eslint-typed` v1 | `honored` / `disabled` |
+| `javascript.eslint_typed` | `eslint-typed`, `eslint-typed.mNN` | 아니오 | `--eslint` + `--node` | 아니오 | `codeye-ts-eslint-typed` v1 또는 `codeye-js-eslint-rejection-types` v1 | TS `honored`, JS `overridden` / `disabled` |
 | `rust.cargocheck` | `cargo-check`, `cargo-check.mNN` | 예 | `--cargo` | **예** | `codeye-rust-cargo-check` v1 | `honored` / `honored` |
 | `rust.clippy` | `clippy`, `clippy.mNN` | 아니오 | `--clippy` (+`--cargo`) | **예** | `codeye-rust-clippy` v1 | `honored` / `honored` |
 | `any.lizard` | `lizard` | 아니오 | `--lizard` | 아니오 | `codeye-structure-lizard` v1 | `overridden` / `honored` |
@@ -418,7 +418,7 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 | `config` | `not_read`(`honored`가 아님), `recorded`(읽은 파일을 기록함), `unrecorded`(`honored`인데 `config_files=null`) |
 | `config_paths`, `config_digest` | `recorded`일 때만. 읽은 파일이 없으면 `config_paths`는 생략되고 digest만 있다. digest는 SHA-256(`codeye-rule-config-v1\0` + 경로 순으로 각 `path\0sha256\n`)이다. **코드 제외 export에서 뺀다.** 모드와 `config` 상태는 남는다 |
 
-문맥이 **알려짐**은 `config`가 `not_read`이거나 `recorded`이고 digest가 있는 경우다. 문맥이 없는 행(builder 3 이하 보고서의 go vet 외 분석기)은 **모름**이다. 비교는 같은 분석기의 모든 행(모듈별 task)을 모아 문맥 집합이 같은지 본다. 한 모듈의 설정만 바뀌어도 그 분석기의 사라진 finding 전부가 `rule_context_changed`다.
+문맥이 **알려짐**은 `config`가 `not_read`이거나 `recorded`이고 digest가 있는 경우다. 문맥이 없는 행(builder 3 이하 보고서의 go vet 외 분석기)은 **모름**이다. 두 실행에서 단일 발견 경로를 처리한 성공 행을 확인할 수 있으면 해당 행들의 문맥을 비교한다. 처리 수에 비해 경로 목록이 짧은 성공 행도 그 파일을 처리했을 수 있어 함께 비교한다. 이전 보고서에서 해당 행을 확인할 수 없으면 분석기 전체의 문맥을 비교한다. 실행 요약의 도구 차이는 모든 행을 보여 준다.
 
 | 사유 | 조건 |
 |---|---|
@@ -427,7 +427,7 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 | `rule_context_changed` | 규칙 팩·버전·선택·모드·설정 digest 중 하나가 다름. 차이는 `tool:<analyzer>:rule_context`에 보임(digest는 앞 12자) |
 | `source_suppressions_hidden` | 현재 쪽이 `source_suppressions=honored`이거나 그 규칙이 `unreported_suppression_rules`에 있음 |
 
-우선순위는 위치 미검사(`check_failed`, `location_not_inspected`) → `suppressed_in_source` → 도구 버전(`rules_unknown`, `rules_changed`) → 규칙 문맥(`rule_context_unknown`, `rule_context_changed`) → `source_suppressions_hidden`이다.
+우선순위는 위치 미검사(`check_failed`, `location_not_inspected`) → 원시 관찰의 억제·활성 진단(`suppressed_in_source`, `active_observation_remains`) → 도구 버전(`rules_unknown`, `rules_changed`) → 규칙 문맥(`rule_context_unknown`, `rule_context_changed`) → `source_suppressions_hidden`이다.
 
 팩이 지킬 규칙:
 
@@ -696,6 +696,7 @@ cppcheck(기준)와 clang-tidy(추가 깊이)다. Clang Static Analyzer(CSA)는 
 
 - **원래 루트 추정.** 항목 파일 절대 경로의 접두어 중 스냅샷에 실제로 있는 파일에 가장 많이 맞는 것을 고른다. 동률이면 더 긴 접미어가 맞는 쪽이다. 추정한 루트는 다른 머신의 절대 경로이므로 기록하지 않는다. 추정하지 못하면 `compile_db_root_not_inferred`다.
 - **경로 변환.** `directory`·`file`·`-I`·`-isystem`·`-iquote`·`-idirafter`·`-include`·`-imacros`를 그 루트 아래 스냅샷 경로로 바꾼다. 상대 경로는 항목 `directory` 기준이다. 원래 build 디렉터리(예: `_build/gen`)도 같은 규칙으로 작업 사본 경로가 된다. 없으면 `include_dirs_not_in_snapshot`, 강제 include 파일이 없으면 `forced_include_files_not_in_snapshot`다. 루트 밖 include 경로(system 경로 포함)는 버린다(`include_paths_outside_snapshot`). 도구는 자기 system header를 쓴다. Windows 경로의 `command`는 CommandLineToArgvW 규칙으로 나눈다.
+- include 검색 디렉터리가 추정한 프로젝트 루트이면 `-I.`나 `-iquote .`도 작업 사본 루트의 절대 경로로 바꾼다. 루트를 가리키는 `.`은 디렉터리 인자에만 쓴다. 빈 include 인자와 제어 문자가 섞인 경로는 정규화 전에 버린다.
 - **제한.** JSON이 아니거나 64 MiB, 100,000 항목, 항목당 4,096 인자를 넘으면 `compile_db_unreadable`로 실패한다. 둘 이상의 compile DB가 있으면 얕은 경로부터 읽고 `multiple_compile_dbs`를 남긴다.
 
 | 항목 제외 사유 | 경우 |
@@ -972,11 +973,11 @@ ESLint 구문 규칙(기준), tsc, type-aware ESLint(추가 깊이)를 공유 `-
 |---|---|
 | ESLint 기준 | JS/TS 소스가 있는 모든 모듈 |
 | tsc | `tsconfig.json`이 있는 모듈 |
-| ESLint type-aware | `tsconfig.json`과 TS 소스가 있는 모듈 |
+| ESLint type-aware | `tsconfig.json`과 TS 소스가 있는 모듈 또는 `tsconfig.json` 없이 범위에 JS 소스가 있는 모듈 |
 
 - `package.json`이 있는 디렉터리(testdata·숨김 디렉터리 제외)가 모듈이고, 어느 모듈에도 속하지 않는 소스는 루트 모듈(`.`)에 둔다. 루트에 `package.json`이 없으면 `no_package_json_module` 제약을 남긴다. 중첩 모듈의 파일은 그 모듈의 작업이 맡는다. `jsts.PackageModules`는 env.discover의 모듈 탐지와 같은 결과를 내도록 시험으로 묶었다.
-- tsconfig는 `<모듈>/tsconfig.json` 하나다. tsc와 type-aware 작업은 그 체인(`extends`·`references`)을 `config_files`에 기록한다.
-- JS 전용 모듈은 기준선만 받는다. `checkJs`는 켜지 않는다. 저장소 tsconfig가 `allowJs`·`checkJs`를 켜면 tsc가 따른다.
+- tsconfig는 `<모듈>/tsconfig.json` 하나다. tsc와 TS용 type-aware 작업은 그 체인(`extends`·`references`)을 `config_files`에 기록한다.
+- `tsconfig.json`이 없는 JS 모듈은 기준선과 선택 보강 작업을 받는다. 보강은 격리된 관리 프로그램에서만 `checkJs`를 켠다. 저장소 tsconfig가 `allowJs`·`checkJs`를 켜면 tsc가 따른다.
 - 도구 스크립트는 같은 이름의 npm 패키지 안에 있어야 하고 `<node> <script> <args>`로 실행한다. `--node` 없이 도구만 지정하면 `toolchain_not_configured`다.
 
 ### JS/TS 실행
@@ -1002,8 +1003,10 @@ tsc:    <node> <tsc> --noEmit --pretty false --incremental false --composite fal
 
 - **ESLint 설정.** 저장소 `eslint.config.*`·`.eslintrc.*`는 실행 가능한 JS이므로 `--no-config-lookup -c <관리 설정>`으로 읽지 않는다. 관리 설정은 `@eslint/js`·`typescript-eslint`를 eslint와 같은 도구 `node_modules`의 절대 진입 경로로 `require`하고 저장소 `node_modules`에서 plugin·parser를 찾지 않는다. `repository_config=overridden`과 `repository_eslint_config_not_loaded`를 기록한다. 저장소 설정을 따르는 실행은 구현하지 않았으므로 저장소가 정한 규칙·plugin 결과는 보이지 않는다. `.eslintignore`는 eslint 10이 읽지 않으며 `eslintignore_unsupported`로 남긴다. `package.json`의 `eslintConfig`는 flat config가 읽지 않고, cwd의 `eslint-suppressions.json`은 관리 경로가 대신한다.
 - **tsc.** `tsconfig.json`은 JSONC 데이터로 읽는다. tsc와 typescript-eslint `parserOptions.project` 프로그램은 tsconfig 언어 서비스 `plugins`를 읽지 않는다. `NODE_ENV`는 넘기지 않는다.
-- **type-aware.** 관리 설정의 `project`는 `./tsconfig.json`, `tsconfigRootDir`는 모듈 디렉터리다. 절대 작업 경로의 `(`·`[`·`*`를 typescript-eslint가 glob으로 확장하므로 상대 경로를 쓴다. projectService 방식은 쓰지 않는다.
-- **의존성 코드.** 모듈 경로나 그 상위에 `node_modules`가 있으면 tsc와 type-aware 작업은 실행 전에 `skipped_policy`(`node_modules_outside_snapshot`)다. 출처를 manifest에 묶을 수 없기 때문이다. 예외는 이번 attempt의 `deps.javascript` 기록이 `installed_dirs`로 적은 디렉터리이며, 링크가 아닌 실제 디렉터리일 때만 받아들인다([JS/TS 의존성 받기](#jsts-의존성-받기)). 기준선은 모듈 해석을 하지 않으므로 계속 실행한다.
+- **TS type-aware.** 관리 설정의 `project`는 `./tsconfig.json`, `tsconfigRootDir`는 모듈 디렉터리다. 절대 작업 경로의 `(`·`[`·`*`를 typescript-eslint가 glob으로 확장하므로 상대 경로를 쓴다. projectService 방식은 쓰지 않는다.
+- **관리 JS 타입 보강.** `tsconfig.json`이 없는 모듈에서 범위 내 일반 `.js`·`.jsx`·`.mjs`·`.cjs` 파일만 스냅샷 해시와 대조해 별도 임시 디렉터리에 복제한다. 링크, 벤더·생성·예제 경로, 최소화 파일과 ESLint 설정 파일을 입력으로 받지 않는다. 선택한 파일과 운영자가 설치한 TypeScript의 ES2022·DOM 표준 타입 파일만 읽는 컴파일러를 사용한다. 모듈 import·파일 경로와 패키지에 대한 타입 참조·`@types`·프로젝트 설정은 해석하지 않는다. 관찰 문서에 `type_analysis=isolated_javascript_primitive_rejections`를 기록하고, 보고서에서 규칙 팩·표준 타입 가정·검사 한계를 확인할 수 있다.
+- 관리 JS 타입 보강은 모듈당 최대 48개 파일, 파일당 128 KiB, 소스 합계 1 MiB, 실행 단계당 25초다. Node old-space를 192 MiB로 제한한다. 소스가 한도를 넘으면 `javascript_type_input_budget_exceeded`, 지원하지 않는 텍스트면 `javascript_type_input_unsupported`로 보강 작업을 건너뛴다. `third-party`나 `third_party` 등 보강 대상이 아닌 파일은 관찰 문서에 제외 수를 남긴다. 선택 범위의 JS 파일이 모두 제외되면 `javascript_type_no_eligible_files`로 표시한다. 실행기 또는 도구가 실패하면 결과와 사유를 남긴다. 필수 구문 분석 작업은 따로 실행한다.
+- **의존성 코드.** 모듈 경로나 그 상위에 `node_modules`가 있으면 tsc와 TS용 type-aware 작업은 실행 전에 `skipped_policy`(`node_modules_outside_snapshot`)다. 출처를 manifest에 묶을 수 없기 때문이다. 예외는 이번 attempt의 `deps.javascript` 기록이 `installed_dirs`로 적은 디렉터리이며, 링크가 아닌 실제 디렉터리일 때만 받아들인다([JS/TS 의존성 받기](#jsts-의존성-받기)). 기준선과 관리 JS 타입 보강은 의존성 디렉터리를 사용하지 않는다.
 
 tsc와 type-aware 작업은 실행 전에 tsconfig 체인 전체(루트, 로컬 `extends`, `references`)를 검사한다. 기록에는 옵션 이름만 남긴다(`tsconfig_option_<snake_name>`).
 
@@ -1026,11 +1029,15 @@ tsc와 type-aware 작업은 실행 전에 tsconfig 체인 전체(루트, 로컬 
 
 | 분석기 | 규칙 팩 | repository_config | config_files | source_suppressions |
 |---|---|---|---|---|
-| eslint | `codeye-js-eslint` v1 | `overridden` | `[]` | `disabled` |
+| eslint | `codeye-js-eslint` v2 | `overridden` | `[]` | `disabled` |
 | eslint-typed | `codeye-ts-eslint-typed` v1 | `honored`(tsconfig) | 체인(열거 가능할 때) | `disabled` |
+| eslint-typed 관리 JS | `codeye-js-eslint-rejection-types` v1 | `overridden` | `[]` | `disabled` |
 | tsc | `codeye-ts-tsc` v1 | `honored` | 체인과 참조 체인 | `honored` |
 
-`selection`에는 plugin 버전(예: `@eslint/js@10.0.1 recommended`)과 끈 플래그를 적는다. plugin을 올리면 규칙 문맥이 바뀐다.
+`selection`에는 plugin 버전(예: `@eslint/js@10.0.1 recommended`), 추가 규칙과 해당 범위, 끈 플래그를 적는다. plugin을 올리면 규칙 문맥이 바뀐다. [이전 ESLint 관찰 예시](../examples/observations-eslint.json)는 당시 v1 문맥으로 읽는다.
+
+- 기준선은 `.js`·`.jsx`·`.mjs`·`.cjs` 파일에 `prefer-promise-reject-errors`를 켠다. 전역 `Promise.reject(value)`와 전역 `new Promise`의 실행자에 전달된 거부 콜백을 직접 호출하는 코드에서 문자열·객체 리터럴처럼 구문상 `Error` 객체가 될 수 없는 인자를 경고한다. 오류의 메시지와 스택이 필요한 곳에서 실패 원인을 추적하는 데 영향을 준다. 인자가 없는 호출은 `allowEmptyReject=true`로 허용한다. 변수·함수 반환값·멤버 접근의 타입은 추론하지 않아, 예를 들어 HTTP 응답 본문에서 받은 문자열을 변수로 전달하면 이 규칙에서 경고가 없을 수 있다.
+- 관리 JS 작업은 타입 정보로 확인한 거부 사유의 모든 타입이 원시값일 때만 `@typescript-eslint/prefer-promise-reject-errors` 경고를 남긴다. HTTP 응답 본문에서 받은 문자열이 해당한다. `Error`·객체·`any`·`unknown` 가능성이 있거나 인자가 없으면 보강 경고를 내지 않는다. 두 작업이 성공했고 구문 진단과 보강 진단이 같은 경로·줄·바이트 열에서 확인되면 기준선 관찰을 인용하는 발견 한 건을 표시한다. 두 관찰과 원시 출력은 각각 보존하며 모델 검토의 보강 관찰 인용도 유효하다. 기준선 결과가 없거나 실패하면 검증된 보강 진단으로 발견을 만든다.
 
 - ESLint 억제 계열: `eslint-disable`·`-line`·`-next-line`·블록, `/* eslint rule: off */`(기록 없이 진단을 지움), `/* eslint rule: error */`(선택 밖 규칙을 켬), `/* eslint-env */`, cwd의 `eslint-suppressions.json`. `--no-inline-config`와 빈 관리 suppressions 파일이면 모두 꺼져 억제가 0건이므로 `disabled`다. 그 실행에서 억제 메시지가 하나라도 나오면 `source_suppressions_not_disabled`로 실패한다. 없는 `--suppressions-location` 파일은 exit 2다.
 - tsc의 `@ts-ignore`·`@ts-expect-error`·`@ts-nocheck`는 숨긴 진단을 보고하지 않으므로 `honored`다. 기준선 TS 규칙의 `@typescript-eslint/ban-ts-comment`가 이 주석을 볼 수 있다.
@@ -1040,13 +1047,14 @@ tsc와 type-aware 작업은 실행 전에 tsconfig 체인 전체(루트, 로컬 
 - typescript-eslint recommended의 eslint-recommended는 tsc가 검사하는 core 규칙 22개를 TS 파일에서 끈다(constructor-super, getter-return, no-array-constructor, no-class-assign, no-const-assign, no-dupe-args, no-dupe-class-members, no-dupe-keys, no-func-assign, no-import-assign, no-new-native-nonconstructor, no-new-symbol, no-obj-calls, no-redeclare, no-setter-return, no-this-before-super, no-undef, no-unreachable, no-unsafe-negation, no-unused-expressions, no-unused-vars, no-with).
 - tsc의 `noUnusedLocals`·`noUnusedParameters`·`noFallthroughCasesInSwitch`는 저장소 설정과 무관하게 끈다. 기준선의 `@typescript-eslint/no-unused-vars`·`no-fallthrough`가 같은 구성을 보고한다.
 - type-aware 규칙(`recommendedTypeCheckedOnly`)은 eslint-recommended를 빼서 기준선과 겹치지 않는다. async·경계 검사(no-floating-promises, no-misused-promises, require-await, no-unsafe-*)는 이 규칙이 맡는다.
-- JS 파일은 타입 검사가 없으므로 core 규칙을 유지한다. no-undef는 관리 설정이 전역을 선언하지 않으므로 JS에서도 끈다.
+- TypeScript의 Promise 거부 사유는 기존 `@typescript-eslint/prefer-promise-reject-errors`로 tsconfig 프로그램 안에서 검사한다. 기준선에는 이 검사가 없으므로 타입 검사 작업을 계획할 수 없거나 타입 공백으로 작업이 실패하면 TS 파일에서 해당 진단을 얻을 수 없다.
+- JS 기준선은 core 규칙을 유지한다. no-undef는 이 관리 설정이 전역을 선언하지 않으므로 JS에서도 끈다.
 
 ### JS/TS 종료 코드와 결과
 
 | 도구 | 종료 코드 | 판정 |
 |---|---|---|
-| eslint | 0 오류 없음, 1 오류 메시지(치명 구문 오류 포함), 2 crash·설정 오류·대상 없음 | exit 0인데 오류가 있거나 exit 1인데 오류가 없으면 `exit_status_mismatch`. 2와 "Oops! Something went wrong!"는 `eslint_failed`. 해석하지 못한 파일(치명 메시지)은 `parse-error` 관찰 하나와 `parse_error` 단위, 제약 `unparsable_files_not_analyzed`이고 나머지 파일로 성공한다. 해석한 파일이 없으면 `parse_errors` |
+| eslint | 0 오류 없음(경고 가능), 1 오류 메시지(치명 구문 오류 포함), 2 crash·설정 오류·대상 없음 | exit 0인데 오류가 있거나 exit 1인데 오류가 없으면 `exit_status_mismatch`. 경고만 있는 성공은 `success_with_findings`이며 원문 등급은 `warning`이다. 2와 "Oops! Something went wrong!"는 `eslint_failed`. 해석하지 못한 파일(치명 메시지)은 `parse-error` 관찰 하나와 `parse_error` 단위, 제약 `unparsable_files_not_analyzed`이고 나머지 파일로 성공한다. 해석한 파일이 없으면 `parse_errors` |
 | tsc | 0 진단 없음, 2 진단 있음(`--noEmit`), 1 명령행 오류·설정 로드 실패 | 레코드 유무와 0/2가 어긋나면 `exit_status_mismatch`. 그 밖은 `tsc_failed` |
 
 - 파일 상태: eslint는 `linted_clean`·`linted_with_findings`·`parse_error`·`outside_tsconfig_program`·`not_linted`·`unknown`, tsc는 `checked`·`not_verified`·`dependency_gap`·`outside_tsconfig_program`이다. tsc의 `files_in_scope`는 모듈의 JS/TS 파일 수이고 프로그램 루트가 아닌 파일은 건너뜀으로 센다.

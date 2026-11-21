@@ -25,6 +25,8 @@ const (
 	SchemaVersionContract = "0.4"
 	// SchemaVersionWorkflow adds accepted HTTP route selections to documents.
 	SchemaVersionWorkflow = "0.5"
+	// SchemaVersionWorkflowReading retains submitted HTTP source context on a whole-run investigation.
+	SchemaVersionWorkflowReading = "0.6"
 
 	StageEnvironment = "environment"
 	StageDocuments   = "documents"
@@ -187,6 +189,7 @@ type Record struct {
 	InstructionNotes    []InstructionNote       `json:"instruction_notes,omitempty"`
 	DocumentQuality     []DocumentQuality       `json:"document_quality,omitempty"`
 	WorkflowSelections  []WorkflowSelection     `json:"workflow_selections,omitempty"`
+	WorkflowReading     *WorkflowReading        `json:"workflow_reading,omitempty"`
 	Strengths           []Strength              `json:"strengths,omitempty"`
 	ContractComparisons []ContractComparison    `json:"contract_comparisons,omitempty"`
 	PartialSupport      *ContractPartialSupport `json:"partial_support,omitempty"`
@@ -311,6 +314,10 @@ func Validate(r Record, want Expect) error {
 		if r.Slice != nil || want.Slice != "" || r.ContractProbe != nil {
 			return invalid("workflow record version")
 		}
+	case SchemaVersionWorkflowReading:
+		if r.Slice != nil || want.Slice != "" || r.Stage != StageInvestigate || !r.Accepted() || r.WorkflowReading == nil {
+			return invalid("workflow reading requires an accepted global investigation")
+		}
 	default:
 		return invalid("schema_version")
 	}
@@ -373,6 +380,9 @@ func Validate(r Record, want Expect) error {
 		return err
 	}
 	if err := checkWorkflowSelections(r); err != nil {
+		return err
+	}
+	if err := checkWorkflowReading(r, catalog); err != nil {
 		return err
 	}
 	return checkCalls(r)

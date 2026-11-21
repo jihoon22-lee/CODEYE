@@ -166,7 +166,7 @@ def main() -> None:
         review_validator.validate(doc)
     check_stage_examples(role_docs, role_raw, pack_doc, role_files)
     workflow_negatives = check_workflow_example(review_validator, pack_doc, role_files)
-    print(f"PASS: workflow route selections attached to the accepted document contract; {workflow_negatives} negative cases")
+    print(f"PASS: workflow routes and submitted source attached to the accepted document contract; {workflow_negatives} negative cases")
     workflow_report = copy.deepcopy(unscreened)
     workflow_artifact = next(a for a in workflow_report["artifacts"] if a["task_key"] == "review.documents" and a["media_type"] == "application/vnd.codeye.review+json")
     workflow_artifact["decoder"] = "application/vnd.codeye.review+json;schema_version=0.5"

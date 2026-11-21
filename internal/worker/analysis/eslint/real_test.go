@@ -50,6 +50,73 @@ func caseFiles(extra map[string]string) map[string]string {
 	return out
 }
 
+const promiseRejectionJS = `export function request(message) {
+  return Promise.reject("Request failed: " + message);
+}
+export function upload(open) {
+  return new Promise((resolve, reject) => {
+    queueMicrotask(() => open ? resolve("Uploaded") : reject(404));
+  });
+}
+export const fromUnknown = (reason) => Promise.reject(reason);
+export const fromError = () => Promise.reject(new Error("Failed"));
+export const fromNoReason = () => Promise.reject();
+export const fromCustomPromise = (Promise) => Promise.reject("Expected");
+export const fromCustomCallback = (reject) => reject("Expected");
+`
+
+const promiseRejectionTS = `export function request(reason: string): Promise<never> {
+  return Promise.reject(reason);
+}
+`
+
+func promiseRejectionFiles() map[string]string {
+	return caseFiles(map[string]string{
+		"tsconfig.json":  fixGapTSConfig,
+		"request.js":     promiseRejectionJS,
+		"src/request.ts": promiseRejectionTS,
+	})
+}
+
+func checkPromiseRejections(t *testing.T, doc obsdoc.Document) {
+	t.Helper()
+	if doc.Outcome.TaskStatus != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings ||
+		!slices.Equal(doc.Coverage.ProcessedPaths, []string{"request.js", "src/request.ts"}) || len(doc.Observations) != 2 {
+		t.Fatalf("promise rejection warnings: outcome %+v, coverage %+v, observations %+v", doc.Outcome, doc.Coverage, doc.Observations)
+	}
+	if doc.RulePack.Version != "2" || !slices.Contains(doc.RulePack.Selection, promiseRejectRule+" warn (JS files, allowEmptyReject=true)") {
+		t.Fatalf("rules %+v", doc.RulePack)
+	}
+	for i, line := range []int{2, 6} {
+		o := doc.Observations[i]
+		if o.RuleID != promiseRejectRule || o.Category != "error_handling" || o.RawSeverity == nil || *o.RawSeverity != "warning" ||
+			o.Location == nil || o.Location.Path != "request.js" || o.Location.StartLine != line || o.RawRef.JSONPointer == "" {
+			t.Fatalf("rejection diagnosis %+v", o)
+		}
+	}
+}
+
+func TestRealESLintPromiseRejections(t *testing.T) {
+	fx := packtest.NewFixture(t, "", promiseRejectionFiles(), domain.Scope{})
+	base := newReal(t, false)
+	res := packtest.RunTask(t, base, fx.Job, "eslint", &executor.Executor{})
+	jststest.Capture(t, "promise-rejection", res)
+	doc, _ := jststest.ReadEnvelope(t, fx.Job, res)
+	checkPromiseRejections(t, doc)
+	check := res.Executions[len(res.Executions)-1].Result
+	if check.ExitCode == nil || *check.ExitCode != 0 {
+		t.Fatalf("ESLint warnings should exit zero: %+v", check)
+	}
+
+	typed := newReal(t, true)
+	res = packtest.RunTask(t, typed, fx.Job, "eslint-typed", &executor.Executor{})
+	doc, _ = jststest.ReadEnvelope(t, fx.Job, res)
+	if doc.Outcome.TaskStatus != domain.TaskSucceeded || !mapsEqual(packtest.Rules(doc), map[string]int{"@typescript-eslint/" + promiseRejectRule: 1}) ||
+		!slices.Equal(doc.Coverage.ProcessedPaths, []string{"src/request.ts"}) {
+		t.Fatalf("typed rejection diagnosis: outcome %+v, coverage %+v, observations %+v", doc.Outcome, doc.Coverage, doc.Observations)
+	}
+}
+
 // TC-111: the baseline lints every package.json module of the monorepo and
 // the root sources outside them, the type-aware task lints the TS module's
 // tsconfig program; no repository configuration program runs, the source

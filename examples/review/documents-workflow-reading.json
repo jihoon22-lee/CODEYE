@@ -1,0 +1,76 @@
+{
+  "schema_version": "0.5",
+  "pack": {
+    "id": "review",
+    "version": "2.5.2"
+  },
+  "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+  "run_id": "0195f3a0-0000-7000-8000-000000000025",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000026",
+  "stage": "documents",
+  "outcome": "accepted",
+  "upstream": [
+    {
+      "source": "docs.discover",
+      "state": "accepted",
+      "sha256": "711839d217caeb8ba540aba6ab3cfaab3a5d5a696304b5da93d553da664768f1"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_6244889ca0294819d9af7e2b",
+      "path": "archive/README.md",
+      "sha256": "ed3ba8cd595b898ab336cec0f8b3b699ef8a552aaeac5b1fff8ac1c3f7c2e9ef",
+      "start_line": 1,
+      "end_line": 3,
+      "kind": "document"
+    }
+  ],
+  "observations": [],
+  "contracts": [
+    {
+      "statement": "목록에서 책장을 비운 뒤 같은 항목을 조회하면 비어 있음을 안내한다.",
+      "applies_to": "archive",
+      "evidence_ids": [
+        "ev_6244889ca0294819d9af7e2b"
+      ]
+    }
+  ],
+  "workflow_selections": [
+    {
+      "contract_index": 1,
+      "route_digests": [
+        "ef05391d7077f9fbbc28c464204430e837e46f10066ff9d873fafbe0ad79bad0"
+      ]
+    }
+  ],
+  "limitations": [
+    "model_input_not_secret_screened"
+  ],
+  "calls": [
+    {
+      "role": "documents",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_id": "review",
+      "pack_version": "2.5.2",
+      "pack_sha256": "fed289ac5d4b2e35ae127f7935b313fd9adb25afa9936f03db0264bd7494089b",
+      "pack_files": [
+        "00-core.md",
+        "documents.md",
+        "domains.md",
+        "languages/go.md",
+        "pack.yaml"
+      ],
+      "request_sha256": "59316273ab24516462cc85c0298d6d91b2dcbf21671c791c79a0a90a7bc08f6b",
+      "request_bytes": 14915,
+      "usage": {
+        "input": 817,
+        "output": 50
+      },
+      "attempt": 1,
+      "outcome": "accepted",
+      "output_errors": []
+    }
+  ]
+}

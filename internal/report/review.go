@@ -21,12 +21,25 @@ const LimReviewLineage = "review_lineage_mismatch"
 
 const ContractReviewSince = 12
 const WorkflowReviewSince = 14
+const WorkflowReadingSince = 15
 
 type (
-	ReviewDecoder         struct{}
-	ContractReviewDecoder struct{}
-	WorkflowReviewDecoder struct{}
+	ReviewDecoder          struct{}
+	ContractReviewDecoder  struct{}
+	WorkflowReviewDecoder  struct{}
+	WorkflowReadingDecoder struct{}
 )
+
+func (WorkflowReadingDecoder) Key() DecoderKey {
+	return DecoderKey{MediaType: record.MediaType, SchemaVersion: record.SchemaVersionWorkflowReading}
+}
+
+func (WorkflowReadingDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Contribution, error) {
+	if ctx.Task.Key != "review.investigate" || art.Role != "other" {
+		return Contribution{}, invalidf("workflow reading record attached to unexpected task or role")
+	}
+	return decodeWholeReview(ctx, body, record.StageInvestigate)
+}
 
 func (WorkflowReviewDecoder) Key() DecoderKey {
 	return DecoderKey{MediaType: record.MediaType, SchemaVersion: record.SchemaVersionWorkflow}
@@ -118,6 +131,12 @@ func reviewLineage(rec *record.Record, states map[string]*taskState, obs map[str
 	for _, o := range rec.Observations {
 		x, ok := obs[o.ID]
 		if !ok || x.TaskKey != o.TaskKey || x.RuleID != o.RuleID || (o.Path != "" && (x.Location == nil || x.Location.Path != o.Path || x.Location.StartLine != o.StartLine)) {
+			return false
+		}
+	}
+	if rec.WorkflowReading != nil {
+		st := states["review.documents"]
+		if !reviewAccepted(st) || !rec.WorkflowReadingMatches(*st.reviewResult.Record) {
 			return false
 		}
 	}

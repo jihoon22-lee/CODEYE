@@ -29,6 +29,7 @@ type workflowRouteInput struct {
 	Scope       string `json:"scope,omitempty"`
 	PatternKind string `json:"pattern_kind,omitempty"`
 	Handler     string `json:"handler,omitempty"`
+	SameHandler string `json:"same_handler_as,omitempty"`
 }
 
 type workflowChoice struct {
@@ -54,18 +55,26 @@ type workflowLink struct {
 }
 
 type workflowEvidenceInput struct {
-	Method          string `json:"method"`
-	Path            string `json:"path"`
-	PatternKind     string `json:"pattern_kind,omitempty"`
-	ContractIndices []int  `json:"contract_indices"`
-	Registration    string `json:"registration_evidence_id,omitempty"`
-	Handler         string `json:"handler_evidence_id,omitempty"`
-	DecisionCall    string `json:"decision_call_evidence_id,omitempty"`
-	Decision        string `json:"decision_evidence_id,omitempty"`
-	OutcomeCall     string `json:"outcome_call_evidence_id,omitempty"`
-	Outcome         string `json:"outcome_evidence_id,omitempty"`
-	OutcomeBasis    string `json:"outcome_basis,omitempty"`
-	Test            string `json:"test_evidence_id,omitempty"`
+	Method          string                        `json:"method"`
+	Path            string                        `json:"path"`
+	PatternKind     string                        `json:"pattern_kind,omitempty"`
+	ContractIndices []int                         `json:"contract_indices"`
+	Registration    string                        `json:"registration_evidence_id,omitempty"`
+	Handler         string                        `json:"handler_evidence_id,omitempty"`
+	DecisionCall    string                        `json:"decision_call_evidence_id,omitempty"`
+	Decision        string                        `json:"decision_evidence_id,omitempty"`
+	OutcomeCall     string                        `json:"outcome_call_evidence_id,omitempty"`
+	Outcome         string                        `json:"outcome_evidence_id,omitempty"`
+	OutcomeBasis    string                        `json:"outcome_basis,omitempty"`
+	Test            string                        `json:"test_evidence_id,omitempty"`
+	RelatedMutation *workflowRelatedMutationInput `json:"related_mutation,omitempty"`
+}
+
+type workflowRelatedMutationInput struct {
+	Method       string `json:"method"`
+	Path         string `json:"path"`
+	Registration string `json:"registration_evidence_id,omitempty"`
+	Handler      string `json:"handler_evidence_id,omitempty"`
 }
 
 func workflowRouteScope(r workflowRoute) string {
@@ -85,13 +94,28 @@ func (s *roleStage) workflowRouteDigest(r workflowRoute) string {
 		s.j.RunID, s.j.AttemptID, s.j.Snapshot.Digest, r.Method, r.Path, r.PatternKind, r.Registration.ID, r.Handler.ID, r.DecisionCall.ID, r.Decision.ID))
 }
 
-// Round-robin route families so a long set of registrations for the same
-// resource does not crowd out other parts of the service.
+type workflowHandlerKey struct {
+	method, registration, handler, contracts string
+	offset                                   int
+}
+
+func (r workflowRoute) handlerKey() workflowHandlerKey {
+	// An unspecified method may share paths with method-specific behavior.
+	if r.Method == "" || r.handlerOffset == 0 {
+		return workflowHandlerKey{}
+	}
+	return workflowHandlerKey{method: r.Method, registration: r.Registration.Path, handler: r.Handler.Path, offset: r.handlerOffset}
+}
+
+// Round-robin route families so registrations for the same resource do not
+// crowd out other parts of the service. Retain alternate patterns after one
+// registration per handler and method.
 func diverseWorkflowRoutes(routes []workflowRoute) []workflowRoute {
 	type family struct{ dir, resource string }
 	groups := map[family][]workflowRoute{}
 	var order []family
-	for _, route := range routes {
+	distinct, alternatives := partitionWorkflowRoutes(routes, workflowRoute.handlerKey)
+	for _, route := range distinct {
 		literals := make([]string, 0, 2)
 		for _, part := range strings.Split(route.Path, "/") {
 			if part != "" && !strings.ContainsAny(part, "{}:*") {
@@ -108,14 +132,30 @@ func diverseWorkflowRoutes(routes []workflowRoute) []workflowRoute {
 		groups[key] = append(groups[key], route)
 	}
 	out := make([]workflowRoute, 0, len(routes))
-	for i := 0; len(out) < len(routes); i++ {
+	for i := 0; len(out) < len(distinct); i++ {
 		for _, key := range order {
 			if i < len(groups[key]) {
 				out = append(out, groups[key][i])
 			}
 		}
 	}
-	return out
+	return append(out, alternatives...)
+}
+
+func partitionWorkflowRoutes[T any](routes []T, keyOf func(T) workflowHandlerKey) (distinct, alternatives []T) {
+	seen := map[workflowHandlerKey]bool{}
+	for _, row := range routes {
+		key := keyOf(row)
+		if key != (workflowHandlerKey{}) {
+			if seen[key] {
+				alternatives = append(alternatives, row)
+				continue
+			}
+			seen[key] = true
+		}
+		distinct = append(distinct, row)
+	}
+	return distinct, alternatives
 }
 
 func (s *roleStage) workflowDocumentInput(in docsInput, routes []workflowRoute, instructions string) (docsInput, []workflowRoute) {
@@ -125,7 +165,7 @@ func (s *roleStage) workflowDocumentInput(in docsInput, routes []workflowRoute, 
 	countCues := func(list []workflowRouteInput) int {
 		n := 0
 		for _, r := range list {
-			if r.Handler != "" {
+			if r.Handler != "" || r.SameHandler != "" {
 				n++
 			}
 		}
@@ -197,6 +237,22 @@ func addWorkflowHandlerCues(input []workflowRouteInput, routes []workflowRoute, 
 	counts := map[pattern]int{}
 	for _, route := range routes {
 		counts[pattern{route.Method, route.Path}]++
+	}
+	first := map[workflowHandlerKey]string{}
+	for i, route := range routes {
+		key := route.handlerKey()
+		if key == (workflowHandlerKey{}) {
+			continue
+		}
+		if earlier := first[key]; earlier != "" {
+			cost := len(`,"same_handler_as":`) + record.JSONLen(earlier)
+			if cost <= remaining {
+				input[i].SameHandler = earlier
+				remaining -= cost
+			}
+		} else {
+			first[key] = input[i].ID
+		}
 	}
 	for _, preferred := range []bool{true, false} {
 		for i, route := range routes {
@@ -439,15 +495,17 @@ func (s *roleStage) selectedWorkflowRoutes(doc record.Record) ([]workflowLink, b
 	for _, link := range out {
 		selected = append(selected, link.route)
 	}
-	tests, err := s.workflowRouteTests(selected, routes)
+	tests, err := s.workflowTestWitnesses(selected, routes)
 	if err != nil {
 		return out, missing, err
 	}
 	for i, test := range tests {
-		if test.ID != "" && !slices.ContainsFunc(out[i].indices, func(index int) bool {
-			return !record.ScopeUnder(test.Path, doc.Contracts[index-1].AppliesTo)
+		if test.excerpt.ID != "" && !slices.ContainsFunc(out[i].indices, func(index int) bool {
+			scope := doc.Contracts[index-1].AppliesTo
+			return !record.ScopeUnder(test.excerpt.Path, scope) || !test.related.inScope(scope)
 		}) {
-			out[i].route.Test = test
+			out[i].route.Test = test.excerpt
+			out[i].route.relatedTest = test.related
 		}
 		for _, index := range out[i].indices {
 			out[i].route.scopeOutcome(doc.Contracts[index-1].AppliesTo)
@@ -456,26 +514,34 @@ func (s *roleStage) selectedWorkflowRoutes(doc record.Record) ([]workflowLink, b
 	return out, missing, nil
 }
 
+func submittedWorkflowID(x record.Excerpt, sent []record.Excerpt) string {
+	if x.ID == "" {
+		return ""
+	}
+	for _, e := range sent {
+		if e.Path == x.Path && e.SHA256 == x.SHA256 && e.Kind == x.Kind && e.Start <= x.Start && x.End <= e.End {
+			return e.ID
+		}
+	}
+	return ""
+}
+
 func workflowEvidence(links []workflowLink, sent []record.Excerpt) []workflowEvidenceInput {
 	var out []workflowEvidenceInput
 	for _, link := range links {
 		r := link.route
 		id := func(x record.Excerpt) string {
-			if x.ID == "" {
-				return ""
-			}
-			for _, e := range sent {
-				if e.Path == x.Path && e.SHA256 == x.SHA256 && e.Kind == x.Kind && e.Start <= x.Start && x.End <= e.End {
-					return e.ID
-				}
-			}
-			return ""
+			return submittedWorkflowID(x, sent)
 		}
 		row := workflowEvidenceInput{Method: r.Method, Path: r.Path, PatternKind: r.PatternKind, ContractIndices: link.indices,
 			Registration: id(r.Registration), Handler: id(r.Handler), DecisionCall: id(r.DecisionCall), Decision: id(r.Decision), Test: id(r.Test)}
 		if outcome, call := id(r.Outcome), id(r.OutcomeCall); outcome != "" && row.DecisionCall != "" &&
 			(r.OutcomeDepth == 0 || call != "") && (r.OutcomeDepth < 2 || row.Decision != "") {
 			row.Outcome, row.OutcomeCall, row.OutcomeBasis = outcome, call, "conditional_source_unexecuted"
+		}
+		if related := r.relatedTest; row.Test != "" && row.Handler != "" && related.method != "" {
+			row.RelatedMutation = &workflowRelatedMutationInput{Method: related.method, Path: related.pattern,
+				Registration: id(related.registration), Handler: id(related.handler)}
 		}
 		if row.Handler != "" || row.Decision != "" || row.DecisionCall != "" || row.Outcome != "" {
 			out = append(out, row)
@@ -484,13 +550,31 @@ func workflowEvidence(links []workflowLink, sent []record.Excerpt) []workflowEvi
 	return out
 }
 
+func (s *roleStage) submittedWorkflowReading(links []workflowLink, sent []record.Excerpt) *record.WorkflowReading {
+	for _, link := range links {
+		r := link.route
+		if r.relatedTest.method == "" || len(link.indices) == 0 || submittedWorkflowID(r.Registration, sent) == "" {
+			continue
+		}
+		read := submittedWorkflowID(r.Handler, sent)
+		change := submittedWorkflowID(r.relatedTest.handler, sent)
+		test := submittedWorkflowID(r.Test, sent)
+		if read != "" && change != "" && read != change && test != "" {
+			return &record.WorkflowReading{ContractIndex: link.indices[0], RouteDigest: s.workflowRouteDigest(r),
+				ReadEvidenceID: read, ChangeEvidenceID: change, TestEvidenceID: test}
+		}
+	}
+	return nil
+}
+
 // Only offer locations with unseen source in the same contract scope.
 // The overview still decides whether a fresh read can resolve its question.
 func (s *roleStage) workflowNavigation(docs record.Record, links []workflowLink, sent []record.Excerpt) []contractNavigationCandidate {
 	var out []contractNavigationCandidate
 	for _, link := range links {
 		label := strings.TrimSpace(link.route.Method + " " + link.route.Path)
-		for _, e := range []record.Excerpt{link.route.Outcome, link.route.OutcomeCall, link.route.Decision, link.route.DecisionCall} {
+		for _, e := range []record.Excerpt{link.route.Outcome, link.route.OutcomeCall, link.route.Decision, link.route.DecisionCall,
+			link.route.relatedTest.handler, link.route.relatedTest.registration} {
 			if e.ID == "" || !record.HasNewContractEvidence(e, sent) {
 				continue
 			}
@@ -517,15 +601,19 @@ func (s *roleStage) workflowNavigation(docs record.Record, links []workflowLink,
 			if len(indices) == 0 {
 				continue
 			}
+			routeLabel := label
+			if e.ID == link.route.relatedTest.handler.ID || e.ID == link.route.relatedTest.registration.ID {
+				routeLabel = strings.TrimSpace(link.route.relatedTest.method + " " + link.route.relatedTest.pattern)
+			}
 			if i := slices.IndexFunc(out, func(c contractNavigationCandidate) bool { return c.location.ID == location.ID }); i >= 0 {
 				union := slices.Concat(out[i].indices, indices)
 				slices.Sort(union)
 				out[i].indices = slices.Compact(union)
-				if out[i].workflowRoute != label {
+				if out[i].workflowRoute != routeLabel {
 					out[i].workflowRoute = ""
 				}
 			} else {
-				out = append(out, contractNavigationCandidate{location: location, indices: indices, workflowRoute: label, symbolHint: symbolHint})
+				out = append(out, contractNavigationCandidate{location: location, indices: indices, workflowRoute: routeLabel, symbolHint: symbolHint})
 			}
 		}
 	}
@@ -535,7 +623,7 @@ func (s *roleStage) workflowNavigation(docs record.Record, links []workflowLink,
 func workflowOverviewWindows(links []workflowLink) []record.Excerpt {
 	var out []record.Excerpt
 	add := func(x record.Excerpt) bool {
-		if x.ID == "" || len(out) == maxWorkflowOverviewWindows {
+		if x.ID == "" {
 			return false
 		}
 		lines, bytes := x.End-x.Start+1, record.JSONLen(x.Text)
@@ -552,19 +640,38 @@ func workflowOverviewWindows(links []workflowLink) []record.Excerpt {
 			lines += e.End - e.Start + 1
 			bytes += record.JSONLen(e.Text)
 		}
-		if lines <= roleMaxCodeLines && bytes <= roleMaxCodeFile {
+		if len(out) < maxWorkflowOverviewWindows && lines <= roleMaxCodeLines && bytes <= roleMaxCodeFile {
 			out = append(out, x)
 			return true
 		}
 		return false
 	}
-	for _, link := range links {
+	distinct, alternatives := partitionWorkflowRoutes(links, func(link workflowLink) workflowHandlerKey {
+		key := link.route.handlerKey()
+		if key.offset != 0 {
+			key.contracts = fmt.Sprint(link.indices)
+		}
+		return key
+	})
+	// Keep one complete read and corroborating mutation together before
+	// filling the remaining slots with independent handler previews.
+	for _, link := range distinct {
+		r := link.route
+		if r.relatedTest.method == "" {
+			continue
+		}
+		if add(r.Handler) && add(r.Registration) && add(r.Test) && add(r.relatedTest.handler) {
+			break
+		}
+		out = out[:0]
+	}
+	for _, link := range distinct {
 		add(link.route.Handler)
 	}
-	for _, link := range links {
+	for _, link := range distinct {
 		add(link.route.Registration)
 	}
-	for _, link := range links {
+	for _, link := range distinct {
 		windows := link.route.outcomeWindows()
 		if len(windows) == 0 {
 			continue
@@ -577,8 +684,21 @@ func workflowOverviewWindows(links []workflowLink) []record.Excerpt {
 			}
 		}
 	}
+	for _, link := range distinct {
+		if r := link.route; r.relatedTest.method != "" && add(r.Test) {
+			add(r.relatedTest.handler)
+		}
+	}
 	for _, link := range links {
 		add(link.route.Test)
+	}
+	for _, link := range distinct {
+		if r := link.route; r.relatedTest.method != "" && add(r.Test) {
+			add(r.relatedTest.registration)
+		}
+	}
+	for _, link := range alternatives {
+		add(link.route.Registration)
 	}
 	return out
 }
@@ -597,8 +717,9 @@ func workflowFollowupLinks(selected []workflowLink, prior record.ContractCompari
 			if !record.ScopeUnder(link.route.Decision.Path, prior.AppliesTo) {
 				link.route.Decision = record.Excerpt{}
 			}
-			if !record.ScopeUnder(link.route.Test.Path, prior.AppliesTo) {
+			if !record.ScopeUnder(link.route.Test.Path, prior.AppliesTo) || !link.route.relatedTest.inScope(prior.AppliesTo) {
 				link.route.Test = record.Excerpt{}
+				link.route.relatedTest = httpRelatedTest{}
 			}
 			out = append(out, link)
 		}

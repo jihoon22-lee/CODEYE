@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import type { AnalysisReport } from './analysisReport';
+import { sourceEvidenceURL, type AnalysisReport } from './analysisReport';
+import type { Citation } from './parseReportSections';
 import { reportKo as t } from './locales/report-ko';
 import { formatInstant, runStatusLabel } from './format';
 import '../../internal/report/reportui/font.css';
@@ -13,8 +14,8 @@ export function ReportIcon({ name }: { name: IconName }) {
   return <span className={`icon report-icon report-icon-${name}`} aria-hidden="true" />;
 }
 
-export function ReportLayout({ report, rail, children, className = '' }: {
-  report: AnalysisReport; rail?: ReactNode; children: ReactNode; className?: string;
+export function ReportLayout({ report, rail, children, className = '', purpose }: {
+  report: AnalysisReport; rail?: ReactNode; children: ReactNode; className?: string; purpose?: Citation;
 }) {
   const name = report.project?.name;
   const start = report.project?.start;
@@ -25,6 +26,8 @@ export function ReportLayout({ report, rail, children, className = '' }: {
     report.published && Number.isFinite(Date.parse(report.published)) ? {label: t.published, time: report.published} : null;
   const duration = Number.isFinite(startedAt) && Number.isFinite(finishedAt) && finishedAt >= startedAt
     ? Math.round((finishedAt - startedAt) / 1000) : null;
+  const purposeLink = purpose && sourceEvidenceURL(report.sourceBase, purpose.path, purpose.line, purpose.end);
+  const purposeLocation = purpose && <code>{purpose.path}:{purpose.line}</code>;
   return (
     <article className={`report-document review-theme web-report ${className}`} aria-label={t.title}>
       <div className="report-layout">
@@ -36,6 +39,10 @@ export function ReportLayout({ report, rail, children, className = '' }: {
           <header className="report-hero">
             <p className="report-kicker">{name ? t.title : t.revision(report.revision)}</p>
             <h4 className="report-name">{name || t.title}</h4>
+            {purpose?.excerpt && <p className="report-purpose">
+              {purpose.excerpt.text.trim()}{' '}
+              {purposeLink ? <a href={purposeLink} target="_blank" rel="noopener noreferrer">{purposeLocation}</a> : purposeLocation}
+            </p>}
             {report.project?.source && <div className="report-hero-source"><span>{t.target}</span><code>{report.project.source}</code></div>}
             <div className="report-verdict">
               <span className="badge"><ReportIcon name={report.status === 'completed' ? 'check' : 'clock'} />

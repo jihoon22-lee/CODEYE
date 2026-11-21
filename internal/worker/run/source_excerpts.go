@@ -29,7 +29,7 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 		}
 	}
 	lookup := func(p string) (string, bool) { e, ok := files[p]; return e.SHA256, ok }
-	var model, diagnostics [][]sourceexcerpt.Key
+	var model, workflow, diagnostics [][]sourceexcerpt.Key
 	modelEnds := map[sourceexcerpt.Key]int{}
 	withheld := map[string]bool{}
 	var host *taskRun
@@ -68,13 +68,22 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 				if len(keys) > 0 {
 					model = append(model, keys)
 				}
+				if task.spec.Key == "review.investigate" && rec.WorkflowReading != nil {
+					var related []sourceexcerpt.Key
+					for _, e := range rec.WorkflowReadingEvidence() {
+						key := sourceexcerpt.Key{Path: e.Path, SHA256: e.SHA256, Line: e.Start}
+						related = append(related, key)
+						modelEnds[key] = max(modelEnds[key], e.End)
+					}
+					workflow = append(workflow, related)
+				}
 			}
 		}
 		if host == nil && task.status.Terminal() && len(task.manifest.Artifacts) > 0 {
 			host = task
 		}
 	}
-	if host == nil || len(model)+len(diagnostics) == 0 {
+	if host == nil || len(model)+len(workflow)+len(diagnostics) == 0 {
 		return
 	}
 	root, err := os.OpenRoot(a.snapshot.SnapshotDir)
@@ -137,6 +146,7 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 		}
 	}
 	add(model, sourceexcerpt.MaxItems/2, true)
+	add(workflow, min(sourceexcerpt.MaxItems, len(doc.Items)+3), true)
 	add(diagnostics, sourceexcerpt.MaxItems, false)
 	add(model, sourceexcerpt.MaxItems, true)
 	if len(doc.Items) == 0 || a.ctx.Err() != nil {

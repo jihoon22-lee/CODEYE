@@ -100,13 +100,16 @@ func (c *documentCoverage) next(s *roleStage, budget int) (record.Excerpt, bool)
 }
 
 func uncoveredDocumentRanges(lines []string, ext string, covered []documentRange) []documentRange {
-	headings := documentationHeadings(lines, ext)
+	return documentGaps(len(lines), documentationHeadings(lines, ext), covered)
+}
+
+func documentGaps(lineCount int, headings []documentHeading, covered []documentRange) []documentRange {
 	skipThrough := 0
 	for i, heading := range headings {
 		if !heading.skip || heading.line < skipThrough {
 			continue
 		}
-		skipThrough = len(lines)
+		skipThrough = lineCount
 		for _, next := range headings[i+1:] {
 			if next.level <= heading.level {
 				skipThrough = next.line
@@ -124,8 +127,8 @@ func uncoveredDocumentRanges(lines []string, ext string, covered []documentRange
 		}
 		start = max(start, r.end)
 	}
-	if start < len(lines) {
-		gaps = append(gaps, documentRange{start, len(lines)})
+	if start < lineCount {
+		gaps = append(gaps, documentRange{start, lineCount})
 	}
 	return gaps
 }
@@ -192,6 +195,200 @@ func documentationRanges(lines []string, ext string, start, end, slots int) []do
 // behavior and examples under user-facing sections.
 func documentationContinuation(lines []string, prefixEnd int, ext string, budget int) (start, end int) {
 	return bestDocumentationSection(lines, prefixEnd, ext, budget, false)
+}
+
+// representativeDocumentSection uses exact source lines from a project
+// README. It can start at a heading or a paragraph within an uncovered
+// section. Commands in code fences do not count as product behavior.
+func representativeDocumentSection(lines []string, ext string, budget int, covered []documentRange) (start, end int) {
+	headings := productDocumentHeadings(lines, ext)
+	byLine := make(map[int]documentHeading, len(headings))
+	weights := make([]int, len(lines))
+	prose := make([]bool, len(lines))
+	for _, heading := range headings {
+		byLine[heading.line] = heading
+	}
+	var fence string
+	for i, raw := range lines {
+		line := strings.TrimSpace(raw)
+		switch {
+		case fence != "":
+			if strings.HasPrefix(line, fence) {
+				fence = ""
+			}
+		case strings.HasPrefix(line, "```") || strings.HasPrefix(line, "~~~"):
+			fence = line[:3]
+		case substantiveDocumentLine(line) && !strings.HasPrefix(line, "|"):
+			prose[i] = true
+			weights[i] = documentBehaviorWeight(line)
+		}
+	}
+	start, best := -1, 0
+	for _, gap := range documentGaps(len(lines), headings, slices.Clone(covered)) {
+		for at := gap.start; at < gap.end; at++ {
+			heading, titled := byLine[at]
+			paragraph := prose[at] && (at == gap.start || strings.TrimSpace(lines[at-1]) == "" || byLine[at-1].level > 0)
+			if !titled && !paragraph {
+				continue
+			}
+			score, used, through := 0, 0, at
+			for line := at; line < min(at+roleMaxDocLines, gap.end); line++ {
+				if next, ok := byLine[line]; line != at && ok && (next.level <= heading.level || !titled) {
+					break
+				}
+				used += record.JSONLen(lines[line])
+				if used > budget {
+					break
+				}
+				score += weights[line]
+				through = line + 1
+			}
+			// A heading whose text lies beyond the limit adds no evidence.
+			for through > at+1 {
+				if _, heading := byLine[through-1]; !heading && strings.TrimSpace(lines[through-1]) != "" {
+					break
+				}
+				through--
+			}
+			if score >= 3 && score+heading.weight > best {
+				start, end, best = at, through, score+heading.weight
+			}
+		}
+	}
+	return start, end
+}
+
+func productDocumentHeadings(lines []string, ext string) []documentHeading {
+	headings := documentationHeadings(lines, ext)
+	for i, heading := range headings {
+		title := strings.ToLower(strings.Trim(lines[heading.line], "# \t\r"))
+		switch title {
+		case "building", "build instructions", "development environment", "tech stack", "technology stack", "개발 환경", "기술 스택", "문서":
+			headings[i].skip = true
+		}
+	}
+	return headings
+}
+
+const (
+	compactDocSections = 2
+	compactDocLines    = 16
+	compactDocBytes    = 800
+)
+
+// compactDocumentCoverage takes short, independent sections from the least
+// represented portions of a guide. It only spends slots still available
+// before the unlinked test material.
+func (s *roleStage) compactDocumentCoverage(doc userDocument, out []record.Excerpt, remain int) []record.Excerpt {
+	headings := productDocumentHeadings(doc.lines, path.Ext(doc.entry.Path))
+	if len(headings) < 6 {
+		return out
+	}
+	var covered []documentRange
+	for _, x := range out {
+		if x.Path == doc.entry.Path && x.DirectivePath == "" {
+			covered = append(covered, documentRange{x.Start - 1, x.End})
+		}
+	}
+	for range compactDocSections {
+		if len(out) >= roleMaxDocs || remain < 128 {
+			break
+		}
+		budget := min(compactDocBytes, remain)
+		best := documentRange{}
+		distance := -1
+		for _, gap := range documentGaps(len(doc.lines), headings, slices.Clone(covered)) {
+			for i, h := range headings {
+				if h.line < gap.start || h.line >= gap.end {
+					continue
+				}
+				sectionEnd := len(doc.lines)
+				if i+1 < len(headings) {
+					sectionEnd = headings[i+1].line
+				}
+				if slices.ContainsFunc(covered, func(old documentRange) bool {
+					return old.start < sectionEnd && h.line < old.end
+				}) {
+					continue
+				}
+				end := compactDocumentEnd(doc.lines, h.line, min(gap.end, sectionEnd), budget)
+				if end <= h.line+1 {
+					continue
+				}
+				separation := len(doc.lines)
+				for _, old := range covered {
+					separation = min(separation, max(h.line-old.end, old.start-end))
+				}
+				if separation > distance {
+					best, distance = documentRange{h.line, end}, separation
+				}
+			}
+		}
+		if distance < 0 {
+			break
+		}
+		window, ok := s.boundedExcerpt(doc.entry, "document", "", best.start+1, doc.lines[best.start:best.end], budget)
+		if !ok || window.End != best.end {
+			break
+		}
+		out = append(out, window)
+		covered = append(covered, best)
+		remain -= record.JSONLen(window.Text)
+	}
+	return out
+}
+
+// compactDocumentEnd retains complete paragraphs and fenced examples as far
+// as they fit. A heading, half of a paragraph, or open code fence is not a
+// representative section by itself.
+func compactDocumentEnd(lines []string, start, end, budget int) int {
+	used, bodyEnd := record.JSONLen(lines[start]), start
+	var fence string
+	hasBody := false
+	listItems := 0
+	for i := start + 1; i < min(end, start+compactDocLines); i++ {
+		raw := strings.TrimSpace(lines[i])
+		used += record.JSONLen(lines[i])
+		if used > budget {
+			break
+		}
+		switch {
+		case fence != "":
+			if strings.HasPrefix(raw, fence) {
+				fence, bodyEnd, hasBody = "", i+1, true
+			}
+		case strings.HasPrefix(raw, "```") || strings.HasPrefix(raw, "~~~"):
+			fence = raw[:3]
+		case raw == "" && hasBody:
+			bodyEnd = i
+		default:
+			if substantiveDocumentLine(raw) {
+				if strings.HasPrefix(raw, "- ") || strings.HasPrefix(raw, "* ") {
+					listItems++
+					hasBody = hasBody || listItems > 1 || strings.HasSuffix(raw, ".")
+				} else {
+					hasBody = true
+				}
+			}
+			if hasBody && i+1 == end {
+				bodyEnd = end
+			}
+		}
+	}
+	return bodyEnd
+}
+
+func documentBehaviorWeight(line string) int {
+	score := documentationLineWeight(line)
+	for _, word := range witnessTerms(line) {
+		switch word {
+		case "supports", "supported", "unsupported", "cannot", "unless", "only", "must", "never", "except",
+			"calculates", "calculated", "counts", "rejects", "retains", "preserves", "excludes", "limits",
+			"경우", "제외", "제한", "허용", "보장", "합산", "계산", "유지", "아니다", "않는다":
+			return score + 3
+		}
+	}
+	return score
 }
 
 func bestDocumentationSection(lines []string, prefixEnd int, ext string, budget int, workflowOnly bool) (start, end int) {
@@ -334,6 +531,8 @@ func documentationHeadingWeight(title string) (weight int, skip bool) {
 			"credits", "acknowledgements", "badge", "badges", "ci", "설치", "목차", "후원", "라이선스", "변경이력":
 			return 0, true
 		case "api", "reference", "인터페이스":
+			weight = max(weight, 10)
+		case "caveats", "limitations", "constraints", "compatibility", "restrictions", "제약", "제한", "지원":
 			weight = max(weight, 10)
 		case "usage", "options", "arguments", "parameters", "commands", "examples", "example", "behavior", "behaviour",
 			"configuration", "errors", "returns", "사용법", "옵션", "명령", "예제", "동작", "설정", "오류", "반환":

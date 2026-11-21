@@ -25,6 +25,7 @@ type secView struct {
 	Appendix       []secPart
 	OverviewDetail []secPart
 	Decision       projectDecision
+	Behaviors      projectBehaviors
 	// Summary selects the summary layout (render_summary.go): the appendix
 	// is Appendix instead of the full record tables.
 	Summary bool
@@ -48,6 +49,7 @@ type secPart struct {
 	Counts   []countRow
 	Table    *secTable
 	List     []secItem
+	Workflow *workflowReadingView
 	Findings []Finding
 	// Cards are the short finding cards of the summary layout.
 	Cards []secCard
@@ -731,7 +733,7 @@ func (v secView) observationsPart(heading string, ids []string, obs map[string]O
 
 func renderMarkdownSections(r Report, digest string, l Locale) []byte {
 	v := withInsights(newSecView(r, digest, l))
-	decision := v.projectDecision()
+	v.buildProjectOpening()
 	var b strings.Builder
 	p := func(s ...string) {
 		for _, x := range s {
@@ -745,10 +747,11 @@ func renderMarkdownSections(r Report, digest string, l Locale) []byte {
 		p("## ", mdText(s.Title))
 		p()
 		if s.ID == "overview" {
-			mdDecision(p, decision, l)
+			mdBehaviors(p, v.Behaviors, l)
+			mdDecision(p, v.Decision, l)
 		}
 		for _, part := range s.Parts {
-			mdComparisonAnchor(p, decision, part.Anchor)
+			mdComparisonAnchor(p, v.Decision, v.Behaviors, part.Anchor)
 			mdPart(p, part, l)
 		}
 	}
@@ -815,6 +818,7 @@ func mdPart(p func(...string), part secPart, l Locale) {
 		}
 		p()
 	}
+	mdWorkflowCitations(p, part.Workflow)
 	for _, f := range part.Findings {
 		mdFinding(p, f, "#### ", true)
 	}
@@ -888,6 +892,8 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <main class="report-main">
 <header class="report-hero">
 {{if and .R.Project .R.Project.Name}}<h1 class="report-name">{{.R.Project.Name}}</h1>{{else}}<h1 class="report-name">{{.L.Label "title"}}</h1>{{end}}
+{{if .Behaviors.Description}}<p class="report-purpose">{{.Behaviors.Description}} {{with .Behaviors.Source}}
+{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer"><code>{{.Location}}</code></a>{{else}}<code>{{.Location}}</code>{{end}}{{end}}</p>{{end}}
 {{with .HeaderSource}}<p class="export-target"><strong>{{$.L.Label "report.target"}}</strong><code>{{.}}</code></p>{{end}}
 <div class="report-verdict">
 <span class="badge">{{if .HasStatusBanner}}{{reportIcon "clock"}}{{else}}{{reportIcon "circle-check"}}{{end}} {{.ReportStatus}}</span>
@@ -904,7 +910,14 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <h2>{{.Title}}</h2>
 {{if eq .ID "overview"}}
 {{if $.Summary}}{{range .Parts}}{{template "part" (pair $l .)}}{{end}}{{end}}
+{{if $.Behaviors.Rows}}
+{{if $.PriorityDecision}}{{template "decision" $}}{{end}}
+{{template "behaviors" $}}
+{{if not $.PriorityDecision}}<details class="card report-disclosure">
+<summary>{{reportIcon "chevron-down"}} {{$l.Label "decision.document_assessment"}}</summary>
 {{template "decision" $}}
+</details>{{end}}
+{{else}}{{template "decision" $}}{{end}}
 <details class="card report-disclosure">
 <summary>{{reportIcon "chevron-down"}} {{$l.Label "opening.coverage_details"}}</summary>
 {{if $.Summary}}{{range $.OverviewDetail}}{{template "part" (pair $l .)}}{{end}}{{else}}{{range .Parts}}{{template "part" (pair $l .)}}{{end}}{{end}}
@@ -1004,6 +1017,36 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 </div>
 </div>
 {{end}}{{end}}
+{{define "behaviors"}}{{$l := .L}}{{with .Behaviors}}
+<section class="card report-card report-behaviors" aria-labelledby="report-behaviors">
+<div class="card-body">
+<h3 id="report-behaviors">{{$l.Label "behavior.heading"}}</h3>
+{{range $i, $row := .Rows}}
+{{if eq $i 0}}<article class="report-behavior">
+<h4>{{template "behavior_claim" .}}</h4>
+{{else}}<details class="report-behavior"><summary>{{template "behavior_claim" .}}</summary>{{end}}
+<p class="report-behavior-status">{{$l.Label "behavior.documented"}} · {{$l.Label (printf "decision.comparison.%s" .Status)}}</p>
+{{with .Preview}}<div class="report-behavior-preview">
+<p>{{$l.Label "behavior.preview_source"}} · {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer"><code>{{.Location}}</code></a>{{else}}<code>{{.Location}}</code>{{end}}</p>
+<pre tabindex="0"><code>{{.Text}}</code></pre></div>{{end}}
+{{if .Additional}}<p class="report-behavior-explanation"><strong>{{$l.Label "decision.additional_observation"}}</strong> {{range inlineCodeParts .Additional}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{end}}</p>{{end}}
+{{if .Explanation}}<p class="report-behavior-explanation"><strong>{{$l.Label "behavior.recorded_comparison"}}</strong> {{range inlineCodeParts .Explanation}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{end}}</p>{{end}}
+<div class="report-behavior-links">
+{{template "citation" .DocumentSource}}
+{{if .CodeSource.Location}}{{template "citation" .CodeSource}}{{end}}
+<a class="btn btn-sm btn-ghost-primary" href="#{{.Anchor}}">{{$l.Label "behavior.open_comparison"}}{{reportIcon "chevron-right"}}</a>
+</div>
+{{template "workflow_reading" .Workflow}}
+{{if eq $i 0}}</article>{{else}}</details>{{end}}
+{{end}}
+</div>
+</section>
+{{end}}{{end}}
+{{define "behavior_claim"}}{{range inlineCodeParts .Claim}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{end}}{{end}}
+{{define "workflow_reading"}}{{with .}}<details class="report-workflow-reading">
+<summary>{{.Heading}}</summary><p>{{.Context}}</p>
+<ul>{{range .Items}}<li>{{template "item" .}}</li>{{end}}</ul>
+</details>{{end}}{{end}}
 {{define "part"}}{{$l := .L}}{{with .P}}{{if .Cards}}<section class="report-group" data-tone="{{.Tone}}">
 <div class="report-group-title"><span class="report-group-mark">{{reportIcon (groupIcon .Tone)}}</span><h3>{{.Heading}}</h3>{{if .Model}}<p class="report-group-note" role="note">{{.Model}}</p>{{end}}</div>
 {{else if .Heading}}<h3{{if .Anchor}} id="{{.Anchor}}" tabindex="-1"{{end}}>{{.Heading}}</h3>
@@ -1016,7 +1059,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{$t := .Table}}{{range $i, $row := $t.Rows}}<tr{{if $t.ObservationIDs}} id="{{index $t.ObservationIDs $i}}" data-observation="{{index $t.ObservationIDs $i}}"{{end}}{{if $t.RowIDs}} id="{{index $t.RowIDs $i}}"{{end}}>{{range $row}}<td>{{if .Anchor}}<a href="#{{.Anchor}}">{{end}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{if .Anchor}}</a>{{end}}</td>{{end}}</tr>
 {{end}}</table></div>
 {{end}}{{if .List}}<ul>{{range .List}}<li>{{template "item" .}}</li>{{end}}</ul>
-{{end}}{{range .Sources}}{{template "citation" .}}{{end}}{{range .Findings}}<section class="card export-full-finding" id="{{.ID}}" data-finding="{{.ID}}">
+{{end}}{{template "workflow_reading" .Workflow}}{{range .Sources}}{{template "citation" .}}{{end}}{{range .Findings}}<section class="card export-full-finding" id="{{.ID}}" data-finding="{{.ID}}">
 <h4>{{.Title}}</h4>
 <ul>
 <li>id: <code>{{.ID}}</code></li>
@@ -1065,7 +1108,7 @@ type partArgs struct {
 func renderHTMLSections(r Report, digest string, l Locale) ([]byte, error) {
 	var buf bytes.Buffer
 	v := withInsights(newSecView(r, digest, l))
-	v.Decision = v.projectDecision()
+	v.buildProjectOpening()
 	if err := htmlSectionsTemplate.Execute(&buf, v); err != nil {
 		return nil, err
 	}

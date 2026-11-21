@@ -31,13 +31,36 @@ type httpTestExchange struct {
 	end, outcomes int
 	server        *ast.Object
 	router        string
+	success       *ast.IfStmt
+	state         httpTestState
+}
+
+type httpTestState struct {
+	start, end                      int
+	method, key, keyType, errorType string
+	constructor                     httpRouteMethod
+	argument                        int
+}
+
+type workflowTestWitness struct {
+	excerpt record.Excerpt
+	related httpRelatedTest
 }
 
 // Tests are optional support for already selected routes. Only take a test
 // from its registration or handler directory, and match it against every
 // known route in that directory before selecting its source window.
 func (s *roleStage) workflowRouteTests(selected, catalog []workflowRoute) ([]record.Excerpt, error) {
-	out := make([]record.Excerpt, len(selected))
+	witnesses, err := s.workflowTestWitnesses(selected, catalog)
+	out := make([]record.Excerpt, len(witnesses))
+	for i, witness := range witnesses {
+		out[i] = witness.excerpt
+	}
+	return out, err
+}
+
+func (s *roleStage) workflowTestWitnesses(selected, catalog []workflowRoute) ([]workflowTestWitness, error) {
+	out := make([]workflowTestWitness, len(selected))
 	dirs := map[string]bool{}
 	selectedIDs := map[string]int{}
 	for i, r := range selected {
@@ -72,9 +95,16 @@ func (s *roleStage) workflowRouteTests(selected, catalog []workflowRoute) ([]rec
 			if err == nil && !ast.IsGenerated(file) {
 				f := &httpRouteFile{contractGoFile: contractGoFile{e, positions, file, strings.Split(content, "\n")}, imports: httpRouteImports(file)}
 				if f.unconditional() {
+					for _, route := range catalog {
+						if path.Dir(route.Handler.Path) == dir && route.state.packageName == file.Name.Name {
+							f.pkg = route.state.field.owner.pkg
+							break
+						}
+					}
 					f.shadowed = testUnstableObjects(file)
 					for _, exchanges := range f.httpTestExchanges(catalog) {
 						s.httpTestWindows(f, exchanges, selectedIDs, out, scores)
+						s.httpTestStateWindows(f, exchanges, selected, catalog, out, scores)
 					}
 				}
 			}
@@ -86,22 +116,23 @@ func (s *roleStage) workflowRouteTests(selected, catalog []workflowRoute) ([]rec
 	return out, nil
 }
 
-func (s *roleStage) httpTestWindows(f *httpRouteFile, exchanges []httpTestExchange, ids map[string]int, out []record.Excerpt, scores []int) {
-	store := func(i, first, last, score int) {
-		if score <= scores[i] || last-first >= httpAssertionLines {
-			return
-		}
-		window, _ := s.boundedExcerpt(f.entry, "test", "context", first, f.lines[first-1:last], httpAssertionWindow)
-		if window.End == last && window.ID != "" {
-			out[i], scores[i] = window, score
-		}
+func (s *roleStage) storeHTTPTestWindow(f *httpRouteFile, first, last, score int, related httpRelatedTest, out *workflowTestWitness, priorScore *int) {
+	if score <= *priorScore || last-first >= httpAssertionLines {
+		return
 	}
+	window, _ := s.boundedExcerpt(f.entry, "test", "context", first, f.lines[first-1:last], httpAssertionWindow)
+	if window.End == last && window.ID != "" {
+		*out, *priorScore = workflowTestWitness{window, related}, score
+	}
+}
+
+func (s *roleStage) httpTestWindows(f *httpRouteFile, exchanges []httpTestExchange, ids map[string]int, out []workflowTestWitness, scores []int) {
 	for j, x := range exchanges {
 		if x.outcomes == 0 {
 			continue
 		}
 		if i, ok := ids[x.route]; ok {
-			store(i, x.start, x.end, x.outcomes)
+			s.storeHTTPTestWindow(f, x.start, x.end, x.outcomes, httpRelatedTest{}, &out[i], &scores[i])
 		}
 		if j == 0 || x.method != "GET" {
 			continue
@@ -114,7 +145,7 @@ func (s *roleStage) httpTestWindows(f *httpRouteFile, exchanges []httpTestExchan
 		}
 		for _, id := range []string{prev.route, x.route} {
 			if i, ok := ids[id]; ok {
-				store(i, prev.start, x.end, 8+prev.outcomes+x.outcomes)
+				s.storeHTTPTestWindow(f, prev.start, x.end, 8+prev.outcomes+x.outcomes, httpRelatedTest{}, &out[i], &scores[i])
 			}
 		}
 	}
@@ -135,7 +166,8 @@ func (f *httpRouteFile) httpTestExchanges(catalog []workflowRoute) [][]httpTestE
 			continue
 		}
 		flow := &httpTestFlow{file: f, t: params[0].Names[0].Obj, catalog: catalog,
-			requests: map[*ast.Object]httpTestRequest{}, recorders: map[*ast.Object]bool{}, served: map[*ast.Object]int{}}
+			requests: map[*ast.Object]httpTestRequest{}, recorders: map[*ast.Object]bool{}, served: map[*ast.Object]int{},
+			testStart: fn.Body.Pos()}
 		flow.walk(fn.Body)
 		out = append(out, flow.exchanges)
 	}
@@ -160,15 +192,16 @@ type httpTestFlow struct {
 	recorders map[*ast.Object]bool
 	served    map[*ast.Object]int // exchange index by recorder
 	exchanges []httpTestExchange
+	testStart token.Pos
 }
 
 func (x *httpTestFlow) walk(body *ast.BlockStmt) {
-	for _, stmt := range body.List {
+	for i, stmt := range body.List {
 		switch st := stmt.(type) {
 		case *ast.BlockStmt:
 			x.walk(st)
 		case *ast.AssignStmt:
-			if st.Tok != token.DEFINE || len(st.Lhs) != 1 || len(st.Rhs) != 1 {
+			if st.Tok != token.DEFINE || len(st.Lhs) == 0 || len(st.Rhs) != 1 {
 				continue
 			}
 			id := httpRouteIdent(st.Lhs[0])
@@ -176,11 +209,16 @@ func (x *httpTestFlow) walk(body *ast.BlockStmt) {
 			if id == nil || id.Obj == nil || call == nil || x.file.shadowed[id.Obj] {
 				continue
 			}
-			if x.file.testPackageCall(call, "net/http/httptest") == "NewRecorder" && len(call.Args) == 0 {
+			if len(st.Lhs) == 1 && x.file.testPackageCall(call, "net/http/httptest") == "NewRecorder" && len(call.Args) == 0 {
 				x.recorders[id.Obj] = true
 				continue
 			}
-			if method, target := x.file.testRequest(call); method != "" && target != "" {
+			arity := 1
+			if x.file.testPackageCall(call, "net/http") == "NewRequest" ||
+				x.file.testPackageCall(call, "net/http") == "NewRequestWithContext" {
+				arity = 2
+			}
+			if method, target := x.file.testRequest(call); len(st.Lhs) == arity && method != "" && target != "" {
 				x.requests[id.Obj] = httpTestRequest{x.file.line(st.Pos()), method, target}
 			}
 		case *ast.ExprStmt:
@@ -214,6 +252,9 @@ func (x *httpTestFlow) walk(body *ast.BlockStmt) {
 			}
 		case *ast.IfStmt:
 			x.assertion(st)
+			if i >= 2 {
+				x.stateAssertion(st, body.List[i-2], body.List[i-1])
+			}
 		}
 	}
 }
@@ -241,6 +282,9 @@ func (x *httpTestFlow) assertion(st *ast.IfStmt) {
 		end := x.file.line(st.End())
 		if end-e.start < httpAssertionLines {
 			e.end, e.outcomes = end, min(3, e.outcomes+1)
+			if status && x.file.httpSuccessfulStatus(expected, false) {
+				e.success = st
+			}
 		}
 	}
 }
@@ -409,7 +453,7 @@ func (f *httpRouteFile) testRequest(call *ast.CallExpr) (string, string) {
 			return "", ""
 		}
 		inner, _ := ast.Unparen(ret.Results[0]).(*ast.CallExpr)
-		if inner == nil {
+		if inner == nil || f.testPackageCall(inner, "net/http/httptest") == "" {
 			return "", ""
 		}
 		method, target = f.testRequestArgs(inner)
@@ -433,7 +477,11 @@ func (f *httpRouteFile) testRequest(call *ast.CallExpr) (string, string) {
 }
 
 func (f *httpRouteFile) testRequestArgs(call *ast.CallExpr) (ast.Expr, ast.Expr) {
-	switch f.testPackageCall(call, "net/http/httptest") {
+	name := f.testPackageCall(call, "net/http/httptest")
+	if name == "" {
+		name = f.testPackageCall(call, "net/http")
+	}
+	switch name {
 	case "NewRequest":
 		if len(call.Args) == 3 {
 			return call.Args[0], call.Args[1]

@@ -430,7 +430,7 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 	}
 	links.member, links.witnessSource = selected.member, selected.sources
 	for _, trace := range selected.goTraces {
-		windows, ok := goWrapperWindows(out, trace.excerpts, remain)
+		windows, ok := wholeTraceWindows(out, trace.excerpts, remain, maxGoWrapperWindows)
 		if !ok {
 			continue
 		}
@@ -440,6 +440,52 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 		for i, name := range trace.callees {
 			caller, callee := trace.excerpts[i], trace.excerpts[i+1]
 			links.directCalls = append(links.directCalls, directCall{CallerEvidenceID: caller.ID, CalleeEvidenceID: callee.ID, Symbol: name})
+		}
+	}
+	if len(selected.cFamily) > 0 {
+		var trace []record.Excerpt
+		for _, w := range selected.cFamily {
+			lines := strings.Split(selected.sources[w.entry.Path], "\n")
+			if window, ok := s.boundedExcerpt(w.entry, "code", "context", w.line, lines[w.line-1:w.end], witnessMaxExcerpt); ok && window.End == w.end {
+				trace = append(trace, window)
+			}
+		}
+		if len(trace) == len(selected.cFamily) {
+			if windows, ok := wholeTraceWindows(out, trace, remain, roleMaxCodeFiles-2); ok {
+				for _, x := range windows {
+					keep(x, x.End+1)
+				}
+			}
+		}
+	}
+	for _, w := range selected.cDefinitions {
+		if len(out) >= roleMaxCodeFiles-2 {
+			break
+		}
+		if slices.ContainsFunc(selected.witnesses, func(prior contractWitness) bool {
+			return prior.compileBranch && prior.entry.Path == w.entry.Path
+		}) {
+			continue
+		}
+		bytes, availableLines := roleMaxCodeFile, roleMaxCodeLines
+		for _, prior := range out {
+			if prior.Path != w.entry.Path {
+				continue
+			}
+			if prior.Start <= w.end && w.line <= prior.End {
+				availableLines = 0
+				break
+			}
+			bytes -= record.JSONLen(prior.Text)
+			availableLines -= prior.End - prior.Start + 1
+		}
+		if w.end-w.line+1 > availableLines {
+			continue
+		}
+		lines := strings.Split(selected.sources[w.entry.Path], "\n")
+		window, ok := s.boundedExcerpt(w.entry, "code", "context", w.line, lines[w.line-1:w.end], min(witnessMaxExcerpt, remain, bytes))
+		if ok && window.End == w.end {
+			keep(window, len(lines))
 		}
 	}
 	// Preserve a slot for a selected test and at least two ordinary files
@@ -722,11 +768,34 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 	selection := docpath.NewSelection(paths)
 	file := func(d envdoc.Doc) (string, string) { return d.Path, d.Class }
 	constrained := len(paths) > roleMaxDocs || bound > roleMaxDocsBytes
+	fullReview := normalizedScope(s.j.Scope).Kind == "full" && s.j.PullRequest == nil
+	spreadReadme := constrained && fullReview && slices.ContainsFunc(selected, func(d envdoc.Doc) bool {
+		return selection.Primary(d.Path) && (*d.LineCount > roleMaxDocLines || *files[d.Path].Size > roleMaxDocBytes)
+	})
 	secondaryRule := s.h.secondary()
+	bundled := func(p string) bool {
+		if !spreadReadme || selection.Primary(p) || selection.Linked(p) {
+			return false
+		}
+		switch secondaryRule.Match(p) {
+		case "fixtures", "testdata", "test-data", "tests/data", "vendor", "third_party", "node_modules":
+			return true
+		}
+		// Keep a project's own test guide at the test directory root.
+		// Extra documents in nested test suites compete with the README.
+		dirs := strings.Split(strings.ToLower(p), "/")
+		return slices.Contains(dirs[:max(0, len(dirs)-2)], "test") || slices.Contains(dirs[:max(0, len(dirs)-2)], "tests")
+	}
 	secondary := func(p string) bool { return !selection.Linked(p) && secondaryRule.Match(p) != "" }
 	order := func(list []envdoc.Doc) {
 		docpath.Sort(list, selection, file)
 		sort.SliceStable(list, func(i, j int) bool { return !secondary(list[i].Path) && secondary(list[j].Path) })
+		if spreadReadme {
+			firstParty := func(d envdoc.Doc) bool {
+				return !secondary(d.Path) && !bundled(d.Path) && (d.Class == envdoc.ClassAgent || selection.Product(d.Path, d.Class))
+			}
+			sort.SliceStable(list, func(i, j int) bool { return firstParty(list[i]) && !firstParty(list[j]) })
+		}
 	}
 	if constrained {
 		order(selected)
@@ -745,20 +814,30 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 	var productContinuations []userDocument
 	var primary string
 	continuedProduct := false
-	var continuation record.Excerpt
+	spreadProduct := false
 	for i := range selected {
 		d := selected[i]
 		e := files[d.Path]
 		product := selection.Product(d.Path, d.Class)
 		// Give the product text one more window before unlinked test inputs
 		// and general guidance compete for the remaining slots.
-		if constrained && !continuedProduct && len(productContinuations) > 0 && (secondary(d.Path) || (!product && d.Class != envdoc.ClassAgent)) {
+		if constrained && !continuedProduct && len(productContinuations) > 0 &&
+			(secondary(d.Path) || bundled(d.Path) || (!product && d.Class != envdoc.ClassAgent)) {
 			continuedProduct = true
 			before := len(out)
 			out = s.fillDocumentCoverage(productContinuations, primary, out, remain, min(roleMaxDocs, before+1))
 			if len(out) > before {
-				continuation = out[before]
-				remain -= record.JSONLen(continuation.Text)
+				remain -= record.JSONLen(out[before].Text)
+			}
+		}
+		if !spreadProduct && bundled(d.Path) && primary != "" {
+			spreadProduct = true
+			if i := slices.IndexFunc(productContinuations, func(doc userDocument) bool { return doc.entry.Path == primary }); i >= 0 {
+				before := len(out)
+				out = s.compactDocumentCoverage(productContinuations[i], out, remain)
+				for _, x := range out[before:] {
+					remain -= record.JSONLen(x.Text)
+				}
 			}
 		}
 		if len(out) >= roleMaxDocs || remain < 128 {
@@ -847,6 +926,25 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 			remain -= record.JSONLen(example.Text)
 			packageExcerpts++
 		}
+		if constrained && fullReview && partial && selection.Primary(d.Path) {
+			// Put concrete product behavior before unlinked documents that
+			// could use the remaining request slots and bytes.
+			covered := []documentRange{{0, last}}
+			for range 2 {
+				budget := min(roleMaxDocBytes, remain)
+				start, end := representativeDocumentSection(lines, path.Ext(d.Path), budget, covered)
+				if start < 0 || len(out) >= roleMaxDocs {
+					break
+				}
+				excerpt, ok := s.boundedExcerpt(e, "document", "", start+1, lines[start:end], budget)
+				if !ok {
+					break
+				}
+				out = append(out, excerpt)
+				covered = append(covered, documentRange{start, excerpt.End})
+				remain -= record.JSONLen(excerpt.Text)
+			}
+		}
 	}
 	if len(out) < roleMaxDocs && remain >= 128 {
 		budget := min(roleMaxDocBytes, remain)
@@ -854,8 +952,10 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 		for _, ranked := range later {
 			for _, d := range ranked {
 				after := d.after
-				if d.entry.Path == continuation.Path {
-					after = max(after, continuation.End)
+				for _, x := range out {
+					if x.DirectivePath == "" && x.Path == d.entry.Path {
+						after = max(after, x.End)
+					}
 				}
 				start, end := documentationContinuation(d.lines, after, path.Ext(d.entry.Path), budget)
 				if start >= 0 {

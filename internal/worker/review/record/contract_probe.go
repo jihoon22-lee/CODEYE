@@ -87,7 +87,8 @@ func checkContractProbe(r Record) error {
 	if r.ContractProbe == nil {
 		return nil
 	}
-	if r.Stage == StageInvestigate && r.Accepted() && r.Slice == nil && r.Schema == SchemaVersionContract {
+	if r.Stage == StageInvestigate && r.Accepted() && r.Slice == nil &&
+		(r.Schema == SchemaVersionContract || r.Schema == SchemaVersionWorkflowReading) {
 		for _, comparison := range r.ContractComparisons {
 			if r.ContractProbe.Valid(r.Snapshot, comparison) {
 				return nil

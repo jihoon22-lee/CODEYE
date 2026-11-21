@@ -447,6 +447,22 @@
     white-space: nowrap;
     overflow-wrap: normal;
   }
+  .report-export:has(.report-purpose, .report-behaviors) .export-brand-inner { padding-block: .5rem; }
+  .report-export:has(.report-purpose, .report-behaviors) .export-page { row-gap: .7rem; padding-block-start: .7rem; }
+  .report-export:has(.report-purpose, .report-behaviors) .export-mobile-nav > summary { min-height: 2.35rem; }
+  .report-export:has(.report-purpose, .report-behaviors) .report-hero { padding: .85rem; }
+  .report-export:has(.report-purpose, .report-behaviors) .export-target {
+    display: block;
+    margin-block: .4rem 0;
+    line-height: 1.4;
+  }
+  .report-export:has(.report-purpose, .report-behaviors) .export-target strong { margin-inline-end: .45rem; white-space: nowrap; }
+  .report-export:has(.report-purpose, .report-behaviors) .report-verdict { margin-block-start: .55rem; }
+  .report-export:has(.report-purpose, .report-behaviors) .export-hero-meta { gap: .12rem .6rem; margin-block-start: .45rem; line-height: 1.45; }
+  .report-export:has(.report-purpose, .report-behaviors) .report-hero-note { margin-block-start: .4rem; line-height: 1.35; }
+  .report-export #overview:has(.report-behaviors) { margin-block-start: .75rem; }
+  .report-export #overview:has(.report-behaviors) > h2 { margin-block-end: .45rem; padding-block-end: .35rem; font-size: 1.28rem; }
+  .report-export .report-behaviors { margin-block-start: .45rem; }
 }
 
 @media print {

@@ -275,6 +275,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 		}
 		r.Artifacts = append(r.Artifacts, item)
 	}
+	deduplicateManagedJSRejections(&r, states)
 	composeReviews(&r, states, lim)
 	applyDispositions(&r, in.Reviews, in.Now)
 	sortReport(&r)
