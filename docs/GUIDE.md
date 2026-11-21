@@ -214,6 +214,26 @@ codeye tools
 
 인터넷 없는 머신에서는 사내 endpoint와 인증 경로를 설정하고 [오프라인 모드](OPERATIONS.md#오프라인-모드)의 조건을 따른다.
 
+<details>
+<summary>사내 OpenAI 호환 서버용 opencode.json 예시</summary>
+
+기존 설정 파일이 있으면 그 파일을 지정한다. 새로 만들 때는 예시의 주소와 `review-model`을 실제 서버 주소와 모델 ID로 바꾼다. 인증이 필요하면 서비스 계정의 인증 파일에서 같은 공급자 이름(`internal`)을 사용한다.
+
+```json
+{
+  "model": "internal/review-model",
+  "provider": {
+    "internal": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {"baseURL": "https://llm.example.test/v1"},
+      "models": {"review-model": {"name": "Review model"}}
+    }
+  }
+}
+```
+
+</details>
+
 ### 터미널에서 연결하기
 
 OpenCode의 기본 탐색 경로는 `~/.opencode/bin/opencode`와 PATH다. 서비스 계정의 OpenCode `auth.json`에 API 키가 있으면 사용할 수 있다. 터미널에서 OpenAI 키를 전달하는 예다.
