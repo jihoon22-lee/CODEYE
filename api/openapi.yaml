@@ -1217,6 +1217,58 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/AdminProvider'}
         default: {$ref: '#/components/responses/Error'}
+  /api/v1/admin/opencode:
+    get:
+      operationId: adminGetOpenCode
+      x-codeye-status: implemented
+      description: 관리자가 저장한 서비스 머신 경로와 현재 모델 연결 상태를 읽는다.
+      responses:
+        '200':
+          description: 관리자용 OpenCode 설정
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OpenCodeSettings'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      operationId: adminPutOpenCode
+      x-codeye-status: implemented
+      description: 관리형 설치의 OpenCode 경로와 모델을 저장한다. 빈 문자열은 해당 항목의 명시 설정을 지운다.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [executable, config_file, credential_file, model]
+              properties:
+                executable: {type: string, description: 서버의 실행 파일 경로}
+                config_file: {type: string, description: 서버의 OpenCode JSON 또는 JSONC 파일 경로}
+                credential_file: {type: string, description: 서버의 OpenCode 또는 CODEYE 인증 파일 경로}
+                model: {type: string, description: 사용할 모델 이름}
+      responses:
+        '200':
+          description: 저장한 뒤의 설정
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OpenCodeSettings'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/admin/opencode/probe:
+    post:
+      operationId: adminProbeOpenCode
+      x-codeye-status: implemented
+      description: 관리자가 저장한 연결로 합성 입력을 한 번 보내고 확인 결과를 기록한다.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      responses:
+        '200':
+          description: 확인 결과와 현재 모델
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OpenCodeSettings'}
+        default: {$ref: '#/components/responses/Error'}
   /api/v1/admin/settings:
     get:
       operationId: adminGetSettings
@@ -2233,6 +2285,20 @@ components:
         kind: {enum: [github, ghes]}
         host: {type: string}
         api_url: {type: [string, 'null']}
+    OpenCodeSettings:
+      type: object
+      additionalProperties: false
+      required: [executable, config_file, credential_file, model, editable, configured, effective_model, probe]
+      properties:
+        executable: {type: string}
+        config_file: {type: string}
+        credential_file: {type: string}
+        model: {type: string}
+        editable: {type: boolean, description: 관리형 단일 머신 설치에서 수정 가능}
+        configured: {type: boolean, description: 설치의 현재 설정에서 모델을 선택할 수 있음}
+        effective_model: {type: [string, 'null'], description: 사용할 공급자/모델}
+        probe: {enum: [null, not_probed, verified, failed]}
+        reason: {type: [string, 'null'], description: 선택 또는 연결 확인의 사유 코드}
     ServiceSettings:
       type: object
       additionalProperties: false

@@ -208,7 +208,7 @@ def run(base, root, env, probe_env):
         })
         assert saved["configured"] and saved["effective_model"] == "openai/gpt-6.2-sol", saved
         assert saved["probe"] == "not_probed", saved
-        verified = session.request("POST", "admin/opencode/probe", {}, timeout=200)
+        verified = session.request("POST", "admin/opencode/probe", timeout=200)
         assert verified["probe"] == "verified" and KEY not in json.dumps(verified), verified["probe"]
         view, report = analyze(session, project["id"])
         assert report["coverage"]["ai_review"]["status"] == "performed", report["coverage"]["ai_review"]

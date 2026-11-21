@@ -493,6 +493,9 @@ Python API docstring 근거는 `documents.evidence[]`에서 선택 필드 `direc
 | `PUT/DELETE /admin/source-roots/{rid}/grants/{uid}` | — | 204. 이미 그 상태면 변경 없이 204 |
 | `GET /admin/providers` | — | `{items: [{id, kind, host, api_url}]}` |
 | `POST /admin/providers` | `{host}` | Git host 승인. 새로 더하면 201, 이미 있으면 200(`AdminProvider`). `github.com`은 `github`, 그 밖은 `ghes`. 형식 오류 422. 감사 `provider.added` |
+| `GET /admin/opencode` | — | 관리자가 저장한 경로와 모델, 수정 가능 여부, 현재 선택된 모델과 연결 확인 결과. 인증 파일 내용은 전달하지 않는다. |
+| `PUT /admin/opencode` | `{executable, config_file, credential_file, model}` | 관리형 서비스의 로컬 OpenCode 설정을 교체한다. 경로는 절대 경로 또는 서비스 계정의 `~/`로 입력한다. 빈 값은 설치 기본값을 쓴다. 저장은 모델을 호출하지 않으며 새 분석부터 적용된다. |
+| `POST /admin/opencode/probe` | — | 저장된 설정으로 합성 입력을 한 번 보낸다. 응답의 `probe`와 `reason`으로 결과를 확인한다. [관리자 설정](GUIDE.md#관리자-화면에서-연결하기) |
 | `GET /admin/settings` | — | `ServiceSettings`: `{others_model_review, others_build_scripts, updated_at, service_origin}` |
 | `PUT /admin/settings` | `{others_model_review?, others_build_scripts?}`(하나 이상) | 200 `ServiceSettings`. 관리자가 아닌 사람이 시작한 run에 다음 배정부터 적용한다. 바뀐 값이 있을 때만 감사 `service.settings_set` |
 | `GET /audit` | — | 전체 감사 기록 `AuditPage` |
