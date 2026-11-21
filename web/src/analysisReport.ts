@@ -1,5 +1,5 @@
 // Validate the projection used by the report view before rendering any model or tool text.
-import { excerptFits, parseSections, parseExcerpt, type Excerpt, type Sections } from './reportSections';
+import { excerptFits, parseSections, parseExcerpt, type Excerpt, type Sections } from './parseReportSections';
 
 export type Evidence = {
   id: string;

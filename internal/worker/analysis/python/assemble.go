@@ -102,36 +102,8 @@ func (bd *builder) executions(names ...string) {
 	for i, n := range names {
 		results[i] = rc.results[n]
 	}
-	for _, r := range results {
-		if r != nil && r.Cleanup == executor.CleanupUncertain {
-			bd.fail(domain.TaskFailed, ReasonCleanupUncertain, obsdoc.ExitExecutionError)
-		}
-	}
-	for _, r := range results {
-		if r != nil && r.Status == executor.StatusCancelled {
-			bd.fail(domain.TaskCancelled, ReasonCancelled, obsdoc.ExitCancelled)
-		}
-	}
-	if rc.cancelled {
-		bd.fail(domain.TaskCancelled, ReasonCancelled, obsdoc.ExitCancelled)
-	}
-	for _, r := range results {
-		if r != nil && r.Status == executor.StatusTimedOut {
-			bd.fail(domain.TaskTimedOut, ReasonTimeout, obsdoc.ExitTimeout)
-		}
-	}
-	for _, r := range results {
-		if r == nil {
-			continue
-		}
-		switch r.Status {
-		case executor.StatusUnsupported:
-			bd.fail(domain.TaskUnsupported, ReasonExecutionUnsupported, obsdoc.ExitNotRun)
-		case executor.StatusStartFailed:
-			bd.fail(domain.TaskFailed, ReasonToolStartFailed, obsdoc.ExitNotRun)
-		case executor.StatusRejected:
-			bd.fail(domain.TaskFailed, ReasonExecutionRejected, obsdoc.ExitNotRun)
-		}
+	if status, reason, class := pack.ExecutionOutcome(results, rc.cancelled); reason != "" {
+		bd.fail(status, reason, class)
 	}
 	if results[0] != nil && bd.doc.Tool.Version == nil {
 		bd.fail(domain.TaskFailed, ReasonToolVersion, obsdoc.ExitConfigurationError)

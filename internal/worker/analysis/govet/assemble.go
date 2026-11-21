@@ -14,12 +14,12 @@ import (
 
 // Task failure reasons (stable codes recorded in TaskResult.Reason and Outcome.Reason).
 const (
-	ReasonCleanupUncertain     = "cleanup_uncertain"
-	ReasonCancelled            = "cancelled"
-	ReasonTimeout              = "timeout"
-	ReasonExecutionUnsupported = "execution_unsupported"
-	ReasonToolStartFailed      = "tool_start_failed"
-	ReasonExecutionRejected    = "execution_rejected"
+	ReasonCleanupUncertain     = pack.ReasonCleanupUncertain
+	ReasonCancelled            = pack.ReasonCancelled
+	ReasonTimeout              = pack.ReasonTimeout
+	ReasonExecutionUnsupported = pack.ReasonExecutionUnsupported
+	ReasonToolStartFailed      = pack.ReasonToolStartFailed
+	ReasonExecutionRejected    = pack.ReasonExecutionRejected
 	ReasonToolVersion          = "tool_version_unrecognized"
 	ReasonToolchain            = "toolchain_unavailable"
 	ReasonModuleMissing        = "go_module_missing"
@@ -498,42 +498,11 @@ func assemble(in assembleInput) Document {
 
 	// Outcome: precedence from cleanup to parser state.
 	results := []*executor.Result{in.Version, in.ModEdit, in.List, in.Vet}
-	status, reason, class := domain.TaskSucceeded, "", ""
+	status, reason, class := pack.ExecutionOutcome(results, in.Cancelled)
 	partial := false
 	fail := func(s domain.TaskStatus, r, c string) {
 		if reason == "" {
 			status, reason, class = s, r, c
-		}
-	}
-	for _, r := range results {
-		if r != nil && r.Cleanup == executor.CleanupUncertain {
-			fail(domain.TaskFailed, ReasonCleanupUncertain, ExitExecutionError)
-		}
-	}
-	for _, r := range results {
-		if r != nil && r.Status == executor.StatusCancelled {
-			fail(domain.TaskCancelled, ReasonCancelled, ExitCancelled)
-		}
-	}
-	if in.Cancelled {
-		fail(domain.TaskCancelled, ReasonCancelled, ExitCancelled)
-	}
-	for _, r := range results {
-		if r != nil && r.Status == executor.StatusTimedOut {
-			fail(domain.TaskTimedOut, ReasonTimeout, ExitTimeout)
-		}
-	}
-	for _, r := range results {
-		if r == nil {
-			continue
-		}
-		switch r.Status {
-		case executor.StatusUnsupported:
-			fail(domain.TaskUnsupported, ReasonExecutionUnsupported, ExitNotRun)
-		case executor.StatusStartFailed:
-			fail(domain.TaskFailed, ReasonToolStartFailed, ExitNotRun)
-		case executor.StatusRejected:
-			fail(domain.TaskFailed, ReasonExecutionRejected, ExitNotRun)
 		}
 	}
 	if in.Version != nil && !versionOK {

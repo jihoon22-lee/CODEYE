@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import cases from '../../internal/report/testdata/document_examples.json';
 import { citedDocumentExample } from './reportExample';
-import type { Citation } from './reportSections';
+import type { Citation } from './parseReportSections';
 
 describe('saved document examples', () => {
   it.each(cases)('$name', ({ statement, text, example }) => {

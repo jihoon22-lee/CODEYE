@@ -19,12 +19,12 @@ import (
 
 // Task failure reasons (TaskResult.Reason and outcome.reason).
 const (
-	ReasonCleanupUncertain     = "cleanup_uncertain"
-	ReasonCancelled            = "cancelled"
-	ReasonTimeout              = "timeout"
-	ReasonExecutionUnsupported = "execution_unsupported"
-	ReasonToolStartFailed      = "tool_start_failed"
-	ReasonExecutionRejected    = "execution_rejected"
+	ReasonCleanupUncertain     = pack.ReasonCleanupUncertain
+	ReasonCancelled            = pack.ReasonCancelled
+	ReasonTimeout              = pack.ReasonTimeout
+	ReasonExecutionUnsupported = pack.ReasonExecutionUnsupported
+	ReasonToolStartFailed      = pack.ReasonToolStartFailed
+	ReasonExecutionRejected    = pack.ReasonExecutionRejected
 	ReasonToolVersion          = "tool_version_unrecognized"
 	ReasonSnapshotIntegrity    = "snapshot_integrity_failed"
 	ReasonNotRun               = "cargo_not_run"
@@ -688,41 +688,10 @@ func assemble(in assembleInput) obsdoc.Document {
 
 	// Outcome: precedence from cleanup to parser state.
 	results := []*executor.Result{in.Rustc, in.Cargo, in.ClippyV, in.Main}
-	status, reason, class := domain.TaskSucceeded, "", ""
+	status, reason, class := pack.ExecutionOutcome(results, in.Cancelled)
 	fail := func(s domain.TaskStatus, r, c string) {
 		if reason == "" {
 			status, reason, class = s, r, c
-		}
-	}
-	for _, r := range results {
-		if r != nil && r.Cleanup == executor.CleanupUncertain {
-			fail(domain.TaskFailed, ReasonCleanupUncertain, obsdoc.ExitExecutionError)
-		}
-	}
-	for _, r := range results {
-		if r != nil && r.Status == executor.StatusCancelled {
-			fail(domain.TaskCancelled, ReasonCancelled, obsdoc.ExitCancelled)
-		}
-	}
-	if in.Cancelled {
-		fail(domain.TaskCancelled, ReasonCancelled, obsdoc.ExitCancelled)
-	}
-	for _, r := range results {
-		if r != nil && r.Status == executor.StatusTimedOut {
-			fail(domain.TaskTimedOut, ReasonTimeout, obsdoc.ExitTimeout)
-		}
-	}
-	for _, r := range results {
-		if r == nil {
-			continue
-		}
-		switch r.Status {
-		case executor.StatusUnsupported:
-			fail(domain.TaskUnsupported, ReasonExecutionUnsupported, obsdoc.ExitNotRun)
-		case executor.StatusStartFailed:
-			fail(domain.TaskFailed, ReasonToolStartFailed, obsdoc.ExitNotRun)
-		case executor.StatusRejected:
-			fail(domain.TaskFailed, ReasonExecutionRejected, obsdoc.ExitNotRun)
 		}
 	}
 	if (in.Rustc != nil && !rustcOK) || (in.Cargo != nil && !cargoOK) || (in.ClippyV != nil && !clippyOK) {

@@ -1,7 +1,6 @@
 import type { AnalysisChoices, Project, Setup } from './api';
-import type { Dependency } from './reportSections';
+import type { Dependency, Ledger } from './parseReportSections';
 import { ko as t } from './locales/ko';
-import type { Ledger } from './reportSections';
 
 export type Gap = { section: string; code: string; subject: string | null; detail: string | null };
 

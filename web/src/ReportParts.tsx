@@ -2,7 +2,7 @@ import { createContext, useContext, useId, useState, type ReactNode } from 'reac
 import type { Api } from './api';
 import type { AnalysisReport, Evidence, Finding } from './analysisReport';
 import { formatInstant, runStatusLabel } from './format';
-import type { Citation, Excerpt } from './reportSections';
+import type { Citation, Excerpt } from './parseReportSections';
 import { reportURL, sourceEvidenceURL } from './analysisReport';
 import { FindingHistory, HIDDEN, findingBadge, type ComparisonLoad } from './HistoryView';
 import { ko } from './locales/ko';

@@ -1,4 +1,4 @@
-import type { Citation } from './reportSections';
+import type { Citation } from './parseReportSections';
 
 export type DocumentExample = { call: string; output: string };
 type Candidate = DocumentExample & { name: string; args: string[] };

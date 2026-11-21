@@ -429,36 +429,8 @@ func (o *outcome) fail(s domain.TaskStatus, reason, class string) {
 // executionFailures applies the precedence shared with the other adapters: cleanup,
 // cancellation, timeout, then executor refusals.
 func (o *outcome) executionFailures(results []*executor.Result, cancelled bool) {
-	for _, r := range results {
-		if r != nil && r.Cleanup == executor.CleanupUncertain {
-			o.fail(domain.TaskFailed, ReasonCleanupUncertain, obsdoc.ExitExecutionError)
-		}
-	}
-	for _, r := range results {
-		if r != nil && r.Status == executor.StatusCancelled {
-			o.fail(domain.TaskCancelled, ReasonCancelled, obsdoc.ExitCancelled)
-		}
-	}
-	if cancelled {
-		o.fail(domain.TaskCancelled, ReasonCancelled, obsdoc.ExitCancelled)
-	}
-	for _, r := range results {
-		if r != nil && r.Status == executor.StatusTimedOut {
-			o.fail(domain.TaskTimedOut, ReasonTimeout, obsdoc.ExitTimeout)
-		}
-	}
-	for _, r := range results {
-		if r == nil {
-			continue
-		}
-		switch r.Status {
-		case executor.StatusUnsupported:
-			o.fail(domain.TaskUnsupported, ReasonExecutionUnsupported, obsdoc.ExitNotRun)
-		case executor.StatusStartFailed:
-			o.fail(domain.TaskFailed, ReasonToolStartFailed, obsdoc.ExitNotRun)
-		case executor.StatusRejected:
-			o.fail(domain.TaskFailed, ReasonExecutionRejected, obsdoc.ExitNotRun)
-		}
+	if status, reason, class := pack.ExecutionOutcome(results, cancelled); reason != "" {
+		o.fail(status, reason, class)
 	}
 }
 

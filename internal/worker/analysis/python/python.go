@@ -45,12 +45,12 @@ const (
 
 // Task failure reasons shared by the Python adapters (outcome.reason).
 const (
-	ReasonCleanupUncertain     = "cleanup_uncertain"
-	ReasonCancelled            = "cancelled"
-	ReasonTimeout              = "timeout"
-	ReasonExecutionUnsupported = "execution_unsupported"
-	ReasonToolStartFailed      = "tool_start_failed"
-	ReasonExecutionRejected    = "execution_rejected"
+	ReasonCleanupUncertain     = pack.ReasonCleanupUncertain
+	ReasonCancelled            = pack.ReasonCancelled
+	ReasonTimeout              = pack.ReasonTimeout
+	ReasonExecutionUnsupported = pack.ReasonExecutionUnsupported
+	ReasonToolStartFailed      = pack.ReasonToolStartFailed
+	ReasonExecutionRejected    = pack.ReasonExecutionRejected
 	ReasonToolVersion          = "tool_version_unrecognized"
 	ReasonNotRun               = "tool_not_run"
 	ReasonWorkspaceDrift       = "workspace_drift"
