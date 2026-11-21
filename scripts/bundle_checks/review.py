@@ -473,18 +473,46 @@ def check_scope_artifact(scope: dict) -> None:
     root = ROOT / "fixtures/modules/slices/input"
     offered = scope["overview"]["offered"]
     ensure(offered == sorted(offered), "scope offered files are not sorted")
+    line_coverage = scope["schema_version"] == "0.3"
     placed = {}
-    files = list(scope["overview"]["files"]) + [f for s in scope["slices"] for f in s["files"]] + list(scope.get("excluded", []))
+    windows = {}
+    files = (list(scope["overview"]["files"]) + [f for s in scope["slices"] for f in s["files"]]
+             + list(scope.get("excluded", [])) + list(scope.get("unplanned", [])))
+
+    def add_window(path, start, end):
+        ensure(1 <= start <= end <= placed[path]["total_lines"], "scope window outside file: " + path)
+        previous = windows.setdefault(path, [])
+        ensure(not any(start <= b and a <= end for a, b in previous), "scope windows overlap: " + path)
+        previous.append((start, end))
+
     for f in files:
-        ensure(f["path"] not in placed, "scope file in two places: " + f["path"])
-        placed[f["path"]] = f
-        ensure(hashlib.sha256((root / f["path"]).read_bytes()).hexdigest() == f["sha256"], "scope file blob: " + f["path"])
-        ensure((f["state"] == "covered_by_overview") == (f["path"] in offered), "scope covered_by_overview differs from offered: " + f["path"])
+        path = f["path"]
+        if line_coverage and path in placed:
+            previous = placed[path]
+            ensure(f["state"] == "planned" and previous["state"] in ("covered_by_overview", "planned")
+                   and all(f[k] == previous[k] for k in ("module", "sha256", "total_lines", "class", "rank")), "scope continuation differs from file: " + path)
+        else:
+            ensure(path not in placed, "scope file in two places: " + path)
+            placed[path] = f
+            ensure(hashlib.sha256((root / path).read_bytes()).hexdigest() == f["sha256"], "scope file blob: " + path)
+            ensure((f["state"] == "covered_by_overview") == (path in offered), "scope covered_by_overview differs from offered: " + path)
         ensure(f["planned_bytes"] <= f["bound_bytes"], "scope planned bytes above the bound: " + f["path"])
+        if line_coverage and f["state"] == "planned":
+            add_window(path, f["start_line"], f["start_line"] + f["planned_lines"] - 1)
+    for omitted in scope.get("omitted", []):
+        add_window(omitted["path"], omitted["start_line"], omitted["end_line"])
+    if line_coverage:
+        for path, f in placed.items():
+            overview_lines = f["planned_lines"] if f["state"] == "covered_by_overview" else 0
+            ensure(overview_lines + sum(end - start + 1 for start, end in windows.get(path, [])) == f["total_lines"],
+                   "scope file lines do not add up: " + path)
     ensure(set(offered) <= set(placed), "scope offered file outside the plan")
     for m in scope["modules"]:
-        held = sum(1 for f in files if f["module"] == m["id"])
+        held = sum(1 for f in placed.values() if f["module"] == m["id"] and f["state"] != "not_planned")
         ensure(held + m["files_not_planned"] == m["files_eligible"], "scope module count: " + m["id"])
+        if line_coverage:
+            ensure(sum(1 for f in placed.values() if f["module"] == m["id"] and f["state"] == "not_planned") == m["files_not_planned"],
+                   "scope unscheduled file count: " + m["id"])
     for i, s in enumerate(scope["slices"]):
         key = f"s{i + 1:03d}"
         ensure(s["key"] == key and s["investigate_task"] == "review.investigate." + key and s["verify_task"] == "review.verify." + key, "scope slice keys out of order")
@@ -498,10 +526,15 @@ def check_scope_artifact(scope: dict) -> None:
         want = "secondary_path:" + seg if seg else f.get("secondary") if f.get("secondary") == "generated_file" else None
         ensure(f.get("secondary") == want and (f["class"] == "secondary") == (want is not None), "scope file class differs from the rule: " + f["path"])
     for m in scope["modules"]:
-        own = [f for f in files if f["module"] == m["id"]]
+        own = [f for f in placed.values() if f["module"] == m["id"]]
         ensure(m["files_secondary"] >= sum(1 for f in own if f["class"] == "secondary") and m["files_secondary_not_planned"] <= min(m["files_secondary"], m["files_not_planned"]), "scope module secondary count: " + m["id"])
-    classes = [s["class"] for s in scope["slices"]]
-    ensure(classes == sorted(classes, key=lambda c: c == "secondary"), "scope secondary slot before a primary one")
+    tiers = {"changed": 0, "neighbor": 1, None: 2}
+    slot_tiers = [tiers[s.get("pull_request")] for s in scope["slices"]]
+    ensure(slot_tiers == sorted(slot_tiers), "scope pull request slots not in order")
+    if not line_coverage:
+        for tier in tiers.values():
+            classes = [s["class"] for s in scope["slices"] if tiers[s.get("pull_request")] == tier]
+            ensure(classes == sorted(classes, key=lambda c: c == "secondary"), "scope secondary slot before a primary one")
     for s in scope["slices"]:
         ensure(s["class"] == s["files"][0]["class"] and s["rank"] == s["files"][0]["rank"] and all(f["class"] == s["class"] for f in s["files"]), "scope slot class differs from its files: " + s["key"])
 
@@ -534,9 +567,13 @@ def check_slice_examples(raw: dict, validators: dict) -> int:
                 ensure(call["role"] == stage and call["pack_files"] == roles[stage]["files"] and call["pack_sha256"] == roles[stage]["digest"], "slice call pack digest: " + name)
             by_source = {u["source"]: u for u in doc["upstream"]}
             ensure(by_source.get("review.scope", {}).get("sha256") == hashlib.sha256(compact_json(raw["scope"])).hexdigest(), "slice upstream scope digest: " + name)
-        planned = {f["path"] for f in entry["files"] if f["state"] == "planned"}
-        sent = {e["path"] for e in docs["investigate.s001"]["evidence"] if e.get("origin") == "context" and e["kind"] in ("code", "test")}
-        ensure(sent and sent <= planned, "slice sent files outside its planned files")
+        if scope["schema_version"] == "0.3":
+            planned = {(f["path"], f["start_line"], f["start_line"] + f["planned_lines"] - 1) for f in entry["files"]}
+            sent = {(e["path"], e["start_line"], e["end_line"]) for e in docs["investigate.s001"]["evidence"] if e.get("origin") == "context" and e["kind"] in ("code", "test")}
+        else:
+            planned = {f["path"] for f in entry["files"] if f["state"] == "planned"}
+            sent = {e["path"] for e in docs["investigate.s001"]["evidence"] if e.get("origin") == "context" and e["kind"] in ("code", "test")}
+        ensure(sent and sent <= planned, "slice request outside its planned scope")
         verify = docs["verify.s001"]
         inv = {u["source"]: u for u in verify["upstream"]}.get("review.investigate.s001", {})
         ensure(inv.get("sha256") == hashlib.sha256(compact_json(raw["investigate.s001"])).hexdigest(), "slice verify upstream investigate digest")
@@ -555,7 +592,7 @@ def check_slice_examples(raw: dict, validators: dict) -> int:
     negative = [
         case("slice record without slice", lambda d: d["investigate.s001"].pop("slice")),
         case("0.2 record with a slice", lambda d: d["investigate.s001"].update(schema_version="0.2")),
-        case("slice key outside s001..s096", lambda d: d["verify.s001"]["slice"].update(key="s097")),
+        case("slice key outside the supported range", lambda d: d["verify.s001"]["slice"].update(key="s1000")),
         case("slice of nine modules", lambda d: d["investigate.s001"]["slice"].update(modules=[f"go:m{i}" for i in range(9)])),
         case("slice verify given an interpret candidate", lambda d: d["verify.s001"]["candidates"][0].update(origin="interpret")),
         case("slice interpret record", lambda d: d["investigate.s001"].update(stage="interpret")),
@@ -567,11 +604,11 @@ def check_slice_examples(raw: dict, validators: dict) -> int:
         case("scope not_planned miscount", lambda d: d["scope"]["modules"][0].update(files_not_planned=1)),
         case("scope screen outside the enum", lambda d: d["scope"].update(screen="unscreened")),
         case("scope not_screened without its limitation", lambda d: d["scope"].update(screen="not_screened")),
-        case("scope ceiling above 207", lambda d: d["scope"]["budget"].update(max_calls=208)),
+        case("scope ceiling above the supported limit", lambda d: d["scope"]["budget"].update(max_calls=2014)),
         case("scope slice out of order", lambda d: d["scope"]["slices"].reverse()),
-        case("scope slot key beyond s096", lambda d: d["scope"]["slices"][0].update(key="s097")),
+        case("scope slot key past s999", lambda d: d["scope"]["slices"][0].update(key="s1000")),
         case("scope fills more slots than planned", lambda d: d["scope"]["limits"].update(slots=len(d["scope"]["slices"]) - 1)),
-        case("scope slot limit other than 96", lambda d: d["scope"]["limits"].update(max_slices=32)),
+        case("scope slot limit from older incompatible layout", lambda d: d["scope"]["limits"].update(max_slices=32)),
         case("scope without its priority rule", lambda d: d["scope"].pop("priority")),
         case("scope secondary file without a reason", lambda d: first_file(d).update({"class": "secondary"})),
         case("scope primary file below a secondary path", lambda d: d["scope"]["priority"]["secondary"]["segments"].append("store")),

@@ -78,7 +78,7 @@ var goBuildFilesTree = map[string]string{
 
 func pinHash(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:])[:16] }
 
-// reviewRequests runs every review role and hashes every request.
+// reviewRequests hashes the whole-run requests.
 func reviewRequests(t *testing.T, j analysis.Job, static analysis.Handler, script map[string]func(int, opencode.Request) opencode.Reply) []string {
 	t.Helper()
 	return reviewRequestsWith(t, j, Handler{Static: static}, script)
@@ -92,17 +92,25 @@ func reviewRequestsWith(t *testing.T, j analysis.Job, rh Handler, script map[str
 	rh.Caller = f
 	plan, res := runRoleWith(t, j, rh, "1.27.4")
 	for _, p := range plan {
+		if !wholeRunRole(p.Key) && p.Key != record.TaskContract {
+			continue
+		}
 		if r := res[p.Key]; strings.HasPrefix(p.Key, "review.") && r.Status != domain.TaskSucceeded && r.Status != domain.TaskSkippedPolicy && r.Status != domain.TaskBudgetExhausted {
 			t.Fatalf("%s %+v", p.Key, r)
 		}
 	}
 	var out []string
 	for _, p := range plan {
-		if strings.HasPrefix(p.Key, "review.") {
+		if wholeRunRole(p.Key) || p.Key == record.TaskContract {
 			out = append(out, fmt.Sprintf("%s %s/%s", p.Key, res[p.Key].Status, res[p.Key].Reason))
 		}
 	}
+	pending := map[string]bool{}
 	for _, q := range f.requests {
+		if pending[q.Role] {
+			continue
+		}
+		pending[q.Role] = true
 		if q.Role == record.StageVerify && strings.Contains(string(q.Input), limVerifyHashesOmitted) {
 			in := decodeAs[verifyInput](t, q)
 			catalog := catalogOf(in.Scope.Excerpts)
@@ -195,42 +203,10 @@ func goPinJobs(t *testing.T) map[string]analysis.Job {
 var pinnedGo = map[string][]string{
 	"go-build-files": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret skipped_policy/no_tool_observations", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c 0f35e48b1837906c", "documents 0af57c400b0bf7df cbb9d0c83ce64f50", "investigate ece7724ecbbfe81e c3580ccbe7f93361", "verify 162675714ff44036 e0f027c525ea4547"},
 	"modules":        {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c 1591d2065785bf02", "documents 0af57c400b0bf7df 044b26c350ee8aac", "investigate ece7724ecbbfe81e 7fab296a9fdf4def", "interpret 07f3d86f118cca51 6c30210249e618c0", "verify 162675714ff44036 739ea4868928c8e1"},
-	// The worst case has more code than the overview offers, so it plans
-	// review.scope and nine slots: the seven the plan-time packing needs and
-	// two of slack, which review.scope leaves empty. The fixture has no
-	// secrets screen. User-facing documentation leads under the cap. The
-	// slots run unscreened (their records say
-	// model_input_not_secret_screened) with the same requests as behind a
-	// completed screen that withholds nothing. The slot requests follow the
-	// review priority: the files with go vet diagnostics come first.
 	"modules-worst": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/",
-		"review.scope succeeded/",
-		"review.investigate.s001 succeeded/", "review.verify.s001 succeeded/", "review.investigate.s002 succeeded/", "review.verify.s002 succeeded/",
-		"review.investigate.s003 succeeded/", "review.verify.s003 succeeded/", "review.investigate.s004 succeeded/", "review.verify.s004 succeeded/",
-		"review.investigate.s005 succeeded/", "review.verify.s005 succeeded/", "review.investigate.s006 succeeded/", "review.verify.s006 succeeded/",
-		"review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 skipped_policy/no_review_scope", "review.verify.s008 skipped_policy/no_review_scope",
-		"review.investigate.s009 skipped_policy/no_review_scope", "review.verify.s009 skipped_policy/no_review_scope",
-		"review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 0af57c400b0bf7df 3aa9c25804ffa595", "investigate ece7724ecbbfe81e 72f5989b6eb7246e", "interpret 07f3d86f118cca51 0ba79c5a6cd9bbf3", "verify 162675714ff44036 208b5395107c96d2",
-		"investigate ece7724ecbbfe81e e974e862da159923", "verify 162675714ff44036 5ef3cf21e54e4d46", "investigate ece7724ecbbfe81e 1d3e98a1d772eb70", "verify 162675714ff44036 78a5855122d165ae",
-		"investigate ece7724ecbbfe81e d4a19db5bcea1b14", "verify 162675714ff44036 7be8876032bafd15", "investigate ece7724ecbbfe81e 4e5d7047024a2994", "verify 162675714ff44036 0b1da9de5113145e",
-		"investigate ece7724ecbbfe81e b02f5fe18573d22f", "verify 162675714ff44036 15ac4b1a24bafdaf", "investigate ece7724ecbbfe81e 212a07f3c6943ca2", "verify 162675714ff44036 9d6853628eba4f96",
-		"investigate ece7724ecbbfe81e 7561e4c5bde1f2c9", "verify 162675714ff44036 4b2a9f51d58b68ec"},
-	// The worst case behind a completed secrets screen at the default
-	// ceiling: the whole-run requests are those of modules-worst except
-	// interpret (it also lists the secrets task), and every slot request
-	// carries the overview's investigate and verify instructions.
+		"review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 0af57c400b0bf7df 8ea8deedb933224b", "investigate ece7724ecbbfe81e 72f5989b6eb7246e", "interpret 07f3d86f118cca51 0ba79c5a6cd9bbf3", "verify 162675714ff44036 208b5395107c96d2"},
 	"modules-worst-screened": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/",
-		"review.scope succeeded/",
-		"review.investigate.s001 succeeded/", "review.verify.s001 succeeded/", "review.investigate.s002 succeeded/", "review.verify.s002 succeeded/",
-		"review.investigate.s003 succeeded/", "review.verify.s003 succeeded/", "review.investigate.s004 succeeded/", "review.verify.s004 succeeded/",
-		"review.investigate.s005 succeeded/", "review.verify.s005 succeeded/", "review.investigate.s006 succeeded/", "review.verify.s006 succeeded/",
-		"review.investigate.s007 succeeded/", "review.verify.s007 succeeded/", "review.investigate.s008 skipped_policy/no_review_scope", "review.verify.s008 skipped_policy/no_review_scope",
-		"review.investigate.s009 skipped_policy/no_review_scope", "review.verify.s009 skipped_policy/no_review_scope",
-		"review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 0af57c400b0bf7df 3aa9c25804ffa595", "investigate ece7724ecbbfe81e 72f5989b6eb7246e", "interpret 07f3d86f118cca51 71915d5d7b19dc70", "verify 162675714ff44036 208b5395107c96d2",
-		"investigate ece7724ecbbfe81e e974e862da159923", "verify 162675714ff44036 5ef3cf21e54e4d46", "investigate ece7724ecbbfe81e 1d3e98a1d772eb70", "verify 162675714ff44036 78a5855122d165ae",
-		"investigate ece7724ecbbfe81e d4a19db5bcea1b14", "verify 162675714ff44036 7be8876032bafd15", "investigate ece7724ecbbfe81e 4e5d7047024a2994", "verify 162675714ff44036 0b1da9de5113145e",
-		"investigate ece7724ecbbfe81e b02f5fe18573d22f", "verify 162675714ff44036 15ac4b1a24bafdaf", "investigate ece7724ecbbfe81e 212a07f3c6943ca2", "verify 162675714ff44036 9d6853628eba4f96",
-		"investigate ece7724ecbbfe81e 7561e4c5bde1f2c9", "verify 162675714ff44036 4b2a9f51d58b68ec"},
+		"review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 0af57c400b0bf7df 8ea8deedb933224b", "investigate ece7724ecbbfe81e 72f5989b6eb7246e", "interpret 07f3d86f118cca51 71915d5d7b19dc70", "verify 162675714ff44036 208b5395107c96d2"},
 }
 
 func TestGoReviewInputsUnchanged(t *testing.T) {

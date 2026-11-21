@@ -134,6 +134,12 @@ func reviewLineage(rec *record.Record, states map[string]*taskState, obs map[str
 			return false
 		}
 	}
+	if rec.Slice != nil && rec.Stage == record.StageInvestigate {
+		st := states[record.TaskScope]
+		if scopeAccepted(st) && st.scope.LineCoverage() && !sliceInvestigationInScope(*rec, st.scope) {
+			return false
+		}
+	}
 	if rec.WorkflowReading != nil {
 		st := states["review.documents"]
 		if !reviewAccepted(st) || !rec.WorkflowReadingMatches(*st.reviewResult.Record) {
@@ -242,6 +248,11 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 		obs[o.ID] = o
 	}
 	exposed, known := map[string]bool{}, true
+	if scope := states[record.TaskScope]; scopeAccepted(scope) && scope.scope.LineCoverage() &&
+		!coverageOverviewInScope(scope.scope, states["review.investigate"]) {
+		scope.rejected = true
+		limits.add(LimReviewLineage + ":" + record.TaskScope)
+	}
 	// The whole-run roles, then each slice's investigate and verify: a slice
 	// verify's lineage reads its investigate's acceptance.
 	for _, key := range reviewRecordKeys(states) {

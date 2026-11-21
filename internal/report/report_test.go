@@ -700,6 +700,11 @@ func TestRenderingEscapesHostileText(t *testing.T) {
 		}
 	}
 	h = strings.Replace(h, font, "", 1)
+	navigation := `<script id="report-export-navigation">` + reportExportNavigation + `</script>`
+	if strings.Count(h, navigation) != 1 || !strings.Contains(h, `script-src 'sha256-`+exportNavigationHash()+`'`) {
+		t.Fatal("saved HTML does not authorize exactly the embedded navigation script")
+	}
+	h = strings.Replace(h, navigation, "", 1)
 	for _, bad := range []string{"<script", "<img", "<iframe", "<link", "<object", "url("} {
 		if strings.Contains(strings.ToLower(h), bad) {
 			t.Fatalf("html contains %q", bad)
@@ -724,6 +729,10 @@ func TestRenderingEscapesHostileText(t *testing.T) {
 	for rep, pipes := range map[*Report]int{&r: 7, &flat: 8} {
 		md := string(RenderMarkdown(*rep, Digest(b), Korean))
 		outside := strings.ReplaceAll(stripCodeSpans(md), "[문서 분석에서 보기](#documents)", "")
+		for _, section := range SectionKeys {
+			outside = strings.ReplaceAll(outside, "[보기](#"+section+")", "")
+		}
+		outside = regexp.MustCompile(`\[상세 보기\]\(#static-detail-obs_[0-9a-f]{20}\)`).ReplaceAllString(outside, "")
 		if strings.Contains(outside, "<script") || strings.Contains(outside, "<img") || strings.Contains(outside, "](") || strings.Contains(outside, "![") || strings.Contains(outside, "\n# heading") {
 			t.Fatalf("markdown structure broken:\n%s", md)
 		}

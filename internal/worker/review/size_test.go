@@ -120,10 +120,10 @@ func TestDocumentsFitKeepsExcerptsWhenModuleLinksExceedBudget(t *testing.T) {
 
 // longText is a maximal accepted text field (JSON size at the limit).
 func longText(prefix string) string {
-	s := prefix + strings.Repeat("가", 190)
-	for record.JSONLen(s) > 400 {
-		s = s[:len(s)-3]
-	}
+	// This rune adds exactly its UTF-8 size to the JSON string. Compute
+	// the same maximum without encoding every possible shorter string.
+	const fill = "가"
+	s := prefix + strings.Repeat(fill, (400-record.JSONLen(prefix))/len(fill))
 	if !record.ModelText(s) {
 		panic("longText not accepted")
 	}

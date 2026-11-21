@@ -2,6 +2,6 @@
 <results version="2">
     <cppcheck version="2.22.0"/>
     <errors>
-        <error id="checkersReport" severity="information" msg="Active checkers: 81/189 (use --checkers-report=&lt;filename&gt; to see details)" verbose="Active checkers: 81/189 (use --checkers-report=&lt;filename&gt; to see details)"/>
+        <error id="checkersReport" severity="information" msg="Active checkers: 114/189 (use --checkers-report=&lt;filename&gt; to see details)" verbose="Active checkers: 114/189 (use --checkers-report=&lt;filename&gt; to see details)"/>
     </errors>
 </results>

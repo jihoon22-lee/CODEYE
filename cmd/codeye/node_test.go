@@ -26,9 +26,9 @@ func TestRunNodeDispatchAndUsage(t *testing.T) {
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--max-workers", "2"},
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--autoscale", "--max-workers", "17"},
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--autoscale", "--max-workers", "0"},
-		// The call ceiling is 15..207: never below the whole-run roles' worst case.
+		// The call ceiling is 15..2013: never below the whole-run roles' worst case.
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-max-calls", "14"},
-		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-max-calls", "208"},
+		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-max-calls", "2014"},
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-max-calls", "0"},
 	}
 	for _, args := range cases {

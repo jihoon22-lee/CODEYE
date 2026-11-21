@@ -24,6 +24,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	workerrun "github.com/jihoon22-lee/CODEYE/internal/worker/run"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/testexec"
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
 
@@ -138,7 +139,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		return agent.ExitUsage
 	}
 	if !review.ValidMaxCalls(*reviewMaxCalls) {
-		fmt.Fprintln(stderr, "invalid --review-max-calls; expected 15..207 (default 99)")
+		fmt.Fprintln(stderr, "invalid --review-max-calls; expected 15..2013 (default 99)")
 		return agent.ExitUsage
 	}
 	// --autoscale starts with zero workers and follows controller
@@ -343,6 +344,7 @@ func workerHandlersWithCaller(ctx context.Context, h *workerproto.Hello, runner 
 	depCfg.RustConsumer = !unusable["cargo-check"]
 	depCfg.JSConsumer = !unusable["tsc"] || !unusable["eslint-typed"]
 	depCfg.PythonConsumers = pythonConsumers(cfg, missing)
+	var testHandler analysis.Handler
 	for i, handler := range hs {
 		if handler.Info().Name == analyzerpack.CompositeName {
 			reviewed := review.Handler{Static: handler, Caller: caller, MaxCalls: h.ReviewMaxCalls}
@@ -358,7 +360,33 @@ func workerHandlersWithCaller(ctx context.Context, h *workerproto.Hello, runner 
 				return nil, nil, err
 			}
 			hs[i] = wrapped
+			testCfg := depCfg
+			// The test suites can consume dependencies on nodes without a
+			// separately configured type checker.
+			testCfg.JSConsumer = true
+			testCfg.PythonConsumers = true
+			testCfg.RustConsumer = true
+			testDeps, err := deps.Wrap(reviewed, testCfg, deps.Fetchers()...)
+			if err != nil {
+				return nil, nil, err
+			}
+			testBase, err := discovery.Wrap(testDeps, discovery.Config{Observer: observer})
+			if err != nil {
+				return nil, nil, err
+			}
+			testNpm, testPython := h.TestPackageManagers["npm"], h.TestPackageManagers["python"]
+			if testNpm == "" {
+				testNpm = depCfg.NpmScript
+			}
+			if testPython == "" {
+				testPython = depCfg.Python
+			}
+			testHandler = testexec.New(testBase, testexec.Config{Go: h.GoExecutable, GoModCache: h.GoModCache, Node: h.AnalyzerTools["node"], Npm: testNpm,
+				Python: testPython, Cargo: h.AnalyzerTools["cargo"], ToolPath: h.ToolPath, DependencyCacheRoot: cfg.DependencyCacheRoot})
 		}
+	}
+	if testHandler != nil {
+		hs = append(hs, testHandler)
 	}
 	var codes []string
 	for _, m := range missing {

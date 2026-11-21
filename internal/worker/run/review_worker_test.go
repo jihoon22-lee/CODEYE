@@ -286,12 +286,19 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				if task.Reason != nil {
 					row += ":" + *task.Reason
 				}
+				if _, _, slice := record.SliceTask(task.Key); slice {
+					if task.Status != domain.TaskSkippedPolicy || task.Reason == nil || *task.Reason != domain.ReasonNoReviewScope {
+						t.Fatalf("unexpected follow-up after whole-source overview: %s", row)
+					}
+					continue
+				}
 				got = append(got, row)
 			}
 			// go-vet.m02 (svc/b, go 1.30) fails on a node older than go1.30,
 			// as in TestDiscoveryTasksThroughTheWorker.
 			want := []string{"env.discover=succeeded", "docs.discover=succeeded", "go-vet=succeeded", "go-vet.m01=succeeded", "go-vet.m02=failed:" + govet.ReasonToolchain,
 				"review.environment=succeeded", "review.documents=succeeded", "review.investigate=succeeded", tc.interpret, "review.verify=succeeded",
+				"review.scope=succeeded",
 				"review.contract=skipped_policy:no_review_scope"}
 			if !slices.Equal(got, want) {
 				t.Fatalf("tasks\n got %v\nwant %v", got, want)
@@ -326,6 +333,9 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				row := x.Key + "=" + x.Result
 				if x.Reason != nil {
 					row += ":" + *x.Reason
+				}
+				if x.Key == "review.scope" || strings.HasPrefix(x.Key, "review.investigate.s") || strings.HasPrefix(x.Key, "review.verify.s") {
+					continue
 				}
 				optional = append(optional, row)
 			}

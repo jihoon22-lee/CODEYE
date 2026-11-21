@@ -1,0 +1,154 @@
+{
+  "adapter": {
+    "id": "gofmt",
+    "version": "1"
+  },
+  "analyzer": {
+    "ecosystem": "go",
+    "id": "go.gofmt",
+    "required": false
+  },
+  "coverage": {
+    "files_in_scope": 1,
+    "files_skipped": 0,
+    "files_unlisted": 0,
+    "processed_paths": [
+      "-sample.go"
+    ],
+    "unit": "file",
+    "units": {
+      "excluded_data_directory": 1,
+      "format_checked": 1
+    }
+  },
+  "executions": [
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "[REDACTED]",
+          "-l",
+          "--",
+          "./-sample.go"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "gofmt.check.b001",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 13,
+        "incomplete": false,
+        "sha256": "fea01c2aeff0c5f98ed91e282ec95f6d23c9a882d95912cdb5f0764467c4b9b8",
+        "total_bytes": 13,
+        "truncated": false
+      }
+    }
+  ],
+  "kind": "analyzer_observations",
+  "limitations": [
+    "data_directories_excluded"
+  ],
+  "module": {
+    "dir": ".",
+    "name": ""
+  },
+  "observations": [
+    {
+      "category": "maintainability",
+      "id": "obs_b2b0c50a2001c8a78205",
+      "location": {
+        "blob_sha256": "3798308c7197ad689b4fc8cdd606a7c7b37838623c0fac67fc7b13b52620b442",
+        "column_unit": "byte",
+        "end_col": 0,
+        "end_line": 1,
+        "path": "-sample.go",
+        "start_col": 0,
+        "start_line": 1
+      },
+      "location_state": "resolved",
+      "path": "-sample.go",
+      "raw_message": "file differs from gofmt output",
+      "raw_ref": {
+        "byte_end": 13,
+        "byte_start": 0,
+        "execution": "gofmt.check.b001",
+        "json_pointer": "",
+        "record_index": 0,
+        "stream": "stdout",
+        "stream_sha256": "fea01c2aeff0c5f98ed91e282ec95f6d23c9a882d95912cdb5f0764467c4b9b8"
+      },
+      "raw_severity": null,
+      "related": [],
+      "rule_id": "format_mismatch",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "-sample.go"
+    }
+  ],
+  "outcome": {
+    "exit_class": "success_with_findings",
+    "partial_parse": false,
+    "reason": null,
+    "task_status": "succeeded"
+  },
+  "parse": {
+    "observations": 1,
+    "ok": true,
+    "records": 1,
+    "shape_errors": 0,
+    "tool_errors": 0,
+    "unparsed_bytes": 0,
+    "unresolved_observations": 0
+  },
+  "parser": {
+    "id": "gofmt",
+    "version": "1"
+  },
+  "patterns": [
+    "."
+  ],
+  "rule_pack": {
+    "config_files": [],
+    "id": "codeye-go-format",
+    "repository_config": "none",
+    "selection": [
+      "-l"
+    ],
+    "source_suppressions": "none",
+    "unreported_suppression_rules": [],
+    "version": "1"
+  },
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "070fa84f6f0e34e43d6d73580cb44a7e743b950a1be22bcf1840042ce52c0c6a",
+  "target": {
+    "platform": null,
+    "properties": {
+      "excluded_directories": "hidden,testdata,vendor,node_modules"
+    }
+  },
+  "task_key": "gofmt",
+  "tool": {
+    "name": "gofmt",
+    "version": "go1.27.4",
+    "version_tested": true
+  },
+  "tool_errors": [],
+  "workspace_drift": []
+}

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -25,6 +26,35 @@ func syntheticManifest(files map[string]int64) source.Manifest {
 		m.Entries = append(m.Entries, source.Entry{Path: p, Kind: "file", Size: &n, SHA256: strings.Repeat("a", 64)})
 	}
 	return m
+}
+
+func TestOrdinaryCoverageKeepsPinnedRetryTasks(t *testing.T) {
+	files := map[string]int64{"go.mod": 41}
+	for i := range 12 {
+		files[fmt.Sprintf("catalogue/entry%02d.go", i)] = 1017
+	}
+	j := analysis.Job{RunID: domain.NewID(), AttemptID: domain.NewID(), Scope: domain.Scope{Kind: "full"},
+		Snapshot: source.Snapshot{Manifest: syntheticManifest(files)}}
+	// A previous worker planned these keys from this manifest. A failed or
+	// cancelled run requeues all of them before requesting a pinned retry.
+	var stored []string
+	for i := 1; i <= 64; i++ {
+		stored = append(stored, fmt.Sprintf("review.investigate.s%03d", i), fmt.Sprintf("review.verify.s%03d", i))
+	}
+	j.AttemptID = domain.NewID()
+	plan, err := (Handler{Static: secretsStub{}, MaxCalls: 600}).Plan(t.Context(), j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actual []string
+	for _, task := range plan {
+		if _, _, ok := record.SliceTask(task.Key); ok {
+			actual = append(actual, task.Key)
+		}
+	}
+	if !slices.Equal(actual, stored) {
+		t.Fatalf("pinned retry planned %d tasks for %d stored tasks", len(actual), len(stored))
+	}
 }
 
 // randomTree is a repository of Go, Python, JS/TS, Rust and C/C++ modules
@@ -317,11 +347,9 @@ func TestExcerptBoundNeverBelowRealBytes(t *testing.T) {
 	}
 }
 
-// TC-163: a repository whose eligible files all fit the overview gets no
-// slice: today's plan, request bytes and records (the fixtures pinned by
-// TestGoReviewInputsUnchanged, the language fixtures and the regression
-// inputs, one metrics.go each).
-func TestSmallRepositoriesPlanNoSlices(t *testing.T) {
+// TC-163: even when every file fits the ordinary overview estimate, a
+// contract witness or a long file can leave lines for follow-up.
+func TestSmallRepositoriesPlanCoverageForDisplacedLines(t *testing.T) {
 	jobs := goPinJobs(t)
 	jobs["metrics-regression"] = treeJob(t, map[string]string{"go.mod": "module sample.test/metrics\n\ngo 1.23\n", "metrics.go": "package metrics\n\nfunc Mean() {}\n", "README.md": "# Metrics\n"})
 	for _, c := range langCases {
@@ -336,10 +364,9 @@ func TestSmallRepositoriesPlanNoSlices(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, s := range specs {
-			if strings.HasPrefix(s.Key, "review.") && !slices.Contains([]string{"review.environment", "review.documents", "review.investigate", "review.interpret", "review.verify"}, s.Key) {
-				t.Errorf("%s plans %s", name, s.Key)
-			}
+		slots := len(sliceKeys(specs))
+		if !slices.ContainsFunc(specs, func(s analysis.TaskSpec) bool { return s.Key == record.TaskScope }) || slots < 1 || slots != coverageSlots(plan) || slots > record.LegacyMaxSlices {
+			t.Errorf("%s plan does not allow for displaced lines (%d slots)", name, slots)
 		}
 	}
 }

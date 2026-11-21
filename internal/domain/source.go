@@ -275,11 +275,13 @@ type RunRequest struct {
 
 // Scope selects what part of the source a run covers.
 type Scope struct {
-	Kind  string   `json:"kind"`
-	Paths []string `json:"paths,omitempty"`
+	Kind           string   `json:"kind"`
+	Paths          []string `json:"paths,omitempty"`
+	ReviewCoverage string   `json:"review_coverage,omitempty"`
 }
 
 const maxScopePaths = 100
+const ReviewCoverageExtended = "extended"
 
 // ParseRunRequest strictly decodes and validates a run creation body.
 func ParseRunRequest(raw []byte) (RunRequest, error) {
@@ -299,6 +301,9 @@ func (r RunRequest) Validate() error {
 	}
 	if r.SourcePolicy != "latest_at_acquire" {
 		return invalidf("source_policy must be latest_at_acquire")
+	}
+	if r.Scope.ReviewCoverage != "" && r.Scope.ReviewCoverage != ReviewCoverageExtended {
+		return invalidf("scope review_coverage must be extended")
 	}
 	switch r.Scope.Kind {
 	case "full":

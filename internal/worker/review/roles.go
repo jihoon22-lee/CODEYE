@@ -761,9 +761,20 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	sent, trimmed, err := s.fitExcerpts(instructions, 1, code, build)
 	// Keep space for multiple implementation paths before sending every
 	// environment note. A truncated handoff is visible in the role record.
-	for (err == nil || errors.Is(err, errTooLarge)) && len(sent) < min(3, len(code)) && len(in.Environment.Notes) > 0 {
+	minimum := min(3, len(code))
+	if s.slice != nil {
+		minimum = len(code)
+	}
+	for (err == nil || errors.Is(err, errTooLarge)) && len(sent) < minimum && len(in.Environment.Notes) > 0 {
 		in.Environment.Notes = in.Environment.Notes[:len(in.Environment.Notes)-1]
 		s.rec.Limitations = addLim(s.rec.Limitations, "environment_notes_outside_input")
+		in.Scope.Limitations = s.rec.Limitations
+		sent, trimmed, err = s.fitExcerpts(instructions, 1, code, build)
+	}
+	if s.slice != nil && (err == nil || errors.Is(err, errTooLarge)) && len(sent) < minimum && uDoc.State == record.UpstreamAccepted {
+		docEv = nil
+		in.Documents = documentsHandoff{State: uDoc.State, Contracts: []record.Contract{}, Conflicts: []record.Conflict{}, Questions: []record.Question{}, Evidence: []docEvidence{}}
+		s.rec.Limitations = addLim(s.rec.Limitations, "document_context_outside_review_input")
 		in.Scope.Limitations = s.rec.Limitations
 		sent, trimmed, err = s.fitExcerpts(instructions, 1, code, build)
 	}
@@ -797,8 +808,10 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	}
 	s.setEvidence(append(append([]record.Excerpt{}, sent...), docEv...))
 	catalog := catalogOf(s.rec.Evidence)
+	source := catalogOf(sent)
 	var candidates []record.Candidate
 	var strengths []record.Strength
+	var strengthsOmitted bool
 	var comparisons []record.ContractComparison
 	var probe *record.ContractProbe
 	var probeObservation string
@@ -813,7 +826,7 @@ func (s *roleStage) investigate() analysis.TaskResult {
 			return errs
 		}
 		var errs []string
-		if len(out.Candidates) > 4 || len(out.Strengths) > record.MaxReviewStrengths || len(out.ContractComparisons) > record.MaxContractComparisons {
+		if len(out.Candidates) > 4 || len(out.ContractComparisons) > record.MaxContractComparisons {
 			errs = addLim(errs, "too_many_items")
 		}
 		var list []record.Candidate
@@ -825,11 +838,15 @@ func (s *roleStage) investigate() analysis.TaskResult {
 			c.ID = fmt.Sprintf("investigate_%d", i+1)
 			list = append(list, record.Candidate{CandidateText: c, Origin: record.StageInvestigate})
 		}
+		var supported []record.Strength
 		for _, x := range out.Strengths {
-			if record.ForeignInsightProse(x.Title) || record.ForeignInsightProse(x.Benefit) {
-				errs = addLim(errs, record.InsightLanguageError)
-			} else if !x.Valid(catalog) || !s.existingDir(x.Scope) {
-				errs = addLim(errs, "strength_invalid")
+			if len(supported) == record.MaxReviewStrengths {
+				break
+			}
+			if x.Valid(catalog) && s.existingDir(x.Scope) && slices.ContainsFunc(x.EvidenceIDs, func(id string) bool {
+				return strengthImplementation(source[id])
+			}) {
+				supported = append(supported, x)
 			}
 		}
 		seen := map[int]bool{}
@@ -842,7 +859,8 @@ func (s *roleStage) investigate() analysis.TaskResult {
 			seen[x.ContractIndex] = true
 		}
 		if len(errs) == 0 {
-			candidates, strengths, comparisons = list, out.Strengths, out.ContractComparisons
+			candidates, strengths, comparisons = list, supported, out.ContractComparisons
+			strengthsOmitted = len(supported) != len(out.Strengths)
 			probe, probeObservation = selectContractProbe(out.ContractProbe, navigation, comparisons, in)
 		}
 		return errs
@@ -852,6 +870,9 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		return *r
 	}
 	s.rec.Candidates, s.rec.Strengths, s.rec.ContractComparisons = candidates, strengths, comparisons
+	if strengthsOmitted {
+		s.rec.Limitations = addLim(s.rec.Limitations, "review_strength_omitted")
+	}
 	if probe != nil {
 		for i := range s.rec.ContractComparisons {
 			resolveContractProbeReason(&s.rec.ContractComparisons[i], *probe, navigation, in)
@@ -867,6 +888,20 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		s.rec.Schema = record.SchemaVersionWorkflowReading
 	}
 	return s.finish()
+}
+
+// A strength needs implementation in an actual submitted source excerpt.
+// Optional prose with insufficient evidence must not discard valid candidates.
+func strengthImplementation(e record.Excerpt) bool {
+	if !contractRuntimePath(e.Path, e.Kind) {
+		return false
+	}
+	found := false
+	contractExecutableLines(e.Text, e.Path, func(_ int, _ bool) bool {
+		found = true
+		return true
+	})
+	return found
 }
 
 func candidateErrors(c record.CandidateText, catalog map[string]record.Excerpt) []string {

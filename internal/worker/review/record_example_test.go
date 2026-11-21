@@ -35,7 +35,7 @@ func TestReviewExampleRecords(t *testing.T) {
 	f := &scriptedCaller{script: validScript(t)}
 	plan, res := runRole(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
 	for _, r := range rows(plan, res) {
-		if r.key == "review.contract" && r.status == "skipped_policy" && r.reason == domain.ReasonNoReviewScope && !r.required {
+		if r.status == "skipped_policy" && r.reason == domain.ReasonNoReviewScope && !r.required {
 			continue
 		}
 		if r.status != "succeeded" {

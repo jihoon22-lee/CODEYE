@@ -1,10 +1,11 @@
 import { useId, useState, type FormEvent } from 'react';
-import { SETUP_AVAILABLE_KEYS, type AnalysisChoices, type Api, type Project, type Provider, type Setup } from './api';
+import { RUN_BODY, SETUP_AVAILABLE_KEYS, TEST_RUN_BODY, type AnalysisChoices, type Api, type Project, type Provider, type Setup } from './api';
 import { describeError, isTerminalRun, type ErrorText } from './format';
 import type { Idempotency } from './idempotency';
 import { ko as t } from './locales/ko';
 import { CHOICE_AVAILABILITY, choiceLocked, choicesFor, parseTarget, quickBody, unavailableReason } from './quickStart';
 import { ErrorNote } from './RunPanel';
+import { pullRequestRunBody } from './pullRequest';
 
 type Props = { api: Api; userId: string; idempotency: Idempotency; setup: Setup | null; providers: Provider[]; onStarted: (project: Project, runId: string) => void };
 
@@ -18,6 +19,7 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
   const [branch, setBranch] = useState<string | null>(null); // null: follow the address
   const [touched, setTouched] = useState<Partial<AnalysisChoices>>({});
   const [comment, setComment] = useState<boolean | null>(null); // null: the project's remembered choice
+  const [withTests, setWithTests] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<ErrorText | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -26,6 +28,7 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
   const parsed = parseTarget(input).target;
   const kind = parsed?.kind ?? 'local';
   const choices = choicesFor(kind, setup, touched);
+  const canTest = choices.run_build_scripts && !choiceLocked(setup, 'run_build_scripts');
   const shownBranch = branch ?? (parsed?.kind === 'git' ? parsed.branch ?? '' : '');
   const pullRequest = parsed?.kind === 'git' ? parsed.pullRequest ?? null : null;
   // What this service does not offer the user, said plainly under the field.
@@ -41,6 +44,7 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
     if (!body) { setError(refused); return; }
     setError(null);
     setSubmitting(true);
+    const runBody = withTests && canTest ? TEST_RUN_BODY : RUN_BODY;
     try {
       const project = await api.createProject(body);
       const active = project.activity?.run;
@@ -51,14 +55,17 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
         if (comment !== null && project.can_manage && project.analysis && (project.analysis.comment_on_pull_request ?? false) !== comment) {
           await api.setProjectAnalysis(project.id, { ...project.analysis, comment_on_pull_request: comment });
         }
-        const ack = await api.createPullRequestRun(project.id, idempotency.keyFor(userId, project.id), target.pullRequest, comment);
-        idempotency.complete(userId, project.id);
+        const body = pullRequestRunBody(target.pullRequest, comment, runBody.profile);
+        const key = idempotency.keyFor(userId, project.id, body);
+        const ack = await api.createPullRequestRun(project.id, key, target.pullRequest, comment, runBody.profile);
+        idempotency.complete(userId, project.id, body);
         runId = ack.id;
-      } else if (active && !isTerminalRun(active.status)) {
+      } else if (runBody === RUN_BODY && active && !isTerminalRun(active.status)) {
         runId = active.id;
       } else {
-        const ack = await api.createRun(project.id, idempotency.keyFor(userId, project.id));
-        idempotency.complete(userId, project.id);
+        const key = idempotency.keyFor(userId, project.id, runBody);
+        const ack = await api.createRun(project.id, key, runBody);
+        idempotency.complete(userId, project.id, runBody);
         runId = ack.id;
       }
       setInput('');
@@ -66,6 +73,7 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
       setBranch(null);
       setTouched({});
       setComment(null);
+      setWithTests(false);
       onStarted(project, runId);
     } catch (e) {
       setServerError(describeError(e));
@@ -112,6 +120,11 @@ export function QuickStart({ api, userId, idempotency, setup, providers, onStart
       </div>}
       {box('send_source_to_model', q.sendSource, q.sendSourceHelp)}
       {box('run_build_scripts', q.runBuildScripts, q.runBuildScriptsHelp)}
+      <div className="field">
+        <label className="inline"><input type="checkbox" checked={withTests && canTest} disabled={!canTest} aria-describedby={`${uid}-tests-help`}
+          onChange={e => setWithTests(e.target.checked)} /> {q.withTests}</label>
+        <small id={`${uid}-tests-help`} className="small">{q.withTestsHelp}</small>
+      </div>
       {box('fetch_dependencies', q.fetchDependencies, q.fetchDependenciesHelp)}
       {pullRequest !== null && <div className="field">
         <label className="inline"><input type="checkbox" checked={comment ?? false} aria-describedby={`${uid}-comment-help`} onChange={e => setComment(e.target.checked)} /> {t.pullRequest.commentBox}</label>

@@ -77,6 +77,7 @@ export function ProjectsView({ api, userId, idempotency, link, claimReportLandin
   const [lastOk, setLastOk] = useState<Date | null>(null);
   // A deep link (codeye up) opens its project once it is in the list.
   const [selectedId, setSelectedId] = useState<string | null>(link?.project ?? null);
+  const [projectsExpanded, setProjectsExpanded] = useState(false);
   const [reloads, setReloads] = useState(0);
   const latest = useRef<Project[]>([]);
   const poller = useRef<Poller<ProjectPage> | null>(null);
@@ -137,25 +138,31 @@ export function ProjectsView({ api, userId, idempotency, link, claimReportLandin
   // Every user starts with the one-field start; the projects are listed under it.
   const created = (project: Project) => { commit([project, ...latest.current.filter(x => x.id !== project.id)]); setSelectedId(project.id); };
   const list = <section className="panel list-panel" aria-labelledby="list-title">
-    <h2 id="list-title">{p.listTitle}</h2>
-    {error && <><ErrorNote error={{ ...error, message: `${p.loadFailed} ${error.message}` }} />{projects.length > 0 && lastOk && <p className="small">{t.stages.listPollError} {t.stages.lastConfirmed(formatClock(lastOk))}</p>}<button type="button" onClick={() => setReloads(n => n + 1)}>{p.reload}</button></>}
-    <div aria-live="polite" aria-busy={loading}>
-      {loading && projects.length === 0 ? <p>{p.loading}</p> : projects.length === 0 && !error ? <p className="small">{p.listEmpty}</p> : null}
+    <div className="project-list-header">
+      <h2 id="list-title">{p.listTitle}</h2>
+      <button type="button" className="project-list-toggle" aria-controls="project-list-content" aria-expanded={projectsExpanded}
+        onClick={() => setProjectsExpanded(expanded => !expanded)}>{projectsExpanded ? p.closeList : p.openList}</button>
     </div>
-    <ul className="plain projects">
-      {projects.map(project => {
-        const summary = describeSource(project, roots.items, providers.items);
-        return <li key={project.id}>
-          <button type="button" className="item" aria-pressed={project.id === selectedId} onClick={() => setSelectedId(project.id)}>
-            <strong>{project.name === '' ? shorten(summary, 60) : project.name}</strong>
-            {project.name !== '' && <span className="small">{summary}</span>}
-          </button>
-          <ProjectActivity project={project} />
-          <LastReportLink project={project} />
-        </li>;
-      })}
-    </ul>
-    {cursor && <div className="actions"><button type="button" onClick={loadMore} disabled={loading}>{p.loadMore}</button></div>}
+    <div id="project-list-content" className="project-list-content" data-expanded={projectsExpanded}>
+      {error && <><ErrorNote error={{ ...error, message: `${p.loadFailed} ${error.message}` }} />{projects.length > 0 && lastOk && <p className="small">{t.stages.listPollError} {t.stages.lastConfirmed(formatClock(lastOk))}</p>}<button type="button" onClick={() => setReloads(n => n + 1)}>{p.reload}</button></>}
+      <div aria-live="polite" aria-busy={loading}>
+        {loading && projects.length === 0 ? <p>{p.loading}</p> : projects.length === 0 && !error ? <p className="small">{p.listEmpty}</p> : null}
+      </div>
+      <ul className="plain projects">
+        {projects.map(project => {
+          const summary = describeSource(project, roots.items, providers.items);
+          return <li key={project.id}>
+            <button type="button" className="item" aria-pressed={project.id === selectedId} onClick={() => setSelectedId(project.id)}>
+              <strong>{project.name === '' ? shorten(summary, 60) : project.name}</strong>
+              {project.name !== '' && <span className="small">{summary}</span>}
+            </button>
+            <ProjectActivity project={project} />
+            <LastReportLink project={project} />
+          </li>;
+        })}
+      </ul>
+      {cursor && <div className="actions"><button type="button" onClick={loadMore} disabled={loading}>{p.loadMore}</button></div>}
+    </div>
   </section>;
   const create = <section className="panel start-panel" aria-labelledby="create-title">
     <h2 id="create-title" className="visually-hidden">{p.createTitle}</h2>

@@ -13,12 +13,12 @@
     {
       "source": "review.documents",
       "state": "accepted",
-      "sha256": "64aa905efae121eeebf1346fe4b93c257b63de9b5e0e4f54c99947f9a4024ec3"
+      "sha256": "f0d0fc61d1407af81f070668b01339baaa7b693b5da2ceeda51e3ff78d32ed48"
     },
     {
       "source": "review.investigate",
       "state": "accepted",
-      "sha256": "0617bd97715f319211f92c5bc482a355f853e7f31db89f2d239f309ac9ab7129"
+      "sha256": "f2ae541f5732f0afbda6f6533591c56d03cbcb8992218f98326fdd181482463d"
     },
     {
       "source": "review.interpret",

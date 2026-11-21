@@ -23,6 +23,10 @@ const (
 	textToolEvidence       = "도구 출력 stream의 원시 진단(레코드 순번과 byte 범위로 위치 지정)."
 	textRejectImpact       = "문자열·숫자·일반 객체처럼 Error가 아닌 값을 Promise의 거부 사유로 쓰면, 오류 처리부가 Error의 메시지와 스택을 기대할 때 실패 원인을 추적하기 어려울 수 있다."
 	textRejectAction       = "근거에 표시된 거부 호출의 인자와 호출부의 오류 처리 계약을 확인한다. 호출부가 원래 값을 읽는다면 그 동작을 보존하면서 Error 객체를 전달할 수 있는지 검토한다. 이미 받은 Error 객체는 메시지와 스택을 보존하도록 그대로 전달한다."
+	textFormatImpact       = "현재 파일의 서식이 기록된 gofmt 버전의 출력과 다르다."
+	textFormatAction       = "해당 파일에 gofmt를 적용한 뒤 변경된 서식을 검토한다."
+	textFormatVerification = "같은 버전의 gofmt -l로 해당 파일을 다시 검사해 출력이 없는지 확인한다."
+	textFormatScope        = "파일 전체의 비교 결과이며 표시 위치는 파일 첫 줄이다."
 	textRejectVerification = "해당 실패 경로를 실행해 기존 오류 처리 계약과 사용자 안내 문구가 유지되고 오류 처리부가 메시지와 스택을 얻는지 확인한다."
 )
 
@@ -146,6 +150,19 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 				categories[k] = o.Category
 			}
 		}
+		if obs.Metric != nil && obs.Metric.Name == "duplicated_lines" {
+			switch {
+			case len(o.Related) != 1 || o.Related[0].Location == nil:
+				obs.EvidenceState = EvidenceUnresolved
+			default:
+				l := o.Related[0].Location
+				if sha, ok := ctx.Source.Lookup(l.Path); ok && sha == l.BlobSHA256 {
+					obs.Metric.Counterpart = &ObservationLocation{SnapshotID: ctx.Snapshot.ID, Path: l.Path, StartLine: l.StartLine, EndLine: l.EndLine, ColumnUnit: "byte", BlobSHA256: l.BlobSHA256}
+				} else {
+					obs.EvidenceState = EvidenceManifestMismatch
+				}
+			}
+		}
 		out.Observations = append(out.Observations, obs)
 	}
 	sort.Strings(order)
@@ -211,6 +228,12 @@ func toolFinding(ctx DecodeContext, analyzerID, category string, obs []Observati
 		f.Impact = textRejectImpact
 		f.Recommendation.Summary = textRejectAction
 		f.Verification = []string{textRejectVerification}
+	}
+	if analyzerID == "go.gofmt" && first.RuleID == "format_mismatch" {
+		f.Impact = textFormatImpact
+		f.Recommendation.Summary = textFormatAction
+		f.Verification = []string{textFormatVerification}
+		f.Limitations = []string{textFormatScope}
 	}
 	var toolIDs []string
 	for _, o := range obs {

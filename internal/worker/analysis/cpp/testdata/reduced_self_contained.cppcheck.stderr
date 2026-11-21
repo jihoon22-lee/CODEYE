@@ -17,6 +17,6 @@
             <location file="[REDACTED]/src/util.cpp" line="18" column="17"/>
             <symbol>counts</symbol>
         </error>
-        <error id="checkersReport" severity="information" msg="Active checkers: 125/189 (use --checkers-report=&lt;filename&gt; to see details)" verbose="Active checkers: 125/189 (use --checkers-report=&lt;filename&gt; to see details)"/>
+        <error id="checkersReport" severity="information" msg="Active checkers: 175/189 (use --checkers-report=&lt;filename&gt; to see details)" verbose="Active checkers: 175/189 (use --checkers-report=&lt;filename&gt; to see details)"/>
     </errors>
 </results>

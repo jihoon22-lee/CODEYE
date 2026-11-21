@@ -3,6 +3,7 @@ import type { AnalysisReport } from './analysisReport';
 import { reportKo as t } from './locales/report-ko';
 import { reportSearchKo as s } from './locales/report-search-ko';
 import type { Citation } from './parseReportSections';
+import { documentComparisonHeading } from './reportDocumentGroups';
 import './ReportSearch.css';
 
 export type ReportSearchTarget =
@@ -41,9 +42,9 @@ function searchEntries(report: AnalysisReport): SearchEntry[] {
     const workflowRefs = row.workflow ? [row.workflow.read, row.workflow.change, row.workflow.test] : [];
     const refs = [...new Set([...row.documentRefs, ...row.codeRefs, ...(row.additional?.codeRefs ?? []), ...workflowRefs])]
       .map(id => citations.get(id)).filter((c): c is Citation => !!c);
-    return entry({kind: 'comparison', index}, includesCode ? row.statement : t.reading.comparisonStatus[row.status] ?? s.comparison,
+    return entry({kind: 'comparison', index}, documentComparisonHeading(row, index, includesCode !== false),
       t.sections.titles.documents, refs.flatMap(c => [c.path, ...(c.directivePath ? [c.directivePath] : [])]),
-      includesCode ? [row.reason, row.additional?.reason ?? '', ...refs.map(c => c.excerpt?.text ?? '')] : []);
+      [t.reading.comparisonStatus[row.status] ?? s.comparison, ...(includesCode ? [row.reason, row.additional?.reason ?? '', ...refs.map(c => c.excerpt?.text ?? '')] : [])]);
   }) ?? [];
   for (const f of report.findings) {
     const section = !sections ? 'findings' : codeReview.has(f.id) ? 'code_review' : 'static_analysis';
@@ -73,6 +74,9 @@ export function focusReportFinding(container: HTMLElement | null | undefined, id
 }
 
 export function focusReportSearchLocation(target: HTMLElement | null | undefined) {
+  for (let parent = target?.parentElement; parent; parent = parent.parentElement) {
+    if (parent instanceof HTMLDetailsElement) parent.open = true;
+  }
   target?.focus({ preventScroll: true });
   target?.scrollIntoView?.({ block: 'start' });
 }
@@ -105,8 +109,8 @@ export function ReportSearch({ report, navigate }: { report: AnalysisReport; nav
       }
     }}>
       <button ref={trigger} type="button" className="btn btn-sm btn-ghost-primary report-search-toggle"
-        aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
-        {s.title}
+        aria-expanded={open} aria-controls={id} aria-label={s.title} onClick={() => setOpen(!open)}>
+        <span className="report-search-label">{s.title}</span><span className="report-search-icon" aria-hidden="true" />
       </button>
       <div id={id} hidden={!open}>
         {open && <>

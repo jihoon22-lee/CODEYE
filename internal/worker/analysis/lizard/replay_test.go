@@ -73,6 +73,8 @@ func TestReplayMetrics(t *testing.T) {
 		t.Fatalf("metrics %v", got)
 	}
 	if !slices.Equal(doc.Coverage.ProcessedPaths, []string{"src/complex.py", "src/route/route.go", "web/add.js"}) || doc.Coverage.Units[UnitAnalyzed] != 3 ||
+		doc.Coverage.Units["functions_measured"] != 4 || doc.Coverage.Units[anypack.UnitExcludedThirdPartyDirectory] != 1 ||
+		!slices.Contains(doc.Limitations, anypack.LimThirdPartyDirectoriesExcluded) || doc.Target.Properties["excluded_third_party_directories"] != anypack.ThirdPartyDirectories ||
 		doc.Coverage.Units[anypack.UnitExcludedDataDir] != 2 || !slices.Contains(doc.Limitations, anypack.LimDataDirsExcluded) || doc.Target.Properties["excluded_directories"] != anypack.DataDirectories {
 		t.Fatalf("coverage %+v", doc.Coverage)
 	}

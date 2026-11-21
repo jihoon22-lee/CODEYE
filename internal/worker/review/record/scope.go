@@ -20,16 +20,16 @@ import (
 // slot by slot afterwards and is read from the slice task states
 // (budget_exhausted / review_budget_exhausted).
 //
-// Schema 0.2 is what the worker writes. Schema 0.1 (plan-time slices without
-// priority) is still decoded so an older worker's artifact reads; DecodeScope
-// returns it in the 0.2 shape with Schema "0.1" and no priority fields.
+// Schema 0.3 records source line windows. Earlier artifacts retain their
+// original file-only coverage and admission rules when decoded.
 const (
-	ScopeMediaType     = "application/vnd.codeye.review-scope+json"
-	ScopeSchemaVersion = "0.2"
+	ScopeMediaType      = "application/vnd.codeye.review-scope+json"
+	ScopeSchemaVersion  = "0.3"
+	ScopeSchemaPriority = "0.2"
 	// ScopeSchemaPlanned is the earlier schema of plan-time slices.
 	ScopeSchemaPlanned = "0.1"
 	ScopeKind          = "review_scope"
-	ScopeMaxBytes      = 1 << 20
+	ScopeMaxBytes      = 24 << 20
 
 	// Call budget of the review (codeye agent --review-max-calls).
 	DefaultMaxCalls = 99
@@ -44,22 +44,28 @@ const (
 	// verify) for every slot, the usual cost of a slot whose replies need no
 	// repair. A slot needing repairs costs up to SliceReserveCalls, so at
 	// the largest ceiling fewer slots may be admitted.
-	MaxSlices   = 96
-	MaxMaxCalls = WholeRunMaxCalls + MaxSlices*2
+	LegacyMaxSlices = 96
+	LegacyMaxCalls  = WholeRunMaxCalls + LegacyMaxSlices*2
+	MaxSlices       = 999
+	MaxMaxCalls     = WholeRunMaxCalls + MaxSlices*2
 	// planSlices bounds the slices of a schema 0.1 artifact.
 	planSlices = 32
 
 	// Admission rule recorded in the artifact: sequential admission of
 	// slots in order, each needing SliceReserveCalls of the calls the
 	// attempt has left.
-	AdmissionSequentialReserve = "sequential_reserve"
+	AdmissionSequentialReserve   = "sequential_reserve"
+	AdmissionReserveVerification = "reserve_verification"
+	SliceMinCalls                = 2
 	// PriorityOrder names the order review.scope fills the slots in
 	// (docs/REVIEW.md#검토-우선순위).
 	PriorityOrder = "primary_first_observations_first"
 	// PriorityPullRequestFirst is the order of a pull-request run: the
 	// changed files first, then the files in their directories, each tier in
 	// PriorityOrder.
-	PriorityPullRequestFirst = "pull_request_changed_first"
+	PriorityPullRequestFirst     = "pull_request_changed_first"
+	PriorityCoverageFirst        = "coverage_first"
+	PriorityChangedCoverageFirst = "pull_request_changed_coverage_first"
 	// Pull-request labels of a scope file and slot.
 	PullRequestChanged  = "changed"
 	PullRequestNeighbor = "neighbor"
@@ -166,6 +172,17 @@ type ScopeFile struct {
 	// the pull request changes or that sits beside one (order
 	// pull_request_changed_first); absent otherwise.
 	PullRequest string `json:"pull_request,omitempty"`
+	// StartLine identifies the first line of a planned slice window in schema 0.3.
+	StartLine int    `json:"start_line,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+// ScopeOmission identifies a line range with no request the worker can schedule.
+type ScopeOmission struct {
+	Path      string `json:"path"`
+	StartLine int    `json:"start_line"`
+	EndLine   int    `json:"end_line"`
+	Reason    string `json:"reason"`
 }
 
 // ScopeOverview is the overview prefix and the code and test files the
@@ -193,27 +210,31 @@ type ScopeSlice struct {
 
 // ScopeDoc is the review scope artifact (schema 0.2 shape).
 type ScopeDoc struct {
-	Schema      string        `json:"schema_version"`
-	Kind        string        `json:"kind"`
-	Pack        PackRef       `json:"pack"`
-	Snapshot    string        `json:"snapshot_manifest_digest"`
-	RunID       string        `json:"run_id"`
-	AttemptID   string        `json:"attempt_id"`
-	Screen      string        `json:"screen"`
-	Budget      ScopeBudget   `json:"budget"`
-	Limits      ScopeLimits   `json:"limits"`
-	Priority    ScopePriority `json:"priority"`
-	Upstream    []Upstream    `json:"upstream"`
-	Modules     []ScopeModule `json:"modules"`
-	Overview    ScopeOverview `json:"overview"`
-	Slices      []ScopeSlice  `json:"slices"`
-	Excluded    []ScopeFile   `json:"excluded"`
-	Limitations []string      `json:"limitations"`
+	Schema      string          `json:"schema_version"`
+	Kind        string          `json:"kind"`
+	Pack        PackRef         `json:"pack"`
+	Snapshot    string          `json:"snapshot_manifest_digest"`
+	RunID       string          `json:"run_id"`
+	AttemptID   string          `json:"attempt_id"`
+	Screen      string          `json:"screen"`
+	Budget      ScopeBudget     `json:"budget"`
+	Limits      ScopeLimits     `json:"limits"`
+	Priority    ScopePriority   `json:"priority"`
+	Upstream    []Upstream      `json:"upstream"`
+	Modules     []ScopeModule   `json:"modules"`
+	Overview    ScopeOverview   `json:"overview"`
+	Slices      []ScopeSlice    `json:"slices"`
+	Excluded    []ScopeFile     `json:"excluded"`
+	Unplanned   []ScopeFile     `json:"unplanned,omitempty"`
+	Omitted     []ScopeOmission `json:"omitted,omitempty"`
+	Limitations []string        `json:"limitations"`
 }
 
 // Planned reports an artifact of the earlier schema (plan-time slices, no
 // priority).
 func (d ScopeDoc) Planned() bool { return d.Schema == ScopeSchemaPlanned }
+
+func (d ScopeDoc) LineCoverage() bool { return d.Schema == ScopeSchemaVersion }
 
 // The schema 0.1 shape, decoded strictly and converted.
 type scopeLimitsV01 struct {
@@ -335,9 +356,9 @@ func DecodeScope(body []byte, want Expect) (ScopeDoc, error) {
 	return d, nil
 }
 
-// MarshalScope validates before encoding. Only schema 0.2 is written.
+// MarshalScope validates before encoding. Workers write schema 0.3.
 func MarshalScope(d ScopeDoc, want Expect) ([]byte, error) {
-	if d.Schema != ScopeSchemaVersion {
+	if d.Schema != ScopeSchemaVersion && d.Schema != ScopeSchemaPriority {
 		return nil, invalid("scope schema")
 	}
 	if err := ValidateScope(d, want); err != nil {
@@ -357,8 +378,9 @@ func MarshalScope(d ScopeDoc, want Expect) ([]byte, error) {
 // fields of every file and slot.
 func ValidateScope(d ScopeDoc, want Expect) error {
 	planned := d.Planned()
+	coverage := d.LineCoverage()
 	switch {
-	case (d.Schema != ScopeSchemaVersion && !planned) || d.Kind != ScopeKind:
+	case (!coverage && d.Schema != ScopeSchemaPriority && !planned) || d.Kind != ScopeKind:
 		return invalid("scope schema")
 	case !packID.MatchString(d.Pack.ID) || !version.MatchString(d.Pack.Version):
 		return invalid("pack identity")
@@ -376,23 +398,36 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 		return invalid("limitations")
 	}
 	b := d.Budget
+	reserve, admission := SliceReserveCalls, AdmissionSequentialReserve
+	if coverage {
+		reserve, admission = SliceMinCalls, AdmissionReserveVerification
+	}
 	// A schema 0.1 artifact came from a worker whose largest ceiling was 207
 	// as well.
-	if !ValidMaxCalls(b.MaxCalls) || b.WholeRunMaxCalls != WholeRunMaxCalls || b.SliceReserveCalls != SliceReserveCalls || b.Admission != AdmissionSequentialReserve ||
+	if !ValidMaxCalls(b.MaxCalls) || (!coverage && b.MaxCalls > LegacyMaxCalls) ||
+		b.WholeRunMaxCalls != WholeRunMaxCalls || b.SliceReserveCalls != reserve || b.Admission != admission ||
 		b.MaxRequestBytes <= 0 || b.CallsBeforeSlices < 0 || b.CallsBeforeSlices > WholeRunMaxCalls {
 		return invalid("budget")
 	}
 	l := d.Limits
-	maxSlices := MaxSlices
+	maxSlices := LegacyMaxSlices
 	if planned {
 		maxSlices = planSlices
+	} else if coverage && l.MaxSlices == MaxSlices {
+		maxSlices = MaxSlices
 	}
 	if l.MaxFiles <= 0 || l.MaxBytes <= 0 || l.MaxFileBytes <= 0 || l.MaxFileBytes > l.MaxBytes || l.MaxFileLines <= 0 || l.MaxSlices != maxSlices ||
-		(!planned && (l.Slots < 1 || l.Slots > MaxSlices)) {
+		(!planned && (l.Slots < 0 || l.Slots > maxSlices)) || (!coverage && !planned && l.Slots == 0) ||
+		(l.MaxSlices != MaxSlices && b.MaxCalls > LegacyMaxCalls) {
 		return invalid("limits")
 	}
 	pullRequest := d.Priority.Order == PriorityPullRequestFirst
-	if !planned && ((d.Priority.Order != PriorityOrder && !pullRequest) || !d.Priority.Secondary.Valid()) {
+	ordinary := PriorityOrder
+	if coverage {
+		pullRequest = d.Priority.Order == PriorityChangedCoverageFirst
+		ordinary = PriorityCoverageFirst
+	}
+	if !planned && ((d.Priority.Order != ordinary && !pullRequest) || !d.Priority.Secondary.Valid()) {
 		return invalid("priority rule")
 	}
 	if planned && (d.Priority.Order != "" || len(d.Excluded) != 0) {
@@ -403,6 +438,12 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 	}
 	if err := checkUpstreamState(d.Upstream[0]); err != nil {
 		return err
+	}
+	if coverage {
+		return validateCoverageScope(d, want, pullRequest)
+	}
+	if d.Unplanned != nil || d.Omitted != nil {
+		return invalid("line coverage fields on older scope")
 	}
 	modules := map[string]ScopeModule{}
 	notPlanned := 0
@@ -428,6 +469,8 @@ func ValidateScope(d ScopeDoc, want Expect) error {
 	checkFile := func(f ScopeFile, states ...string) error {
 		_, known := modules[f.Module]
 		switch {
+		case f.StartLine != 0 || f.Reason != "":
+			return invalid("line coverage fields on older scope")
 		case domain.ValidateEvidencePath(f.Path) != nil || !hex64.MatchString(f.SHA256) || files[f.Path]:
 			return invalid("scope file")
 		case SourceKind(f.Path) == "" || !known || !slices.Contains(states, f.State):

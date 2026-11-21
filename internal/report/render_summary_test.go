@@ -97,7 +97,7 @@ func checkTableWidths(t *testing.T, md string) {
 func TestLedgerRowsShowSecondaryFiles(t *testing.T) {
 	r := storedExample(t, "../../examples/report-slices.json")
 	m := &r.CodeReview.Ledger.Modules[1]
-	// go:store as a secondary module whose 13 files the ceiling refused.
+	// Display the go:store row as a secondary module with its own counts.
 	m.Class, m.FilesSecondary, m.FilesSecondarySent = "secondary", m.FilesEligible, m.FilesSentToModel
 	m.FilesSecondaryNotReached, m.FilesBudgetExhausted = m.FilesBudgetExhausted, 0
 	d := strings.Repeat("0", 64)
@@ -113,7 +113,12 @@ func TestLedgerRowsShowSecondaryFiles(t *testing.T) {
 			t.Fatalf("%s: no secondary ledger row", detail)
 		}
 		line := md[i : i+strings.Index(md[i:], "\n")]
-		if !strings.Contains(line, " | 0 | 0 | 13 | 0 | 17 |") {
+		want := []int{m.FilesBudgetExhausted, m.FilesNotPlanned, m.FilesSecondaryNotReached, m.FilesNotSent, m.FilesWithCompletedReview}
+		var cells []string
+		for _, n := range want {
+			cells = append(cells, strconv.Itoa(n))
+		}
+		if !strings.HasSuffix(line, " | "+strings.Join(cells, " | ")+" |") {
 			t.Fatalf("%s: secondary row %s", detail, line)
 		}
 	}
@@ -178,6 +183,63 @@ func TestSummaryStaticGroupsAddUp(t *testing.T) {
 		}
 		if shown+rest != c.primary+c.secondary || (c.primary > 0 && c.primary+c.secondary > summaryShown && strings.Contains(strings.Split(text, " 외 ")[0], "fixtures/")) {
 			t.Fatalf("%+v: %q", c, text)
+		}
+	}
+}
+
+func TestRegularStaticOutcomeExcludesMeasurementsAndSecretScans(t *testing.T) {
+	r := storedExample(t, "../../examples/report.json")
+	r.StaticAnalysis.Stage.Tasks, r.StaticAnalysis.Stage.Succeeded = 122, 76
+	tools := make([]StaticTool, 0, 122)
+	for n := range 119 {
+		tool := StaticTool{TaskKey: "testdiagnostic.m" + strconv.Itoa(n), TaskStatus: "unsupported", Result: "not_in_result_manifest"}
+		if n < 73 {
+			tool.TaskStatus, tool.Result = "succeeded", DiscoveryAccepted
+		}
+		tools = append(tools, tool)
+	}
+	for _, key := range []string{"lizard", "jscpd", "gitleaks"} {
+		// Legacy specialized rows may only identify their purpose by task key.
+		tools = append(tools, StaticTool{TaskKey: key, TaskStatus: "succeeded", Result: DiscoveryAccepted})
+	}
+	r.StaticAnalysis.Languages = []StaticLanguage{{Tools: tools}}
+	r.Metrics.TaskKeys = []string{"lizard", "jscpd"}
+	r.Secrets.TaskKeys = []string{"gitleaks"}
+	for _, level := range []string{DetailSummary, DetailFull} {
+		body, err := RenderHTMLAt(r, "digest", Korean, level)
+		if err != nil {
+			t.Fatal(err)
+		}
+		md := RenderMarkdownAt(r, "digest", Korean, level)
+		for _, contents := range [][]byte{body, md} {
+			if bytes.Count(contents, []byte("결과 확보 73/119개 작업")) != 2 ||
+				bytes.Contains(contents, []byte("작업 122개")) {
+				t.Fatalf("%s did not give regular diagnostics the same summary and headline", level)
+			}
+		}
+	}
+}
+
+func TestStaticGroupOrderRespectsSeverityThenMainSource(t *testing.T) {
+	r := storedExample(t, "../../examples/report.json")
+	v := newSecView(r, "digest", Korean)
+	tools := []StaticTool{
+		{TaskKey: "go-vet", ObservationIDs: []string{"fixture-low", "fixture-high"}},
+		{TaskKey: "staticcheck", ObservationIDs: []string{"main-low"}},
+	}
+	observation := func(id, path, severity string) Observation {
+		return Observation{ID: id, RuleID: id, RawSeverity: &severity, EvidenceState: EvidenceVerified,
+			Location: &ObservationLocation{Path: path, StartLine: 5, EndLine: 5}}
+	}
+	obs := map[string]Observation{
+		"fixture-low":  observation("fixture-low", "fixtures/a.go", "low"),
+		"fixture-high": observation("fixture-high", "fixtures/b.go", "high"),
+		"main-low":     observation("main-low", "internal/report/a.go", "low"),
+	}
+	groups := v.staticGroups(StaticLanguage{Tools: tools}, obs, nil)
+	for i, want := range []string{"fixture-high", "main-low", "fixture-low"} {
+		if groups[i].Rule != want {
+			t.Fatalf("group %d was %s, wanted %s", i, groups[i].Rule, want)
 		}
 	}
 }

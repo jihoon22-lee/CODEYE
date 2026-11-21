@@ -13,10 +13,10 @@ import (
 // Analysis summaries and additional evidence can change between revisions
 // that still compare the same findings by fp2 and rule context.
 func TestEarlierBuilderBaselinesAgainstCurrentBuilder(t *testing.T) {
-	if report.BuilderVersion != "15" {
+	if report.BuilderVersion != "16" {
 		t.Fatalf("builder version %s: revisit this test", report.BuilderVersion)
 	}
-	for _, version := range []string{"4", "12", "13", "14"} {
+	for _, version := range []string{"4", "12", "13", "14", "15"} {
 		t.Run(version, func(t *testing.T) { checkHistoricalBaseline(t, version) })
 	}
 }
@@ -35,7 +35,11 @@ func checkHistoricalBaseline(t *testing.T, version string) {
 	cur.Report.PullRequest = &report.PullRequestSection{Number: 7, Items: []report.PullRequestItem{}}
 	cur.Report.Documents = &report.DocumentsSection{Comparisons: []report.DocComparison{{Status: "match", Statement: "same behavior", Followup: true}}}
 	cur.Report.Gaps = []report.Gap{{Section: report.SectionDocuments, Code: record.LimDocumentScopeItemsOmitted}}
-	cur.Report.CodeReview = &report.CodeReviewSection{Strengths: []record.Strength{{Title: "guarded return"}}}
+	cur.Report.CodeReview = &report.CodeReviewSection{
+		Strengths: []record.Strength{{Title: "guarded return"}},
+		Ledger: &report.ReviewLedger{Files: []report.LedgerFile{{Path: "a.go", ModuleID: "go:.", TotalLines: 12,
+			SentLines: 4, ReviewedLines: 4, Investigation: "accepted"}}},
+	}
 	cur.Report.Findings = slices.Clone(old.Report.Findings)
 	cur.Report.Findings[0].Evidence = []report.Evidence{{Kind: "code", Excerpt: &sourceexcerpt.Excerpt{StartLine: 5, EndLine: 5, Text: "return nil"}}}
 	want, got := Compare(old, base), Compare(cur, base)

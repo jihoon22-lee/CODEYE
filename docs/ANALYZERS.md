@@ -10,7 +10,7 @@
 - 도구가 진단한 사실과 실제 결함 여부를 분리한다. 모든 도구 진단은 검토 전의 낮은 등급 관찰이다.
 - 모든 도구를 필수로 설치하지 않는다. 생태계마다 기준 분석기 하나만 판정 필수이고 나머지는 추가 깊이다.
 - 실제로 실행해 확인한 버전에 parser와 종료 코드 해석을 고정한다. 확인하지 않은 OS·버전의 호환성을 주장하지 않는다.
-- 기본 규칙 선택은 동작·오류·보안·성능 위험을 우선한다. 스타일·형식 규칙은 고르지 않는다. 모든 규칙 일괄 활성화를 기본으로 삼지 않는다.
+- 기본 정적 규칙은 동작·오류·보안·성능 위험을 우선한다. Go의 서식 비교는 독립 작업이다. 모든 규칙 일괄 활성화를 기본으로 삼지 않는다.
 - 의존성 CVE 검사, 상용 분석 엔진, 자동 수정 적용은 하지 않는다. suggested fix는 개수만 센다.
 
 ## 분석기 목록
@@ -21,7 +21,8 @@
 |---|---|---|---|---|---|---|
 | `go.vet` | `go-vet`, `go-vet.mNN` | 예 | `--go` | 아니오 | `codeye-go-vet-default` v1(합성) | `none` / `none` |
 | `go.staticcheck` | `staticcheck`, `staticcheck.mNN` | 아니오 | `--staticcheck` (+`--go`) | 아니오 | `codeye-go-staticcheck` v2 | `overridden` / `reported` |
-| `cpp.cppcheck` | `cppcheck` | 예 | `--cppcheck` | 아니오 | `codeye-cpp-cppcheck` v1 | compile DB 모드 `honored`, 축소 모드 `none` / `disabled` |
+| `go.gofmt` | `gofmt` | 아니오 | `--go` 도구 체인에 함께 설치된 `gofmt` | 아니오 | `codeye-go-format` v1 | `none` / `none` |
+| `cpp.cppcheck` | `cppcheck` | 예 | `--cppcheck` | 아니오 | `codeye-cpp-cppcheck` v2 | compile DB 모드 `honored`, 축소 모드 `none` / `disabled` |
 | `cpp.clang_tidy` | `clang-tidy` | 아니오 | `--clang-tidy` | 아니오 | `codeye-cpp-clang-tidy` v1 | `honored` / `honored` |
 | `python.ruff` | `ruff`, `ruff.mNN` | 예 | `--ruff` | 아니오 | `codeye-python-ruff` v1 | `overridden` / `reported` |
 | `python.mypy` | `mypy`, `mypy.mNN` | 아니오 | `--mypy` | 아니오 | `codeye-python-mypy` v1 | `overridden` / `honored` |
@@ -32,8 +33,8 @@
 | `javascript.eslint_typed` | `eslint-typed`, `eslint-typed.mNN` | 아니오 | `--eslint` + `--node` | 아니오 | `codeye-ts-eslint-typed` v1 또는 `codeye-js-eslint-rejection-types` v1 | TS `honored`, JS `overridden` / `disabled` |
 | `rust.cargocheck` | `cargo-check`, `cargo-check.mNN` | 예 | `--cargo` | **예** | `codeye-rust-cargo-check` v1 | `honored` / `honored` |
 | `rust.clippy` | `clippy`, `clippy.mNN` | 아니오 | `--clippy` (+`--cargo`) | **예** | `codeye-rust-clippy` v1 | `honored` / `honored` |
-| `any.lizard` | `lizard` | 아니오 | `--lizard` | 아니오 | `codeye-structure-lizard` v1 | `overridden` / `honored` |
-| `any.jscpd` | `jscpd` | 아니오 | `--jscpd` + `--node` | 아니오 | `codeye-duplication-jscpd` v1 | `overridden` / `honored` |
+| `any.lizard` | `lizard` | 아니오 | `--lizard` | 아니오 | `codeye-structure-lizard` v2 | `overridden` / `honored` |
+| `any.jscpd` | `jscpd` | 아니오 | `--jscpd` + `--node` | 아니오 | `codeye-duplication-jscpd` v2 | `overridden` / `honored` |
 | `any.gitleaks` | `gitleaks` | 아니오 | `--gitleaks` | 아니오 | `codeye-secrets-gitleaks` v1 | `honored` / `disabled` |
 
 go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder와 비교가 합성한다([규칙 문맥과 소스 안 억제](#규칙-문맥과-소스-안-억제)). 모듈 단위 분석기는 루트 모듈의 key에 이름만 쓰고 나머지 모듈은 경로 정렬 순서로 `.m01`부터 붙인다. 모듈이 64개를 넘으면 계획 오류다. 무엇이 모듈인지는 팩별 절이 정한다. C/C++과 `any` 분석기는 작업 하나다.
@@ -46,7 +47,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 
 | 플래그 | 값 | 쓰는 분석기 |
 |---|---|---|
-| `--go /abs/go` | Go toolchain의 `go` | go vet, Staticcheck(`go list`), env.discover |
+| `--go /abs/go` | Go toolchain의 `go` | go vet, Staticcheck(`go list`), 같은 경로에 설치된 gofmt, env.discover |
 | `--go-mod-cache DIR` | 운영자가 준비한 오프라인 모듈 캐시(읽기 전용 보호 경로). 없으면 빈 scratch 캐시 | go vet, Staticcheck |
 | `--node /abs/node` | 공유 node toolchain | pyright, ESLint, tsc, jscpd, env.discover |
 | `--staticcheck /abs/staticcheck` | 실행 파일 | Staticcheck |
@@ -125,6 +126,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | 분석기 | 실행당 제한시간 | stdout 상한 | stderr 상한 |
 |---|---|---|---|
 | go vet, Staticcheck | 15분 | 32 MiB | 4 MiB |
+| gofmt | 작업 전체 2분 | 배치마다 32 KiB | 배치마다 64 KiB |
 | cppcheck, clang-tidy | 30분 | 32 MiB | 32 MiB(cppcheck XML이 stderr로 나옴) |
 | ruff, mypy, pyright, bandit | 15분 | 32 MiB | 4 MiB |
 | ESLint 기준·type-aware | 15분 | 64 MiB | 4 MiB |
@@ -165,6 +167,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | 대상 | 도구 경로 변수 | 캡처·덤프 변수 | 시험 선택 |
 |---|---|---|---|
 | go vet | `CODEYE_TEST_GO`(없으면 테스트 바이너리의 `GOROOT/bin/go`) | `CODEYE_GOVET_TARGET`·`CODEYE_GOVET_OUT`·`CODEYE_GOVET_MODCACHE`·`CODEYE_GOVET_DUMP` | `./internal/worker/analysis/govet/` |
+| gofmt | 테스트 바이너리의 `GOROOT/bin/gofmt` | `CODEYE_TEST_DUMP_GOFMT` | `-run TestReadOnlyGoFmtCoverage ./internal/worker/analysis/gofmtcheck/` |
 | Staticcheck | `CODEYE_TEST_STATICCHECK`, 선택 `CODEYE_TEST_GOMODCACHE` | `CODEYE_STATICCHECK_CAPTURE`, `CODEYE_STATICCHECK_DUMP`, `CODEYE_STATICCHECK_REPORT_DUMP` | `-run TestRealStaticcheck ./internal/worker/analysis/staticcheck/` |
 | C/C++ | `CODEYE_TEST_CPPCHECK`, `CODEYE_TEST_CLANG_TIDY` | `CODEYE_CPP_CAPTURE`, `CODEYE_CPP_DUMP`, `CODEYE_CPP_PRINT`(기대값 비교 대신 실제 결과 기록) | `-run TestRealFixtureCases ./internal/worker/analysis/cpp/`, 기대값 `fixtures/cpp/expected.json` |
 | Python | `CODEYE_TEST_RUFF`, `CODEYE_TEST_MYPY`, `CODEYE_TEST_BANDIT`, `CODEYE_TEST_PYRIGHT` + `CODEYE_TEST_NODE` | `CODEYE_PYTHON_CAPTURE`, `CODEYE_PYTHON_DUMP` | `-run TestReal ./internal/worker/analysis/python/`. bandit CSV는 CRLF이므로 `testdata/.gitattributes`가 줄바꿈 변환을 끈다 |
@@ -555,7 +558,7 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 
 ## Go 팩
 
-go vet(기준)과 Staticcheck(추가 깊이)다. 두 작업 모두 저장소 코드를 실행하지 않는다.
+go vet(기준), Staticcheck(추가 깊이), gofmt(형식 비교)를 제공한다. 세 작업 모두 저장소 코드를 실행하지 않는다.
 
 - 두 도구는 패키지를 읽어 type-check하고 분석할 뿐 패키지 코드를 실행하지 않는다. 테스트 파일도 type-check만 한다. `-vettool`·`-toolexec`·`-exec`, `go generate`, test 실행은 쓰지 않는다.
 - `CGO_ENABLED=0`이므로 cgo 파일을 빌드하지 않고 C 컴파일러·`#cgo`·pkg-config를 호출하지 않는다.
@@ -566,6 +569,14 @@ go vet(기준)과 Staticcheck(추가 깊이)다. 두 작업 모두 저장소 코
 ### 모듈과 계획
 
 `Plan`은 manifest만 읽는다. 포함된 `go.mod`마다 task 하나를 만든다. `vendor`, `testdata`, `.`·`_`로 시작하는 디렉터리는 제외한다. scope `paths`는 모듈별 `./dir/...` 또는 단일 패키지 `./dir` 패턴이 된다. Staticcheck는 go vet과 같은 모듈 순서로 task를 만든다. 범위에 Go 소스가 없으면 아무것도 계획하지 않는다. Go 소스는 있는데 모듈이 없으면 go vet이 `go-vet` 자리 작업 하나를 `unsupported`(`analysis_unsupported`, 한계 `go_module_missing` 등)로 계획한다.
+
+### Go 형식 비교
+
+`gofmt -l -- ./<파일>`을 분석 작업 사본에서 실행한다. `--go` 실행 파일을 해석한 위치의 형제 실행 파일만 사용하며, 빌드 정보가 `cmd/gofmt`인지 확인하고 기록된 Go 버전을 보고서에 남긴다. 운영자 PATH, 저장소 서식 설정, 외부 다운로드를 사용하지 않는다. 모듈 읽기·패키지 로드·타입 검사 없이 선택된 `.go` 파일을 비교하며, 모듈 밖 파일과 빌드 조건·테스트가 붙은 파일도 비교할 수 있다. 일반 분석 팩의 데이터 디렉터리 제외를 적용한다.
+
+- 파일당 최대 2 MiB, 합계 최대 64 MiB에서 상대 경로 argv를 12 KiB씩 최대 64회로 나눠 넘긴다. 전체 실행 제한시간은 2분이다. 입력 한도로 빠진 파일은 `format_input_limit`와 대상·처리 파일 수로 확인할 수 있다.
+- 쓰기 옵션을 사용하지 않는다. 종료 코드 0에서 stdout 목록은 서식이 다른 파일이다. 항목마다 파일 단위 진단과 첫 줄 위치를 제공한다. 구문·읽기 오류, 잘린 출력, 목록에 없던 경로, 작업 사본 변경이 있으면 작업은 실패하고 전체 처리 완료를 주장하지 않는다.
+- 실행 파일을 읽을 수 없거나 Go 빌드 정보를 확인할 수 없으면 실행하지 않고 도구 사유를 남긴다. Go 1.27.4의 Linux formatter로 서식 일치·차이·구문 오류를 확인했다. [실제 서식 차이 관찰](../examples/observations-gofmt.json)
 
 ### Go 공통 환경과 빌드 문맥
 
@@ -753,7 +764,7 @@ compile DB 생성(configure·cmake·bear)은 저장소 build 설정 실행이라
 ### cppcheck
 
 1. `cppcheck --version` → `Cppcheck 2.22.0`. XML의 `<cppcheck version>`이 이와 다르면 형태 오류다.
-2. `cppcheck --output-format=xmlv2 --enable=warning,performance,portability,information,missingInclude --check-level=normal --platform=native --error-exitcode=2 --project=<scratch>/work/compile_commands.json`. 축소 모드는 `--file-list=<scratch>/work/files.txt`다.
+2. `cppcheck --output-format=xmlv2 --enable=warning,performance,portability,information,missingInclude,style --check-level=normal --platform=native --error-exitcode=2 --project=<scratch>/work/compile_commands.json`. 축소 모드는 `--file-list=<scratch>/work/files.txt`다.
 
 결과는 stderr의 XML(results version 2)과 stdout의 `Checking …` 진행 줄이다. 한 실행이 모든 단위를 본다. XML은 streaming decoder로 읽고 끝(`</results>`)이 없거나 알 수 없는 요소·속성이 있으면 형태 오류다. `--error-exitcode=2`는 레코드가 하나라도 있으면 exit 2다. 실행마다 나오는 `checkersReport` 요약만 있으면 exit 0이므로 종료 코드 대조에서 이 레코드는 세지 않는다. 범위 레코드(information·missingInclude)는 관찰이 아니라 도구 오류·제약이다.
 
@@ -799,13 +810,15 @@ cppcheck CTU와 clang-tidy CSA는 한 실행 안의 단위만 본다. clang-tidy
 
 | | cppcheck `codeye-cpp-cppcheck` v1 | clang-tidy `codeye-cpp-clang-tidy` v1 |
 |---|---|---|
-| 선택 | `--enable=warning,performance,portability,information,missingInclude --check-level=normal --platform=native`. error 검사는 항상 켜짐, style은 실행하지 않음. information·missingInclude는 범위 판단에만 씀 | `-*`, `clang-analyzer-*`(osx·optin·webkit·fuchsia·DeprecatedOrUnsafeBufferHandling·중복 제외), `bugprone-*`(이름·형식·변환 계열과 중복 제외), `performance-*`(avoid-endl, enum-size 제외), `concurrency-thread-canceltype-asynchronous`, `misc-redundant-expression`, `misc-unconventional-assign-operator`, `misc-throw-by-value-catch-by-reference`. 고정 키 `WarningsAsErrors: ""`, `HeaderFilterRegex: .*`, `ExcludeHeaderFilterRegex: ""`, `SystemHeaders: false`, `FormatStyle: none`, `CheckOptions: {}`. 별칭 계열(`cert-*`, `hicpp-*`, `cppcoreguidelines-*`)은 고르지 않음 |
+| 선택 | `--enable=warning,performance,portability,information,missingInclude,style --check-level=normal --platform=native`. error 검사는 항상 켜며 information·missingInclude는 범위 판단에 쓴다. style에서는 `redundantAssignment`만 관찰로 제공한다. | `-*`, `clang-analyzer-*`(osx·optin·webkit·fuchsia·DeprecatedOrUnsafeBufferHandling·중복 제외), `bugprone-*`(이름·형식·변환 계열과 중복 제외), `performance-*`(avoid-endl, enum-size 제외), `concurrency-thread-canceltype-asynchronous`, `misc-redundant-expression`, `misc-unconventional-assign-operator`, `misc-throw-by-value-catch-by-reference`. 고정 키 `WarningsAsErrors: ""`, `HeaderFilterRegex: .*`, `ExcludeHeaderFilterRegex: ""`, `SystemHeaders: false`, `FormatStyle: none`, `CheckOptions: {}`. 별칭 계열(`cert-*`, `hicpp-*`, `cppcoreguidelines-*`)은 고르지 않음 |
 | `repository_config` | compile DB 모드 `honored`, `config_files`=compile DB. 축소 모드 `none` | `honored`, `config_files`=compile DB(`repository_clang_tidy_config=overridden`) |
 | `source_suppressions` | `disabled`. `--inline-suppr`가 없으면 `// cppcheck-suppress`가 효력이 없음 | `honored`. NOLINT·NOLINTNEXTLINE·NOLINTBEGIN을 보고하거나 끌 옵션이 없음. stderr `Suppressed N warnings (K NOLINT)`의 K를 `nolint_suppressed`로 세고 제약 `nolint_suppressed_diagnostics` |
 
 compile DB가 바뀌면 설정 digest가 바뀌어 이전 run과 `rule_context_changed`다. 사라진 clang-tidy finding은 언제나 `absent_unverified`이고, cppcheck는 같은 compile DB이면 `resolved_observed`가 될 수 있다.
 
 범주: cppcheck는 severity performance → performance, memleak·resourceLeak·mismatchAllocDealloc·doubleFree 계열 → resource_lifecycle, except·throw 계열 → error_handling, style → maintainability, 나머지 → correctness. clang-tidy는 `performance-*` → performance, `clang-analyzer-security.*`와 일부 bugprone → security, Malloc·NewDelete·MismatchedDeallocator 계열 → resource_lifecycle, `concurrency-*` → concurrency, 예외·반환값 계열 → error_handling, `deadcode` → maintainability, 나머지 → correctness.
+
+Cppcheck 2.22.0은 개별 규칙 이름으로 `redundantAssignment`를 켤 수 없어 `style` 그룹을 실행한다. 값이 사용되기 전에 같은 필드를 다시 쓰는 진단은 두 대입 위치와 함께 관찰로 남긴다. 나머지 style 결과는 원시 XML과 종료 코드 판단에 남고 관찰·발견 수에서는 제외한다. C 구조체의 연속 대입, 앞 대입을 지운 수정본, 두 대입 사이에 값을 읽는 대조군, 다른 style만 나온 파일을 실제 도구와 재생 시험으로 확인한다.
 
 ### 번역 단위 범위와 생성 헤더
 
@@ -1196,7 +1209,7 @@ clippy 작업은 allow-by-default인 여섯 lint를 `-W`로 켠다. 소스의 `#
 - 환경 공통값에 더해 lizard는 `PYTHONDONTWRITEBYTECODE=1`·`PYTHONNOUSERSITE=1`·`PYTHONIOENCODING=utf-8`, jscpd는 `JSCPD_NO_TIPS=1`·`JSCPD_CACHE_DIR`·`XDG_CACHE_HOME`(scratch)을 받는다. 네트워크를 쓰지 않는다. jscpd의 semantic 모드(모델 내려받기)는 켜지 않는다.
 - **계획.** 분석 하나당 작업 하나(`lizard`, `jscpd`, `gitleaks`, 모듈 `.`, 패턴은 범위 루트)다. lizard·jscpd는 범위에 지원 언어 소스(`pack.SourceFiles`)가 있고 그 도구가 받을 파일이 하나 이상이면 언어와 관계없이 계획한다.
 - **gitleaks 계획.** gitleaks는 모델 검토의 비밀값 선별이기도 하므로 언어 조건 대신 범위에 모델 입력이 될 수 있는 파일이 하나라도 있으면 계획한다(`envdoc.ModelInputPath`: 지원 언어 소스, 안내 문서(README·AGENTS·CONTRIBUTING 등 문서 분류), 모듈 manifest). 문서·설정만 있는 스냅샷의 문서도 내장 민감값 패턴 외에 gitleaks 선별을 받는다. gitleaks를 설정하지 않았으면 작업은 계획되고 `unsupported`(`tool_not_configured`)로 끝나 공백이 보인다. 이때 전체 검토 역할은 미선별 경로(`model_input_not_secret_screened`)를 그대로 따르고, 모듈 단위 slice는 보내지 않는다([검토](REVIEW.md#모듈-단위-검토-분할)).
-- **입력 파일.** lizard와 jscpd는 C/C++, Python, JS/TS, Go, Rust 소스만 받는다(lizard는 reader가 있는 확장자만). 숨김 디렉터리, `testdata`, `vendor`, `node_modules` 아래 파일은 넘기지 않고 `excluded_data_directory` 단위로 세며 `target.properties.excluded_directories`와 `data_directories_excluded`로 남긴다. gitleaks는 범위의 모든 포함 파일(설정·문서·데이터 포함)을 본다.
+- **입력 파일.** lizard와 jscpd는 C/C++, Python, JS/TS, Go, Rust 소스만 받는다(lizard는 reader가 있는 확장자만). 숨김 디렉터리, `testdata`, `vendor`, `node_modules` 아래 파일은 `excluded_data_directory`로 센다. `third-party`·`third_party`·`thirdparty`라는 디렉터리 아래 외부 코드도 넘기지 않고 `excluded_third_party_directory`로 따로 센다(디렉터리 이름의 대소문자 무시). gitleaks는 범위의 모든 포함 파일(설정·문서·데이터 포함)을 본다.
 - **링크.** 스냅샷은 symlink를 복사하지 않는다. 작업 사본에 링크나 특수 파일이 생기면 도구를 시작하지 않고 `failed`/`workspace_link_refused`다(lizard·jscpd는 넘길 파일과 조상, gitleaks는 검사 루트 아래 전체). gitleaks `--follow-symlinks`와 jscpd `followSymlinks`는 꺼져 있다.
 - **사본 밖 결과.** 선택된 스냅샷 파일이 아닌 경로의 결과는 버리고 경로·문구를 저장하지 않으며 작업은 `result_outside_snapshot`으로 실패한다. 도구 오류 문구는 고정이고 건수만 담는다. lizard와 jscpd는 목록에 없는 파일의 결과를 형태 오류로 본다.
 - **argv.** lizard·jscpd는 저장소 경로를 argv에 넣지 않고 scratch 목록·설정 파일로 넘긴다. gitleaks는 범위 루트를 `--` 뒤에 `.` 또는 `./<root>`로 넘긴다.
@@ -1211,9 +1224,9 @@ lizard·jscpd가 내는 것은 구조 지표다. 지표는 임계값을 넘은 �
 - 보고서 decoder는 지표를 finding으로 만들지 않고, 지표를 `observation_ids`로 인용한 finding이 있는 보고서는 무효다. `summary.metric_observations`는 `raw_observations` 중 지표 관찰 수이며 0이면 생략한다. 화면·Markdown·HTML은 "구조 지표, 결함 아님" 표지를 붙이고, 웹 parser는 요약의 수와 `metric`을 가진 관찰 수가 다르면 보고서를 거부한다([보고서](REPORT.md)).
 - 검토 해석 역할은 지표 관찰을 읽지 않고 제약 `metrics_not_defects`만 남는다.
 - 지표는 `attention`을 만들지 않는다. 위치를 확인하지 못한 지표(예: `source_drift`)는 미해결로 세어 판정을 `inconclusive`로 둔다.
-- 보고서 builder 버전은 `4` 그대로이며 새 필드는 생략 가능한 가산 필드다.
+- 중복 블록의 상대 위치는 생략 가능한 보고서 필드다. 이전 보고서에서 이 위치를 기록하지 않았으면 저장한 첫 위치와 당시 측정값을 표시한다.
 
-| 분석기 | 지표 | 임계값(규칙 팩 v1) | 근거 |
+| 분석기 | 지표 | 임계값(규칙 팩 v2) | 근거 |
 |---|---|---|---|
 | lizard | `cyclomatic_complexity`(count) | CCN ≥ 16 | lizard 기본 경고 "CCN > 15"와 같음 |
 | jscpd | `duplicated_lines`(lines) | minLines 10, minTokens 100, mode `mild` | 기본값(5줄·50토큰)은 짧은 반복까지 잡아 지표가 흐려짐 |
@@ -1224,7 +1237,7 @@ lizard·jscpd가 내는 것은 구조 지표다. 지표는 임계값을 넘은 �
 ### lizard
 
 - argv: `--xml --no-gitignore --input_file <scratch>/analyzers/lizard/files.txt`. `--xml`은 함수 이름(`fn(...) at file:line`), NCSS, CCN과 분석한 모든 파일을 준다. CSV는 `long_name`이 매개변수 기본값까지 복사해 그 안의 비밀값이 stream에 남으므로 쓰지 않는다. `-E` 확장(`-Eduplicate` 등)은 켜지 않는다.
-- XML 모드는 자체 임계값과 관계없이 exit 0이므로 CODEYE가 임계값을 적용한다. Latin-1 파일도 해독해 측정한다.
+- XML 모드는 자체 임계값과 관계없이 exit 0이므로 CODEYE가 임계값을 적용한다. 완전하게 파싱한 함수 수는 임계값 미만까지 포함해 `functions_measured`로 센다. Latin-1 파일도 해독해 측정한다.
 - 규칙 문맥: `repository_config=overridden`(`config_files=[]`), `source_suppressions=honored`(`#lizard forgive`와 `GENERATED CODE` 표지가 함수를 기록 없이 숨김, 제약 `in_source_suppressions_honored`). `whitelizard.txt`는 XML에 영향이 없다. 함수 끝 줄은 기록하지 않는다(`function_end_lines_not_recorded`).
 
 | 종료/출력 | 결과 |
@@ -1239,7 +1252,7 @@ lizard·jscpd가 내는 것은 구조 지표다. 지표는 임계값을 넘은 �
 
 - argv: `<node> <run-jscpd.js> --config <scratch>/analyzers/jscpd/jscpd.json`. 설정의 `path`에 넘길 파일의 절대 경로를 적고 `output`은 scratch, `reporters=[xcode]`, `absolute`, `noGitignore`, `noTips`, `noColors`를 켠다. json 보고기는 중복된 소스 텍스트를 복사하므로 쓰지 않는다. xcode는 경로와 줄 범위만 stdout에 쓴다. complexity·dead-code·semantic·history 모드는 켜지 않는다.
 - `--config`를 주면 저장소 `.jscpd.json`, `.config/jscpd.json`, `package.json`의 `"jscpd"` 키를 읽지 않는다(`repository_config=overridden`, `config_files=[]`). `jscpd:ignore-start`/`jscpd:ignore-end`는 블록을 기록 없이 숨기므로 `source_suppressions=honored`이고 사라진 지표를 개선으로 읽지 않는다.
-- 중복이 있든 없든 exit 0이다. xcode 줄 `… Found N lines (s-e) duplicated on file …`의 N(=end−start)이 지표 값이고 N < minLines는 형태 오류다. 열은 기록하지 않는다(`clone_columns_not_recorded`).
+- 중복이 있든 없든 exit 0이다. xcode 줄 `… Found N lines (s-e) duplicated on file …`의 N(=end−start)이 지표 값이고 N < minLines는 형태 오류다. 열은 기록하지 않는다(`clone_columns_not_recorded`). 두 블록의 스냅샷 위치를 각각 검증한다. 새 보고서에서 확인된 상대 블록은 `observation.metric.counterpart`에 남는다.
 - 처리 파일은 CODEYE가 넘긴 목록이다(`processed_paths_from_input_list`). 임계값에 닿는 파일이 없으면 stderr "analyzed no files"를 `no_file_reached_clone_thresholds`로 남긴다.
 
 | 종료/출력 | 결과 |

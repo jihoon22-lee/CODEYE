@@ -62,7 +62,7 @@ func withPacks(r ...string) []string {
 
 func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	ctx := context.Background()
-	if hs, missing := Handlers(ctx, Config{}, &executor.Executor{}); len(hs) != 0 || !slices.Equal(reasons(missing), withPacks("go-vet:not_configured", "staticcheck:not_configured")) {
+	if hs, missing := Handlers(ctx, Config{}, &executor.Executor{}); len(hs) != 0 || !slices.Equal(reasons(missing), withPacks("go-vet:not_configured", "staticcheck:not_configured", "gofmt:not_configured")) {
 		t.Fatalf("unconfigured: %d %+v", len(hs), missing)
 	}
 	if hs, missing := Handlers(ctx, Config{GoExecutable: "relative/go"}, &executor.Executor{}); len(hs) != 0 || missing[0].Reason != "invalid_config" {
@@ -70,7 +70,7 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	}
 	// staticcheck alone is extra depth: without a baseline nothing is advertised.
 	if hs, missing := Handlers(ctx, Config{Tools: map[string]string{"staticcheck": filepath.Join(t.TempDir(), "staticcheck")}}, &executor.Executor{}); len(hs) != 0 ||
-		!slices.Equal(reasons(missing), withPacks("go-vet:not_configured", "staticcheck:toolchain_not_configured")) {
+		!slices.Equal(reasons(missing), withPacks("go-vet:not_configured", "staticcheck:toolchain_not_configured", "gofmt:not_configured")) {
 		t.Fatalf("staticcheck without go: %d %+v", len(hs), missing)
 	}
 	goExe := goPath(t)
@@ -94,7 +94,7 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	for _, d := range c.Descriptors() {
 		ids = append(ids, d.ID)
 	}
-	if !slices.Equal(ids, []string{"go.vet", "go.staticcheck", "cpp.cppcheck", "cpp.clang_tidy", "python.ruff", "python.mypy", "python.pyright", "python.bandit", "javascript.eslint", "javascript.tsc", "javascript.eslint_typed", "rust.cargocheck", "rust.clippy", "any.lizard", "any.jscpd", "any.gitleaks"}) {
+	if !slices.Equal(ids, []string{"go.vet", "go.staticcheck", "go.gofmt", "cpp.cppcheck", "cpp.clang_tidy", "python.ruff", "python.mypy", "python.pyright", "python.bandit", "javascript.eslint", "javascript.tsc", "javascript.eslint_typed", "rust.cargocheck", "rust.clippy", "any.lizard", "any.jscpd", "any.gitleaks"}) {
 		t.Fatalf("catalog order %v", ids)
 	}
 	// A configured staticcheck path that is not a file is invalid: the

@@ -86,6 +86,29 @@ func TestDocumentsAbsent(t *testing.T) {
 	}
 }
 
+func TestDefaultDocumentBudgetCoversEngineeringGuides(t *testing.T) {
+	guide := strings.Repeat("The worker examines documents from the fixed working snapshot.\n", 1250)
+	files := map[string]string{
+		"docs/execution.md": guide, "docs/report.md": guide, "docs/api.md": guide,
+		"docs/modules.md": guide, "docs/operations.md": guide, "docs/setup.md": guide,
+	}
+	j := jobOf(t, files, domain.Scope{Kind: "full"})
+	d := runDocs(t, j, Budget{})
+	if d.Documents.Budget.ReadBytes != int64(len(guide)*len(files)) || d.Documents.Budget.ReadBytes <= 256<<10 {
+		t.Fatalf("engineering guides did not fit the default budget: %+v", d.Documents.Budget)
+	}
+	for _, doc := range d.Documents.Items {
+		if doc.Status != envdoc.DocSelected {
+			t.Fatalf("guide excluded under the default budget: %+v", doc)
+		}
+	}
+	custom := Budget{TotalBytes: 96 << 10, PerDocumentBytes: 96 << 10, MaxDocuments: 10}
+	limited := runDocs(t, j, custom)
+	if limited.Documents.Budget.TotalBytes != custom.TotalBytes || limited.Documents.Budget.ReadBytes != int64(len(guide)) {
+		t.Fatalf("explicit budget was replaced: %+v", limited.Documents.Budget)
+	}
+}
+
 // TC-97 (2/4): a root document and a sub-module document that apply to the
 // same path are grouped; the platform does not judge the conflict.
 func TestDocumentsRootAndSubOverlap(t *testing.T) {
@@ -120,7 +143,8 @@ func TestDocumentsRootAndSubOverlap(t *testing.T) {
 // TC-97 (3/4): the per-document cap and the total budget are separate,
 // recorded reasons; reading order is fixed.
 func TestDocumentsBudget(t *testing.T) {
-	big := strings.Repeat("design text\n", 6000) // 72,000 bytes exceeds the default per-document budget.
+	const line = "design text\n"
+	big := strings.Repeat(line, int(DefaultBudget.PerDocumentBytes)/len(line)+1)
 	j := jobOf(t, map[string]string{"AGENTS.md": "a\n", "README.md": strings.Repeat("r", 300), "docs/a.md": strings.Repeat("d", 300), "docs/b.md": "b\n", "docs/huge.md": big}, domain.Scope{Kind: "full"})
 	d := runDocs(t, j, Budget{})
 	if s, r := statusOf(t, d, "docs/huge.md"); s != envdoc.DocBudgetExceeded || r != envdoc.ReasonTooLarge {

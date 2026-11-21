@@ -26,8 +26,11 @@ func (c sectionContext) gaps() []Gap {
 			add(SectionDocuments, code, nil, detail)
 		}
 	}
-	if r.Coverage.TestStatus == "not_run" {
+	switch r.Coverage.TestStatus {
+	case TestNotRun:
 		add(SectionReport, "tests_not_run", nil, nil)
+	case TestPartial:
+		add(SectionReport, "test_results_partial", nil, nil)
 	}
 	modelGap := func(section string, m ModelInterpretation) {
 		if m.State != ModelPerformed && !(m.Reason != nil && domain.NothingToReview(*m.Reason)) {

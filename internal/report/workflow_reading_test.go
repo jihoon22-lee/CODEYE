@@ -59,6 +59,7 @@ func TestRelatedWorkflowReportKeepsFindingsAndTestStatus(t *testing.T) {
 	w := first.RelatedWorkflow
 	w.ReadEvidenceID, w.ChangeEvidenceID, w.TestEvidenceID = ids[w.ReadEvidenceID], ids[w.ChangeEvidenceID], ids[w.TestEvidenceID]
 	r.Builder.Version = strconv.Itoa(WorkflowReadingSince)
+	fileOnlyLedgerForTest(&r)
 	for i := range r.Artifacts {
 		a := &r.Artifacts[i]
 		if deref(a.TaskKey) == investigate && a.MediaType == record.MediaType {

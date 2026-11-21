@@ -66,7 +66,7 @@
         "argv": [
           "cppcheck",
           "--output-format=xmlv2",
-          "--enable=warning,performance,portability,information,missingInclude",
+          "--enable=warning,performance,portability,information,missingInclude,style",
           "--check-level=normal",
           "--platform=native",
           "--error-exitcode=2",
@@ -87,17 +87,17 @@
       "name": "cppcheck.check",
       "status": "exited",
       "stderr": {
-        "captured_bytes": 4448,
+        "captured_bytes": 4908,
         "incomplete": false,
-        "sha256": "93246abf58cd3596264d8ac7e5b2045d0c8dbe906301c49be2d8253eb6c5f143",
-        "total_bytes": 5978,
+        "sha256": "1d3c0b30017317fe9d75c0f70d11a1f1a54840ea8501895addcdbcda05cfe207",
+        "total_bytes": 6295,
         "truncated": false
       },
       "stdout": {
         "captured_bytes": 238,
         "incomplete": false,
         "sha256": "b478aa32edb008461beca11ee6c0511e89f68f019e878bd5c4efb282d3c8385e",
-        "total_bytes": 598,
+        "total_bytes": 530,
         "truncated": false
       }
     }
@@ -139,7 +139,7 @@
         "json_pointer": "",
         "record_index": 1,
         "stream": "stderr",
-        "stream_sha256": "93246abf58cd3596264d8ac7e5b2045d0c8dbe906301c49be2d8253eb6c5f143"
+        "stream_sha256": "1d3c0b30017317fe9d75c0f70d11a1f1a54840ea8501895addcdbcda05cfe207"
       },
       "raw_severity": "error",
       "related": [
@@ -185,7 +185,7 @@
         "json_pointer": "",
         "record_index": 4,
         "stream": "stderr",
-        "stream_sha256": "93246abf58cd3596264d8ac7e5b2045d0c8dbe906301c49be2d8253eb6c5f143"
+        "stream_sha256": "1d3c0b30017317fe9d75c0f70d11a1f1a54840ea8501895addcdbcda05cfe207"
       },
       "raw_severity": "error",
       "related": [],
@@ -216,7 +216,7 @@
         "json_pointer": "",
         "record_index": 5,
         "stream": "stderr",
-        "stream_sha256": "93246abf58cd3596264d8ac7e5b2045d0c8dbe906301c49be2d8253eb6c5f143"
+        "stream_sha256": "1d3c0b30017317fe9d75c0f70d11a1f1a54840ea8501895addcdbcda05cfe207"
       },
       "raw_severity": "warning",
       "related": [
@@ -270,13 +270,13 @@
       "path": "src/util.cpp",
       "raw_message": "Mismatching allocation and deallocation: counts",
       "raw_ref": {
-        "byte_end": 4184,
-        "byte_start": 3745,
+        "byte_end": 4644,
+        "byte_start": 4205,
         "execution": "cppcheck.check",
         "json_pointer": "",
-        "record_index": 8,
+        "record_index": 9,
         "stream": "stderr",
-        "stream_sha256": "93246abf58cd3596264d8ac7e5b2045d0c8dbe906301c49be2d8253eb6c5f143"
+        "stream_sha256": "1d3c0b30017317fe9d75c0f70d11a1f1a54840ea8501895addcdbcda05cfe207"
       },
       "raw_severity": "error",
       "related": [
@@ -310,7 +310,7 @@
   "parse": {
     "observations": 4,
     "ok": true,
-    "records": 10,
+    "records": 11,
     "shape_errors": 0,
     "tool_errors": 0,
     "unparsed_bytes": 0,
@@ -333,20 +333,20 @@
     "id": "codeye-cpp-cppcheck",
     "repository_config": "honored",
     "selection": [
-      "--enable=warning,performance,portability,information,missingInclude",
+      "--enable=warning,performance,portability,information,missingInclude,style",
       "--check-level=normal",
       "--platform=native"
     ],
     "source_suppressions": "disabled",
     "unreported_suppression_rules": [],
-    "version": "1"
+    "version": "2"
   },
   "schema_version": "0.1",
-  "snapshot_manifest_digest": "43f1d631d2ff76772b2fc938cdb321e805493cc1cbf77a198a14eafa7c43d72a",
+  "snapshot_manifest_digest": "45fac8658a8abe3e2aa08be954d7a28fa59708172ffb5b0526c8e7a4e790dfae",
   "target": {
     "platform": "linux/amd64",
     "properties": {
-      "active_checkers": "125/189",
+      "active_checkers": "175/189",
       "check_level": "normal",
       "compile_db_entries": "6",
       "compile_db_units": "3",
@@ -358,7 +358,9 @@
       "mode": "compile_db",
       "platform": "native",
       "preprocessor_configs_checked": "1",
-      "std": "c++17,c11"
+      "std": "c++17,c11",
+      "style_diagnostics_omitted": "1",
+      "style_observation_rule": "redundantAssignment"
     }
   },
   "task_key": "cppcheck",

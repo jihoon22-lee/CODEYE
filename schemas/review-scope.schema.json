@@ -1,10 +1,47 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.codeye.invalid/v0.2/review-scope.schema.json",
+  "$id": "https://schemas.codeye.invalid/v0.3/review-scope.schema.json",
   "title": "CODEYE review scope",
-  "description": "application/vnd.codeye.review-scope+json: the artifact of the review.scope task (no model call), written before any review slot runs. Schema 0.2 is what the worker writes: the plan fixed only the number of slots (limits.slots, at most 96); review.scope filled them at run time in priority order (docs/REVIEW.md#검토-우선순위) and records each file's class (primary, secondary), rank and reason, the secondary-path rule it used, the files it left out (excluded: withheld, unreadable) and per module the files no slot was left for (files_not_planned, of which files_secondary_not_planned are secondary). Schema 0.1 (plan-time slices, at most 32, no priority) is still read so an older worker's artifact decodes. Both record the call ceiling and admission rule, the overview prefix (files the overview investigate is certain to offer when readable) with each file's state and the code and test files the overview actually sent. Every eligible file is in exactly one place. The admitted slots are not here: admission is sequential at run time and is read from the slice task states (budget_exhausted / review_budget_exhausted); a slot left empty ends skipped_policy (no_review_scope). Sizes are JSON-encoded excerpt bytes. The Go decoder (internal/worker/review/record, DecodeScope) is authoritative: it also binds paths and blobs to the snapshot manifest, checks per-module counts, that covered_by_overview matches overview.offered, the classes against the rule and the priority order of the slots.",
-  "oneOf": [{"$ref": "#/$defs/scope_v0_2"}, {"$ref": "#/$defs/scope_v0_1"}],
+  "description": "Snapshot-bound inventory of review input. Schema 0.3 records planned line windows, unreadable or withheld files and unscheduled ranges. Earlier schemas remain readable.",
+  "oneOf": [{"$ref": "#/$defs/scope_v0_3"}, {"$ref": "#/$defs/scope_v0_2"}, {"$ref": "#/$defs/scope_v0_1"}],
   "$defs": {
+    "scope_v0_3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version","kind","pack","snapshot_manifest_digest","run_id","attempt_id","screen","budget","limits","priority","upstream","modules","overview","slices","excluded","limitations"],
+      "properties": {
+        "schema_version": {"const":"0.3"},
+        "kind": {"const":"review_scope"},
+        "pack": {"$ref":"#/$defs/pack"},
+        "snapshot_manifest_digest": {"$ref":"#/$defs/digest"},
+        "run_id": {"$ref":"#/$defs/uuid"},
+        "attempt_id": {"$ref":"#/$defs/uuid"},
+        "screen": {"$ref":"#/$defs/screen"},
+        "budget": {"type":"object","additionalProperties":false,"required":["max_calls","max_request_bytes","whole_run_max_calls","slice_reserve_calls","calls_before_slices","admission"],"properties":{"max_calls":{"type":"integer","minimum":15,"maximum":2013,"description":"the node operator's model call ceiling per attempt (codeye agent --review-max-calls, default 99); 2013 is the whole-run roles plus two calls for each of 999 slots"},"max_request_bytes":{"type":"integer","minimum":1},"whole_run_max_calls":{"const":15},"slice_reserve_calls":{"const":2},"calls_before_slices":{"type":"integer","minimum":0,"maximum":15,"description":"model calls the attempt had made when review.scope ran"},"admission":{"const":"reserve_verification"}}},
+        "limits": {"type":"object","additionalProperties":false,"required":["max_files","max_bytes","max_file_bytes","max_file_lines","max_slices","slots"],"properties":{"max_files":{"type":"integer","minimum":1},"max_bytes":{"type":"integer","minimum":1},"max_file_bytes":{"type":"integer","minimum":1},"max_file_lines":{"type":"integer","minimum":1},"max_slices":{"enum":[96,999]},"slots":{"type":"integer","minimum":0,"maximum":999}}},
+        "priority": {"type":"object","additionalProperties":false,"required":["order","secondary"],"properties":{"order":{"enum":["coverage_first","pull_request_changed_coverage_first"]},"secondary":{"type":"object","additionalProperties":false,"required":["segments","not_for_go"],"properties":{"segments":{"type":"array","minItems":1,"uniqueItems":true,"items":{"$ref":"#/$defs/segment"},"description":"directory segments (case-insensitive; a segment with / matches consecutive directories) that make a file secondary"},"not_for_go":{"type":"array","uniqueItems":true,"items":{"$ref":"#/$defs/segment"},"description":"segments that do not apply to .go files (a Go package may be named build or dist)"}}}}},
+        "upstream": {"$ref":"#/$defs/upstreams"},
+        "modules": {"type":"array","items":{"type":"object","additionalProperties":false,"required":["id","discovered","class","files_eligible","files_secondary","files_not_planned","files_secondary_not_planned"],"properties":{"id":{"$ref":"#/$defs/module"},"discovered":{"type":"boolean"},"class":{"$ref":"#/$defs/class"},"files_eligible":{"type":"integer","minimum":1},"files_secondary":{"type":"integer","minimum":0},"files_not_planned":{"type":"integer","minimum":0},"files_secondary_not_planned":{"type":"integer","minimum":0}}}},
+        "overview": {"type":"object","additionalProperties":false,"required":["files","offered"],"properties":{"files":{"type":"array","items":{"allOf":[{"$ref":"#/$defs/coverage_file"},{"properties":{"state":{"enum":["covered_by_overview"]}}}]}},"offered":{"type":"array","maxItems":8,"uniqueItems":true,"items":{"$ref":"#/$defs/path"}}}},
+        "slices": {"type":"array","maxItems":999,"items":{"type":"object","additionalProperties":false,"required":["key","investigate_task","verify_task","class","rank","modules","files"],"properties":{"key":{"type":"string","pattern":"^s(00[1-9]|0[1-9][0-9]|[1-9][0-9]{2})$"},"investigate_task":{"type":"string","pattern":"^review\\.investigate\\.s[0-9]{3}$"},"verify_task":{"type":"string","pattern":"^review\\.verify\\.s[0-9]{3}$"},"class":{"$ref":"#/$defs/class"},"rank":{"$ref":"#/$defs/rank"},"pull_request":{"$ref":"#/$defs/pull_request_tier","description":"the pull-request tier of every file of the slot"},"modules":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":{"$ref":"#/$defs/module"}},"files":{"type":"array","items":{"allOf":[{"$ref":"#/$defs/coverage_file"},{"properties":{"state":{"enum":["planned"]}}}]},"minItems":1,"maxItems":8}}}},
+        "excluded": {"type":"array","items":{"allOf":[{"$ref":"#/$defs/coverage_file"},{"properties":{"state":{"enum":["withheld","unreadable"]}}}]}},
+        "limitations": {"$ref":"#/$defs/limitations"},
+        "unplanned": {"type":"array","items":{"allOf":[{"$ref":"#/$defs/coverage_file"},{"properties":{"state":{"enum":["not_planned"]}}}]}},
+        "omitted": {"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","start_line","end_line","reason"],"properties":{"path":{"$ref":"#/$defs/path"},"start_line":{"type":"integer","minimum":1},"end_line":{"type":"integer","minimum":1},"reason":{"enum":["review_line_input_limit","review_slice_limit","source_blank_range"]}}}}
+      },
+      "if": {"properties":{"screen":{"const":"not_screened"}},"required":["screen"]},
+      "then": {"properties":{"limitations":{"contains":{"const":"model_input_not_secret_screened"}}}}
+    },
+    "coverage_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path","sha256","module","bound_bytes","planned_lines","planned_bytes","total_lines","state","class","rank"],
+      "properties": {"path":{"$ref":"#/$defs/path"},"sha256":{"$ref":"#/$defs/digest"},"module":{"$ref":"#/$defs/module"},"bound_bytes":{"type":"integer","minimum":0,"description":"JSON-encoded source window bytes"},"planned_lines":{"type":"integer","minimum":0},"planned_bytes":{"type":"integer","minimum":0},"total_lines":{"type":"integer","minimum":0,"maximum":524288},"state":{"enum":["covered_by_overview","withheld","unreadable","planned","not_planned"]},"class":{"$ref":"#/$defs/class"},"rank":{"$ref":"#/$defs/rank"},"secondary":{"type":"string","pattern":"^(secondary_path:[a-z0-9_./-]+|generated_file)$","description":"why a secondary file is secondary: the matched path segment or a generated-file header"},"observations":{"type":"integer","minimum":1,"description":"non-metric tool observations located in the file"},"severity":{"enum":["ignored","low","medium","high"],"description":"the highest severity of those observations"},"pull_request":{"$ref":"#/$defs/pull_request_tier"},"start_line":{"type":"integer","minimum":1},"reason":{"enum":["secret_file_withheld","source_file_unreadable","source_file_too_large","source_file_empty","review_line_input_limit","review_slice_limit"]}},
+      "dependentRequired": {"severity":["observations"],"observations":["severity"]},
+      "if": {"properties":{"class":{"const":"secondary"}},"required":["class"]},
+      "then": {"required":["secondary"]},
+      "else": {"not":{"required":["secondary"]}}
+    },
     "scope_v0_2": {
       "type": "object",
       "additionalProperties": false,

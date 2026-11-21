@@ -45,8 +45,8 @@
   ],
   "documents": {
     "budget": {
-      "total_bytes": 262144,
-      "per_document_bytes": 65536,
+      "total_bytes": 4194304,
+      "per_document_bytes": 524288,
       "max_documents": 1000,
       "read_bytes": 42538
     },

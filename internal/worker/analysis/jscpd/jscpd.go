@@ -34,7 +34,7 @@ const (
 	ParserID        = "jscpd-xcode"
 	ParserVersion   = "1"
 	RulePackID      = "codeye-duplication-jscpd"
-	RulePackVersion = "1"
+	RulePackVersion = "2"
 	TestedSeries    = "5.4"
 	// Interpreter is the shared toolchain that runs the entry script.
 	Interpreter = "node"
@@ -112,7 +112,8 @@ func Plan(ctx context.Context, job analysis.Job) ([]pack.Task, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return anypack.Plan(job, Descriptor(), "structure: duplicated code (jscpd)", anypack.Files(job, Eligible, true)), nil
+	files, _ := anypack.StructureFiles(job, Eligible)
+	return anypack.Plan(job, Descriptor(), "structure: duplicated code (jscpd)", files), nil
 }
 
 // Config selects the jscpd entry script (run-jscpd.js) and the validated
@@ -207,9 +208,9 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	if failed != nil {
 		return *failed
 	}
-	files := anypack.Files(job, Eligible, true)
+	files, thirdParty := anypack.StructureFiles(job, Eligible)
 	in := assembleInput{TaskKey: r.Task.Spec.Key, ManifestDigest: job.Snapshot.Digest, Patterns: r.Task.Patterns, Files: files, Skipped: map[string]string{},
-		Excluded: anypack.ExcludedDataDirFiles(job, Eligible)}
+		Excluded: anypack.ExcludedDataDirFiles(job, Eligible), ThirdParty: thirdParty}
 	var abs []string
 	for _, f := range files {
 		switch {

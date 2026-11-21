@@ -88,21 +88,20 @@ func modelSkipReason(j analysis.Job) string {
 	return domain.ReasonModelSourceNotApproved
 }
 
-func (h Handler) maxCalls() int {
+func (h Handler) maxCalls(scope domain.Scope) int {
 	if h.MaxCalls == 0 {
 		return record.DefaultMaxCalls
+	}
+	if scope.ReviewCoverage != domain.ReviewCoverageExtended {
+		return min(h.MaxCalls, record.LegacyMaxCalls)
 	}
 	return h.MaxCalls
 }
 
-// Plan appends the five roles of the review. The documents role is required only when
-// the manifest has guidance documents in scope; environment and interpret
-// roles are optional. When the overview investigate cannot offer every
-// eligible code file, review.scope and one investigate/verify pair per slot
-// follow (planSlices: the plan fixes how many slots exist, review.scope
-// fills them at run time), all optional for the verdict. The slices come after
-// every required whole-run role, so those calls are always spent before
-// any slice is admitted. The optional contract followup comes last.
+// Plan appends the whole-run review roles. If there is source in scope it
+// also plans the inventory and optional investigation and verification
+// pairs. Their keys are fixed here and review.scope assigns the remaining
+// lines after the overview. The optional contract follow-up comes last.
 func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec, error) {
 	plan, err := h.Static.Plan(ctx, j)
 	if err != nil {
@@ -116,9 +115,17 @@ func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec,
 		analysis.TaskSpec{Key: "review.interpret", Required: false, Title: "정적 진단 해석", Stage: domain.StageCodeReview},
 		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증", Stage: domain.StageCodeReview})
 	sp := planSlicesFor(j.Snapshot.Manifest, j.Scope, h.secondary(), changedPaths(j))
-	if sp.Slots > 0 {
+	groups := codeGroupsFor(j.Snapshot.Manifest, j.Scope, h.secondary(), changedPaths(j), true)
+	if groups.eligible > 0 {
 		plan = append(plan, analysis.TaskSpec{Key: record.TaskScope, Required: false, Title: "모듈별 검토 범위", Stage: domain.StageCodeReview})
-		for i := range sp.Slots {
+		slots := coverageSlots(sp)
+		if j.Scope.ReviewCoverage == domain.ReviewCoverageExtended {
+			planner := roleStage{ctx: ctx, j: j}
+			if n, err := planner.coverageSlotPlan(groups); err == nil {
+				slots = n
+			}
+		}
+		for i := range slots {
 			inv, ver := slotTaskKeys(sliceKey(i))
 			plan = append(plan,
 				analysis.TaskSpec{Key: inv, Required: false, Title: "모듈별 코드 검토 " + sliceKey(i), Stage: domain.StageCodeReview},
@@ -190,8 +197,9 @@ type roleStage struct {
 	screen secretScreen
 	// slice is set for a slice task: its entry of the review.scope artifact
 	// and that artifact's upstream binding (slice_run.go).
-	slice   *record.ScopeSlice
-	scopeUp record.Upstream
+	slice        *record.ScopeSlice
+	scopeUp      record.Upstream
+	sliceReserve int
 }
 
 // begin loads the pack and the record skeleton; a nil caller is reported
@@ -371,7 +379,11 @@ func (s *roleStage) recordCall(reply opencode.Reply, size, attempt int) record.C
 func (s *roleStage) reserveCall() *analysis.TaskResult {
 	used, err := callsUsed(s.j)
 	if err == nil {
-		if used >= s.h.maxCalls() {
+		reserve := 0
+		if s.slice != nil && s.role == record.StageInvestigate && s.sliceReserve == record.SliceMinCalls {
+			reserve = 1
+		}
+		if used >= s.h.maxCalls(s.j.Scope)-reserve {
 			r := result(domain.TaskBudgetExhausted, reasonBudgetExhausted)
 			return &r
 		}

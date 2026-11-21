@@ -57,6 +57,7 @@ type witnessQuery struct {
 	goExamples           []goContractExample
 	goCommands           []goContractCommand
 	hasGoCommandRoute    bool
+	goDefaults           []string
 }
 
 type contractWitness struct {
@@ -197,6 +198,7 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 	pythonRuntime := make([]contractWitness, len(queries))
 	pythonTests := make([]contractWitness, len(queries))
 	formulas := make([]contractWitness, len(queries))
+	defaults := make([]contractWitness, len(queries))
 	formulaTies := make([]bool, len(queries))
 	cRuntime := make(documentedCDefinitions, len(queries))
 	var cFamilies cFamilyCatalog
@@ -263,6 +265,16 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 			continue
 		}
 		found := matchWitnessLines(content, e, queries)
+		defaultSites := goDefaultWitnesses(e, content, queries)
+		for i, q := range queries {
+			if len(q.goDefaults) == 0 || !strings.HasSuffix(e.Path, ".go") {
+				continue
+			}
+			found[i] = contractWitness{}
+			if i < len(defaultSites) && defaultSites[i].score > defaults[i].score && !maintenance[e.Path] && !benchmarkPath(e.Path) {
+				defaults[i] = defaultSites[i]
+			}
+		}
 		for i, query := range queries {
 			if w := documentedPythonWitness(e, content, query); w.line != 0 {
 				w.query = i + 1
@@ -379,6 +391,27 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 		out = append(out, member.source, member.test)
 		seen[member.source.entry.Path], seen[member.test.entry.Path] = true, true
 		hasCode[member.source.query-1] = true
+	}
+	for i, w := range defaults {
+		if w.line == 0 {
+			continue
+		}
+		if seen[w.entry.Path] {
+			for j, old := range out {
+				if old.entry.Path == w.entry.Path && old.end > 0 {
+					first, last := min(old.line, w.line), max(old.end, w.end)
+					if fitsWitness(strings.Split(contents[w.entry.Path], "\n"), first, last) {
+						out[j].line, out[j].end = first, last
+						hasCode[i] = true
+					}
+				}
+			}
+			continue
+		}
+		if len(out) < witnessMaxExcerpts {
+			out = append(out, w)
+			seen[w.entry.Path], hasCode[i] = true, true
+		}
 	}
 	// A directly cited API and its numeric fixture deserve the same slots
 	// before a broad project description claims one of their paths.
@@ -619,7 +652,8 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 	catalog := catalogOf(docs.Evidence)
 	files := s.entries()
 	cited := map[string]string{}
-	hasC := slices.Contains(languagesInScope(s.j), "cpp")
+	languages := languagesInScope(s.j)
+	hasC, hasGo := slices.Contains(languages, "cpp"), slices.Contains(languages, "go")
 	var cGuideCache cFamilyGuideCache
 	var out []witnessQuery
 	for i, c := range docs.Contracts {
@@ -634,6 +668,7 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 		var packageEntry string
 		var goExamples []goContractExample
 		var goCommands []goContractCommand
+		var goDefaults []string
 		addWitnessPaths(paths, c.Statement)
 		members := documentedMembers(c.Statement, true)
 		names := navigationIdentifiers(c.Statement)
@@ -668,6 +703,9 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 			if x.DirectivePath == "" && c.AppliesTo == x.DocumentScope() {
 				goExamples = goExamplesInContract(goExamples, c.Statement, raw)
 				goCommands = goCommandsInContract(goCommands, c.Statement, raw)
+				if hasGo {
+					goDefaults = append(goDefaults, goDefaultFields(c.Statement, raw)...)
+				}
 				formula.fromPassage(c.Statement, passage)
 				if hasC {
 					var err error
@@ -712,7 +750,8 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 			out = append(out, witnessQuery{contractIndex: i + 1, scope: c.AppliesTo, terms: terms, statement: statement, paths: paths,
 				operation: maintenanceOperation(c.Statement), typeContract: mentionsJavaScriptTypes(c.Statement),
 				performance: performanceContract(c.Statement), members: members, navigationNames: exactNames, pythonDocs: pythonDocs, pythonCalls: pythonCalls,
-				formula: formula, cFamilies: cFamilies, packageEntry: packageEntry, goExamples: goExamples, goCommands: goCommands})
+				formula: formula, cFamilies: cFamilies, packageEntry: packageEntry, goExamples: goExamples, goCommands: goCommands,
+				goDefaults: goDefaults})
 		}
 	}
 	common := map[string]int{}

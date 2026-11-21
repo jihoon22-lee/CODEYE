@@ -51,6 +51,12 @@ func TestMetricsAreNotFindings(t *testing.T) {
 		}
 		if o.Metric != nil {
 			metrics[o.ID] = true
+			if o.Metric.Name == "duplicated_lines" {
+				other := o.Metric.Counterpart
+				if other == nil || o.Location == nil || other.Path == o.Location.Path || other.SnapshotID != r.Inputs.SnapshotID || other.StartLine != 1 || other.EndLine != 17 {
+					t.Fatalf("clone counterpart %+v", other)
+				}
+			}
 		}
 	}
 	for _, f := range r.Findings {
@@ -99,8 +105,20 @@ func TestMetricsRendered(t *testing.T) {
 	if !strings.Contains(string(html), `data-count="metric_observations">3<`) || !strings.Contains(md, "| "+mdText(Korean.Label("metric_observations"))+" | 3 |") {
 		t.Fatal("metric count missing")
 	}
-	if strings.Count(md, Korean.Label("metric_marker")) != 3 {
-		t.Fatal("metric observations not marked as non-defects")
+	if !strings.Contains(md, mdText(Korean.Label("metrics.lead"))) {
+		t.Fatal("metric section does not explain the status of these observations")
+	}
+	for _, detail := range []string{DetailSummary, DetailFull} {
+		body := RenderMarkdownAt(Project(r, false), digest, Korean, detail)
+		page, err := RenderHTMLAt(Project(r, false), digest, Korean, detail)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, out := range [][]byte{body, page} {
+			if !strings.Contains(string(out), "lib/b.js:1-17") || !strings.Contains(string(out), "src/a.js:1-17") {
+				t.Fatalf("%s export does not show both clone locations", detail)
+			}
+		}
 	}
 	free := Project(r, false)
 	if err := ValidateReport(free); err != nil {
@@ -113,6 +131,9 @@ func TestMetricsRendered(t *testing.T) {
 		}
 		if o.Metric != nil && o.Metric.Value >= o.Metric.Threshold {
 			n++
+			if o.Metric.Name == "duplicated_lines" && o.Metric.Counterpart == nil {
+				t.Fatal("code-free export lost the other block location")
+			}
 		}
 	}
 	if n != 3 || free.Summary.MetricObservations != 3 {

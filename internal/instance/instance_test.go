@@ -113,7 +113,7 @@ func TestParseDefaultsAndStrictness(t *testing.T) {
 		"relay and key":     cfg(state, `,"agent":{"model":{"relay_file":"/r","credential_file":"/k"}}`),
 		"short cancel":      cfg(state, `,"stop":{"cancel_timeout_seconds":5}`),
 		"low call ceiling":  cfg(state, `,"agent":{"model":{"opencode":`+q(filepath.Join(base, "oc"))+`,"name":"p/m","review_max_calls":14}}`),
-		"high call ceiling": cfg(state, `,"agent":{"model":{"opencode":`+q(filepath.Join(base, "oc"))+`,"name":"p/m","review_max_calls":208}}`),
+		"high call ceiling": cfg(state, `,"agent":{"model":{"opencode":`+q(filepath.Join(base, "oc"))+`,"name":"p/m","review_max_calls":2014}}`),
 		"backup in state":   cfg(state, `,"backup_dir":`+q(filepath.Join(state, "b"))),
 		"git host IP":       cfg(state, `,"git_hosts":["127.0.0.1"]`),
 		"git host URL":      cfg(state, `,"git_hosts":["https://github.com"]`),

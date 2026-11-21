@@ -2,6 +2,7 @@ package report
 
 import (
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -30,7 +31,8 @@ func comparisonCoversContract(comparisons []DocComparison, contract DocContract)
 		return false
 	}
 	for _, comparison := range comparisons {
-		if comparison.Statement == contract.Statement && comparison.AppliesTo == contract.AppliesTo &&
+		if strings.TrimSpace(comparison.Statement) == strings.TrimSpace(contract.Statement) &&
+			displayDocumentScope(comparison.AppliesTo) == displayDocumentScope(contract.AppliesTo) &&
 			!slices.ContainsFunc(contract.EvidenceIDs, func(id string) bool { return !slices.Contains(comparison.DocumentEvidenceIDs, id) }) {
 			return true
 		}
@@ -40,29 +42,28 @@ func comparisonCoversContract(comparisons []DocComparison, contract DocContract)
 
 // withInsights adds the same evidence-backed assessments to both export layouts.
 func withInsights(v secView) secView {
-	l := v.L
 	for i := range v.Sections {
 		block := &v.Sections[i]
-		var parts []secPart
 		switch block.ID {
 		case SectionDocuments:
-			doc := v.R.Documents
-			for _, q := range doc.Quality {
-				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Heading: l.Label("insight."+q.Aspect) + " · " + l.Label("insight."+q.Assessment), Paras: []string{q.Statement}, Sources: v.sourceCitations(q.EvidenceIDs, doc.Evidence)})
+			lead, records := readingLead(block.Parts)
+			block.Parts = []secPart{lead}
+			if reading := v.documentReading(v.R.Documents); reading != nil {
+				block.Parts = append(block.Parts, secPart{Reading: reading})
 			}
-			for i, c := range doc.Comparisons {
-				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Anchor: comparisonAnchor(i),
-					Heading: l.Label("decision.comparison." + c.Status), Paras: []string{c.Statement},
-					List: v.comparisonDetails(c, doc.Evidence), Workflow: v.workflowCitations(c.RelatedWorkflow, doc.Evidence)})
-			}
+			block.Parts = append(block.Parts, secPart{Fold: v.L.Label("docs.reading_discovery"), Parts: records})
 		case SectionCodeReview:
-			for i, s := range v.R.CodeReview.Strengths {
-				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Anchor: strengthAnchor(i), Heading: l.Label("insight.strength") + " · " + s.Title, Paras: []string{s.Benefit}, Sources: v.sourceCitations(s.EvidenceIDs, v.R.CodeReview.Evidence)})
-			}
+			block.Parts = v.codeReviewReadingOrder(block.Parts)
 		}
-		block.Parts = append(parts, block.Parts...)
 	}
 	return v
+}
+
+func readingLead(parts []secPart) (secPart, []secPart) {
+	records := slices.Clone(parts)
+	lead := secPart{Paras: records[0].Paras[:1]}
+	records[0].Paras = records[0].Paras[1:]
+	return lead, records
 }
 
 type workflowReadingView struct {
@@ -103,12 +104,103 @@ func comparisonAnchor(i int) string { return "document-comparison-" + strconv.It
 func strengthAnchor(i int) string   { return "code-strength-" + strconv.Itoa(i+1) }
 
 type sourceCitation struct {
-	File, Range, Location    string
-	ExcerptLocation, Text    string
-	URL, LinkLabel           string
-	ActionLabel, StoredLabel string
-	Example                  *documentExample
-	ExampleLabel             string
+	File, Range, Location            string
+	ID, Anchor, Jump                 string
+	ExcerptLocation, Text            string
+	URL, LinkLabel                   string
+	ActionLabel, StoredLabel         string
+	CitationLabel                    string
+	Example                          *documentExample
+	ExampleLabel                     string
+	StartLine, EndLine, ExcerptStart int
+}
+
+type sourcePreview struct {
+	Location, Label, Citation, CitationLabel string
+	Lines                                    []sourcePreviewLine
+}
+
+type sourcePreviewLine struct {
+	Number int
+	Text   string
+	Focus  bool
+}
+
+func (s sourceCitation) Preview() *sourcePreview {
+	return s.previewFor("")
+}
+
+var previewIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z_0-9]*$`)
+
+func (s sourceCitation) previewFor(title string) *sourcePreview {
+	if s.Text == "" || s.ExcerptStart < 1 {
+		return nil
+	}
+	lines := strings.Split(s.Text, "\n")
+	inside := s.StartLine >= s.ExcerptStart && s.EndLine < s.ExcerptStart+len(lines)
+	focus := -1
+	if inside && s.StartLine == s.EndLine {
+		focus = s.StartLine - s.ExcerptStart
+	} else {
+		focus = previewSymbolLine(lines, title)
+	}
+	if focus < 0 && inside && s.EndLine-s.StartLine < 5 {
+		focus = s.StartLine - s.ExcerptStart
+	}
+	first, last := 0, len(lines)
+	if focus >= 0 {
+		first = max(0, min(focus-1, len(lines)-5))
+		last = min(first+5, len(lines))
+	}
+	preview := &sourcePreview{Location: sourceRange(s.File, s.ExcerptStart+first, s.ExcerptStart+last-1), Label: s.StoredLabel}
+	if s.EndLine-s.StartLine >= 5 && preview.Location != s.Location {
+		preview.Citation, preview.CitationLabel = s.Location, s.CitationLabel
+	}
+	for index := first; index < last; index++ {
+		preview.Lines = append(preview.Lines, sourcePreviewLine{s.ExcerptStart + index, lines[index], index == focus})
+	}
+	return preview
+}
+
+func previewSymbolLine(lines []string, title string) int {
+	if exact := strings.TrimSpace(title); exact != "" {
+		found := -1
+		for i, line := range lines {
+			if strings.TrimSpace(line) != exact {
+				continue
+			}
+			if found >= 0 {
+				found = -1
+				break
+			}
+			found = i
+		}
+		if found >= 0 {
+			return found
+		}
+	}
+	for _, part := range inlineCodeParts(title) {
+		if !part.Code || !previewIdentifier.MatchString(part.Text) {
+			continue
+		}
+		token := regexp.MustCompile(`\b` + part.Text + `\b`)
+		found := -1
+		for i, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "//") || strings.HasPrefix(line, "/*") || strings.HasPrefix(line, "* ") || strings.HasPrefix(line, "# ") || !token.MatchString(line) {
+				continue
+			}
+			if found >= 0 {
+				found = -1
+				break
+			}
+			found = i
+		}
+		if found >= 0 {
+			return found
+		}
+	}
+	return -1
 }
 
 func (s sourceCitation) Brief() sourceCitation {
@@ -139,6 +231,7 @@ func (v secView) sourceCitations(ids []string, evidence []SectionEvidence) []sou
 
 func (v secView) citeSectionEvidence(e SectionEvidence) sourceCitation {
 	s := newSourceCitation(v.L, e.Kind, e.Path, e.StartLine, e.EndLine, e.Excerpt)
+	s.ID = e.ID
 	s.URL = snapshotBrowserURL(v.R, e.Path, e.StartLine, e.EndLine)
 	s.LinkLabel = v.L.Label("opening.open_source")
 	return s
@@ -156,6 +249,7 @@ func newSourceCitation(l Locale, kind, path string, start, end int, excerpt *sou
 		s.ActionLabel = l.Label("evidence.view_manifest")
 	}
 	s.StoredLabel = l.Label("evidence.stored_excerpt")
+	s.CitationLabel = l.Label("evidence.cited_range")
 	return s
 }
 
@@ -196,8 +290,9 @@ func sourceRange(path string, start, end int) string {
 }
 
 func citeSource(path string, start, end int, excerpt *sourceexcerpt.Excerpt) sourceCitation {
-	s := sourceCitation{File: path, Range: strconv.Itoa(start) + "-" + strconv.Itoa(end), Location: sourceRange(path, start, end)}
+	s := sourceCitation{File: path, Range: strconv.Itoa(start) + "-" + strconv.Itoa(end), Location: sourceRange(path, start, end), StartLine: start, EndLine: end}
 	if excerpt != nil {
+		s.ExcerptStart = excerpt.StartLine
 		s.ExcerptLocation = sourceRange(path, excerpt.StartLine, excerpt.EndLine)
 		s.Text = excerpt.Text
 	}
@@ -207,11 +302,18 @@ func citeSource(path string, start, end int, excerpt *sourceexcerpt.Excerpt) sou
 // A fence longer than any backtick run in the snapshot keeps its lines literal.
 func mdCitations(p func(...string), sources []sourceCitation) {
 	for _, x := range sources {
+		mdReadingAnchor(p, x.Anchor)
 		if x.Example != nil {
 			p("**", mdText(x.ExampleLabel), "** ", mdCodeSpan(x.Example.Call), " → ", mdCodeSpan(x.Example.Output))
 			p()
 		}
-		if x.URL == "" {
+		if x.Jump != "" {
+			if x.URL != "" {
+				p("[", mdCode(x.Location), "](#", x.Jump, ") · [", mdText(x.LinkLabel), "](<", x.URL, ">)")
+			} else {
+				p("[", mdCode(x.Location), "](#", x.Jump, ")")
+			}
+		} else if x.URL == "" {
 			p(mdCode(x.Location))
 		} else {
 			p(mdCode(x.Location), " · [", mdText(x.LinkLabel), "](<", x.URL, ">)")

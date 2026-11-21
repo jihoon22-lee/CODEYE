@@ -12,7 +12,7 @@ import (
 	"io"
 	"os"
 	"path"
-	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -36,8 +36,6 @@ const (
 	maxScanBytes      = 8 << 20
 )
 
-var funcDecl = regexp.MustCompile(`^func\s+([A-Za-z_][A-Za-z0-9_]{0,127})\s*[\[(]`)
-
 // Expansion limitation codes.
 const (
 	limNoSymbol        = "no_symbol_for_expansion"
@@ -49,8 +47,16 @@ const (
 
 type functionName struct{ dir, pkg, name string }
 
-// citedSymbols selects up to maxSymbols package functions from cited Go excerpts.
-func citedSymbols(catalog []Excerpt, candidates []CandidateText) map[functionName]bool {
+type expansionSource struct {
+	positions *token.FileSet
+	file      *ast.File
+	lines     []string
+}
+
+// citedSymbols selects package functions whose declarations or bodies
+// intersect the lines a candidate actually cites.
+func citedSymbols(catalog []Excerpt, candidates []CandidateText, files map[string]source.Entry,
+	load func(source.Entry) (*expansionSource, error)) (map[functionName]bool, error) {
 	byID := map[string]Excerpt{}
 	for _, e := range catalog {
 		byID[e.ID] = e
@@ -63,20 +69,31 @@ func citedSymbols(catalog []Excerpt, candidates []CandidateText) map[functionNam
 			if !ok || (e.Kind != "code" && e.Kind != "test") || !strings.HasSuffix(e.Path, ".go") {
 				continue
 			}
-			file, err := parser.ParseFile(token.NewFileSet(), e.Path, e.Text, parser.PackageClauseOnly)
-			if err != nil {
+			src, known := files[e.Path]
+			if !known || src.SHA256 != e.SHA256 {
 				continue
 			}
-			for _, line := range strings.Split(e.Text, "\n") {
-				m := funcDecl.FindStringSubmatch(line)
-				if m == nil || m[1] == "main" || m[1] == "init" || len(out) >= maxSymbols {
+			parsed, err := load(src)
+			if err != nil {
+				return nil, err
+			}
+			if parsed == nil || e.Start < 1 || e.End > len(parsed.lines) {
+				continue
+			}
+			for _, decl := range parsed.file.Decls {
+				f, ok := decl.(*ast.FuncDecl)
+				if !ok || f.Recv != nil || f.Body == nil || f.Name.Name == "main" || f.Name.Name == "init" || len(out) >= maxSymbols {
 					continue
 				}
-				out[functionName{path.Dir(e.Path), file.Name.Name, m[1]}] = true
+				first := parsed.positions.PositionFor(f.Pos(), false).Line
+				last := parsed.positions.PositionFor(f.End(), false).Line
+				if first <= e.End && e.Start <= last {
+					out[functionName{path.Dir(e.Path), parsed.file.Name.Name, f.Name.Name}] = true
+				}
 			}
 		}
 	}
-	return out
+	return out, nil
 }
 
 type window struct{ lo, hi int } // 0-based inclusive
@@ -117,9 +134,63 @@ func enclosing(lines []string, at int) window {
 // expand returns caller/test excerpts for the cited symbols, each bound to
 // the snapshot blob and line range, plus limitation codes.
 func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, catalog []Excerpt, candidates []CandidateText) ([]Excerpt, []string, error) {
-	symbols := citedSymbols(catalog, candidates)
 	lims := []string{limExpansionGoOnly, limDirectCalls}
+	if !slices.ContainsFunc(catalog, func(e Excerpt) bool { return strings.HasSuffix(e.Path, ".go") }) {
+		return nil, append(lims, limNoSymbol), nil
+	}
+	eligible := map[string]source.Entry{}
+	for _, e := range snapshot.Manifest.Entries {
+		if e.Kind == "file" && e.SHA256 != "" && e.Size != nil && e.ExcludedReason == "" && strings.HasSuffix(e.Path, ".go") &&
+			inScope(e.Path, scope) && *e.Size <= maxFileBytes && domain.ValidateEvidencePath(e.Path) == nil {
+			eligible[e.Path] = e
+		}
+	}
+	root, err := os.OpenRoot(snapshot.SnapshotDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer root.Close()
+	overflow := false
+	scannedBytes := int64(0)
+	parsedFiles := map[string]*expansionSource{}
+	load := func(f source.Entry) (*expansionSource, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if p, cached := parsedFiles[f.Path]; cached {
+			return p, nil
+		}
+		if len(parsedFiles) >= maxScanFiles || scannedBytes+*f.Size > maxScanBytes {
+			overflow = true
+			return nil, nil
+		}
+		scannedBytes += *f.Size
+		parsedFiles[f.Path] = nil
+		b, err := readVerified(root, f)
+		if err != nil {
+			return nil, err
+		}
+		if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 || record.Sensitive(b) {
+			return nil, nil
+		}
+		positions := token.NewFileSet()
+		file, err := parser.ParseFile(positions, f.Path, b, 0)
+		if err != nil {
+			overflow = true
+			return nil, nil
+		}
+		p := &expansionSource{positions: positions, file: file, lines: strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")}
+		parsedFiles[f.Path] = p
+		return p, nil
+	}
+	symbols, err := citedSymbols(catalog, candidates, eligible, load)
+	if err != nil {
+		return nil, nil, err
+	}
 	if len(symbols) == 0 {
+		if overflow {
+			lims = append(lims, limCallersOutside)
+		}
 		return nil, append(lims, limNoSymbol), nil
 	}
 	dirs := map[string]bool{}
@@ -127,24 +198,18 @@ func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, c
 		dirs[sym.dir] = true
 	}
 	var files []source.Entry
-	for _, e := range snapshot.Manifest.Entries {
-		if e.Kind == "file" && e.SHA256 != "" && e.Size != nil && e.ExcludedReason == "" && strings.HasSuffix(e.Path, ".go") &&
-			dirs[path.Dir(e.Path)] && inScope(e.Path, scope) && *e.Size <= maxFileBytes && domain.ValidateEvidencePath(e.Path) == nil {
+	for _, e := range eligible {
+		if dirs[path.Dir(e.Path)] {
 			files = append(files, e)
 		}
 	}
-	sort.SliceStable(files, func(i, j int) bool {
+	sort.Slice(files, func(i, j int) bool {
 		ti, tj := strings.HasSuffix(files[i].Path, "_test.go"), strings.HasSuffix(files[j].Path, "_test.go")
 		if ti != tj {
 			return !ti
 		}
 		return files[i].Path < files[j].Path
 	})
-	root, err := os.OpenRoot(snapshot.SnapshotDir)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer root.Close()
 	covered := func(path string, w window, picked []Excerpt) bool {
 		for _, e := range catalog {
 			if e.Path == path && e.Start <= w.lo+1 && w.hi+1 <= e.End {
@@ -159,32 +224,17 @@ func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, c
 		return false
 	}
 	var out []Excerpt
-	used, hits, overflow := 0, 0, false
-	scannedBytes := int64(0)
-	for n, f := range files {
-		if err := ctx.Err(); err != nil {
-			return nil, nil, err
-		}
-		if n >= maxScanFiles || scannedBytes+*f.Size > maxScanBytes {
-			overflow = true
-			break
-		}
-		scannedBytes += *f.Size
-		b, err := readVerified(root, f)
+	used, hits := 0, 0
+	for _, f := range files {
+		p, err := load(f)
 		if err != nil {
 			return nil, nil, err
 		}
-		if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 || record.Sensitive(b) {
+		if p == nil {
 			continue
 		}
-		lines := strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
-		positions := token.NewFileSet()
-		file, err := parser.ParseFile(positions, f.Path, b, 0)
-		if err != nil {
-			overflow = true
-			continue
-		}
-		ast.Inspect(file, func(node ast.Node) bool {
+		lines := p.lines
+		ast.Inspect(p.file, func(node ast.Node) bool {
 			call, ok := node.(*ast.CallExpr)
 			if !ok {
 				return true
@@ -197,10 +247,10 @@ func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, c
 				fun = indexed.X
 			}
 			name, ok := fun.(*ast.Ident)
-			if !ok || (name.Obj != nil && name.Obj.Kind != ast.Fun) || !symbols[functionName{path.Dir(f.Path), file.Name.Name, name.Name}] {
+			if !ok || (name.Obj != nil && name.Obj.Kind != ast.Fun) || !symbols[functionName{path.Dir(f.Path), p.file.Name.Name, name.Name}] {
 				return true
 			}
-			i := positions.PositionFor(name.Pos(), false).Line - 1
+			i := p.positions.PositionFor(name.Pos(), false).Line - 1
 			hits++
 			w := enclosing(lines, i)
 			if covered(f.Path, w, out) {

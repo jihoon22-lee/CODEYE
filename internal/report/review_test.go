@@ -113,6 +113,7 @@ func TestWorkflowReviewDecoderAndOlderBuilder(t *testing.T) {
 	}
 	r := exampleReport(t)
 	r.Builder.Version = "13"
+	fileOnlyLedgerForTest(&r)
 	if err := ValidateReport(r); err != nil {
 		t.Fatalf("legacy document record invalid: %v", err)
 	}
@@ -139,6 +140,7 @@ func TestWorkflowReviewDecoderAndOlderBuilder(t *testing.T) {
 	supplement := r.Coverage.ReviewCalls[docCall]
 	supplement.Purpose = record.WorkflowSelectionPurpose
 	r.Coverage.ReviewCalls = append(r.Coverage.ReviewCalls, supplement)
+	countAddedCallForTest(&r)
 	if err := ValidateReport(r); err != nil {
 		t.Fatalf("current builder cannot read workflow call: %v", err)
 	}

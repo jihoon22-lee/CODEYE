@@ -163,7 +163,7 @@ def comparison_history(session, project_id, first_run, first_report, go_source, 
     assert recorded["version"] == 1 and recorded["disposition"] == "accepted_risk", recorded
 
     # Run 2: two lines inserted above the diagnostic and a second, different printf misuse.
-    (go_source / "example.go").write_text(original.replace("func Print()", "// shifted\n//\nfunc Print()")
+    (go_source / "example.go").write_text(original.replace("func Print()", "// shifted\n// retains the original diagnostic.\nfunc Print()")
                                            + '\nfunc Count() { fmt.Printf("%s %s", "x") }\n')
     second = session.enqueue(project_id)
     assert publish(second)["revision"] == 1
@@ -257,11 +257,18 @@ def secrets_pack(session, cli, services, children, directory, binary, origin, us
     from bundle_checks.report import check_sections
     for doc in (full, code_free):
         check_sections(doc, source)
+        clones = [o for o in doc["observations"] if o.get("metric", {}).get("name") == "duplicated_lines"]
+        assert len(clones) == 1, clones
+        clone = clones[0]
+        counterpart = clone["metric"]["counterpart"]
+        assert {clone["location"]["path"], counterpart["path"]} == {"lib/b.js", "src/a.js"}, clone
+        assert counterpart["snapshot_id"] == doc["inputs"]["snapshot_id"] and counterpart["end_line"] > counterpart["start_line"], counterpart
     assert sum(len(g["observation_ids"]) for g in full["metrics"]["metrics"]) == 2, full["metrics"]
     assert full["secrets"]["task_keys"] == ["gitl" "eaks"] and all(d["finding_id"] for d in full["secrets"]["detections"]), full["secrets"]
     rows = {row["task_key"]: row for row in full["coverage"]["tools"]}
     assert (rows["lizard"]["exit_class"], rows["jscpd"]["exit_class"], rows["gitl" + "eaks"]["exit_class"]) == (
         "success_without_findings", "success_without_findings", "success_with_findings"), rows
+    assert rows["lizard"]["packages"]["functions_measured"] >= 1, rows["lizard"]
     summary = full["summary"]
     assert summary == code_free["summary"] and summary["metric_observations"] == 2 and summary["actionable_findings"] == 0, summary
     metrics = {o["id"] for o in full["observations"] if "metric" in o}
@@ -473,16 +480,19 @@ def run(base, root, env, *, browser=False):
             data = (directory / "artifacts" / key).read_bytes()
             assert hashlib.sha256(data).hexdigest() == key.split("/")[-1]
             observation_docs.append(json.loads(data))
-        # go vet keeps its v0.1 document; staticcheck writes the generic envelope (docs/ANALYZERS.md).
+        # go vet keeps its v0.1 document. Staticcheck and gofmt use the generic envelope.
         vet_docs = [d for d in observation_docs if d.get("kind") == "go_vet_observations"]
         sc_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["id"] == "go.staticcheck"]
+        fmt_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["id"] == "go.gofmt"]
         # (docs/ANALYZERS.md): lizard, jscpd and gitleaks are planned for every
         # project; this node has none of their tools, so each is a visible
         # not_run stand-in.
         structure_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["ecosystem"] == "any"]
-        assert len(vet_docs) == 1 and len(sc_docs) == 1 and len(structure_docs) == 3 and len(observation_docs) == 5, [d.get("kind") for d in observation_docs]
+        assert len(vet_docs) == len(sc_docs) == len(fmt_docs) == 1 and len(structure_docs) == 3 and len(observation_docs) == 6, [d.get("kind") for d in observation_docs]
         assert all(d["outcome"]["exit_class"] == "not_run" and d["outcome"]["reason"] == "tool_not_configured" for d in structure_docs), [d["outcome"] for d in structure_docs]
         doc, sc_doc = vet_docs[0], sc_docs[0]
+        fmt_doc = fmt_docs[0]
+        assert fmt_doc["outcome"]["exit_class"] == "success_without_findings" and fmt_doc["coverage"]["processed_paths"] == ["example.go"], fmt_doc["outcome"]
         assert doc["analyzer_id"] == "go.vet"
         assert any(o["rule_id"] == "printf" and o["location"]["path"] == "example.go" for o in doc["observations"])
         assert sc_doc["analyzer"] == {"id": "go.staticcheck", "ecosystem": "go", "required": False}
@@ -517,17 +527,18 @@ def run(base, root, env, *, browser=False):
         static_stage = go_stages["static_analysis"]
         if staticcheck:
             # The three tasks without their tools keep the stage partial.
-            assert static_stage["state"] == "partial" and static_stage["counts"] == {"unsupported": 3} and static_stage["succeeded"] == 2, static_stage
+            assert static_stage["state"] == "partial" and static_stage["counts"] == {"unsupported": 3} and static_stage["succeeded"] == 3, static_stage
         else:
             # An analyzer without its tool is visible: go vet succeeded, staticcheck
             # and the tasks unsupported, so the stage is partial (never succeeded).
             assert static_stage["state"] == "partial" and static_stage["counts"] == {"unsupported": 4}, static_stage
-            assert static_stage["succeeded"] == 1, static_stage
+            assert static_stage["succeeded"] == 2, static_stage
         assert static_stage["reasons"] == ["tool_not_configured"], static_stage
-        assert static_stage["planned"] == 5 and go_stages["report"]["state"] == "succeeded", go_stages
+        assert static_stage["planned"] == 6 and go_stages["report"]["state"] == "succeeded", go_stages
         # The model review was not approved for this source: excluded by policy, never success.
         assert go_stages["code_review"]["state"] == "skipped" and go_stages["code_review"]["reasons"] == ["model_source_not_approved"], go_stages
-        assert go_stages["code_review"]["planned"] == 3, go_stages  # investigate, interpret, verify
+        planned_review = go_stages["code_review"]["planned"]
+        assert planned_review >= 4 and go_stages["code_review"]["counts"] == {"skipped_policy": planned_review}, go_stages
         assert go_stages["documents"]["succeeded"] == 1 and "model_source_not_approved" in go_stages["documents"]["reasons"], go_stages
         print(f"PASS: 실제 Go run 단계 표시 detail={go_activity['detail']} (목록/상세 일치)")
         streamed, plan_revision = stream_agrees(session, actual)
@@ -538,7 +549,8 @@ def run(base, root, env, *, browser=False):
         assert code_free["summary"] == full["summary"]
         assert full["summary"]["raw_observations"] == len(doc["observations"]) + len(sc_doc["observations"])
         tool_rows = {row["task_key"]: row for row in full["coverage"]["tools"]}
-        assert sorted(tool_rows) == ["gitl" "eaks", "go-vet", "jscpd", "lizard", "staticcheck"], tool_rows
+        assert sorted(tool_rows) == ["gitl" "eaks", "go-vet", "gofmt", "jscpd", "lizard", "staticcheck"], tool_rows
+        assert tool_rows["gofmt"]["exit_class"] == "success_without_findings" and tool_rows["gofmt"]["processed_files"] == 1, tool_rows
         assert all(tool_rows[k]["exit_class"] == "not_run" for k in ("lizard", "jscpd", "gitl" "eaks")), tool_rows
         assert tool_rows["staticcheck"]["analyzer"] == "go.staticcheck"
         assert tool_rows["staticcheck"]["exit_class"] == ("success_without_findings" if staticcheck else "not_run"), tool_rows
@@ -553,6 +565,7 @@ def run(base, root, env, *, browser=False):
         assert all(a["decoder"] == "application/vnd.codeye.environment+json;schema_version=0.1" for a in environment)
         assert not any(item.endswith((":env.discover", ":docs.discover")) for item in full["limitations"])
         statuses = {task["key"]: task["status"] for task in full["tasks"]}
+        assert all(statuses[k] == "skipped_policy" for k in ("review.investigate", "review.interpret", "review.verify", "review.scope")), statuses
         assert statuses["env.discover"] == statuses["docs.discover"] == "succeeded"
         assert statuses["staticcheck"] == ("succeeded" if staticcheck else "unsupported"), statuses
         assert statuses["lizard"] == statuses["jscpd"] == statuses["gitl" "eaks"] == "unsupported", statuses

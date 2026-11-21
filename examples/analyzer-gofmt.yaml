@@ -1,0 +1,30 @@
+# Go 형식 비교 어댑터. 구현은 internal/worker/analysis/gofmtcheck에 있다.
+# version_probe는 빌드 정보 조회와 동등한 표현이다. 어댑터는 조회용 프로세스를 실행하지 않는다.
+schema_version: '0.1'
+id: go.gofmt
+languages: [go]
+planned_platforms: [linux, windows]
+availability: verified # Linux Go 1.27.4
+version_contract: go1.27-buildinfo
+analysis_scope: [text, syntax]
+executes_repository_code: false
+requires_build: false
+network_policy: none
+version_probe:
+  executable: '${go}'
+  argv: [version, '${gofmt}']
+execute:
+  executable: '${gofmt}'
+  argv: [-l, '--', './${file}']
+  cwd: '${workspace}'
+  timeout_seconds: 120
+  stdout_max_bytes: 32768
+  env_allowlist: [PATH, LANG, SystemRoot, HOME, USERPROFILE, TMPDIR, TMP, TEMP]
+exit_codes:
+  clean: [0]
+  findings: []
+  error: [1, 2]
+parser:
+  id: gofmt
+  format: text
+  input: stdout-artifact

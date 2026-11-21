@@ -7,6 +7,31 @@ import (
 	"testing"
 )
 
+func fileOnlyLedgerForTest(r *Report) {
+	if r.CodeReview == nil || r.CodeReview.Ledger == nil {
+		return
+	}
+	if r.Builder.Version == "5" {
+		r.CodeReview.Ledger = nil
+	} else {
+		ledger := r.CodeReview.Ledger
+		ledger.Files = nil
+		for i := range ledger.Modules {
+			ledger.Modules[i].FilesAccepted, ledger.Modules[i].FilesRequested = nil, nil
+		}
+		ledger.Status = ledgerStatus(*ledger, r.Tasks)
+	}
+	overview := overviewOf(*r)
+	r.Overview = &overview
+}
+
+func countAddedCallForTest(r *Report) {
+	if r.CodeReview != nil && r.CodeReview.Ledger != nil && r.CodeReview.Ledger.CallsUsed != nil {
+		n := *r.CodeReview.Ledger.CallsUsed + 1
+		r.CodeReview.Ledger.CallsUsed = &n
+	}
+}
+
 // CODEYE_REAL_REPORT names a stored report.json of a real run (kept outside
 // the repository). It must still read and render; the test logs the line
 // count of each Markdown form.

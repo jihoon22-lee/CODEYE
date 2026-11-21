@@ -1,5 +1,54 @@
 import { expect, test } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+test('saved report navigation follows scroll and fragment links under CSP', async ({page}, info) => {
+  const assets = new URL('../../internal/report/reportui/', import.meta.url);
+  const css = ['tabler.css', 'report.css', 'export.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
+  const script = readFileSync(new URL('export-navigation.js', assets), 'utf8');
+  const hash = createHash('sha256').update(script).digest('base64');
+  const sections = { overview: '종합', documents: '문서 분석', code_review: '코드 분석', appendix: '부록' };
+  const links = Object.entries(sections).map(([key, name]) => `<li><a href="#${key}" class="nav-link">${name}</a></li>`).join('');
+  const file = info.outputPath('report.html');
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `<!doctype html><html lang="ko"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'">
+    <style>${css}.export-section { min-height: 82vh; }</style>
+    <body class="review-theme report-export"><div class="report-layout export-page">
+    <nav class="report-rail">
+      <div class="export-desktop-nav"><ul class="nav">${links}</ul></div>
+      <details class="export-mobile-nav"><summary>보고서 목차 <span class="export-mobile-current"></span><span>⌄</span></summary><ul class="nav">${links}</ul></details>
+    </nav><main class="report-main">
+    ${Object.entries(sections).map(([key, name]) => `<section class="export-section" id="${key}"><h2>${name}</h2>
+      ${key === 'documents' ? '<details><summary>근거</summary><p id="document-citation">문서 근거</p></details>' : ''}</section>`).join('')}
+    </main></div><script>document.body.classList.add('unexpected-script')</script><script>${script}</script></body></html>`);
+
+  await page.setViewportSize({width: 1280, height: 720});
+  const url = pathToFileURL(file).href;
+  await page.goto(url);
+  const current = page.locator('.export-desktop-nav [aria-current="location"]');
+  await expect(current).toHaveText(sections.overview);
+  expect(await page.locator('body').evaluate(body => body.classList.contains('unexpected-script'))).toBe(false);
+  await page.locator('#documents').evaluate(section => section.scrollIntoView());
+  await expect(current).toHaveText(sections.documents);
+  await page.locator('#code_review').evaluate(section => section.scrollIntoView());
+  await expect(current).toHaveText(sections.code_review);
+  await page.locator('#overview').evaluate(section => section.scrollIntoView());
+  await expect(current).toHaveText(sections.overview);
+  await page.locator('.export-desktop-nav').getByRole('link', {name: sections.appendix}).click();
+  await expect(current).toHaveText(sections.appendix);
+  await expect(page).toHaveURL(url + '#appendix');
+
+  await page.setViewportSize({width: 390, height: 720});
+  await page.goto(url + '#document-citation');
+  await expect(page.locator('#document-citation')).toBeVisible();
+  await expect(page.locator('.export-mobile-current')).toHaveText(sections.documents);
+  await page.locator('#code_review').evaluate(section => section.scrollIntoView());
+  await expect(page.locator('.export-mobile-current')).toHaveText(sections.code_review);
+  await expect(page.locator('.export-mobile-nav [aria-current="location"]')).toHaveText(sections.code_review);
+});
 
 test('long saved source scrolls inside the HTML finding card at mobile and desktop widths', async ({page}) => {
   const assets = new URL('../../internal/report/reportui/', import.meta.url);
@@ -72,6 +121,29 @@ test('comparison rows keep the example and opened document within the web report
   }
 });
 
+test('focused source wraps inside the mobile excerpt while context stays scrollable', async ({page}) => {
+  const assets = new URL('../../internal/report/reportui/', import.meta.url);
+  const css = ['tabler.css', 'report.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
+  const line = '    fmt.Printf("the report records this format expression", firstArgument, secondArgument)';
+  await page.setViewportSize({width:390,height:844});
+  await page.setContent(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style>
+    <article class="report-document review-theme"><div class="report-selected-source"><pre class="source-window" tabindex="0"><code>
+    <span class="source-line"><span class="source-line-number" aria-hidden="true">4</span><span class="source-line-code">${'long_context_'.repeat(34)}</span></span>
+    <span class="source-line" data-focus="true"><span class="source-line-number" aria-hidden="true">5</span><span class="source-line-code">${line}</span></span>
+    </code></pre></div></article>`);
+  const source = page.locator('.source-window');
+  expect(await source.evaluate(pre => pre.scrollWidth > pre.clientWidth)).toBe(true);
+  const selection = await source.locator('[data-focus] .source-line-code').evaluate(element => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const pre = element.closest('pre')!.getBoundingClientRect();
+    const lines = Array.from(range.getClientRects());
+    return {count:lines.length, contained:lines.every(line => line.left >= pre.left && line.right <= pre.right + 1)};
+  });
+  expect(selection.count).toBeGreaterThan(1);
+  expect(selection.contained).toBe(true);
+});
+
 test('published report exposes the same counts, evidence and revision in the browser and exports', async ({page}) => {
   const login = process.env.CODEYE_TEST_REPORT_LOGIN;
   test.skip(!login, '실제 게시 보고서는 회귀 파일럿에서 생성한다');
@@ -93,6 +165,19 @@ test('published report exposes the same counts, evidence and revision in the bro
   await target.click();
   const report = page.getByRole('article', {name:'분석 보고서'});
   await expect(report).toBeVisible();
+  const listToggle = page.getByRole('button', {name:'목록 열기',exact:true});
+  const workspace = page.locator('.project-workspace');
+  for (const width of [1280,390]) {
+    await page.setViewportSize({width,height:844});
+    await expect.poll(() => workspace.evaluate(element => element.clientWidth - element.querySelector<HTMLElement>('.project-detail')!.clientWidth)).toBeLessThanOrEqual(1);
+    await listToggle.focus();
+    await expect(target).toBeHidden();
+    await listToggle.press('Enter');
+    await expect(target).toBeVisible();
+    await expect(target).toHaveAttribute('aria-pressed','true');
+    await page.getByRole('button', {name:'목록 접기',exact:true}).press('Space');
+    await expect(target).toBeHidden();
+  }
   const response = await page.request.get('/api/v1/runs/' + id + '/report?format=json&include_code=true');
   expect(response.ok()).toBe(true);
   const doc = await response.json();
@@ -112,6 +197,11 @@ test('published report exposes the same counts, evidence and revision in the bro
   if (doc.inputs.commit_sha) await expect(hero.getByText(doc.inputs.commit_sha.slice(0, 12), {exact: true})).toHaveAttribute('title', doc.inputs.commit_sha);
   const judgment = report.locator('.report-executive');
   await expect(judgment).toHaveCount(1);
+  const context = report.locator('details.report-overview-context');
+  await expect(context).not.toHaveAttribute('open', '');
+  await expect(report.getByRole('tabpanel', {name: '종합', exact: true}).locator('pre:visible')).toHaveCount(0);
+  await context.locator(':scope > summary').press('Enter');
+  await expect(judgment).toBeVisible();
   await expect(judgment.locator('table, .model-reading-list')).toHaveCount(0);
   await expect(judgment.getByText('적용 범위', {exact:true})).toHaveCount(0);
   const comparisonRows = judgment.locator('.report-comparison-rows');
@@ -171,6 +261,11 @@ test('published report exposes the same counts, evidence and revision in the bro
       if (section.key === 'gaps') continue;
       await report.getByRole('tablist').locator('[aria-controls="report-section-' + section.key + '"]').click();
       const counts = report.locator('[data-section-counts="' + section.key + '"]');
+      const disclosure = counts.locator('xpath=ancestor::details[not(@open)][last()]/summary');
+      while (await disclosure.count()) {
+        await expect(disclosure).toBeVisible();
+        await disclosure.press('Enter');
+      }
       for (const [key, value] of Object.entries(section.counts as Record<string, number>)) {
         const cell = counts.locator('[data-count="' + key + '"] dd');
         await expect(cell).toBeVisible();

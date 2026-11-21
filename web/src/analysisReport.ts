@@ -33,21 +33,23 @@ export type Finding = {
   locations: string[];
   observations: string[];
 };
-export type Task = { key: string; status: string; reason: string | null };
+export type Task = { key: string; status: string; reason: string | null; required?: boolean };
+type TestResult = Task & { attempted: boolean; directory: string | null; exit: number | null; result: 'passed' | 'failed' | 'unverified' };
+export type ObservationPlace = { path: string; start: number; end: number };
 export type Observation = {
   id: string;
   rule: string;
   tool: string | null;
   message: string | null;
   path: string | null;
-  location: { path: string; start: number; end: number } | null;
+  location: ObservationPlace | null;
   state: string;
   evidenceState: string | null;
   // The tool's own severity, and whether an in-source suppression hid it.
   severity: string | null;
   suppressed: boolean;
   // Structure or duplication measurement (never a finding).
-  metric: { name: string; value: number; threshold: number; unit: string } | null;
+  metric: { name: string; value: number; threshold: number; unit: string; counterpart?: ObservationPlace; excerpt?: Excerpt | null; counterpartExcerpt?: Excerpt | null } | null;
 };
 export type AnalysisReport = {
   project?: {name: string; source: string | null; start: string | null; finish: string | null};
@@ -81,6 +83,7 @@ export type AnalysisReport = {
   };
   calls: {
     role: string;
+    requested?: boolean;
     purpose?: string;
     model: string;
     version: string;
@@ -90,6 +93,7 @@ export type AnalysisReport = {
   findings: Finding[];
   observations: Observation[];
   tasks: Task[];
+  testResults?: { status: string; tasks: TestResult[] };
   limitations: string[];
   // Analysis sections; null for revisions published before they existed,
   // which keep the flat layout.
@@ -236,7 +240,15 @@ export function parseAnalysisReport(
       suppressed: o.suppressed === true,
       metric: o.metric == null ? null : (() => {
         const m = object(o.metric);
-        return { name: str(m.name), value: count(m.value), threshold: count(m.threshold), unit: str(m.unit) };
+        const name = str(m.name);
+        const metric = { name, value: count(m.value), threshold: count(m.threshold), unit: str(m.unit),
+          excerpt: parseExcerpt(m.excerpt), counterpartExcerpt: parseExcerpt(m.counterpart_excerpt) };
+        if (m.counterpart === undefined) return metric;
+        const other = object(m.counterpart);
+        const counterpart = { path: str(other.path), start: count(other.start_line), end: count(other.end_line) };
+        if (name !== 'duplicated_lines' || other.snapshot_id !== object(r.inputs).snapshot_id ||
+          counterpart.start < 1 || counterpart.end < counterpart.start) invalid();
+        return { ...metric, counterpart };
       })(),
     };
   });
@@ -259,6 +271,14 @@ export function parseAnalysisReport(
     return { name: str(p.name), source: nullable(p.source), start: nullable(p.started_at), finish: nullable(p.finished_at) };
   })();
   const includesCode = r.export != null && object(r.export).include_code === true;
+  for (const observation of observations) {
+    const metric: Observation['metric'] = observation.metric;
+    if (!metric) continue;
+    for (const [excerpt, place] of [[metric.excerpt, observation.location], [metric.counterpartExcerpt, metric.counterpart]] as const) {
+      if (excerpt && (!includesCode || !place || observation.evidenceState !== 'verified_against_source_manifest' ||
+        !excerptFits(excerpt, place.start, place.end, false))) invalid();
+    }
+  }
   const sections = parseSections(r, observations.map(o => o.id), findings.map(f => f.id), counts.total, includesCode);
   const modelFindings = new Set(sections?.codeReview.findings);
   for (const finding of findings) {
@@ -268,6 +288,30 @@ export function parseAnalysisReport(
     }
   }
   const head = r.pull_request == null ? null : nullable(object(r.pull_request).head_repository);
+  const tasks = array(r.tasks, (v) => {
+    const task = object(v);
+    return { key: str(task.key), status: str(task.status), reason: nullable(task.reason), required: task.required_for_verdict === true };
+  });
+  const testResults = input.profile === 'with-tests' ? (() => {
+    const executions = new Map<string, Record<string, unknown>>();
+    for (const execution of array(r.executions ?? [], object)) {
+      if (execution.name === 'test.run') executions.set(str(execution.task_key), execution);
+    }
+    return {
+      status: str(coverage.test_status),
+      tasks: tasks.filter(task => task.key.startsWith('test.')).map((task): TestResult => {
+        const e = executions.get(task.key);
+        const exit = typeof e?.exit_code === 'number' && Number.isSafeInteger(e.exit_code) ? e.exit_code : null;
+        const confirmed = e?.status === 'exited' && e.cleanup === 'confirmed' && exit !== null && exit >= 0;
+        const result = confirmed && task.status === 'succeeded' && exit === 0 ? 'passed' :
+          confirmed && task.status === 'failed' && exit !== 0 && task.reason !== 'no_tests_executed' ? 'failed' : 'unverified';
+        const cwd = typeof e?.cwd === 'string' ? e.cwd : '';
+        const directory = cwd === '.' || cwd && cwd !== '[REDACTED]' && !/[:\\\u0000-\u001f\u007f]/.test(cwd) &&
+          cwd.split('/').every(segment => segment && segment !== '.' && segment !== '..') ? cwd : null;
+        return { ...task, attempted: e !== undefined, directory, exit, result };
+      }),
+    };
+  })() : undefined;
   function metric(key: string) {
     return coverage[key] == null ? null : count(coverage[key]);
   }
@@ -281,6 +325,7 @@ export function parseAnalysisReport(
       const c = object(v);
       return {
         role: str(c.role),
+        requested: typeof c.request_sha256 === 'string' && c.request_sha256.length > 0,
         purpose: nullable(c.purpose) ?? undefined,
         model: str(c.model),
         version: str(c.opencode_version),
@@ -308,14 +353,8 @@ export function parseAnalysisReport(
     priorities,
     findings,
     observations,
-    tasks: array(r.tasks, (v) => {
-      const task = object(v);
-      return {
-        key: str(task.key),
-        status: str(task.status),
-        reason: nullable(task.reason),
-      };
-    }),
+    tasks,
+    testResults,
     limitations: array(r.limitations, str),
     sections,
   };

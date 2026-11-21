@@ -28,6 +28,10 @@
             <location file="[REDACTED]/src/ring.c" line="20" column="15" info="Assignment &apos;slot=0&apos;, assigned value is 0"/>
             <symbol>slot</symbol>
         </error>
+        <error id="constVariablePointer" severity="style" msg="Variable &apos;slot&apos; can be declared as pointer to const" verbose="Variable &apos;slot&apos; can be declared as pointer to const" cwe="398" hash="7524397522439835924" file0="[REDACTED]/src/ring.c">
+            <location file="[REDACTED]/src/ring.c" line="20" column="8" info="Variable &apos;slot&apos; can be declared as pointer to const"/>
+            <symbol>slot</symbol>
+        </error>
         <error id="syntaxError" severity="error" msg="Unmatched &apos;(&apos;. Configuration: &apos;&apos;." verbose="Unmatched &apos;(&apos;. Configuration: &apos;&apos;." file0="[REDACTED]/src/util.cpp">
             <location file="[REDACTED]/src/util.cpp" line="2" column="16"/>
         </error>

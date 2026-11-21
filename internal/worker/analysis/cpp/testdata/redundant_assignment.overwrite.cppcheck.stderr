@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<results version="2">
+    <cppcheck version="2.22.0"/>
+    <errors>
+        <error id="redundantAssignment" severity="style" msg="Variable &apos;item.left&apos; is reassigned a value before the old one has been used." verbose="Variable &apos;item.left&apos; is reassigned a value before the old one has been used." cwe="563" hash="2752399100426190795" file0="[REDACTED]/state.c">
+            <location file="[REDACTED]/state.c" line="5" column="15" info="item.left is overwritten"/>
+            <location file="[REDACTED]/state.c" line="4" column="15" info="item.left is assigned"/>
+            <symbol>item.left</symbol>
+        </error>
+        <error id="checkersReport" severity="information" msg="Active checkers: 114/189 (use --checkers-report=&lt;filename&gt; to see details)" verbose="Active checkers: 114/189 (use --checkers-report=&lt;filename&gt; to see details)"/>
+    </errors>
+</results>

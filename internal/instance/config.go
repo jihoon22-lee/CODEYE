@@ -572,7 +572,7 @@ func (c *Config) validate(knownTools []string) error {
 			return errors.New("agent.model.timeout_seconds must be 1..1800 (0 = 180)")
 		}
 		if m.ReviewMaxCalls != 0 && !record.ValidMaxCalls(m.ReviewMaxCalls) {
-			return errors.New("agent.model.review_max_calls must be between 15 and 207")
+			return errors.New("agent.model.review_max_calls must be between 15 and 2013")
 		}
 	}
 	for _, v := range []int64{c.Quota.SnapshotBytes, c.Quota.WorkspaceBytes, c.Quota.CacheBytes, c.Quota.LogsBytes, c.Quota.ArtifactsBytes} {

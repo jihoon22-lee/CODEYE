@@ -108,9 +108,12 @@ type Hello struct {
 	// AnalyzerTools are operator analyzer tool paths by tool name and the
 	// shared toolchain paths under their reserved names (node, docs/ANALYZERS.md
 	// §2.4); absent when none is configured.
-	AnalyzerTools      map[string]string `json:"analyzer_tools,omitempty"`
-	ToolPath           string            `json:"tool_path"`
-	LeaseMarginSeconds int               `json:"lease_margin_seconds"`
+	AnalyzerTools map[string]string `json:"analyzer_tools,omitempty"`
+	// TestPackageManagers carries the operator's npm and Python paths even
+	// when dependency fetching is off.
+	TestPackageManagers map[string]string `json:"test_package_managers,omitempty"`
+	ToolPath            string            `json:"tool_path"`
+	LeaseMarginSeconds  int               `json:"lease_margin_seconds"`
 
 	// AdvertiseWithoutBaseline: advertise the analysis capability even when no
 	// baseline analyzer is usable; its tasks end unsupported (the service).

@@ -110,8 +110,8 @@ func TestContractWitnessesReachCitedSnapshotLines(t *testing.T) {
 	sliced := map[string]bool{}
 	for _, slot := range scope.Slices {
 		for _, file := range slot.Files {
-			if file.Path == implementation || file.Path == tests || file.Path == hidden {
-				t.Fatalf("already offered or withheld file in a slice: %+v", file)
+			if file.Path == hidden {
+				t.Fatalf("withheld file in a slice: %+v", file)
 			}
 			sliced[file.Path] = true
 		}
@@ -409,7 +409,7 @@ func TestSpareOverviewWindowsPreserveFileAndLineCoverage(t *testing.T) {
 	script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
 		in := decodeAs[investigateInput](t, q)
 		if !in.Scope.WholeRun {
-			t.Fatal("all eligible files already have a window")
+			return asJSON(map[string]any{"candidates": []any{}})
 		}
 		seen := map[string]bool{}
 		var windows []record.Excerpt
@@ -443,7 +443,7 @@ func TestSpareOverviewWindowsPreserveFileAndLineCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(scope.Overview.Offered) != 6 || len(scope.Overview.Files) != 6 || len(scope.Slices) != 0 {
+	if len(scope.Overview.Offered) != 6 || len(scope.Overview.Files) != 6 || len(scope.Slices) == 0 {
 		t.Fatalf("scope counted a window as another file: %+v", scope)
 	}
 	if !slices.ContainsFunc(scope.Overview.Files, func(f record.ScopeFile) bool {

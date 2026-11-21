@@ -16,6 +16,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/cpp"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/gitleaks"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/gofmtcheck"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jscpd"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/lizard"
@@ -93,9 +94,10 @@ type entry struct {
 // their own section; nothing else in this package changes per pack.
 func catalog() []entry {
 	return []entry{
-		// Go (baseline go vet, extra depth staticcheck).
+		// Go (baseline go vet, extra depth Staticcheck and gofmt).
 		{desc: govet.Descriptor(), plan: govet.Plan, build: buildGoVet},
 		{desc: staticcheck.Descriptor(), plan: staticcheck.Plan, build: buildStaticcheck},
+		{desc: gofmtcheck.Descriptor(), plan: gofmtcheck.Plan, build: buildGoFmt},
 		// C/C++ (baseline cppcheck, extra depth clang-tidy with the Clang
 		// Static Analyzer).
 		{desc: cpp.CppcheckDescriptor(), plan: cpp.PlanCppcheck, build: buildCppcheck},
@@ -194,6 +196,20 @@ func buildStaticcheck(ctx context.Context, cfg Config, runner executor.Runner, g
 	}
 	a, err := staticcheck.New(staticcheck.Config{Executable: exe, Go: goh})
 	return probeBuilt(ctx, cfg, runner, staticcheck.Name, a, err)
+}
+
+func buildGoFmt(_ context.Context, cfg Config, _ executor.Runner, goh *govet.Handler, _ map[string]pack.Toolchain) built {
+	if cfg.GoExecutable == "" {
+		return unavailable(gofmtcheck.Name, "not_configured", "", pack.ReasonToolNotConfigured)
+	}
+	if goh == nil {
+		return unavailable(gofmtcheck.Name, "invalid_config", "invalid Go toolchain", pack.ReasonToolUnavailable)
+	}
+	a, err := gofmtcheck.New(cfg.GoExecutable)
+	if err != nil {
+		return unavailable(gofmtcheck.Name, "invalid_config", err.Error(), pack.ReasonToolUnavailable)
+	}
+	return built{analyzer: a}
 }
 
 // Handlers probes the configured tools through runner and returns the

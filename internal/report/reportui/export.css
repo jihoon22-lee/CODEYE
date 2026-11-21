@@ -66,6 +66,20 @@
   margin-inline-start: auto;
 }
 
+.export-mobile-current {
+  margin-inline-start: auto;
+  color: var(--report-blue);
+  text-align: end;
+}
+
+.export-mobile-current:not(:empty) + :last-child {
+  margin-inline-start: 0;
+}
+
+.export-mobile-current:empty {
+  display: none;
+}
+
 .export-mobile-nav[open] > summary > :last-child,
 .report-disclosure[open] > summary > :first-child {
   rotate: 180deg;
@@ -81,16 +95,16 @@
   grid-column: 1 / -1;
 }
 
-.report-export:not(:has(.export-section:target, .export-section :target)) .report-rail .nav-link[href="#overview"],
-.report-export:has(#overview:target, #overview :target) .report-rail .nav-link[href="#overview"],
-.report-export:has(#environment:target, #environment :target) .report-rail .nav-link[href="#environment"],
-.report-export:has(#documents:target, #documents :target) .report-rail .nav-link[href="#documents"],
-.report-export:has(#static_analysis:target, #static_analysis :target) .report-rail .nav-link[href="#static_analysis"],
-.report-export:has(#metrics:target, #metrics :target) .report-rail .nav-link[href="#metrics"],
-.report-export:has(#secrets:target, #secrets :target) .report-rail .nav-link[href="#secrets"],
-.report-export:has(#code_review:target, #code_review :target) .report-rail .nav-link[href="#code_review"],
-.report-export:has(#gaps:target, #gaps :target) .report-rail .nav-link[href="#gaps"],
-.report-export:has(#appendix:target, #appendix :target) .report-rail .nav-link[href="#appendix"] {
+.report-export:not(.report-scroll-navigation, :has(.export-section:target, .export-section :target)) .report-rail .nav-link[href="#overview"],
+.report-export:not(.report-scroll-navigation):has(#overview:target, #overview :target) .report-rail .nav-link[href="#overview"],
+.report-export:not(.report-scroll-navigation):has(#environment:target, #environment :target) .report-rail .nav-link[href="#environment"],
+.report-export:not(.report-scroll-navigation):has(#documents:target, #documents :target) .report-rail .nav-link[href="#documents"],
+.report-export:not(.report-scroll-navigation):has(#static_analysis:target, #static_analysis :target) .report-rail .nav-link[href="#static_analysis"],
+.report-export:not(.report-scroll-navigation):has(#metrics:target, #metrics :target) .report-rail .nav-link[href="#metrics"],
+.report-export:not(.report-scroll-navigation):has(#secrets:target, #secrets :target) .report-rail .nav-link[href="#secrets"],
+.report-export:not(.report-scroll-navigation):has(#code_review:target, #code_review :target) .report-rail .nav-link[href="#code_review"],
+.report-export:not(.report-scroll-navigation):has(#gaps:target, #gaps :target) .report-rail .nav-link[href="#gaps"],
+.report-export:not(.report-scroll-navigation):has(#appendix:target, #appendix :target) .report-rail .nav-link[href="#appendix"] {
   color: var(--report-blue);
   background: var(--report-blue-soft);
   font-weight: 750;
@@ -100,9 +114,9 @@
   display: flex;
   flex-wrap: wrap;
   gap: .28rem 1.25rem;
-  margin: .8rem 0 0;
+  margin: .35rem 0 0;
   font-size: .79rem;
-  color: #d3e1f8;
+  color: var(--report-muted);
 }
 
 .export-target {
@@ -110,14 +124,14 @@
   align-items: baseline;
   flex-wrap: wrap;
   gap: .15rem .55rem;
-  margin: .85rem 0 .2rem;
-  color: #e3edfc;
+  margin: .35rem 0 .1rem;
+  color: var(--report-ink);
   font-size: .89rem;
 }
 
 .export-target strong {
   flex: none;
-  color: #d3e1f8;
+  color: var(--report-muted);
   font-size: .8rem;
   font-weight: 600;
 }
@@ -350,6 +364,29 @@
 
 .report-export .scroll table:has(th:nth-child(5)) {
   min-inline-size: 38rem;
+}
+
+.report-export .report-measurement-table {
+  min-inline-size: 16rem;
+  table-layout: fixed;
+}
+
+.report-export .report-measurement-table th:first-child {
+  width: 5.25rem;
+  white-space: nowrap;
+}
+
+.report-export .report-measurement-table td:first-child {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.report-export .report-measurement-table:has(.report-row-toggle) th:last-child {
+  width: 5.35rem;
+}
+
+.report-export .report-measurement-table .report-row-toggle summary {
+  white-space: nowrap;
 }
 
 .report-export :is(th, td) {

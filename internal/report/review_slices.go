@@ -26,8 +26,8 @@ const (
 
 // Ledger statuses.
 const (
-	// LedgerComplete: every eligible code and test file of the scope was sent
-	// to the model and its review reached an accepted verify record.
+	// LedgerComplete: every known line of all eligible files was in an
+	// accepted investigation. File-only ledgers used the verify task state.
 	LedgerComplete = "complete"
 	// LedgerOverviewOnly: no slice investigate task succeeded; only the
 	// whole-run review sent files.
@@ -61,8 +61,9 @@ func (SliceReviewDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte
 // the attempt and the snapshot manifest. PlannedScopeDecoder reads the
 // earlier schema 0.1 (plan-time slices) an older worker writes.
 type (
-	ScopeDecoder        struct{}
-	PlannedScopeDecoder struct{}
+	ScopeDecoder         struct{}
+	PriorityScopeDecoder struct{}
+	PlannedScopeDecoder  struct{}
 )
 
 func (ScopeDecoder) Key() DecoderKey {
@@ -71,6 +72,14 @@ func (ScopeDecoder) Key() DecoderKey {
 
 func (PlannedScopeDecoder) Key() DecoderKey {
 	return DecoderKey{MediaType: record.ScopeMediaType, SchemaVersion: record.ScopeSchemaPlanned}
+}
+
+func (PriorityScopeDecoder) Key() DecoderKey {
+	return DecoderKey{MediaType: record.ScopeMediaType, SchemaVersion: record.ScopeSchemaPriority}
+}
+
+func (PriorityScopeDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Contribution, error) {
+	return ScopeDecoder{}.Decode(ctx, art, body)
 }
 
 func (PlannedScopeDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Contribution, error) {
@@ -204,7 +213,8 @@ func (c sectionContext) ledger() *ReviewLedger {
 		}
 		whole := !isSliceTask(k) && k != record.TaskContract
 		switch {
-		case reviewAccepted(st), k == record.TaskContract && contractCallRecord(st):
+		case reviewAccepted(st), k == record.TaskContract && contractCallRecord(st),
+			doc != nil && doc.LineCoverage() && !st.rejected && st.reviewResult != nil && st.reviewResult.Record != nil:
 			for _, call := range st.reviewResult.Record.Calls {
 				if k == record.TaskContract && call.RequestDigest == "" {
 					continue
@@ -233,6 +243,7 @@ func (c sectionContext) ledger() *ReviewLedger {
 		calls += doc.Budget.CallsBeforeSlices
 		mc, mb := doc.Budget.MaxCalls, doc.Budget.MaxRequestBytes
 		l.MaxCalls, l.MaxRequestBytes = &mc, &mb
+		l.ExtendedCoverage = doc.LineCoverage() && doc.Limits.MaxSlices == record.MaxSlices
 	}
 	if callsKnown {
 		l.CallsUsed = &calls
@@ -242,6 +253,11 @@ func (c sectionContext) ledger() *ReviewLedger {
 	}
 
 	if doc != nil {
+		if doc.LineCoverage() {
+			c.lineCoverage(doc, l)
+			l.Status = ledgerStatus(*l, c.r.Tasks)
+			return l
+		}
 		// A schema 0.2 artifact says each file's class; the ledger then
 		// tells primary files the ceiling refused (budget exhausted, not
 		// planned) from secondary files it did not reach.
@@ -323,8 +339,14 @@ func (c sectionContext) ledger() *ReviewLedger {
 // ledgerStatus derives the ledger status from its rows and the task rows.
 func ledgerStatus(l ReviewLedger, tasks []Task) string {
 	complete := len(l.Modules) > 0
-	for _, m := range l.Modules {
-		complete = complete && m.FilesWithCompletedReview == m.FilesEligible
+	if l.Files == nil {
+		for _, m := range l.Modules {
+			complete = complete && m.FilesWithCompletedReview == m.FilesEligible
+		}
+	} else {
+		for _, f := range l.Files {
+			complete = complete && f.ReviewedLines > 0 && f.ReviewedLines == f.TotalLines
+		}
 	}
 	if complete {
 		return LedgerComplete
@@ -380,13 +402,38 @@ func ledgerGaps(l *ReviewLedger, add func(section, code string, subject, detail 
 	if l.Scope.Result != "accepted" {
 		add(SectionCodeReview, "review_scope_"+l.Scope.Result, strPtr(l.Scope.Key), l.Scope.Reason)
 	}
+	codes := map[string]map[string]bool{}
+	for _, f := range l.Files {
+		for _, r := range f.Remaining {
+			var code string
+			switch r.Reason {
+			case lineBudgetExhausted:
+				code = "review_scope_budget_exhausted"
+			case record.ScopeReasonSlotLimit:
+				code = "review_scope_not_planned"
+			case record.ScopeReasonLineLimit, record.ScopeReasonBlankRange:
+				code = "review_scope_line_input_limit"
+			case lineReviewUnaccepted:
+				code = "review_scope_response_unaccepted"
+			case lineReviewUnconfirmed:
+				code = "review_scope_request_unconfirmed"
+			default:
+				continue
+			}
+			if codes[f.ModuleID] == nil {
+				codes[f.ModuleID] = map[string]bool{}
+			}
+			codes[f.ModuleID][code] = true
+		}
+	}
 	for _, m := range l.Modules {
 		for _, g := range []struct {
 			code string
 			n    int
 		}{{"review_scope_budget_exhausted", m.FilesBudgetExhausted}, {"review_scope_not_planned", m.FilesNotPlanned}, {"review_scope_secondary_not_reached", m.FilesSecondaryNotReached},
-			{"review_scope_withheld", m.FilesWithheld}, {"review_scope_unreadable", m.FilesUnreadable}, {"review_scope_not_sent", m.FilesNotSent}} {
-			if g.n > 0 {
+			{"review_scope_withheld", m.FilesWithheld}, {"review_scope_unreadable", m.FilesUnreadable}, {"review_scope_not_sent", m.FilesNotSent},
+			{"review_scope_line_input_limit", 0}, {"review_scope_response_unaccepted", 0}, {"review_scope_request_unconfirmed", 0}} {
+			if g.n > 0 || codes[m.ModuleID][g.code] {
 				add(SectionCodeReview, g.code, strPtr(m.ModuleID), nil)
 			}
 		}
@@ -478,6 +525,13 @@ func validateLedger(r Report) error {
 		!slices.Contains([]string{"accepted", "skipped", "not_succeeded", "result_rejected", "result_missing"}, l.Scope.Result) {
 		return invalidf("ledger scope differs from the review.scope task")
 	}
+	if l.Files != nil && (n < LineCoverageSince || l.Scope.Result != "accepted") {
+		return invalidf("line coverage ledger lacks a compatible builder or accepted scope")
+	}
+	if (l.ExtendedCoverage && (n < LineCoverageSince || l.Scope.Result != "accepted")) ||
+		(l.MaxCalls != nil && *l.MaxCalls > record.LegacyMaxCalls && !l.ExtendedCoverage) {
+		return invalidf("extended review ledger lacks a compatible bound scope")
+	}
 	if !slices.Contains(ledgerStatuses, l.Status) || l.Modules == nil {
 		return invalidf("ledger status is invalid")
 	}
@@ -495,6 +549,9 @@ func validateLedger(r Report) error {
 	}
 	if l.CallsUsed != nil && *l.CallsUsed < sent {
 		return invalidf("ledger counts fewer calls than the report lists")
+	}
+	if l.CallsUsed != nil && l.MaxCalls != nil && *l.CallsUsed > *l.MaxCalls {
+		return invalidf("ledger calls exceed the recorded attempt ceiling")
 	}
 	if l.RequestBytesSent != nil && (r.CodeReview.RequestBytes == nil || *l.RequestBytesSent != *r.CodeReview.RequestBytes) {
 		return invalidf("ledger request bytes differ from the code review section")
@@ -542,11 +599,15 @@ func validateLedger(r Report) error {
 		primaryRefused += m.FilesBudgetExhausted
 	}
 	if l.PrimarySlotsBudgetExhausted < 0 || l.PrimarySlotsBudgetExhausted > refused || (l.PrimarySlotsBudgetExhausted > 0 && !ledgerClasses(l)) ||
-		(ledgerClasses(l) && (primaryRefused > 0) != (l.PrimarySlotsBudgetExhausted > 0)) {
+		(ledgerClasses(l) && l.Files == nil && (primaryRefused > 0) != (l.PrimarySlotsBudgetExhausted > 0)) ||
+		(primaryRefused > 0 && l.PrimarySlotsBudgetExhausted == 0) {
 		return invalidf("ledger refused primary slots are invalid")
 	}
 	if ledgerStatus(*l, r.Tasks) != l.Status {
 		return invalidf("ledger status differs from its rows")
+	}
+	if err := validateLedgerLines(l); err != nil {
+		return err
 	}
 	return nil
 }

@@ -9,12 +9,8 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
-// TC-161 (docs/REVIEW.md#계획): the slots the plan makes hold every file
-// review.scope packs at run time below the slot limit. Tool diagnostics,
-// failed analyzers and generated headers reorder the files (and move some
-// to the secondary class), which can need a few more slots than the
-// plan-time packing; slotSlack covers that, so no file is left out while
-// the limit is not reached.
+// TC-161 (docs/REVIEW.md#검토-우선순위): use the runtime scheduler on
+// generated trees with tool diagnostics and generated files.
 func TestSlotSlackCoversRunTimeOrder(t *testing.T) {
 	r := rand.New(rand.NewPCG(5, 6))
 	worst, tried := 0, 0
@@ -47,11 +43,19 @@ func TestSlotSlackCoversRunTimeOrder(t *testing.T) {
 				f.Class, f.Secondary = record.ClassSecondary, record.ReasonGeneratedFile
 			}
 		}
-		packed := fillSlots(rest, plan.Slots)
-		checkSlots(t, packed)
-		worst = max(worst, len(packed)-len(plan.Slices))
-		if len(packed) > plan.Slots {
-			t.Fatalf("tree %d: run-time packing needs %d slots, plan made %d (%d packed at plan time)", i, len(packed), plan.Slots, len(plan.Slices))
+		cursors := make([]*coverageCursor, 0, len(rest))
+		for _, f := range rest {
+			sf := record.ScopeFile{Path: f.Path, Module: f.Module, Class: f.Class, Rank: f.Rank,
+				StartLine: 1, PlannedLines: 1, PlannedBytes: f.Bound, Observations: f.Observations}
+			cursors = append(cursors, &coverageCursor{file: sf, tier: f.Tier, severity: f.Severity, windows: []record.ScopeFile{sf}})
+		}
+		doc := record.ScopeDoc{Limits: record.ScopeLimits{Slots: coverageSlots(plan)}}
+		scheduleCoverage(&doc, cursors, nil)
+		worst = max(worst, len(doc.Slices)-len(plan.Slices))
+		for _, cur := range cursors {
+			if len(cur.windows) != 0 && len(doc.Slices) != doc.Limits.Slots {
+				t.Fatalf("tree %d: %s left behind in %d of %d slots", i, cur.file.Path, len(doc.Slices), doc.Limits.Slots)
+			}
 		}
 	}
 	if tried < 1000 {

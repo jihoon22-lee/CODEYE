@@ -60,41 +60,68 @@ func (s *roleStage) entries() map[string]source.Entry {
 
 // readSource returns a verified snapshot blob that is safe to use as model input.
 func (s *roleStage) readSource(e source.Entry) (string, bool, error) {
-	if *e.Size > maxFileBytes || domain.ValidateEvidencePath(e.Path) != nil {
-		return "", false, nil
+	text, reason, err := s.reviewSource(e)
+	return text, reason == "", err
+}
+
+func (s *roleStage) reviewSource(e source.Entry) (string, string, error) {
+	if *e.Size > maxFileBytes {
+		return "", record.ScopeReasonTooLarge, nil
+	}
+	if domain.ValidateEvidencePath(e.Path) != nil {
+		return "", record.ScopeReasonUnreadable, nil
 	}
 	if s.secretFiles()[e.Path] {
 		s.rec.Limitations = addLim(s.rec.Limitations, limSecretWithheld)
-		return "", false, nil
+		return "", record.ScopeReasonWithheld, nil
 	}
 	root, err := os.OpenRoot(s.j.Snapshot.SnapshotDir)
 	if err != nil {
-		return "", false, err
+		return "", "", err
 	}
 	defer root.Close()
 	b, err := readVerified(root, e)
 	if err != nil {
-		return "", false, err
+		return "", "", err
 	}
-	if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 || record.Sensitive(b) {
-		return "", false, nil
+	if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 {
+		return "", record.ScopeReasonUnreadable, nil
 	}
-	return strings.TrimSuffix(string(b), "\n"), true, nil
+	if record.Sensitive(b) {
+		return "", record.ScopeReasonWithheld, nil
+	}
+	return strings.TrimSuffix(string(b), "\n"), "", nil
 }
 
 // readLines returns lines start..end (1-based, inclusive) of a verified
 // snapshot blob, or ok=false when the blob is not safe model input.
 func (s *roleStage) readLines(e source.Entry, start, end int) (string, int, bool, error) {
-	text, ok, err := s.readSource(e)
+	lines, ok, err := s.sourceLines(e, nil)
 	if err != nil || !ok {
 		return "", 0, false, err
 	}
-	lines := strings.Split(text, "\n")
 	if start < 1 || start > len(lines) {
 		return "", len(lines), false, nil
 	}
 	end = min(end, len(lines))
 	return strings.Join(lines[start-1:end], "\n"), len(lines), true, nil
+}
+
+// sourceLines can reuse a checked blob across excerpts in one role. The
+// caller resolves entries against that role's immutable snapshot index.
+func (s *roleStage) sourceLines(e source.Entry, cached map[string][]string) ([]string, bool, error) {
+	if lines, ok := cached[e.Path]; ok {
+		return lines, true, nil
+	}
+	text, ok, err := s.readSource(e)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	lines := strings.Split(text, "\n")
+	if cached != nil {
+		cached[e.Path] = lines
+	}
+	return lines, true, nil
 }
 
 // secretFiles are the files the secrets screen withholds from every model
@@ -140,20 +167,21 @@ func shortReviewSource(text string, maxBytes int) bool {
 // each excerpt's ID binding again.
 func (s *roleStage) withText(list []record.Excerpt) ([]record.Excerpt, error) {
 	files := s.entries()
+	cached := map[string][]string{}
 	out := make([]record.Excerpt, 0, len(list))
 	for _, x := range list {
 		e, ok := files[x.Path]
 		if !ok || e.SHA256 != x.SHA256 || x.ID != record.ExcerptID(s.j.Snapshot.Digest, x.Path, x.SHA256, x.Start, x.End) {
 			return nil, errSnapshotIntegrity
 		}
-		text, _, ok, err := s.readLines(e, x.Start, x.End)
+		lines, ok, err := s.sourceLines(e, cached)
 		if err != nil {
 			return nil, err
 		}
-		if !ok {
+		if !ok || x.Start < 1 || x.Start > len(lines) {
 			return nil, errSnapshotIntegrity
 		}
-		x.Text = text
+		x.Text = strings.Join(lines[x.Start-1:min(x.End, len(lines))], "\n")
 		out = append(out, x)
 	}
 	return out, nil

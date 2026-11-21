@@ -73,6 +73,42 @@ describe('published report search', () => {
     expect(target?.closest<HTMLDetailsElement>('#report-section-documents')?.open).toBe(true);
   });
 
+  it('opens one stored document excerpt and keeps cross-document comparison links focused', () => {
+    const report = sectioned();
+    const documents = report.sections!.documents;
+    documents.citations.push(
+      { id: 'wide', kind: 'document', path: 'GUIDE.md', line: 1, end: 3, excerpt: { start: 1, end: 3, text: 'opening\ncanonical marker\nclosing' } },
+      { id: 'narrow', kind: 'document', path: 'GUIDE.md', line: 2, end: 2, excerpt: { start: 2, end: 2, text: 'canonical marker' } },
+      { id: 'config', kind: 'document', path: 'docs/config.md', line: 4, end: 4, excerpt: { start: 4, end: 4, text: 'configuration marker' } },
+    );
+    const first = { ...documents.comparisons[0], statement: '파일을 읽는다', status: 'unknown', documentRefs: ['wide', 'config'] };
+    const second = { ...first, statement: '설정을 읽는다', documentRefs: ['narrow'] };
+    documents.comparisons = [first, second];
+    documents.quality = [{ aspect: 'clarity', assessment: 'weakness', statement: '실행 조건을 설명해야 한다', refs: ['narrow'] }];
+    render(<ReportDocument report={report} />);
+    enter('docs/config.md');
+    fireEvent.submit(within(panel()).getByRole('search'));
+    const documentTab = screen.getByRole('tabpanel', { name: t.sections.titles.documents });
+    const heading = within(documentTab).getByRole('heading', { name: first.statement });
+    expect(document.activeElement).toBe(heading);
+    fireEvent.click(within(documentTab).getByRole('link', { name: 'docs/config.md' }));
+    expect(document.activeElement).toBe(within(documentTab).getByRole('heading', { name: 'docs/config.md' }));
+    fireEvent.click(within(documentTab).getByRole('link', { name: first.statement }));
+    expect(document.activeElement).toBe(heading);
+    const guide = heading.closest('.report-reading-group') as HTMLElement;
+    expect(within(guide).getAllByRole('table')).toHaveLength(1);
+    expect(within(guide).getByText(t.qualityTitle)).toBeTruthy();
+    expect(heading.closest('details')?.open).toBe(true);
+    expect(heading.closest('details')?.querySelector('pre')?.textContent).toContain('canonical marker');
+    const sources = within(guide).getByText(t.documentReading.sources).closest('details')!;
+    expect(sources.open).toBe(false);
+    const exact = within(guide).getAllByRole('link', { name: 'GUIDE.md:2' })[0];
+    fireEvent.click(exact);
+    expect(sources.open).toBe(true);
+    expect(document.activeElement?.id).toBe(exact.getAttribute('href')?.slice(1));
+    expect(within(sources).getAllByText('canonical marker')).toHaveLength(1);
+  });
+
   it.each([true, false])('searches related workflow evidence and focuses its comparison (includesCode=%s)', includesCode => {
     const report = sectioned();
     report.includesCode = includesCode;
@@ -103,7 +139,7 @@ describe('published report search', () => {
     }
     fireEvent.submit(within(panel()).getByRole('search'));
     const documentTab = screen.getByRole('tabpanel', { name: t.sections.titles.documents });
-    const target = within(documentTab).getAllByRole('heading', { name: row.statement }).find(h => h.id.endsWith('-document-comparison-2'));
+    const target = within(documentTab).getByRole('heading', { name: includesCode ? row.statement : t.documentReading.withheldBehavior(2) });
     expect(target).toBeDefined();
     expect(document.activeElement).toBe(target);
   });

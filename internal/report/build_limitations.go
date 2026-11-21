@@ -6,21 +6,22 @@ import (
 
 // Limitation and note codes. Renderers translate known codes; JSON keeps codes.
 const (
-	LimAIReviewNotPerformed   = "ai_review_not_performed"
-	LimAIReviewPartial        = "ai_review_partial"
-	LimResultManifestMissing  = "result_manifest_unavailable"
-	LimResultManifestRejected = "result_manifest_rejected"
-	LimRequiredTaskIncomplete = "required_task_not_succeeded"
-	LimCleanupUncertain       = "cleanup_uncertain"
-	LimArtifactRejected       = "artifact_rejected"
-	LimArtifactMissing        = "analysis_artifact_missing"
-	LimUnrecognizedArtifact   = "unrecognized_artifact"
-	LimNoCodeExcerpts         = "controller_holds_no_snapshot_bytes"
-	LimTaskNotInManifest      = "task_not_in_result_manifest"
-	LimTaskStatusMismatch     = "artifact_status_differs_from_accepted_task"
-	LimRunCancelled           = "run_cancelled"
-	LimRunFailed              = "run_failed"
-	LimTestsNotPerformed      = "required_tests_not_performed"
+	LimAIReviewNotPerformed    = "ai_review_not_performed"
+	LimAIReviewPartial         = "ai_review_partial"
+	LimResultManifestMissing   = "result_manifest_unavailable"
+	LimResultManifestRejected  = "result_manifest_rejected"
+	LimRequiredTaskIncomplete  = "required_task_not_succeeded"
+	LimCleanupUncertain        = "cleanup_uncertain"
+	LimArtifactRejected        = "artifact_rejected"
+	LimArtifactMissing         = "analysis_artifact_missing"
+	LimUnrecognizedArtifact    = "unrecognized_artifact"
+	LimNoCodeExcerpts          = "controller_holds_no_snapshot_bytes"
+	LimTaskNotInManifest       = "task_not_in_result_manifest"
+	LimTaskStatusMismatch      = "artifact_status_differs_from_accepted_task"
+	LimRunCancelled            = "run_cancelled"
+	LimRunFailed               = "run_failed"
+	LimTestsNotPerformed       = "required_tests_not_performed"
+	LimTestExecutionUnverified = "test_execution_unverified"
 	// LimStaticAnalysisGap (":<ecosystem>"): source of a language ecosystem
 	// was in scope and the worker had no analyzer for it (a pack-gap task,
 	// docs/ANALYZERS.md#범위에-없는-생태계와-팩-공백). The report is partial; the gap is not a required task.

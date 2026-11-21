@@ -42,7 +42,7 @@
       {"id": "go:svc/b", "ecosystem": "go", "path": "svc/b", "manifests": ["svc/b/go.mod"], "excluded_paths": [], "in_scope": true}
     ],
     "documents": {
-      "budget": {"total_bytes": 262144, "per_document_bytes": 65536, "max_documents": 1000},
+      "budget": {"total_bytes": 4194304, "per_document_bytes": 524288, "max_documents": 1000},
       "items": [
         {"path": "AGENTS.md", "applies_to": ".", "class": "agent_instructions", "status": "selected", "reason": null, "line_count": 11},
         {"path": "README.md", "applies_to": ".", "class": "readme", "status": "selected", "reason": null, "line_count": 9},

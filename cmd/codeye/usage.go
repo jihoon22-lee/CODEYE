@@ -74,7 +74,7 @@ var usageGroups = []usageGroup{
 			"             [--cargo /abs/toolchain/bin/cargo [--clippy /abs/toolchain/bin/cargo-clippy]]\n" +
 			"             [--lizard /abs/lizard] [--jscpd /abs/jscpd/run-jscpd.js] [--gitleaks /abs/gitleaks]\n" +
 			"             [--repo-code-source-root ID ...] [--project-analysis-policy] [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]\n" +
-			"             [--opencode /abs/opencode --model PROVIDER/MODEL [--model-config-file PATH] [--model-credential-file PATH | --model-relay-file PATH]] [--model-source-root ID ...] [--review-max-calls 15..207]\n" +
+			"             [--opencode /abs/opencode --model PROVIDER/MODEL [--model-config-file PATH] [--model-credential-file PATH | --model-relay-file PATH]] [--model-source-root ID ...] [--review-max-calls 15..2013]\n" +
 			"             [--offline] [--ca-bundle /abs/ca-bundle.pem]",
 			"A node agent. --offline: no built-in public registry or model endpoint; --ca-bundle: the CAs the fetch, Git and model processes trust."},
 	}},

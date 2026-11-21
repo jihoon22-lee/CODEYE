@@ -87,3 +87,18 @@ func TestFilesSelection(t *testing.T) {
 		t.Fatal("excluded count")
 	}
 }
+
+func TestStructureFilesExcludeNamedThirdPartyDirectories(t *testing.T) {
+	size := int64(1)
+	job := jobOf([]source.Entry{
+		{Path: "src/first.go", Kind: "file", SHA256: "x", Size: &size},
+		{Path: "assets/third-party/bundle.js", Kind: "file", SHA256: "x", Size: &size},
+		{Path: "Third_Party/lib.go", Kind: "file", SHA256: "x", Size: &size},
+		{Path: "vendor/thirdparty/lib.go", Kind: "file", SHA256: "x", Size: &size},
+		{Path: "src/thirdparty.go", Kind: "file", SHA256: "x", Size: &size},
+	})
+	files, excluded := StructureFiles(job, nil)
+	if !slices.Equal(Paths(files), []string{"src/first.go", "src/thirdparty.go"}) || excluded != 2 || ExcludedDataDirFiles(job, nil) != 1 {
+		t.Fatalf("selected %v, third-party exclusions %d", Paths(files), excluded)
+	}
+}

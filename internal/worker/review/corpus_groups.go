@@ -84,6 +84,10 @@ func planCodeGroups(m source.Manifest, scope domain.Scope, rule record.Secondary
 // every group before any other file. A nil changed list is planCodeGroups
 // exactly.
 func planCodeGroupsFor(m source.Manifest, scope domain.Scope, rule record.SecondaryRule, changed []string) codeGroups {
+	return codeGroupsFor(m, scope, rule, changed, false)
+}
+
+func codeGroupsFor(m source.Manifest, scope domain.Scope, rule record.SecondaryRule, changed []string, includeOversized bool) codeGroups {
 	files := includedFiles(m)
 	scope = normalizedScope(scope)
 	var modules []string
@@ -106,7 +110,7 @@ func planCodeGroupsFor(m source.Manifest, scope domain.Scope, rule record.Second
 	others := otherModuleRoots(files)
 	for _, p := range sortedKeys(files) {
 		e := files[p]
-		if !inScope(p, scope) || *e.Size > maxFileBytes {
+		if !inScope(p, scope) || (!includeOversized && *e.Size > maxFileBytes) {
 			continue
 		}
 		key := ""
