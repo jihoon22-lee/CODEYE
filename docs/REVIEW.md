@@ -24,7 +24,7 @@
 
 | `pack.yaml` id·version | 기록 schema | 역할 |
 |---|---|---|
-| `review` 2.5.1 | `0.2`, slice `0.3`, 계약 후속 검토 `0.4`, HTTP 경로를 고른 문서 `0.5` | environment, documents, investigate, interpret, verify, contract |
+| `review` 2.5.2 | `0.2`, slice `0.3`, 계약 후속 검토 `0.4`, HTTP 경로를 고른 문서 `0.5` | environment, documents, investigate, interpret, verify, contract |
 
 - 지침 개정은 이 지침 하나에 한다. 개정의 검증 절차는 [평가](EVALUATION.md)에 있다.
 - 보고서는 Go가 만들므로 종합·보고 역할에 모델을 호출하지 않는다.
@@ -197,7 +197,8 @@
   - 간접 호출, 메서드 디스패치, 다른 패키지 호출, 외부 계약은 범위 밖이며 `caller_expansion_package_functions_only`를 남긴다. 호출을 찾지 못하면 `no_callers_found`, 예산 밖이면 `callers_outside_review_context`다.
   - 확장을 시도한 verify 기록에는 Go만 있는 스냅샷을 포함해 항상 `caller_expansion_go_only`와 `caller_expansion_package_functions_only`가 남는다. 인용에서 Go 패키지 함수를 찾지 못하면(다른 언어만 인용한 후보 등) `no_symbol_for_expansion`이 더해진다. 다른 언어 후보는 인용한 발췌와 문서 계약으로만 검증된다.
 - 비밀값 선별이 보류한 파일의 호출자·테스트 발췌는 빼고 `secret_files_withheld`를 남긴다.
-- verify 요청의 발췌는 인용 발췌, 확장, 인용되지 않은 문맥 순으로 최대 40개다(인용 발췌는 항상 남는다). 요청이 한도를 넘으면 확장·비인용 문맥·문서 계약을 먼저 줄이고(`review_input_trimmed`, `callers_outside_review_context`, `contracts_outside_verify_input`), 그래도 넘으면 후보를 앞에서부터(investigate 다음 interpret) 보낼 수 있는 만큼만 보낸다. 보내지 못한 후보는 `unreviewed`(`verification_budget_exceeded`)로 남고 task는 `failed`(`review_input_incomplete`)다. 성공으로 바꾸지 않는다.
+- 검증 지침은 코드로 확인한 프로그램 상태, 근거로 확인한 런타임 동작, 실제 호출 경로에서 선택 가능한 지원 입력·설정을 유효 조건으로 쓸 수 있게 한다. 후보의 발동이나 영향에 필요한 외부 동작이 아직 확인되지 않았으면 `inconclusive`를 반환하고 미확인 전제를 적는다.
+- verify 요청의 발췌는 인용 발췌, 확장, 인용되지 않은 문맥 순으로 최대 40개다(인용 발췌는 항상 남는다). 요청이 한도를 넘으면 확장·비인용 문맥·문서 계약을 먼저 줄인다(`review_input_trimmed`, `callers_outside_review_context`, `contracts_outside_verify_input`). 이어서 발췌의 SHA-256을 요청에서만 생략할 수 있다(`verification_excerpt_hashes_omitted`). 근거 ID와 경로·줄·코드 원문은 유지하고 검토 기록에는 스냅샷과 대조한 해시를 저장한다. 그래도 넘으면 후보를 앞에서부터(investigate 다음 interpret) 보낼 수 있는 만큼만 보낸다. 보내지 못한 후보는 `unreviewed`(`verification_budget_exceeded`)로 남고 task는 `failed`(`review_input_incomplete`)다.
 
 - Go 입력의 요청 바이트는 `TestGoReviewInputsUnchanged`가 역할마다 지침 해시와 입력 해시로 고정한다.
 
@@ -315,15 +316,23 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 
 ### Go HTTP 사용자 동작
 
+문서의 기본·보충 요청은 목록 안에서 여유가 있을 때 `handler`에 확인된 Go 처리기의 파일명과 함수명을 읽기 쉬운 짧은 표현으로 표시한다. 긴 이름과 안전한 형식으로 줄일 수 없는 이름은 생략한다. 이름을 보내기 전에 등록과 처리기에 범위·스냅샷·비밀값 선별 규칙을 적용한다. 같은 메서드·패턴이 여러 곳에 있거나 패턴에 리터럴 경로 조각이 없을 때 이름을 먼저 담는다. 이름을 생략해도 앞서 들어간 경로 선택지와 문서 발췌는 유지한다.
+
 워커는 Go 소스에서 리터럴 패턴과 처리기 본문을 모두 확인할 수 있는 등록을 찾는다. 표준 라이브러리의 HTTP 등록, 지원하는 `gorilla/mux` 등록과 접두 경로, 메서드·경로·처리기 필드를 전달하는 제한된 형태의 경로 테이블을 읽는다. 조건부·모호한 등록과 실행 시 계산되는 값은 목록에서 빠질 수 있다. 경로는 해당 등록의 패턴으로, 상위 라우터에 붙는 상대 경로일 수 있다. 워커는 서비스를 구동하거나 실제 도달 여부를 판정하지 않는다.
 
 검색은 범위 내 주요 Go 파일 최대 512개, 파일당 96 KiB, 전체 4 MiB 안에서 수행한다. pull request에서는 변경 파일 경계를 적용한다. 선별에서 보류된 파일, 생성 소스, 테스트와 부차 경로는 후보에서 제외한다. 확인한 경로의 패턴은 128바이트 이하다. 파악한 등록을 최대 64개까지 서로 다른 경로 묶음에 걸쳐 모아 요청에 최대 5,000바이트의 목록으로 넣는다. 여유 공간이 부족하면 먼저 문서 부가 목록을 줄이고 문서 원문은 보존한다.
 
 문서 검토는 같은 호출에서 `workflow_routes`의 짧은 ID를 수락된 사용자 동작 계약에 선택적으로 연결한다. 상태 변경과 이후 조회처럼 한 계약에 여러 경로가 필요할 수 있으며 전체 응답에서 최대 네 건을 선택한다. 검토 기록에는 최종 수락된 계약 번호와 run·attempt·스냅샷·등록·실제 코드 위치에 묶인 digest만 남는다. 누락하거나 잘못된 선택은 일반 문서 계약·질문을 유지한다. 잘못된 선택은 원시 기록에 `workflow_selection_invalid`로 남는다. 경로 ID와 digest 자체는 인용할 근거가 아니다.
 
+기본 요청과 보충 요청은 문서의 동작을 직접 수행하는 경로를 고르고, 같은 계약의 결과를 확인하는 데 필요할 때 선행 동작과 이후 조회도 함께 고르도록 지시한다. 출력 형식에는 실제 후보 번호나 경로 ID 예시를 넣지 않는다.
+
 전체 조사는 같은 범위와 선별 규칙으로 경로를 다시 확인한 뒤 여섯 줄 창 이내로 처리기와 등록부를 우선 보낸다. 요청에 들어간 실제 발췌의 ID는 해당 계약과 함께 전달한다. 처리기와 이어지는 구현에 아직 읽지 않은 줄이 있으면 기존 위치 선택 후보에 포함할 수 있다. 후속 검토에는 같은 계약과 적용 범위에 해당하는 실제 호출부와 구현 발췌를 사용할 수 있다. 소스에서 확인한 한 가지 호출 구성은 배포 전체의 동작을 입증하지 않는다. 다시 확인하지 못한 근거는 상세의 `workflow_evidence_unavailable`로 남기며, 기존 모델 호출 상한과 새 구현 근거 조건을 적용한다.
 
 처리기가 호출하는 함수가 16줄·1,600바이트 안에 들어가면 선언과 본문 전체를 유지한다. 긴 함수에서는 바깥 블록에 확인된 HTTP 응답이 하나 있고 앞 발췌에 그 응답이 없을 때, 인용할 응답 호출과 앞쪽의 읽기·오류 처리 등 한도 안에 들어오는 문장을 함께 고른다. 표준 HTTP 함수나 실제 `http.ResponseWriter` 매개변수의 쓰기 및 그 매개변수로 만든 JSON·XML 인코더의 호출을 찾는다. 응답 후보가 모호하거나 발췌에 들어가지 않으면 앞 발췌를 유지한다.
+
+호출이 이어지는 구현에서 요청이 읽거나 바꾸는 상태의 소스가 확인되면, 경로가 선택된 뒤에만 결과 발췌를 찾는다. 같은 패키지의 직접 반환 호출과 실제 같은 수신자의 호출, 인자를 직접 호출하는 것으로 확인한 콜백을 최대 두 호출까지 추적한다. 수신자 타입을 확인한 `database/sql`·pgx의 리터럴 SQL 연산과 선언을 확인한 구조체 필드 연산을 읽는다. 호출과 결과 발췌는 각각 최대 16줄·1,600바이트다. 이름에 특정 기능 용어가 나오는지보다 확인한 호출 관계와 실제 연산을 사용한다.
+
+전체 조사에서는 처리기와 등록부를 먼저 배정한다. 전체 여섯 발췌 한도의 남은 자리에서 연결된 호출부와 결과 구현을 함께 담을 수 있을 때 결과 근거를 추가하고, 이어서 적격한 테스트 발췌를 붙일 수 있다. 후속 검토는 같은 계약의 원문 뒤에 연결된 구현을 우선 둔다. 요청에서 필요한 발췌가 모두 연결되면 해당 경로에 `conditional_source_unexecuted`를 표시한다. 실제 실행이 없으므로, 이 표시는 그 조건에서 코드가 시도하는 동작을 읽었다는 뜻이다.
 
 선택된 경로에는 적용 범위와 PR 변경 경계를 지키는 등록부·처리기 디렉터리의 Go 테스트를 최대 32개·512 KiB까지 확인해 테스트 발췌 하나를 붙일 수 있다. 같은 테스트 함수에서 `httptest.NewRequest` 또는 그 메서드·경로 인자를 그대로 넘기는 짧은 함수의 요청을 찾고, `ServeHTTP`에 전달한 recorder에서 상태·응답 본문·헤더의 구체적 기대값을 확인한다. 확인한 리터럴 경로와 단순 경로 변수에 맞는 등록이 하나일 때 사용한다. 같은 서버를 이용한 변경 요청, 관련 GET과 두 단언을 한 창에 담을 수 있으면 우선한다. 구현 발췌 뒤에 최대 28줄·1,600바이트의 테스트 원문을 보낸다. 테스트의 통과 여부는 시험 실행 결과가 있을 때 확인한다.
 
@@ -389,13 +398,14 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 | 오프라인 모드인데 사내 endpoint(`base_url`)가 없는 키·키 없는 공급자 모델 | `unsupported`(`model_endpoint_not_configured`) |
 | API 키 파일이 없음·다른 사용자가 읽을 수 있음·공급자 항목 없음 | `unsupported`(`model_credential_unavailable`) |
 | `--version` 응답이 OpenCode 릴리스 형식이 아님 | `unsupported`(`opencode_version_unsupported`) |
+| OpenCode `--version` 확인 제한시간 초과 | `timed_out`(`opencode_version_timeout`) |
 | 공급자가 키를 거부(HTTP 401·403) | `failed`(`model_auth_failed`) |
 | 공급자에 그 모델이 없음(HTTP 404) | `failed`(`model_not_found`) |
 | 사용량 제한(HTTP 429) | `failed`(`model_rate_limited`) |
 | 그 밖의 OpenCode·공급자 오류 | `failed`(`model_unavailable`) |
 | 작업공간 준비 실패·복구되지 않은 확인값 불일치 | `failed`(`workspace_unreachable`) |
 | 예상 밖의 도구 호출·권한 이벤트 | `skipped_policy`(`policy_blocked`) |
-| 시간 초과 | `timed_out`(`model_timeout`) |
+| 모델 요청 제한시간 초과 | `timed_out`(`model_timeout`) |
 | 취소 | `cancelled` |
 | 입력을 만들 수 없음·스냅샷 무결성 불일치 | `failed`(`review_input_unavailable`) |
 | 요청 한도 초과 | `failed`(`review_input_too_large`) |
@@ -413,7 +423,7 @@ slice는 판정 필수가 아니다. 필수로 두면 호출 상한보다 큰 �
 
 모델은 관리형 로컬 OpenCode CLI로 호출한다([`client.go`](../internal/worker/opencode/client.go), [`executor/opencode.go`](../internal/worker/executor/opencode.go)). 실행 규칙(argv, 제한시간, 프로세스 트리 정리)은 [실행](EXECUTION.md)을 따른다. 원격 OpenCode attach나 별도 serve 연결은 구현하지 않았다. 추가할 때는 인증·버전·취소·workspace marker/digest를 대상 환경에서 검증한다.
 
-- **버전.** 시험한 버전은 OpenCode 1.19.5다(`opencode.Version`). 호출마다 먼저 `--version`(8초 이하)을 실행한다. 다른 릴리스(`MAJOR.MINOR.PATCH[-…]`)도 실행하고 그 단계 기록에 `opencode_version_untested`를 남긴다. 릴리스 형식이 아닌 응답만 `opencode_version_unsupported`다. `codeye doctor`의 버전 확인은 모델 비용을 쓰지 않는다.
+- **버전.** 시험한 버전은 OpenCode 1.19.5다(`opencode.Version`). 호출마다 먼저 `--version`을 실행하며 확인에는 설정한 호출 제한시간과 30초 중 짧은 값을 적용한다. 실행 중인 버전 확인이 제한시간을 넘기면 모델 호출 전에 `opencode_version_timeout`을 기록한다. 확인과 요청은 호출당 전체 제한시간을 함께 사용한다. 다른 릴리스(`MAJOR.MINOR.PATCH[-…]`)도 실행하고 그 단계 기록에 `opencode_version_untested`를 남긴다. 릴리스 형식이 아닌 응답만 `opencode_version_unsupported`다. `codeye doctor`의 버전 확인은 모델 비용을 쓰지 않는다.
 - **운영자 설정.** 실행 파일은 절대 경로다. 모델 ID는 `PROVIDER/MODEL`이다. provider는 소문자·숫자·`._-`, 모델 부분은 영숫자와 `._:@+-/`이고 `.`·`..` 경로 조각은 받지 않는다(라우터식 `vendor/model`은 받는다). 평가용 `codeye-gateway`의 Sol·Terra·Luna 모델은 relay 파일이 있을 때만 쓴다. 호출당 제한시간은 `--model-timeout`(기본 180초, 1초~30분)이다. 설정이 없거나 형식이 틀리면 요청을 보내지 않는다(`model_not_configured`). 공급자 변경은 운영자 선택이다([모델 설정](#모델-설정)).
 - **작업 디렉터리와 workspace digest.** 요청마다 attempt scratch 아래 새 디렉터리를 만든다. 그 안의 `identity.txt`에 snapshot digest, 요청 digest, 무작위 32바이트 nonce에 묶인 확인값을 쓰고 첨부로 준다. 응답의 `workspace_proof`가 이 값과 다르면 `workspace_unreachable`이다. 프롬프트와 선택된 데이터는 표준 입력으로만 전달한다. 요청 digest는 정확한 메시지 텍스트의 SHA-256이다.
 - **권한 차단.** `run --pure`로 실행하고, 실행별 HOME/TMP와 플랫폼이 만든 설정(`OPENCODE_CONFIG_CONTENT`)만 쓴다. 설정은 `permission: deny`, 모든 도구 `false`, share·snapshot·autoupdate·LSP·formatter·plugin 끔, 허용 provider 하나다. 프로젝트 설정, 기본 플러그인, 외부 skill, 모델 목록 조회, LSP 다운로드는 환경변수로 끈다. 사용자 설정과 대상 프로젝트 설정을 읽는 경로를 분리한다. 스냅샷 디렉터리는 보호 루트로 넘긴다.

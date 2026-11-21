@@ -31,7 +31,7 @@ func failure(reply opencode.Reply) analysis.TaskResult {
 	switch reply.Reason {
 	case "cancelled":
 		return result(domain.TaskCancelled, reply.Reason)
-	case "model_timeout":
+	case "model_timeout", opencode.ReasonVersionTimeout:
 		return result(domain.TaskTimedOut, reply.Reason)
 	case "model_not_configured", "opencode_version_unsupported", opencode.ReasonCredentialUnavailable:
 		return result(domain.TaskUnsupported, reply.Reason)

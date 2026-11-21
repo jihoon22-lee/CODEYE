@@ -399,9 +399,10 @@ type OverviewReading = {
   reasonLabel?: string;
   comparisonRows?: { label: string; text: string; sources?: ReactNode }[];
   condition?: string;
+  limitation?: string;
   scope?: string;
   followedContract?: boolean;
-  action?: { state: string; title?: string; source: ReactNode };
+  action?: { state: string; title?: string; limitation?: string; source: ReactNode };
   unresolved?: string;
   status?: string;
   model?: boolean;
@@ -476,6 +477,7 @@ function selectedReading(report: AnalysisReport, sections: Sections, readings: R
       action: action && ['critical', 'high'].includes(action.finding.severity) ? {
         state: actionStatus,
         title: included ? action.finding.title : undefined,
+        limitation: action.limitation,
         source: <FindingSourceLink evidence={action.source} />,
       } : undefined,
     };
@@ -490,8 +492,9 @@ function selectedReading(report: AnalysisReport, sections: Sections, readings: R
     title: included ? action.finding.title : t.reading.omitted,
     model: true,
     text: included ? action.finding.impact : undefined,
+    limitation: action.limitation,
     status: actionStatus,
-    next: included ? { label: t.reading.nextAction, text: action.finding.recommendation } : undefined,
+    next: included ? { label: action.limitation ? t.reading.conditionalAction : t.reading.nextAction, text: action.finding.recommendation } : undefined,
     sources: <FindingSourceLink evidence={action.source} />,
   };
   const followup = followups[0];
@@ -499,11 +502,13 @@ function selectedReading(report: AnalysisReport, sections: Sections, readings: R
     const confirmed = included ? relatedStrength(followup, strengths, codeReview.citations) : undefined;
     const strength = confirmed?.strength;
     const text = strength ? distinctStrengthDetails([strength.title], strength.benefit)
-      : followup.condition ? `${t.conditions} · ${followup.condition}` : undefined;
+      : followup.condition && !followup.limitation ? `${t.conditions} · ${followup.condition}` : undefined;
     return {
       title: included ? strength?.title ?? followup.finding.title : t.reading.omitted,
       model: true,
       text: included ? text : undefined,
+      limitation: followup.limitation,
+      scope: strength?.scope !== '.' ? strength?.scope : undefined,
       unresolved: confirmed ? followup.finding.title : undefined,
       status: confirmed ? t.reading.recordedStrength : label(t.validation, followup.finding.validation),
       next: included ? { label: t.reading.nextCheck, text: followup.next } : undefined,
@@ -530,6 +535,7 @@ function selectedReading(report: AnalysisReport, sections: Sections, readings: R
       title: included ? title : t.reading.omitted,
       model: true,
       text: included ? text : undefined,
+      scope: strength.scope !== '.' && (!related || related.scope === strength.scope) ? strength.scope : undefined,
       status: t.reading.recordedStrength,
       sources: <Citations catalog={codeReview.citations} refs={[(proof || first).id]} />,
     };
@@ -569,13 +575,15 @@ function inlineComparisonCode(text: string): ReactNode[] {
 
 function ProjectOverview({ report, sections, openDocuments }: { report: AnalysisReport; sections: Sections; openDocuments: (index?: number) => void }) {
   const readings = projectReadings(report, sections);
-  const { status, title, text, documentClaim, reasonLabel, comparisonRows, condition, scope, comparisonIndex, comparisonExample, followedContract, action, unresolved, next, sources, model } =
+  const { status, title, text, documentClaim, reasonLabel, comparisonRows, condition, limitation, scope, comparisonIndex, comparisonExample, followedContract, action, unresolved, next, sources, model } =
     selectedReading(report, sections, readings);
   const heading = cutLine(title, 165);
   const detail = text !== title ? cutLine(text ?? null, 205) : '';
   const claim = cutLine(documentClaim ?? null, 205);
   const boundary = cutLine(unresolved ?? null, 165);
   const nextStep = cutLine(next?.text ?? null, 165);
+  const limitationText = cutLine(limitation ?? null, 205);
+  const comparisonCount = sections.documents.comparisons.length;
   return (
     <section className="card report-card report-executive" aria-labelledby="report-judgment">
       <div className="card-body">
@@ -591,20 +599,22 @@ function ProjectOverview({ report, sections, openDocuments }: { report: Analysis
         {detail && <p className="report-card-copy">{reasonLabel && <strong>{reasonLabel}{' '}</strong>}{detail}</p>}
         {condition && <p className="report-card-copy"><strong>{t.reading.option}</strong> {condition}</p>}
         {boundary && <p className="report-executive-next"><strong>{t.reading.unresolvedBehavior}</strong> {boundary}</p>}
+        {limitationText && <p className="report-card-copy"><strong>{t.reading.findingLimitation}</strong> {limitationText}</p>}
         {next && nextStep && <p className="report-executive-next"><strong>{next.label}</strong> {nextStep}</p>}
         {scope && <p className="report-card-meta">{t.scopeTitle} <code>{scope}</code></p>}
         {followedContract && <p className="report-card-meta">{t.reading.followedContract}</p>}
         {sources && <div className="report-executive-sources">{sources}</div>}
         {action && <>
-          <p className="report-executive-next"><strong>{t.reading.priorityAction}</strong> {action.state}{action.title && <> · {cutLine(action.title, 165)}</>}</p>
+          <p className="report-executive-next"><strong>{action.limitation ? t.reading.priorityReview : t.reading.priorityAction}</strong> {action.state}{action.title && <> · {cutLine(action.title, 165)}</>}</p>
+          {action.limitation && <p className="report-card-copy"><strong>{t.reading.findingLimitation}</strong> {cutLine(action.limitation, 205)}</p>}
           <div className="report-executive-sources">{action.source}</div>
         </>}
         <div className="report-document-assessment">
           <div className="report-document-assessment-header">
-            <strong>{t.reading.documentAssessment}</strong>
+            <strong>{comparisonCount ? t.reading.documentAssessmentTotal(comparisonCount) : t.reading.documentAssessment}</strong>
             {readings.comparisonCounts.length > 0
               ? <dl>{readings.comparisonCounts.map(({status, count}) => <div key={status}>
-                <dt>{label(t.reading.comparisonCount, status)}</dt><dd data-comparison-status={status}>{count}</dd>
+                <dt>{label(t.reading.comparisonCount, status)}</dt><dd data-comparison-status={status}>{t.reading.comparisonItems(count)}</dd>
               </div>)}</dl>
               : <p>{t.reading.noDocumentAssessment}</p>}
           </div>
@@ -613,7 +623,7 @@ function ProjectOverview({ report, sections, openDocuments }: { report: Analysis
           </p>}
           <ReportAction onClick={() => openDocuments(comparisonIndex)}>{t.reading.openDocumentAnalysis}</ReportAction>
         </div>
-        <ReportGlossary text={[heading, claim, detail, condition ?? '', boundary, nextStep, ...(comparisonRows?.map(row => row.text) ?? [])]}
+        <ReportGlossary text={[heading, claim, detail, condition ?? '', boundary, limitationText, nextStep, ...(comparisonRows?.map(row => row.text) ?? [])]}
           hasSources={Boolean(sources || action || comparisonRows?.some(row => row.sources))} />
       </div>
     </section>

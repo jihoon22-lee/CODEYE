@@ -83,6 +83,91 @@ func TestMissingModelAndUnsupportedVersion(t *testing.T) {
 	}
 }
 
+func TestReviewSeparatesVersionProbeAndModelTimeouts(t *testing.T) {
+	for _, tc := range []struct {
+		name, reason, version string
+		failedSpec            int
+		status                executor.Status
+		cleanup               executor.Cleanup
+		limit, probeLimit     time.Duration
+	}{
+		{name: "version timeout", reason: ReasonVersionTimeout, failedSpec: 1, limit: time.Minute, probeLimit: 30 * time.Second, status: executor.StatusTimedOut, cleanup: executor.CleanupConfirmed},
+		{name: "short configured limit", reason: ReasonVersionTimeout, failedSpec: 1, limit: 12 * time.Second, probeLimit: 12 * time.Second, status: executor.StatusTimedOut, cleanup: executor.CleanupConfirmed},
+		{name: "model timeout", reason: "model_timeout", version: Version, failedSpec: 2, limit: time.Minute, probeLimit: 30 * time.Second, status: executor.StatusTimedOut, cleanup: executor.CleanupConfirmed},
+		{name: "cancelled version probe", reason: "cancelled", failedSpec: 1, limit: time.Minute, probeLimit: 30 * time.Second, status: executor.StatusCancelled, cleanup: executor.CleanupConfirmed},
+		{name: "version executable cannot start", reason: "model_unavailable", failedSpec: 1, limit: time.Minute, probeLimit: 30 * time.Second, status: executor.StatusStartFailed, cleanup: executor.CleanupNotStarted},
+		{name: "unconfirmed timeout cleanup", reason: "recovery_required", failedSpec: 1, limit: time.Minute, probeLimit: 30 * time.Second, status: executor.StatusTimedOut, cleanup: executor.CleanupUncertain},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scratch := t.TempDir()
+			cfg := Config{Executable: filepath.Join(scratch, "opencode"), Model: "opencode/fixture", Timeout: tc.limit}
+			q := Request{Scratch: scratch, SnapshotDigest: strings.Repeat("0", 64), Role: "investigate", Input: json.RawMessage(`{}`)}
+			var workdir string
+			calls := 0
+			reply := cfg.Review(t.Context(), runnerFunc(func(_ context.Context, spec executor.Spec) executor.Result {
+				calls++
+				workdir = spec.Dir
+				switch calls {
+				case 1:
+					if !reflect.DeepEqual(spec.Args, []string{"--version"}) || spec.Timeout != tc.probeLimit || len(spec.Stdin) != 0 {
+						t.Fatalf("unexpected version probe: %v, timeout %v", spec.Args, spec.Timeout)
+					}
+					if tc.failedSpec == 2 {
+						return successful(Version + "\n")
+					}
+				case 2:
+					if spec.Args[0] != "run" || spec.Timeout != tc.limit || len(spec.Stdin) == 0 {
+						t.Fatalf("unexpected model invocation: %v, timeout %v", spec.Args, spec.Timeout)
+					}
+				}
+				return executor.Result{Status: tc.status, Cleanup: tc.cleanup}
+			}), q)
+			if reply.Reason != tc.reason || reply.Version != tc.version || reply.Cleanup != tc.cleanup || reply.Usage != nil || calls != tc.failedSpec {
+				t.Fatalf("%d process invocations, reply %+v", calls, reply)
+			}
+			if _, err := os.Stat(workdir); (tc.cleanup == executor.CleanupUncertain && err != nil) ||
+				(tc.cleanup != executor.CleanupUncertain && !os.IsNotExist(err)) {
+				t.Fatalf("unexpected workspace state for %s: %v", tc.cleanup, err)
+			}
+		})
+	}
+}
+
+func TestReviewVersionProbeDeadlineKeepsCallerCancellationSeparate(t *testing.T) {
+	for _, tc := range []struct {
+		name, runnerReason, reason string
+		callerDeadline             bool
+	}{
+		{name: "review deadline during probe", runnerReason: "context_deadline", reason: ReasonVersionTimeout},
+		{name: "review deadline before probe", runnerReason: "cancelled_before_start", reason: "cancelled"},
+		{name: "caller deadline", runnerReason: "context_deadline", reason: "cancelled", callerDeadline: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			const shortLimit = 30 * time.Millisecond
+			ctx := t.Context()
+			scratch := t.TempDir()
+			cfg := Config{Executable: filepath.Join(scratch, "opencode"), Model: "opencode/fixture", Timeout: shortLimit}
+			if tc.callerDeadline {
+				cfg.Timeout = time.Minute
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, shortLimit)
+				defer cancel()
+			}
+			q := Request{Scratch: scratch, SnapshotDigest: strings.Repeat("0", 64), Role: "probe", Input: json.RawMessage(`{}`)}
+			reply := cfg.Review(ctx, runnerFunc(func(ctx context.Context, spec executor.Spec) executor.Result {
+				if !reflect.DeepEqual(spec.Args, []string{"--version"}) {
+					t.Fatalf("unexpected call after version probe failed: %v", spec.Args)
+				}
+				<-ctx.Done()
+				return executor.Result{Status: executor.StatusCancelled, Reason: tc.runnerReason, Cleanup: executor.CleanupConfirmed}
+			}), q)
+			if reply.Reason != tc.reason || reply.Version != "" || reply.Usage != nil {
+				t.Fatalf("unexpected reply: %+v", reply)
+			}
+		})
+	}
+}
+
 func TestEventGates(t *testing.T) {
 	valid := events(`{"workspace_proof":"proof","result":{}}`)
 	cases := map[string]string{

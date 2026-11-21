@@ -25,7 +25,7 @@ Docker·Podman·Kubernetes는 필요 조건이 아니다. 아래는 실제로 �
 |---|---|---|
 | Linux(WSL2, 커널 6.18), PostgreSQL 17.10, Go 1.27.4, Node 24.18.0 | `codeye up` 서비스 전체 경로(up·open·start·stop·status·backup·restore·doctor), 관리형 PostgreSQL(초기화·재사용·정지·백업·복원), 백업·복원 시험, Go 시험 전체 | 브라우저 자동 열기(`xdg-open`·`wslview`·`explorer.exe`)는 실행하지 않았다. 출력한 링크를 Playwright Chromium으로 열어 확인했다 |
 | Ubuntu 24.04 CI 러너 | Go 시험 전체(임시 PostgreSQL 포함), vet, 웹 시험·빌드, `codeye up` smoke(관리형 `up` 경로 포함). DB는 러너에 설치된 PostgreSQL을 쓰고 관리형 cluster는 PATH의 프로그램으로 만든다 | 백업·복원 시험(TC-32)과 smoke는 PostgreSQL 17.10에서만 실행했다 |
-| UBI 8.10 사용자 공간, WSL2 커널 | 루프백만 있는 환경에서 일반 계정으로 정적 빌드한 CODEYE를 실행했다. 별도 PostgreSQL 17에 `codeye migrate`를 실행한 뒤 `up --offline`으로 읽기 전용 폴더를 분석하고, 로그인해 웹과 HTML 보고서를 열었다 | RHEL 호스트 커널, NFS, GHES, 사내 모델 |
+| Red Hat UBI 8.10 사용자 공간, WSL2 커널 | 일반 계정으로 `codeye up --offline`과 별도 로컬 PostgreSQL 17을 써서 읽기 전용 폴더와 격리 브리지의 읽기 전용 NFSv4.1 소스를 분석했다. 로그인해 웹과 HTML 보고서를 열었다. [소스 확보 시험](TESTING.md#소스-확보) | RHEL 호스트 커널, 회사 NFS의 ACL·지연·장애, GHES, 사내 모델 |
 | RHEL 8.10 | — | 실행하지 않았다. 커널(4.18 기반)이 `pidfd_open`을 제공하는지 확인하지 않았다. 제공하지 않으면 `stop`은 신호를 보내지 않고 `action=not_signalled_unsupported`, 결과 `recovery_required`다. 같은 pid를 쓰는 다른 프로세스에 신호가 가지 않게 하려는 선택이다 |
 | Windows | CI(Windows Server 2025)는 Go 단위 시험·vet·빌드만 실행한다. `GOOS=windows go vet ./...`가 통과한다. `doctor`는 동작하며 `processes.status=unsupported`를 낸다 | `start`·`stop`·`status`·`backup`·`restore`는 `codeye start/stop/status manage processes on Linux only …` 오류와 종료 코드 1로 끝난다. Windows 11의 Native 실행기(Job Object) 수용 시험은 실행하지 않았다. PostgreSQL이 필요한 시험은 Windows 작업에서 건너뛴다 |
 | macOS | — | 빌드와 실행을 확인하지 않았다 |

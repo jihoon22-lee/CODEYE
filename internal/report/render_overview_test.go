@@ -2,6 +2,7 @@ package report
 
 import (
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -231,7 +232,7 @@ func TestUnknownComparisonKeepsItsEvidenceAndStatus(t *testing.T) {
 		len(rows[1].Sources) != len(c.CodeEvidenceIDs) || len(d.Sources) != 0 || d.Next != "" {
 		t.Fatalf("the decision upgraded, duplicated or lost its unresolved comparison: %+v", d)
 	}
-	if len(d.ComparisonCounts) != 1 || d.ComparisonCounts[0].Name != "unknown" || d.ComparisonCounts[0].Value != "3" {
+	if len(d.ComparisonCounts) != 1 || d.ComparisonCounts[0].Name != "unknown" || d.ComparisonCounts[0].Value != "3개" {
 		t.Fatal("document comparisons lost their overall unknown count")
 	}
 }
@@ -383,6 +384,7 @@ func TestProjectOpeningLeadsWithProductEvidenceWhenComparisonsAreUnknown(t *test
 	fixture.Statement = "시험에서만 사용하는 동작"
 	docs.Comparisons = []DocComparison{row, other, fixture}
 	review.FindingIDs = nil
+	review.Strengths[0].Scope = "gateway"
 	proof := review.Strengths[0]
 	review.Evidence = append(review.Evidence, SectionEvidence{
 		ID: "qa", Kind: "code", Path: "scripts/qa-reports.sh", StartLine: 1, EndLine: 4,
@@ -397,7 +399,8 @@ func TestProjectOpeningLeadsWithProductEvidenceWhenComparisonsAreUnknown(t *test
 		projection := Project(r, include)
 		d := newSummaryView(projection, "0", Korean).Decision
 		if d.State != Korean.Label("decision.preserve") || d.ComparisonAnchor != comparisonAnchor(0) ||
-			len(d.ComparisonCounts) != 1 || d.ComparisonCounts[0].Value != "2" || len(d.Sources) != 1 || len(d.ComparisonRows) != 0 {
+			d.Scope != proof.Scope || len(d.ComparisonCounts) != 1 || d.ComparisonCounts[0].Value != "3개" ||
+			len(d.Sources) != 1 || len(d.ComparisonRows) != 0 {
 			t.Fatalf("include_code=%t: unexpected opening %+v", include, d)
 		}
 		if include && (d.Title != proof.Title || d.Reason != proof.Benefit || d.ComparisonExample != row.Statement) ||
@@ -411,10 +414,10 @@ func TestProjectOpeningLeadsWithProductEvidenceWhenComparisonsAreUnknown(t *test
 			}
 			html := string(h)
 			md := string(RenderMarkdownAt(projection, "0", Korean, detail))
-			if !strings.Contains(html, `data-comparison-status="unknown">2`) ||
+			if !strings.Contains(html, `data-comparison-status="unknown">3개`) ||
 				!strings.Contains(html, `href="#document-comparison-1"`) ||
 				!strings.Contains(html, `id="document-comparison-1"`) ||
-				!strings.Contains(md, "**문서 동작 대조** · 미확인 2") ||
+				!strings.Contains(md, "**문서 동작 대조 3개** · 구현 대조 미확인 3개") ||
 				!strings.Contains(md, "[문서 분석에서 보기](#document-comparison-1)") ||
 				!strings.Contains(md, `<a id="document-comparison-1"></a>`) {
 				t.Fatalf("%s export lost status counts or the detail destination", detail)
@@ -427,6 +430,46 @@ func TestProjectOpeningLeadsWithProductEvidenceWhenComparisonsAreUnknown(t *test
 				}
 			}
 		}
+	}
+}
+
+func TestProjectDecisionShowsRecordedLimitationBeforeAction(t *testing.T) {
+	r := storedExample(t, "../../examples/report.json")
+	r.Documents.Comparisons = nil
+	finding := &r.Findings[slices.IndexFunc(r.Findings, func(f Finding) bool { return f.Validation == ValidationSupported })]
+	finding.Conditions[0].Statement = "운영체제에서 파일 알림이 동시에 전달되면 큐가 재시작된다."
+	finding.Verification = []string{"운영체제의 파일 알림 전달 순서를 확인한다."}
+	finding.Recommendation.Summary = "파일 알림 큐를 교체한다."
+	const limitation = "운영체제의 파일 알림이 동시에 전달되는지는 확인되지 않았다."
+	finding.Limitations = []string{"verification_call_failed", limitation, "추가 입력의 종류는 확인하지 않았다."}
+	d := newSummaryView(r, "0", Korean).Decision
+	if d.State != Korean.Label("decision.supported") || d.Tone != "action" || d.Reason != finding.Impact ||
+		d.Limitation != limitation || d.Next != finding.Recommendation.Summary || len(d.Sources) != 1 {
+		t.Fatalf("the published finding lost its state, caveat or recommendation: %+v", d)
+	}
+	h, err := RenderHTMLAt(r, "0", Korean, DetailSummary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, out := range []string{string(h), string(RenderMarkdownAt(r, "0", Korean, DetailSummary))} {
+		opening, _, _ := strings.Cut(out, Korean.Label("opening.coverage_details"))
+		caveat, action := strings.Index(opening, Korean.Label("decision.finding_limitation")), strings.Index(opening, Korean.Label("decision.conditional_action"))
+		if caveat < 0 || action <= caveat || !strings.Contains(opening, "파일 알림 큐를 교체한다") ||
+			strings.Contains(opening, "추가 입력의 종류는 확인하지 않았다") || strings.Contains(opening, Korean.Label("decision.next")) {
+			t.Fatal("opening did not provide the recorded limitation before the conditional recommendation")
+		}
+	}
+	if finding.Validation != ValidationSupported {
+		t.Fatal("rendering altered the published assessment")
+	}
+	finding.Validation = ValidationInconclusive
+	d = newSummaryView(r, "0", Korean).Decision
+	if d.Limitation != limitation || d.Tone != "pending" || d.Next != finding.Verification[0] {
+		t.Fatalf("an inconclusive finding lost the caveat or next check: %+v", d)
+	}
+	exported := newSummaryView(Project(r, false), "0", Korean).Decision
+	if exported.Limitation != "" {
+		t.Fatalf("code-free overview exposed a caveat: %+v", exported)
 	}
 }
 

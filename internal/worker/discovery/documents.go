@@ -21,9 +21,9 @@ type Budget struct {
 	MaxDocuments     int
 }
 
-// DefaultBudget reads at most 32 KiB of one document and 256 KiB in total,
+// DefaultBudget reads at most 64 KiB of one document and 256 KiB in total,
 // and inventories at most 1000 documents.
-var DefaultBudget = Budget{TotalBytes: 256 << 10, PerDocumentBytes: 32 << 10, MaxDocuments: envdoc.MaxDocuments}
+var DefaultBudget = Budget{TotalBytes: 256 << 10, PerDocumentBytes: 64 << 10, MaxDocuments: envdoc.MaxDocuments}
 
 func (b Budget) valid() bool {
 	return b.TotalBytes > 0 && b.PerDocumentBytes > 0 && b.PerDocumentBytes <= b.TotalBytes && b.MaxDocuments > 0 && b.MaxDocuments <= envdoc.MaxDocuments

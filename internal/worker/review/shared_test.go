@@ -42,6 +42,7 @@ func TestModelOutcomeMapping(t *testing.T) {
 	for reason, want := range map[string]domain.TaskStatus{
 		opencode.ReasonCredentialUnavailable: domain.TaskUnsupported, "model_not_configured": domain.TaskUnsupported,
 		opencode.ReasonAuthFailed: domain.TaskFailed, opencode.ReasonModelNotFound: domain.TaskFailed, "model_timeout": domain.TaskTimedOut,
+		opencode.ReasonVersionTimeout: domain.TaskTimedOut,
 	} {
 		if got := failure(opencode.Reply{Reason: reason}); got.Status != want || got.Reason != reason {
 			t.Errorf("%s: %+v", reason, got)

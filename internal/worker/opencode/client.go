@@ -33,6 +33,14 @@ const DefaultTimeout = 180 * time.Second
 // MaxTimeout is the longest accepted per-call limit.
 const MaxTimeout = 30 * time.Minute
 
+const versionProbeTimeout = 30 * time.Second
+
+// ReasonVersionTimeout means the local version probe timed out before a
+// model request was started.
+const ReasonVersionTimeout = "opencode_version_timeout"
+
+var errReviewDeadline = errors.New("review deadline reached")
+
 // LimVersionUntested marks records whose calls went through an OpenCode
 // release other than Version.
 const LimVersionUntested = "opencode_version_untested"
@@ -192,7 +200,7 @@ func (cfg Config) Review(ctx context.Context, runner executor.Runner, q Request)
 		reply.Reason = "invalid_review_role"
 		return
 	}
-	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	ctx, cancel := context.WithTimeoutCause(ctx, cfg.Timeout, errReviewDeadline)
 	defer cancel()
 	dir, err := os.MkdirTemp(q.Scratch, "review-")
 	if err != nil {
@@ -224,7 +232,7 @@ func (cfg Config) Review(ctx context.Context, runner executor.Runner, q Request)
 	}
 	spec := executor.Spec{Executable: cfg.Executable, Args: []string{"--version"}, WorkspaceRoot: dir, Dir: dir,
 		TempParent: q.Scratch, ProtectedRoots: q.ProtectedRoots, OpenCodeModel: cfg.Model,
-		Timeout: min(cfg.Timeout, 8*time.Second), StdoutLimit: 256, StderrLimit: 4096}
+		Timeout: min(cfg.Timeout, versionProbeTimeout), StdoutLimit: 256, StderrLimit: 4096}
 	// The credential is read now, for this call only: a key rotated or
 	// removed between calls takes effect at the next call.
 	provider, why := cfg.provider()
@@ -241,6 +249,12 @@ func (cfg Config) Review(ctx context.Context, runner executor.Runner, q Request)
 	}
 	run := runner.Run(ctx, spec)
 	reply.Cleanup, reply.Reason = run.Cleanup, outcome(run)
+	// The shared review deadline can end a probe before its process timer.
+	// A caller deadline and a process that never started stay cancellations.
+	if reply.Reason == "model_timeout" || (reply.Reason == "cancelled" && run.Reason == "context_deadline" &&
+		errors.Is(context.Cause(ctx), errReviewDeadline)) {
+		reply.Reason = ReasonVersionTimeout
+	}
 	if reply.Reason != "" {
 		return
 	}

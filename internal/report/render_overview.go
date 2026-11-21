@@ -6,14 +6,18 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
 // projectDecision is a reading of verified links within the stored report.
 // Rendering does not turn evidence coverage or a candidate into a verdict.
 type projectDecision struct {
 	Tone, State, Title, Reason, Boundary, Next   string
+	Limitation                                   string
 	DocumentClaim, ReasonLabel, Condition, Scope string
 	ComparisonAnchor, ComparisonExample          string
+	ComparisonHeading                            string
 	ComparisonCounts                             []countRow
 	ComparisonRows                               []secItem
 	Sources                                      []sourceCitation
@@ -25,27 +29,31 @@ type projectDecision struct {
 }
 
 type projectAction struct {
-	Title, State string
-	Source       sourceCitation
+	Title, State, Limitation string
+	Source                   sourceCitation
 }
 
 func (v secView) projectDecision() projectDecision {
 	assessment, representative, counts := v.documentOverview()
 	d := v.selectDecision(assessment, representative)
 	d.ComparisonCounts = counts
+	d.ComparisonHeading = v.L.Label("decision.document_assessment")
+	if n := len(v.R.Documents.Comparisons); n > 0 {
+		d.ComparisonHeading = tf(v.L, "decision.assessment_total", n)
+	}
 	if !v.R.Export.IncludeCode && d.Review {
 		d.Title, d.Reason, d.Boundary, d.Next = v.L.Label("decision.omitted"), "", "", ""
-		d.DocumentClaim, d.Condition = "", ""
+		d.DocumentClaim, d.Condition, d.Limitation = "", "", ""
 		if d.Action != nil {
-			d.Action.Title = ""
+			d.Action.Title, d.Action.Limitation = "", ""
 		}
 	}
 	d.Glossary = decisionGlossary(d)
 	return d
 }
 
-// A comparison contributes to the product overview only if it cites a
-// product document and any resolved conclusion cites product code.
+// Count the stored comparisons. The example needs a product document and
+// any resolved conclusion needs product code.
 func (v secView) documentOverview() (assessment, representative int, counts []countRow) {
 	doc := v.R.Documents
 	assessment, representative = -1, -1
@@ -53,7 +61,11 @@ func (v secView) documentOverview() (assessment, representative int, counts []co
 		var tied []int
 		n, bestRank := 0, -1
 		for i, c := range doc.Comparisons {
-			if c.Status != status || !v.hasReviewText(c.Statement) || !productLocation(path.Join(c.AppliesTo, "scope"), 1, 1) ||
+			if c.Status != status {
+				continue
+			}
+			n++
+			if !v.hasReviewText(c.Statement) || !productLocation(path.Join(c.AppliesTo, "scope"), 1, 1) ||
 				!hasProductSectionEvidence(c.DocumentEvidenceIDs, doc.Evidence, "document") {
 				continue
 			}
@@ -62,7 +74,6 @@ func (v secView) documentOverview() (assessment, representative int, counts []co
 			if status != "unknown" && !code {
 				continue
 			}
-			n++
 			rank := 0
 			if code {
 				rank = 1
@@ -79,8 +90,8 @@ func (v secView) documentOverview() (assessment, representative int, counts []co
 			}
 		}
 		if n > 0 {
-			counts = append(counts, countRow{Name: status, Label: v.L.Label("decision.count." + status), Value: itoa(n)})
-			if assessment < 0 {
+			counts = append(counts, countRow{Name: status, Label: v.L.Label("decision.count." + status), Value: tf(v.L, "decision.count_items", n)})
+			if assessment < 0 && len(tied) > 0 {
 				assessment, representative = tied[0], tied[0]
 				if status == "unknown" && len(tied) > 1 && v.R.Export.IncludeCode {
 					assessment = questionComparison(doc, tied)
@@ -119,7 +130,7 @@ func (v secView) selectDecision(assessment, representative int) projectDecision 
 		d.ComparisonAnchor = comparisonAnchor(assessment)
 		if action != nil && sevRank(action.Severity) >= sevRank("high") {
 			risk := v.findingDecision(*action, false)
-			d.Action = &projectAction{Title: risk.Title, State: risk.State, Source: risk.Sources[0]}
+			d.Action = &projectAction{Title: risk.Title, State: risk.State, Limitation: risk.Limitation, Source: risk.Sources[0]}
 		}
 		return d
 	}
@@ -225,6 +236,7 @@ func (v secView) withRelatedStrength(d projectDecision, f Finding) projectDecisi
 				}
 				d.Title, d.Boundary, d.State = strength.Title, f.Title, l.Label("decision.observed_and_pending")
 				d.Reason = distinctStrengthDetails([]string{strength.Title}, strength.Benefit)
+				d.Scope = displayDocumentScope(strength.Scope)
 				confirmed := v.citeSectionEvidence(e)
 				confirmed.ActionLabel = l.Label("evidence.view_confirmed")
 				loc := candidate.Location
@@ -297,10 +309,21 @@ func readerVerification(values []string) string {
 	return firstOpeningText(values)
 }
 
+func findingLimitation(f Finding) string {
+	if f.Validation == ValidationSupported || f.Validation == ValidationInconclusive {
+		for _, note := range f.Limitations {
+			if text := openingText(note, ""); text != "" && !record.ValidCode(text) {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
 func (v secView) findingDecision(f Finding, pending bool) projectDecision {
 	l := v.L
 	d := projectDecision{Tone: "action", State: lab(l, "validation", f.Validation), Title: f.Title,
-		Reason: openingText(f.Impact, ""), Next: openingText(f.Recommendation.Summary, ""), Review: true}
+		Reason: openingText(f.Impact, ""), Next: openingText(f.Recommendation.Summary, ""), Limitation: findingLimitation(f), Review: true}
 	if d.Reason == "" {
 		for _, c := range f.Conditions {
 			if d.Reason = openingText(c.Statement, ""); d.Reason != "" {
@@ -319,11 +342,13 @@ func (v secView) findingDecision(f Finding, pending bool) projectDecision {
 		if productFindingEvidence(f, e) {
 			loc := e.Location
 			d.Sources = []sourceCitation{v.citeEvidence("code", loc.Path, loc.StartLine, loc.EndLine, e.Excerpt)}
-			switch f.Validation {
-			case ValidationSupported:
-				d.State = l.Label("decision.supported")
-			case ValidationReproduced:
-				d.State = l.Label("decision.reproduced")
+			if d.Tone == "action" {
+				switch f.Validation {
+				case ValidationSupported:
+					d.State = l.Label("decision.supported")
+				case ValidationReproduced:
+					d.State = l.Label("decision.reproduced")
+				}
 			}
 			break
 		}
@@ -478,14 +503,14 @@ func (v secView) matchingCondition(first DocComparison, source SectionEvidence) 
 func (v secView) strengthDecision() projectDecision {
 	review := v.R.CodeReview
 	type locatedStrength struct {
-		title, benefit string
-		evidence       *SectionEvidence
+		title, benefit, scope string
+		evidence              *SectionEvidence
 	}
 	var items []locatedStrength
 	for _, s := range review.Strengths {
 		e := bestProductEvidence(s.EvidenceIDs, review.Evidence, "code")
 		if e != nil && v.hasReviewText(s.Title) && v.hasReviewText(s.Benefit) {
-			items = append(items, locatedStrength{s.Title, s.Benefit, e})
+			items = append(items, locatedStrength{s.Title, s.Benefit, s.Scope, e})
 		}
 	}
 	// A shared, overlapping code location can substantiate one decision
@@ -501,10 +526,14 @@ func (v secView) strengthDecision() projectDecision {
 				a, b = b, a
 			}
 			if a.StartLine <= b.StartLine && a.EndLine >= b.EndLine {
+				scope := ""
+				if first.scope == second.scope {
+					scope = displayDocumentScope(first.scope)
+				}
 				return projectDecision{Tone: "strength", State: v.L.Label("decision.preserve"),
 					Title:   tf(v.L, "decision.related", first.title, second.title),
 					Reason:  distinctStrengthDetails([]string{first.title, second.title}, first.benefit, second.benefit),
-					Sources: []sourceCitation{v.citeSectionEvidence(*a)}, Review: true}
+					Sources: []sourceCitation{v.citeSectionEvidence(*a)}, Scope: scope, Review: true}
 			}
 		}
 	}
@@ -514,7 +543,7 @@ func (v secView) strengthDecision() projectDecision {
 	first := items[0]
 	return projectDecision{Tone: "strength", State: v.L.Label("decision.preserve"), Title: first.title,
 		Reason:  distinctStrengthDetails([]string{first.title}, first.benefit),
-		Sources: []sourceCitation{v.citeSectionEvidence(*first.evidence)}, Review: true}
+		Sources: []sourceCitation{v.citeSectionEvidence(*first.evidence)}, Scope: displayDocumentScope(first.scope), Review: true}
 }
 
 func strengthTextKey(text string) string {

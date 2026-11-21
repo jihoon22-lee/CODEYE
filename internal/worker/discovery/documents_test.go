@@ -120,7 +120,7 @@ func TestDocumentsRootAndSubOverlap(t *testing.T) {
 // TC-97 (3/4): the per-document cap and the total budget are separate,
 // recorded reasons; reading order is fixed.
 func TestDocumentsBudget(t *testing.T) {
-	big := strings.Repeat("design text\n", 3000) // 36000 bytes > 32 KiB
+	big := strings.Repeat("design text\n", 6000) // 72,000 bytes exceeds the default per-document budget.
 	j := jobOf(t, map[string]string{"AGENTS.md": "a\n", "README.md": strings.Repeat("r", 300), "docs/a.md": strings.Repeat("d", 300), "docs/b.md": "b\n", "docs/huge.md": big}, domain.Scope{Kind: "full"})
 	d := runDocs(t, j, Budget{})
 	if s, r := statusOf(t, d, "docs/huge.md"); s != envdoc.DocBudgetExceeded || r != envdoc.ReasonTooLarge {

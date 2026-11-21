@@ -75,6 +75,47 @@ func TestReviewPrioritizesProductGuidesUnderInputLimits(t *testing.T) {
 	}
 }
 
+func TestReviewUsesLongPrimaryReadmeUnderDefaultBudget(t *testing.T) {
+	const guide = "docs/options.md"
+	const oversized = "docs/archive.md"
+	const behavior = "The current notebook remains selected after the display is closed."
+	readme := "# Field notebooks\n\n[Display options](docs/options.md)\n\n" +
+		strings.Repeat("Each field notebook has a separate home view.\n", 975) +
+		"\n## User workflows\n\n" + behavior + "\nOpening another notebook changes which one is selected.\n"
+	if len(readme) < 40<<10 || len(readme) > 50<<10 {
+		t.Fatalf("expected a 40–50 KiB README, got %d bytes", len(readme))
+	}
+	help := "The display offers a compact view.\n"
+	in, stored, inventory := collectDocumentSelection(t, map[string]string{
+		"README.md": readme,
+		guide:       help,
+		oversized:   strings.Repeat(help, int(discovery.DefaultBudget.PerDocumentBytes)/len(help)+1),
+	})
+	if inventory.Budget.PerDocumentBytes != 64<<10 || inventory.Budget.TotalBytes != 256<<10 ||
+		inventory.Budget.ReadBytes != int64(len(readme)+len(help)) {
+		t.Fatalf("unexpected discovery budget: %+v", inventory.Budget)
+	}
+	for _, d := range inventory.Items {
+		switch d.Path {
+		case "README.md", guide:
+			if d.Status != envdoc.DocSelected {
+				t.Fatalf("product guidance not selected: %+v", d)
+			}
+		case oversized:
+			if d.Status != envdoc.DocBudgetExceeded || d.Reason == nil || *d.Reason != envdoc.ReasonTooLarge {
+				t.Fatalf("oversized document reason changed: %+v", d)
+			}
+		}
+	}
+	if len(in.Documents) == 0 || in.Documents[0].Path != "README.md" ||
+		!slices.ContainsFunc(in.Documents, func(d docInput) bool { return d.Path == guide && strings.Contains(d.Text, strings.TrimSpace(help)) }) ||
+		!slices.ContainsFunc(in.Documents, func(d docInput) bool { return d.Path == "README.md" && strings.Contains(d.Text, behavior) }) ||
+		slices.ContainsFunc(in.Documents, func(d docInput) bool { return d.Path == oversized }) ||
+		!slices.Contains(stored.Limitations, "document_excerpt_only") {
+		t.Fatalf("primary README or guide lost from actual review request: %+v", in.Documents)
+	}
+}
+
 func TestReviewStillUsesAdministrativeOnlyGuidance(t *testing.T) {
 	in, stored, inventory := collectDocumentSelection(t, map[string]string{
 		"CONTRIBUTING.md": "Use the maintenance checklist before submitting changes.\n",

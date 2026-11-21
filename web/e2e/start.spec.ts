@@ -35,6 +35,8 @@ test('the tools panel lists what was found and how to add the rest', async () =>
 });
 
 test('a folder path goes straight to its run, and the report opens with what would make it better', async () => {
+  // Allow the report wait plus navigation and the hint check.
+  test.setTimeout(180_000);
   await analyze(env.CODEYE_TEST_START_FOLDER!);
   await expect(page.getByRole('article', { name: '분석 보고서' })).toBeVisible({ timeout: 150_000 });
   // No model key in the smoke: the first hint says how to set one.

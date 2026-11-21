@@ -7,7 +7,7 @@
 - 각 TC는 제품 경로에서 확인할 조건과 결과다. 보조 검사(문서 validator, fixture 검사)의 통과를 TC 통과로 보고하지 않는다([보조 검증과 제품 시험의 차이](#보조-검증과-제품-시험의-차이)).
 - **설계(미구현)** 표시는 해당 기능이 없어 아직 실행할 수 없는 시험이다. **일부** 표시는 `codeye up`의 한 서비스에서 일부 조건만 실행할 수 있다는 뜻이며 괄호 안에 남은 부분을 적는다.
 - **실모델** 표시는 승인된 모델 연결이 있어야 하는 시험이다. CI는 모델을 호출하지 않는다.
-- 표시가 없다는 것은 다른 문서에서 미구현으로 확인되지 않았다는 뜻일 뿐이며, 자동 시험이 있거나 모든 조건을 실행했다는 보장이 아니다. 또 일부 환경에서는 실행하지 않았다. 실기 검증은 Linux(WSL2)에서 했고, Windows는 CI의 Go 단위 시험까지, RHEL 8.10과 여러 물리 머신은 실행하지 않았다.
+- 표시가 없다는 것은 다른 문서에서 미구현으로 확인되지 않았다는 뜻일 뿐이며, 자동 시험이 있거나 모든 조건을 실행했다는 보장이 아니다. 실기 검증은 WSL2 호스트에서 했고 Windows는 CI의 Go 단위 시험까지 확인했다. RHEL 8.10 호스트 커널과 여러 물리 머신은 시험하지 않았다.
 - 요구 열은 주된 연결이다. 전체 연결은 [요구사항 추적표](#요구사항-추적표)에 있다.
 
 ## 입력·환경
@@ -87,6 +87,10 @@ TC-02·TC-31의 "여러 사용자" 부분은 TC-140·TC-144·TC-145가 실행한
 | TC-53 | 승인 root 원자적 경계·symlink/FIFO 교체·credential 제외·원본 아래 data root | 경계 유지, credential 제외, 원본 아래 data root 거부 | REQ-002,015; TC-04 |
 | TC-54 | 변경 감지 재시도·불안정 실패·manifest 무결성·독립 workspace·retained retry | 안정 사본 또는 `source_unstable`, manifest 무결, retained retry는 원본 재확보 없음 | REQ-003,015; TC-03,04 |
 | TC-55 | 실제 Git 확보 | SHA 고정, filter 미실행, LFS/submodule 공백 표시, host/전송 제한, soft fetch quota | REQ-003,024,030 |
+
+TC-01의 등록과 TC-04의 정상 소스 확보 경로를 읽기 전용 NFS에서 수동으로 확인했다. 외부망이 차단된 내부 브리지에 서버의 `secure` export를 두고 WSL2 호스트 커널에서 `ro,vers=4.1,sec=sys`로 마운트했다. Red Hat UBI 8.10 사용자 공간에서 UID 1000으로 실제 `codeye up --offline`을 실행했고 PostgreSQL 17은 같은 환경의 로컬 DB로 띄웠다. 탐색 산출물에 기록된 README SHA-256이 원본과 일치했다. 모델 미설정 상태에서 run이 `partial`로 끝났으며 로그인한 웹 화면에서 보고서를 열고 HTML을 내보냈다.
+
+이 확인의 호스트 커널은 WSL2였다. RHEL 8.10 호스트 커널, 회사 NFS의 마운트·ACL, SSO·GHES, 여러 호스트·부하·장애 전환은 시험하지 않았다.
 
 ## 실행기
 
@@ -243,9 +247,13 @@ TC-268의 짧은 파일 시험은 위치 선택이나 검증된 리터럴로 찾
 
 TC-79의 확인값 시험은 OpenCode 완료 이벤트의 합성 스트림으로 한 번의 불일치 후 복구, 연속 불일치, 호출 예산 소진, 로컬 작업공간 준비 실패, 공급자 실패와 취소를 확인한다. 같은 요청을 새 작업공간과 새 확인값으로 다시 보내며, 실패한 응답은 버리고 사유와 사용량을 보존한다. verify는 수락한 판정과 보류 후보의 형식 복구 요청을 유지한다. 계약 후속 검토는 두 번의 호출 상한을 지킨다(`TestContractWorkspaceProofRetry`, `TestVerifyWorkspaceProofRetryKeepsPending`). REQ-011,013,018,026과 NFR-006,008,010에 연결한다.
 
+TC-79의 버전 확인 시험은 합성 실행기로 `--version`과 모델 요청의 제한시간·실패 사유를 구분한다. 버전 확인은 30초와 설정값 중 짧은 시간을 적용한다. 확인이 시간 초과되면 모델 요청으로 넘어가지 않으며 `opencode_version_timeout`을 기록한다. 요청 자체의 시간 초과는 `model_timeout`이다. 호출자 취소와 정리 확인 실패는 각각 원래 사유를 유지한다(`TestReviewSeparatesVersionProbeAndModelTimeouts`, `TestReviewVersionProbeDeadlineKeepsCallerCancellationSeparate`, `TestModelOutcomeMapping`).
+
 TC-270은 README 링크와 번역·기여 문서가 있는 제품, 여러 모듈 README와 문서 사이트가 있는 모노레포, 관리 문서만 있는 프로젝트에서 탐색·발췌 한도를 시험한다. 대표 README와 연결된 안내, 시작·구성·지역 참조 문서를 우선 선택한다. 범위 밖 README와 외부·코드 예제·모호한 링크는 순위를 바꾸지 않는다. 관리 문서만 있어도 검토하며, 남은 목록과 상속·적용 경로, 읽은 바이트와 발췌 제한을 보존한다(`TestDiscoveryKeepsProductGuidanceWithinDocumentBudgets`, `TestReviewPrioritizesProductGuidesUnderInputLimits`, `TestReviewStillUsesAdministrativeOnlyGuidance`). REQ-004,005,011,027과 NFR-006,008에 연결한다.
 
 TC-270의 긴 문서 시험은 첫 발췌와 뒤쪽 API 절 사이의 본문, 전체가 기존 예산에 들어가는 170줄짜리 안내, 여러 긴 안내의 발췌 순서, 개수나 바이트 상한 초과, 운영 절과 다른 문서가 발췌 자리를 모두 쓰는 경우를 다룬다. 기존 발췌를 유지하고 남은 자리에 추가한 본문의 원래 줄과 근거 ID가 요청과 보고서에서 일치하는지 확인한다. 실제 요청에서 본문이 빠졌으면 `document_excerpt_only`를 기록한다(`TestDocumentContinuationReachesReport`, `TestDocumentCoverage`로 시작하는 시험).
+
+TC-270의 기본 읽기 한도 시험은 40–50 KiB 대표 README와 연결된 짧은 안내를 탐색에서 선택하고, README의 앞부분과 뒤쪽 사용 조건을 실제 문서 검토 요청에 보낸다. 64 KiB를 넘은 문서는 `document_too_large`로 남으며, 합계 256 KiB와 별도 예산을 적용한다(`TestReviewUsesLongPrimaryReadmeUnderDefaultBudget`, `TestDocumentsBudget`).
 
 TC-270은 여러 모듈의 부가 목록으로 요청 한도가 부족한 프로젝트에서도 대표 README, 긴 제품 요구사항의 뒤쪽 사용자 흐름과 별도 안내의 원문을 함께 보내는지 확인한다. 지역 안내의 적용 디렉터리와 발췌 줄을 보존하고, 상한을 넘는 파일의 사유와 발췌·부가 목록의 제한을 기록한다. 문서 탐색 예산과 원래 모듈 연결은 유지한다(`TestDocumentRequestPreservesDistinctProductEvidenceUnderMetadataPressure`). 예제와 합성 입력이 많을 때는 대표 README에서 링크한 예제와 남은 제품 본문을 미연결 합성 입력보다 먼저 보낸다. 부차 경로만 범위에 든 경우에도 실제 안내를 보낸다(`TestDocumentSelectionFavorsProductTextOverUnlinkedFixtures`).
 
@@ -254,6 +262,10 @@ TC-271은 여러 모듈의 Go HTTP 서비스에서 문서에 나온 변경과 �
 TC-271은 긴 HTTP 헬퍼의 뒤쪽에서 응답과 앞선 읽기·오류 처리를 같은 한도 내 발췌에 담는지 확인한다. 짧은 헬퍼, 앞쪽에 이미 응답이 있는 헬퍼, 응답 후보가 여러 개이거나 다른 응답 객체·패키지를 사용하거나 바이트 한도를 넘는 헬퍼도 검증한다. 고정한 소스에서 같은 발췌 ID와 줄 범위를 다시 읽을 수 있어야 한다(`TestGoHTTPDecisionWindowsReadResponseAndItsPrecedingStatements`).
 
 TC-271의 보충 요청 시험은 유효한 첫 선택, 보충 응답의 유효 선택·빈 선택·허위 ID·거절·시간 초과·작업공간 오류, 코어 호출 예산이 남지 않은 실행을 포함한다. 최초 문서 응답을 보존하고, 실제 보충 호출만 일반 문서 응답과 구분해 장부에 센다(`TestSupplementalWorkflowChoices`).
+
+TC-271은 같은 HTTP 메서드와 패턴을 서로 다른 처리기로 등록한 경우의 선택지도 검증한다. 실제 파일과 함수에서 처리기 이름을 뽑아 같은 패턴을 구분하고, 보류 파일과 비밀값 양식에 맞는 이름은 보내지 않는다. 이름 자체나 범위 밖 경로 ID로는 선택할 수 없다. 요청 여유가 작을 때는 확인한 경로와 문서 발췌를 유지하고 리터럴이 없는 패턴에 먼저 이름을 붙인다. 두 선택 요청의 형식 지침에는 수락될 수 있는 예시 답이 없다(`TestWorkflowCuesDistinguishIdenticalPatterns`, `TestWorkflowCuesAreBoundedAndOptional`, `TestWorkflowChoiceInstructionsContainNoEligibleAnswer`).
+
+TC-271은 문서 검토에서 고른 경로만 후속 구현 탐색 대상으로 삼고, 반환 호출이나 확인한 수신자를 따라 저장·조회 결과를 소스에 연결한다. 직접 확인한 하나와 두 개의 호출, 드라이버별 SQL, 모호하거나 범위를 벗어난 호출, 근거 일부만 요청에 들어간 경우를 확인한다. 호출과 구현을 함께 보냈을 때만 실행하지 않은 조건부 소스 근거라고 표시한다(`TestGoHTTPWorkflowOutcomeLinksReturnedStoreOperations`, `TestGoHTTPWorkflowOutcomeRequiresAnExactBoundedChain`, `TestGoHTTPWorkflowOutcomeReplaysWithScopedConditionalEvidence`, `TestGoHTTPWorkflowOutcomeKeepsTwoBoundedStepsIntoVersionedSQL`).
 
 TC-271의 HTTP 테스트 발췌 시험은 리터럴 요청과 짧은 요청 생성 함수, 경로 변수, 변경 후 조회, 상태·본문 기대값을 대조한다. 테스트 원문의 스냅샷과 줄 범위를 확인한다. 다른 메서드·경로, recorder 재사용, 요청 경로 재할당, 단순 로그, 생성·보류·범위 밖·미변경 테스트와 여러 등록에 맞는 요청은 연결하지 않는다(`TestGoHTTPWorkflowUsesOneReadAfterChangeTestWindow`, `TestGoHTTPWorkflowTestRequiresMatchingExecutedRequestAndAssertion`, `TestGoHTTPWorkflowTestMatchesOnlyConcretePathShape`).
 
@@ -362,7 +374,9 @@ TC-134·TC-135에서 종합의 같은 파일과 주제에 속하는 확인된 �
 
 미확인 대조를 종합의 첫 판단으로 보여 줄 때 같은 우선순위에서는 저장된 문서 질문과 적용 범위·문서 인용·구체어가 모두 일치하고 후보가 하나일 때 그 대조를 먼저 보여 준다. 모호한 질문, 문장 없는 이전 보고서 및 코드 미포함에서는 저장 순서를 유지한다. 선택된 미확인 대조는 설명서와 코드 두 행에 실제 동작과 기존 이유 또는 추가 관찰을 표시한다. 웹·HTML·Markdown에서 링크가 같은 대조에 연결되며 코드 인용과 상세의 상태·집계를 보존한다. 짝을 이룬 백틱 안의 내용은 인라인 코드로 보이고 짝 없는 백틱과 태그처럼 보이는 문장은 평문으로 표시된다. 표지에서는 각각의 라벨로 시작·종료 시각과 작성 시각 대체 표시를 확인하고, 실제 고정 커밋과 시작·종료를 기록한 경우의 소요 시간만 표시되는지 확인한다.
 
-TC-134·TC-135에서 제품 문서 대조가 모두 미확인이고 주요 구현 근거가 있으면 코드에서 확인한 동작을 먼저 보여 준다. 같은 카드에서 제품 동작의 상태 수와 설명서 예시 하나를 확인하고 관련 대조로 이동할 수 있다. 시험 범위의 문서 대조는 제품 동작 수에서 제외하고, QA 스크립트에서만 확인한 강점은 앞세우지 않는다. 코드 미포함 내보내기에는 상태 수와 이동 위치가 남고 설명서 예시와 코드 서술은 생략된다(`TestProjectOpeningLeadsWithProductEvidenceWhenComparisonsAreUnknown`, `ReportSections.test.tsx`).
+TC-134·TC-135에서 제품 문서 대조가 모두 미확인이고 주요 구현 근거가 있으면 코드에서 확인한 동작과 적용 범위를 먼저 보여 준다. 상태 수는 시험 범위를 포함한 저장된 대조 전체에서 세며 구현 대조 미확인을 구체적으로 표시한다. 설명서 예시와 선두 강점을 고를 때는 제품 범위를 확인한다. 코드 미포함 내보내기에는 상태 수와 이동 위치가 남고 설명서 예시와 코드 서술은 생략된다(`TestProjectOpeningLeadsWithProductEvidenceWhenComparisonsAreUnknown`, `ReportSections.test.tsx`).
+
+TC-134에서 지지·판단 보류 판정의 종합에 첫 서술형 한계를 표시한다. 지지된 발견은 한계 다음에 저장된 권고를 조건부 조치로 표시하고, 판단 보류 발견은 확인 방법을 표시한다. 사유 코드만 있는 경우 기존 판단을 유지한다. 게시한 판정과 집계를 보존하고 코드 미포함 내보내기에서 한계 서술을 생략한다(`TestProjectDecisionShowsRecordedLimitationBeforeAction`, `ReportSections.test.tsx`).
 
 TC-134에서 종합의 강점 제목·효과를 함께 읽을 수 있는지 확인한다. 효과가 제목을 반복하면 한 번만 표시한다. 관련 강점의 공통 코드 범위와 미확인 조건이 함께 있는 경우의 별도 인용 두 건을 확인한다(`TestStrengthOpeningKeepsSharedEvidenceWithoutRepeatingItsTitle`, `TestRelatedConfirmedControlAndPendingBehaviorHaveSeparateRanges`, `ReportSections.test.tsx`).
 

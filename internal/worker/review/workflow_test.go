@@ -28,6 +28,9 @@ func TestWorkflowSelectionsReachReview(t *testing.T) {
 					var selected []string
 					for _, r := range in.WorkflowRoutes {
 						if (r.Method == "DELETE" && r.Path == "/cups/{cup}") || (r.Method == "GET" && r.Path == "/cups") {
+							if r.Handler != "service.go lower" && r.Handler != "service.go list" {
+								t.Fatalf("route missing the handler cue: %+v", r)
+							}
 							selected = append(selected, r.ID)
 						}
 					}
@@ -290,6 +293,11 @@ func TestSupplementalWorkflowChoices(t *testing.T) {
 					if n != 2 || len(in.Contracts) != 1 || in.Contracts[0].Statement != statement || in.Contracts[0].Index != 1 ||
 						len(in.Routes) != 6 || len(opencode.Prompt(q)) > PromptBudget || strings.Contains(string(q.Input), "removeFromShelf") {
 						t.Fatalf("unexpected supplemental request %+v", in)
+					}
+					for _, route := range in.Routes {
+						if route.Handler != "service.go lower" && route.Handler != "service.go list" {
+							t.Fatalf("supplemental selector lost handler cue: %+v", route)
+						}
 					}
 					switch tc.name {
 					case "selected":

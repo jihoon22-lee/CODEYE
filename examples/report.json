@@ -14,8 +14,8 @@
       "id": "0195f3a0-0000-7000-8000-00000000056d",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "04cf62c59bd8cf50ffced04ce0dd3c087ac1fe145409ce5ec1b25dce3b044503",
-      "size_bytes": 21626,
+      "sha256": "eff99b730f78e13bda5553689f032403abb89735c744068a2d4987915d1049a9",
+      "size_bytes": 21622,
       "task_key": null
     },
     {
@@ -680,8 +680,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000513",
       "media_type": "application/vnd.codeye.environment+json",
       "role": "other",
-      "sha256": "3d728df257f36889565b5071d50d3df7eb160a0b72c1e6e46020efce9ac0efb8",
-      "size_bytes": 2271,
+      "sha256": "f12d530054707f18ac711e8a4c3b6c7efb755d7a4eaa9b6ec76519815fe07a8c",
+      "size_bytes": 2221,
       "task_key": "docs.discover"
     },
     {
@@ -716,7 +716,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000563",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "552e7573a0536c7b60a1558c22285e821e4173f944869230d5ea6d246b3f75ca",
+      "sha256": "2a269cee62dbb221e411f6bc56f791abb9d696c36252592d5b6a6c3e71ee9373",
       "size_bytes": 1573,
       "task_key": "review.environment"
     },
@@ -725,8 +725,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000565",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "e4369c2b0591e139e578f71c91dcd1eb5c554925b165baf9e8c6c2e286a28aa4",
-      "size_bytes": 3170,
+      "sha256": "ac6b3b06abbf3283111bf65dee8915f44e1de78efa4056a87719f37d7cef4af7",
+      "size_bytes": 3377,
       "task_key": "review.documents"
     },
     {
@@ -734,7 +734,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000567",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "8995f1b0662c91f28c30b39e5c605c7948413f15035451c10db3008bb02469bc",
+      "sha256": "0f758a454d3d408f241a4c5ad34b4f6ed5cb70b581e1592abb37c9dd3c11270a",
       "size_bytes": 3231,
       "task_key": "review.investigate"
     },
@@ -743,7 +743,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000569",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "b32be7abe0d6d2983dbb1a294a3b2e274b748e91d041293eabc0b836aabf034a",
+      "sha256": "585c45b001caa49c588146f21c428af375ff3218e2b1a006b5bb28e90ec75d94",
       "size_bytes": 3386,
       "task_key": "review.interpret"
     },
@@ -752,7 +752,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000056b",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "137ea5879964ce2f05a70b3c75e8688d4c00e0ed24e7c1af347b2122c3d33ba8",
+      "sha256": "df4384b0ee18ff27d69dc8421271ae926adb92503a5052ecdea3b9d7829fd037",
       "size_bytes": 4666,
       "task_key": "review.verify"
     }
@@ -767,7 +767,7 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "4b7e09891f5ddfb8dfd27eaa40b19b8ddaba418c079c952d5043902c6f963f6f",
+    "input_digest": "7904e9de3a1cb4cf383b25f9ef3655c5005941edd95ae5ad2f1fa5be5c555708",
     "result_manifest_artifact_id": null,
     "version": "14"
   },
@@ -789,7 +789,7 @@
         "start_line": 1
       }
     ],
-    "exposed_files": 6,
+    "exposed_files": 7,
     "finding_ids": [
       "review_investigate_1",
       "review_interpret_1"
@@ -804,8 +804,8 @@
     ],
     "inventory_files": 10,
     "pack_id": "review",
-    "pack_version": "2.5.1",
-    "request_bytes": 70839,
+    "pack_version": "2.5.2",
+    "request_bytes": 73094,
     "roles": [
       {
         "key": "review.investigate",
@@ -893,7 +893,7 @@
       "status": "performed"
     },
     "inventory_files": 10,
-    "llm_exposed_files": 6,
+    "llm_exposed_files": 7,
     "notes": [
       "inventory_counts_all_included_files",
       "tests_not_planned",
@@ -906,8 +906,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "c857e8e8b6484722ea5d75f8a180d9899373c3b32bb07eddbe1d20b75a7e6aa1",
-        "pack_version": "2.5.1",
+        "pack_sha256": "ee1f462b787ec97b425fda589c73371c18981bc37037f7b72043faf8309c2209",
+        "pack_version": "2.5.2",
         "request_sha256": "a205bafcc165d2bf09d793b5e1f695be481dfdbbd4a480d2385dfbbfb91d9b81",
         "role": "environment",
         "task_key": "review.environment"
@@ -917,9 +917,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "52b3eac8c59fb7bbf5acfeae310e65952a168358f8c32242218961d35d03d33c",
-        "pack_version": "2.5.1",
-        "request_sha256": "63e2fdb1041369292556c2cfe16808c6ec2ce75f094085214ae90c1c1caac53a",
+        "pack_sha256": "fed289ac5d4b2e35ae127f7935b313fd9adb25afa9936f03db0264bd7494089b",
+        "pack_version": "2.5.2",
+        "request_sha256": "684e093aaf3bbb7448952749df3de98b457886ffbcfd9711f716feb5d215ca48",
         "role": "documents",
         "task_key": "review.documents"
       },
@@ -928,8 +928,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "7339584583a82b045e6f36d11e09bc3fb04a835eb2bc5ea16d8cc395ae144568",
-        "pack_version": "2.5.1",
+        "pack_sha256": "c474486de4bf11ef85796d5f8cc30571c36ff6540fa9d7c61abce2c06f89f686",
+        "pack_version": "2.5.2",
         "request_sha256": "3b1842829f79ca2d75cd4f6799aa5b34d03abd56d8a491aaefa7be1db30d6e31",
         "role": "investigate",
         "task_key": "review.investigate"
@@ -939,8 +939,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "2f7f2642d3b96aea726cd5e1caf0670f3f9c9219216394c85969e1b56c3ec26a",
-        "pack_version": "2.5.1",
+        "pack_sha256": "637766c310fd80ba13c555e9fb15c95a25d4bbaf33ffae05dec32dd8949cf559",
+        "pack_version": "2.5.2",
         "request_sha256": "e8832db33df3e95ecf86faec1c3df3b01684cf1cff019789e61460990a1bf308",
         "role": "interpret",
         "task_key": "review.interpret"
@@ -950,9 +950,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "7a8aa28cac7c6e9528275fedba557d3bcfbb949219b5d509fe30dc3386c091e4",
-        "pack_version": "2.5.1",
-        "request_sha256": "736bbe059627589cde2e0ba2baa18dee0cd7ad5a1c95f0527e2dad981cdf0294",
+        "pack_sha256": "112f05f2fc053185977b37a0d66c4f9c6f47ab81e67d0854be84b5c43f96e59d",
+        "pack_version": "2.5.2",
+        "request_sha256": "764696667fd7c4121447f0170aad6da0b9f4b4a356c97dcfb8f88aa99fbac75b",
         "role": "verify",
         "task_key": "review.verify"
       }
@@ -1256,8 +1256,8 @@
   "documents": {
     "budget": {
       "max_documents": 1000,
-      "per_document_bytes": 32768,
-      "read_bytes": 1112,
+      "per_document_bytes": 65536,
+      "read_bytes": 42538,
       "total_bytes": 262144
     },
     "comparisons": [
@@ -1417,11 +1417,11 @@
       {
         "applies_to": ".",
         "class": "design",
-        "line_count": null,
+        "line_count": 731,
         "path": "docs/design.md",
-        "reason": "document_too_large",
+        "reason": null,
         "size_bytes": 41426,
-        "status": "budget_exceeded"
+        "status": "selected"
       },
       {
         "applies_to": "svc/b",
@@ -1434,7 +1434,6 @@
       }
     ],
     "limitations": [
-      "document_budget_exceeded",
       "semantic_conflicts_not_assessed"
     ],
     "model": {
@@ -3091,12 +3090,6 @@
       "subject": "deps.go.m01"
     },
     {
-      "code": "document_budget_exceeded",
-      "detail": "document_too_large",
-      "section": "documents",
-      "subject": "docs/design.md"
-    },
-    {
       "code": "task_failed",
       "detail": "toolchain_unavailable",
       "section": "static_analysis",
@@ -3139,6 +3132,7 @@
   "limitations": [
     "caller_expansion_go_only",
     "caller_expansion_package_functions_only",
+    "document_excerpt_only",
     "files_outside_review_context",
     "no_callers_found",
     "required_task_not_succeeded",
@@ -3342,7 +3336,7 @@
       },
       {
         "code": "analysis_gaps",
-        "count": 7,
+        "count": 6,
         "section": "gaps"
       }
     ],
@@ -3368,9 +3362,9 @@
           "documents": 4,
           "instruction_notes": 1,
           "modules_without_documents": 0,
-          "not_read": 1,
+          "not_read": 0,
           "questions": 1,
-          "read": 3
+          "read": 4
         },
         "key": "documents",
         "state": "succeeded"
@@ -3419,7 +3413,7 @@
       },
       {
         "counts": {
-          "gaps": 7
+          "gaps": 6
         },
         "key": "gaps",
         "state": null
