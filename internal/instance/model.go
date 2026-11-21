@@ -224,10 +224,10 @@ func ResolveModel(cfg *Config, layout Layout, env ModelEnv) (*ResolvedModel, err
 	if cfg.Offline {
 		switch res.Source {
 		case ModelSourceNone:
-			return nil, errors.New("offline mode needs a model key file with base_url (an internal endpoint); a model without a key answers from a public endpoint")
+			return nil, opencode.ErrNativeEndpoint
 		case ModelSourceConfig, ModelSourceSecret:
 			if !credentialHasEndpoint(res.CredentialFile, provider) {
-				return nil, errors.New("offline mode: the model key file has no base_url; add the internal endpoint (an OpenAI-compatible URL) as base_url")
+				return nil, fmt.Errorf("the model key file has no base_url: %w", opencode.ErrNativeEndpoint)
 			}
 		}
 	}
