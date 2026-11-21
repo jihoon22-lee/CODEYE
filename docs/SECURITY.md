@@ -163,7 +163,7 @@ manager는 정확히 일치하는 이메일 또는 기존 사용자 이름으로
 | 사용자 비밀번호 | PBKDF2 verifier만 저장([로그인과 제한](#로그인과-제한)). 평문은 저장·기록하지 않는다 |
 | TLS 키 | 운영자가 준 파일 경로. group·other 접근 불가 mode만 받는다. 내용은 오류 문구에 넣지 않는다 |
 | 노드 | 일회용 등록 토큰과 노드 credential. 0600 파일, hash 저장 |
-| 모델 | API 키는 키 파일(`codeye up`의 `<state_dir>/secrets/model.json` 0600, `agent.model.credential_file`, OpenCode `auth.json`)에만 두고, 설정·인자에는 그 경로나 relay 파일 경로만 둔다. 워커가 호출마다 읽어 OpenCode 프로필로만 넘기고 기록에서 가린다([검토](REVIEW.md#모델-설정)) |
+| 모델 | 관리자는 웹에서 서비스 계정의 OpenCode 실행 파일·설정·인증 파일 경로를 지정한다. 파일 내용과 인증값은 웹에 보내지 않는다. 워커는 선택한 모델의 연결 정보만 격리한 OpenCode에 전달하고, 키와 인증 헤더 값을 실행 기록에서 가린다. [모델 설정](REVIEW.md#모델-설정) |
 | Git | 사용자 Git 설정과 credential helper를 차단한다. 에이전트는 플랫폼 인증정보 파일 경로를 받고, 워커가 호스트를 정확히 일치시켜 Git 자식 프로세스 환경의 HTTP header로 전달한다. 값은 URL·argv·작업 사본·snapshot·분석기·모델 입력에 없다 |
 | GitHub API | controller와 CLI는 승인된 호스트의 HTTPS API를 쓴다. redirect와 다른 origin의 페이지 주소를 따르지 않는다. `GET /setup`은 값 없이 호스트별 플랫폼 계정 상태를 보여 준다 |
 | GitHub App key | 설계 계약(미구현, [Git 연결](GITHUB.md#다중-사용자-설치-설계-계약)) |

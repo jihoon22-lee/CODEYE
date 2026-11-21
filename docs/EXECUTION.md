@@ -178,7 +178,8 @@ codeye agent --controller URL --state-dir DIR [--name NAME] [--enroll-token-file
               [--go-noproxy PATTERNS] [--go-nosumdb PATTERNS] [--npm-registry URL]
               [--npm /abs/npm-cli.js] [--pnpm /abs/pnpm.cjs] [--yarn /abs/yarn.js]
               [--python /abs/python3] [--uv /abs/uv] [--pip-index-url URL]]
-             [--opencode /abs/opencode --model PROVIDER/MODEL [--model-credential-file PATH | --model-relay-file PATH]]
+             [--opencode /abs/opencode --model PROVIDER/MODEL
+              [--model-config-file PATH] [--model-credential-file PATH | --model-relay-file PATH]]
              [--model-timeout 180s] [--model-source-root ID ...]
              [--review-max-calls 15..207]
              [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]
@@ -198,7 +199,7 @@ codeye worker      # agent가 실행한다. 옵션 없음.
 | `--go`, `--go-mod-cache`, `--<tool>`, `--node`, `--python-both-type-checkers` | 분석 도구와 공유 toolchain 경로. 절대 경로만 받고 PATH를 검색하거나 내려받지 않는다. 지정하지 않은 도구의 작업은 `unsupported`(`tool_not_configured`)로 끝난다([분석기](ANALYZERS.md)). |
 | `--repo-code-source-root ID` | 그 local source root에서 저장소 코드를 실행하는 분석 작업을 허가한다. ID는 `--source-root` 매핑이 있어야 한다([분석기](ANALYZERS.md)). |
 | `--dependency-fetch` 외 의존성 옵션 | 의존성 받기 운영자 스위치(기본 꺼짐)와 캐시·예산·Go 받기 설정, npm 레지스트리(`--npm-registry`)와 Python index(`--pip-index-url`), 패키지 관리자 경로(`--npm`·`--pnpm`·`--yarn`·`--python`·`--uv`, JS 관리자는 `--node`도 쓴다). 패키지 관리자는 hello `dependencies.package_managers`로 간다. 스위치가 꺼져 있으면 다른 의존성 옵션은 쓰이지 않는다. 켜면 hello `dependencies`로 워커에 전달되고, run마다 프로젝트 선택 `fetch_dependencies`도 켜져 있어야 계획한다([의존성 준비](ARCHITECTURE.md#의존성-준비), [분석기](ANALYZERS.md#에이전트-플래그)). |
-| `--opencode`, `--model`, `--model-credential-file`, `--model-relay-file`, `--model-timeout`, `--model-source-root` | 모델 실행, API 키 파일(경로만 받고 워커가 호출마다 읽는다), 호출당 제한시간(기본 180초, 1초~30분), root별 모델 전송 승인([검토](REVIEW.md#모델-설정)). 키 파일과 relay 파일은 함께 쓰지 않는다. |
+| `--opencode`, `--model`, `--model-config-file`, `--model-credential-file`, `--model-relay-file`, `--model-timeout`, `--model-source-root` | 모델 실행, OpenCode JSON·JSONC 설정과 인증 파일(경로만 받고 워커가 읽는다), 호출당 제한시간(기본 180초, 1초~30분), root별 모델 전송 승인([검토](REVIEW.md#모델-설정)). 키 파일과 relay 파일은 함께 쓰지 않는다. |
 | `--review-max-calls N` | attempt당 모델 검토 호출 상한(기본 99, 15~207). 상한을 다 쓰면 기본값 33일 때의 약 세 배 비용이 든다([안내서](GUIDE.md)). 범위 밖이면 사용 오류다. 전체 역할 다섯 개가 최대 15회를 쓰고 남은 호출로 모듈 단위 slice를 차례로 허용한다. Hello `review_max_calls`로 워커에 전달되고 run 요청으로는 바꿀 수 없다([검토](REVIEW.md#모듈-단위-검토-분할)). |
 | `--storage-quota AREA=BYTES`, `--storage-log-dir` | 노드 저장 영역 상한(`snapshot`, `workspace`, `cache`, `logs`, 영역마다 한 번)([운영](OPERATIONS.md)). |
 
