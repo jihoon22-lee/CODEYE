@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/report"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
@@ -295,5 +296,103 @@ func (Discount) Adjust(n int) int { return n - 1 }
 	out, _, err = expand(t.Context(), j.Snapshot, j.Scope, catalog, []CandidateText{candidate}, nil, nil)
 	if err != nil || len(out) != 1 || out[0].Path != "request.go" {
 		t.Fatalf("qualified name did not select the cited declaration: %v %v", out, err)
+	}
+}
+
+func TestVerifyPromotesExistingEvidenceWithoutBreakingPublication(t *testing.T) {
+	const (
+		callerPath = "request.go"
+		otherPath  = "a_defaults.go"
+		title      = "음수 수량의 보정 누락"
+	)
+	// Put each declaration at the beginning of a later slice window. The
+	// caller window can then match the investigation context byte for byte.
+	prefix := "package billing\n" + strings.Repeat("// Context.\n", roleMaxCodeLines-1)
+	j := treeJob(t, map[string]string{
+		"go.mod": "module example.org/billing\n\ngo 1.23\n",
+		"quota.go": prefix + `type Quota struct{}
+func (Quota) Adjust(n int) int { return n + 1 }
+`,
+		otherPath: prefix + "func DefaultThreshold() int { return 3 }\n",
+		callerPath: prefix + `func RequestAmount(n int) int {
+	if n < 0 {
+		return 0
+	}
+	return (Quota{}).Adjust(n)
+}
+`,
+	})
+	script := coverageScript(t)
+	var prior, promoted record.Excerpt
+	investigationOrder := func(excerpts []record.Excerpt, path string) int {
+		return slices.IndexFunc(excerpts, func(e record.Excerpt) bool {
+			return e.Path == path && e.Start == roleMaxCodeLines+1
+		})
+	}
+	script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[investigateInput](t, q)
+		anchor := investigationOrder(in.Scope.Excerpts, "quota.go")
+		caller := investigationOrder(in.Scope.Excerpts, callerPath)
+		other := investigationOrder(in.Scope.Excerpts, otherPath)
+		if anchor < 0 || caller < 0 || other < 0 {
+			return asJSON(map[string]any{"candidates": []any{}})
+		}
+		if other >= caller {
+			t.Fatal("an unrelated upstream excerpt must precede the caller in this fixture")
+		}
+		prior = in.Scope.Excerpts[caller]
+		return asJSON(map[string]any{"candidates": []record.CandidateText{{
+			Title: title, Condition: "음수 수량이 요청에 들어온다.", Impact: "계산된 결과의 부호가 바뀐다.",
+			Improvement: "입력 범위를 확인한다.", Counterpoint: "호출자가 먼저 입력을 제한할 수 있다.",
+			Evidence: []string{in.Scope.Excerpts[anchor].ID},
+		}}})
+	}
+	script["verify"] = func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[verifyInput](t, q)
+		caller := investigationOrder(in.Scope.Excerpts, callerPath)
+		other := investigationOrder(in.Scope.Excerpts, otherPath)
+		if len(in.Candidates) != 1 || caller != 1 || other <= caller {
+			t.Fatalf("the related context must move ahead of unrelated context: %+v", in.Scope.Excerpts)
+		}
+		promoted = in.Scope.Excerpts[caller]
+		if promoted.ID != prior.ID || !strings.Contains(promoted.Text, "if n < 0") ||
+			slices.ContainsFunc(in.Scope.Excerpts[caller+1:], func(e record.Excerpt) bool { return e.ID == prior.ID }) {
+			t.Fatalf("verifier should receive the existing caller once: prior=%+v promoted=%+v", prior, promoted)
+		}
+		return asJSON(map[string]any{"verifications": []any{verdict(in.Candidates[0].ID, "refuted", func(v map[string]any) {
+			v["counterevidence_ids"] = []string{promoted.ID}
+			v["invalid_conditions"] = []string{"요청 진입점은 음수 수량에서 반환한다."}
+		})}})
+	}
+	pinExampleSnapshot(t, &j)
+	published := sliceReportWithCaller(t, j, secretsStub{}, DefaultMaxCalls, &exampleIDs{n: 0x602},
+		&scriptedCaller{script: script})
+	accepted := false
+	for _, key := range filledSlots(t, j) {
+		name := "verify." + key
+		verified, err := record.Decode(mustRead(t, recordPath(j, name)), expectRecord(j, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.ContainsFunc(verified.Candidates, func(candidate record.Candidate) bool { return candidate.Title == title }) {
+			continue
+		}
+		accepted = verified.Accepted() && len(verified.Verifications) == 1 &&
+			verified.Verifications[0].Verdict == "refuted"
+	}
+	if !accepted {
+		t.Fatal("the worker did not accept the scripted verification")
+	}
+	index := slices.IndexFunc(published.Findings, func(f report.Finding) bool { return strings.HasSuffix(f.Title, title) })
+	if prior.ID == "" || promoted.ID == "" || index < 0 {
+		t.Fatal("the real slice verification did not reach the report")
+	}
+	finding := published.Findings[index]
+	if finding.Validation != report.ValidationRefuted || !slices.Equal(finding.CounterevidenceIDs, []string{prior.ID}) {
+		t.Fatalf("report rejected the accepted verification: validation=%s, limits=%v, provenance=%s/%s",
+			finding.Validation, finding.Limitations, promoted.Origin, promoted.Symbol)
+	}
+	if prior != promoted || prior.Origin != "context" || prior.Symbol != "" {
+		t.Fatalf("promoting the caller changed its upstream evidence metadata: prior=%+v promoted=%+v", prior, promoted)
 	}
 }

@@ -152,6 +152,16 @@ func (s *roleStage) verify() analysis.TaskResult {
 		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
 	}
 	s.rec.Limitations = addLim(s.rec.Limitations, lims...)
+	if len(extra) > 0 {
+		upstreamEvidence := catalogOf(withText)
+		for i := range extra {
+			// Prioritize matching context without changing the provenance
+			// of an excerpt already bound to an upstream record.
+			if original, ok := upstreamEvidence[extra[i].ID]; ok {
+				extra[i] = original
+			}
+		}
+	}
 	// The request must fit PromptBudget. Expansion, uncited context and
 	// contracts go first; then candidates are verified as a prefix (investigate
 	// before interpret) and the rest stay unreviewed with a limitation. Every

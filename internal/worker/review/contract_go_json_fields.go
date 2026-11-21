@@ -14,7 +14,10 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
-var goJSONPath = regexp.MustCompile(`^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*){0,2}$`)
+var (
+	goJSONPath  = regexp.MustCompile(`^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*){0,2}$`)
+	goJSONToken = regexp.MustCompile(`[A-Za-z0-9_$]+(?:[.-]+[A-Za-z0-9_$]+)*`)
+)
 
 type goJSONTrace struct {
 	contractIndex int
@@ -37,15 +40,24 @@ type goJSONSite struct {
 	value ast.Expr
 }
 
-// Exact wire names from code spans in both the accepted statement and its
-// citation. These select source positions without making claims about values.
+// The cited source marks wire names as code. Accepted statements can drop
+// Markdown formatting, so match whole case-sensitive ASCII paths there.
 func documentedGoJSONFields(out []string, statement, raw string) []string {
-	for _, code := range witnessCode.FindAllStringSubmatch(statement, 12) {
+	documented := map[string]bool{}
+	for _, code := range witnessCode.FindAllStringSubmatch(raw, -1) {
 		name := code[1]
+		if len(name) <= 64 && goJSONPath.MatchString(name) && name != "true" && name != "false" && name != "null" && name != "nil" {
+			documented[name] = true
+		}
+	}
+	if len(documented) == 0 {
+		return out
+	}
+	for _, name := range goJSONToken.FindAllString(statement, -1) {
 		if len(out) == 3 {
 			break
 		}
-		if len(name) <= 64 && goJSONPath.MatchString(name) && name != "true" && name != "false" && name != "null" && name != "nil" && !slices.Contains(out, name) && strings.Contains(raw, "`"+name+"`") {
+		if documented[name] && !slices.Contains(out, name) {
 			out = append(out, name)
 		}
 	}
@@ -136,7 +148,7 @@ func (s *roleStage) goJSONClaimTraces(idx *httpRouteIndex, q witnessQuery) goJSO
 		}
 		for _, d := range f.parsed.Decls {
 			fn, ok := d.(*ast.FuncDecl)
-			if !ok || fn.Body == nil || len(fn.Body.List) == 0 || fn.Type.Results == nil {
+			if !ok || fn.Body == nil || len(fn.Body.List) == 0 || fn.Type.Results.NumFields() == 0 {
 				continue
 			}
 			name := f.namedType(fn.Type.Results.List[0].Type)

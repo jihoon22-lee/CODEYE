@@ -30,19 +30,45 @@ func shipmentJSONSources() map[string]string {
 	}
 }
 
+func TestDocumentedGoJSONFieldsUseExactWireNamesFromCitation(t *testing.T) {
+	const raw = "| `parcel.rate_delta` | selected `draft` uses `true`, `false`, `null` or `nil` |\nordinary storage"
+	for _, tc := range []struct {
+		name, statement string
+		want            []string
+	}{
+		{"undecorated with Korean particles", "parcel.rate_delta는 계산 결과이고 draft가 표시된다.", []string{"parcel.rate_delta", "draft"}},
+		{"punctuation and code spans", "(`parcel.rate_delta`), draft.", []string{"parcel.rate_delta", "draft"}},
+		{"different case", "Parcel.rate_delta and DRAFT", nil},
+		{"extended fields", "new.parcel.rate_delta, parcel.rate_delta.more, parcel.rate_delta_next, parcel.rate_delta-debug, draft2, draft.name, draft--debug, context..draft", nil},
+		{"partial dotted path", "parcel, rate_delta", nil},
+		{"uncited prose and literals", "storage true false null nil", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := documentedGoJSONFields(nil, tc.statement, raw); !slices.Equal(got, tc.want) {
+				t.Fatalf("wire names = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDocumentedJSONFieldsReachBoundGoProducer(t *testing.T) {
 	for _, carrier := range []string{"rail", "ferry"} {
 		t.Run(carrier, func(t *testing.T) {
 			tree := shipmentJSONSources()
+			tree["shipping/produce.go"] = strings.Replace(tree["shipping/produce.go"], "func Prepare", "func reset() () { return }\n\nfunc Prepare", 1)
 			tree["shipping/select.go"] = strings.ReplaceAll(tree["shipping/select.go"], `"rail"`, fmt.Sprintf("%q", carrier))
 			for i := range 12 {
 				tree[fmt.Sprintf("shipping/other%02d.go", i)] = "package shipping\n"
 			}
 			j := treeJob(t, tree)
+			statement := shipmentJSONContract
+			if carrier == "ferry" {
+				statement = "delivery.carrier_id와 delivery.route_version은 배송 정보에 포함된다."
+			}
 			script := coverageScript(t)
 			script["documents"] = func(_ int, request opencode.Request) opencode.Reply {
 				in := decodeAs[docsInput](t, request)
-				return asJSON(docsOutput{Contracts: []record.Contract{{Statement: shipmentJSONContract, AppliesTo: ".", EvidenceIDs: []string{docID(in, "README.md")}}},
+				return asJSON(docsOutput{Contracts: []record.Contract{{Statement: statement, AppliesTo: ".", EvidenceIDs: []string{docID(in, "README.md")}}},
 					Conflicts: []record.Conflict{}, Questions: []record.Question{}, InstructionNotes: []record.InstructionNote{}})
 			}
 			script["investigate"] = func(_ int, request opencode.Request) opencode.Reply {
