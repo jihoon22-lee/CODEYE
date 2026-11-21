@@ -258,20 +258,6 @@
   font-size: .8rem;
 }
 
-.report-decision-coverage {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: .15rem .45rem;
-  margin: .9rem 0 0;
-  color: var(--report-muted);
-  font-size: .84rem;
-}
-
-.report-decision-coverage p {
-  margin: 0;
-}
-
 .report-decision-sources {
   display: flex;
   align-items: flex-start;

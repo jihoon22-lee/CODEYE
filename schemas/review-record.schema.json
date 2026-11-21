@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.codeye.invalid/v0.1/review-record.schema.json",
   "title": "CODEYE review stage record",
-  "description": "application/vnd.codeye.review+json. Version 0.2 records the original whole-run roles, 0.3 adds slice lineage, and 0.4 records a whole-run investigation with a validated probe or one contract followup. The Go decoder also checks snapshot evidence IDs, evidence kinds, scope, model text sizes and execution claims.",
+  "description": "application/vnd.codeye.review+json. Version 0.2 records the original whole-run roles, 0.3 adds slice lineage, 0.4 records a whole-run investigation with a validated probe or one contract followup, and 0.5 records selected workflow routes on accepted documents. The Go decoder also checks snapshot evidence IDs, evidence kinds, scope, model text sizes and execution claims.",
   "type": "object",
   "$ref": "#/$defs/record",
   "$defs": {
@@ -10,7 +10,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["schema_version", "pack", "snapshot_manifest_digest", "run_id", "attempt_id", "stage", "outcome", "upstream", "evidence", "observations", "limitations", "calls"],
       "properties": {
-        "schema_version": {"enum":["0.2","0.3","0.4"]},
+        "schema_version": {"enum":["0.2","0.3","0.4","0.5"]},
         "slice": {"type":"object","additionalProperties":false,"required":["key","modules"],"properties":{"key":{"type":"string","pattern":"^s(00[1-9]|0[1-8][0-9]|09[0-6])$"},"modules":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":{"type":"string","pattern":"^(cpp|go|javascript|python|rust):(\\.|[^:\\u0000-\\u001f]+)$"}}}},
         "pack": {"type":"object","additionalProperties":false,"required":["id","version"],"properties":{"id":{"$ref":"#/$defs/pack_id"},"version":{"$ref":"#/$defs/version"}}},
         "snapshot_manifest_digest": {"$ref":"#/$defs/digest"},
@@ -30,6 +30,7 @@
         "contract_comparisons": {"type": "array", "minItems": 1, "maxItems": 6, "items": {"type": "object", "additionalProperties": false, "required": ["contract_index", "applies_to", "status", "reason", "document_evidence_ids", "code_evidence_ids"], "properties": {"contract_index": {"type": "integer", "minimum": 1, "maximum": 6}, "applies_to": {"$ref": "#/$defs/scope_path"}, "status": {"enum": ["match", "partial", "mismatch", "unknown"]}, "reason": {"$ref": "#/$defs/text"}, "document_evidence_ids": {"$ref": "#/$defs/refs", "minItems": 1, "maxItems": 4}, "code_evidence_ids": {"$ref": "#/$defs/refs", "minItems": 0, "maxItems": 4}}}},
         "partial_support": {"type":"object","additionalProperties":false,"required":["matching","violating"],"properties":{"matching":{"$ref":"#/$defs/contract_condition_evidence"},"violating":{"$ref":"#/$defs/contract_condition_evidence"}}},
         "contract_probe": {"$ref":"#/$defs/contract_probe"},
+        "workflow_selections": {"type":"array","minItems":1,"maxItems":4,"uniqueItems":true,"items":{"$ref":"#/$defs/workflow_selection"}},
         "candidates": {"type":"array","minItems":1,"maxItems":6,"items":{"$ref":"#/$defs/candidate"}},
         "interpretation_limits": {"type":"array","minItems":1,"maxItems":3,"items":{"$ref":"#/$defs/interpretation_limit"}},
         "verifications": {"type":"array","minItems":1,"maxItems":6,"items":{"allOf":[{"$ref":"#/$defs/verification"},{"properties":{"candidate_id":{"$ref":"#/$defs/candidate_id"}}}]}},
@@ -46,6 +47,10 @@
          "else":{"not":{"required":["slice"]}}},
         {"if":{"properties":{"schema_version":{"const":"0.4"}}},
          "then":{"oneOf":[{"properties":{"stage":{"const":"contract"}}},{"required":["contract_probe"],"properties":{"stage":{"const":"investigate"},"outcome":{"const":"accepted"},"upstream":{"items":{"properties":{"source":{"enum":["review.environment","review.documents"]}}}}}}]}},
+        {"if":{"properties":{"schema_version":{"const":"0.5"}}},
+         "then":{"required":["contracts"],"properties":{"stage":{"const":"documents"},"outcome":{"const":"accepted"},"calls":{"$ref":"#/$defs/workflow_calls"}},
+                 "anyOf":[{"required":["workflow_selections"]},{"properties":{"calls":{"contains":{"required":["purpose"]}}}}]},
+         "else":{"not":{"required":["workflow_selections"]},"properties":{"calls":{"items":{"not":{"required":["purpose"]}}}}}},
         {"if":{"properties":{"outcome":{"const":"failed"}}},
          "then":{"required":["failure_reason"],"not":{"anyOf":[{"required":["environment_notes"]},{"required":["contracts"]},{"required":["conflicts"]},{"required":["questions"]},{"required":["instruction_notes"]},{"required":["interpretation_limits"]}]},"properties":{"verifications":{"items":{"properties":{"verdict":{"const":"unreviewed"}}}},"calls":{"items":{"properties":{"outcome":{"not":{"const":"accepted"}}}}}}},
          "else":{"not":{"required":["failure_reason"]}}},
@@ -134,6 +139,23 @@
         "literals":{"type":"array","maxItems":3,"uniqueItems":true,"items":{"$ref":"#/$defs/contract_literal"}}
       }
     },
+    "workflow_selection": {
+      "type":"object","additionalProperties":false,"required":["contract_index","route_digests"],
+      "properties":{
+        "contract_index":{"type":"integer","minimum":1,"maximum":6},
+        "route_digests":{"type":"array","minItems":1,"maxItems":4,"uniqueItems":true,"items":{"$ref":"#/$defs/digest"}}
+      }
+    },
+    "workflow_calls": {
+      "if":{"contains":{"required":["purpose"]}},
+      "then":{"oneOf":[
+        {"minItems":2,"maxItems":2,"prefixItems":[{"$ref":"#/$defs/accepted_primary_document_call"},{"required":["purpose"]}]},
+        {"minItems":3,"maxItems":3,"prefixItems":[
+          {"not":{"anyOf":[{"required":["purpose"]},{"properties":{"outcome":{"const":"accepted"}}}]}},
+          {"$ref":"#/$defs/accepted_primary_document_call"},{"required":["purpose"]}]}
+      ]}
+    },
+    "accepted_primary_document_call":{"not":{"required":["purpose"]},"properties":{"outcome":{"const":"accepted"}}},
     "package_reference": {
       "type":"object","additionalProperties":false,
       "required":["manifest_path","manifest_sha256","entry_path","entry_sha256","name","callable","export"],
@@ -229,7 +251,7 @@
       "type":"object","additionalProperties":false,
       "required":["role","model","opencode_version","pack_id","pack_version","pack_sha256","pack_files","request_sha256","request_bytes","usage","attempt","outcome","output_errors"],
       "properties": {
-        "role":{"$ref":"#/$defs/stage"},"model":{"type":"string","maxLength":160},"opencode_version":{"type":"string","maxLength":64},
+        "role":{"$ref":"#/$defs/stage"},"purpose":{"const":"workflow_selection"},"model":{"type":"string","maxLength":160},"opencode_version":{"type":"string","maxLength":64},
         "pack_id":{"$ref":"#/$defs/pack_id"},"pack_version":{"$ref":"#/$defs/version"},
         "pack_sha256":{"$ref":"#/$defs/digest"},"pack_files":{"type":"array","minItems":1,"maxItems":24,"uniqueItems":true,"items":{"$ref":"#/$defs/path"}},
         "request_sha256":{"oneOf":[{"$ref":"#/$defs/digest"},{"const":""}]},"request_bytes":{"type":"integer","minimum":0},"attempt":{"type":"integer","minimum":1,"maximum":3},

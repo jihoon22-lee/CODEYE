@@ -380,6 +380,7 @@ type corpusLinks struct {
 	witnessSource map[string]string
 	wholeWitness  map[string]record.Excerpt
 	partial       map[string]bool
+	workflow      []workflowLink
 }
 
 // codeCorpus selects code and test excerpts round-robin over the modules of
@@ -412,6 +413,17 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 		}
 		return err
 	}
+	workflow, missingWorkflow, workflowErr := s.selectedWorkflowRoutes(documents)
+	if s.ctx.Err() != nil {
+		return nil, corpusLinks{}, nil, s.ctx.Err()
+	}
+	if missingWorkflow || workflowErr != nil {
+		lims = addLim(lims, limWorkflowUnavailable)
+	}
+	links.workflow = workflow
+	for _, x := range workflowOverviewWindows(workflow) {
+		keep(x, x.End+1)
+	}
 	selected, err := s.contractWitnesses(g, documents)
 	if err != nil {
 		return nil, corpusLinks{}, nil, err
@@ -433,6 +445,9 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 	// Preserve a slot for a selected test and at least two ordinary files
 	// when exact Go traces consume more than the usual witness allowance.
 	witnessLimit := max(witnessMaxExcerpts, len(out)+1)
+	if len(workflow) > 0 {
+		witnessLimit = min(witnessLimit, roleMaxCodeFiles-2)
+	}
 	if len(out) > 0 {
 		var tests []contractWitness
 		for _, w := range selected.witnesses {

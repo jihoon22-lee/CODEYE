@@ -741,14 +741,15 @@ func renderMarkdownSections(r Report, digest string, l Locale) []byte {
 	}
 	mdHeader(p, r, v.view, l)
 	for _, s := range v.Sections {
+		mdSectionAnchor(p, s.ID)
 		p("## ", mdText(s.Title))
 		p()
+		if s.ID == "overview" {
+			mdDecision(p, decision, l)
+		}
 		for _, part := range s.Parts {
 			mdComparisonAnchor(p, decision, part.Anchor)
 			mdPart(p, part, l)
-		}
-		if s.ID == "overview" && (len(decision.ComparisonRows) != 0 || slices.ContainsFunc(decision.Sources, func(source sourceCitation) bool { return source.Example != nil })) {
-			mdDecision(p, decision, l)
 		}
 	}
 	p("## ", mdText(l.Label("section.appendix")))
@@ -916,7 +917,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{else}}<p>{{.L.Label "appendix.lead"}}</p>
 <h3>{{.L.Label "ai_review"}}</h3>
 <p>상태: <code data-field="ai_review">{{.R.Coverage.AIReview.Status}}</code> {{with .R.Coverage.AIReview.Reason}}<code>{{.}}</code>{{end}}</p>
-{{if .R.Coverage.ReviewCalls}}<ul>{{range .R.Coverage.ReviewCalls}}<li>모델 호출 <code>{{.Role}}</code> · <code>{{.Model}}</code> · OpenCode <code>{{.Version}}</code> · <code>{{.Outcome}}</code> · 지침{{if .PackID}} <code>{{.PackID}}@{{.PackVersion}}</code>{{end}} <code>{{.PackDigest}}</code></li>{{end}}</ul>{{end}}
+{{if .R.Coverage.ReviewCalls}}<ul>{{range .R.Coverage.ReviewCalls}}<li>모델 호출 <code>{{.Role}}</code>{{if .Purpose}} ({{$l.Label (printf "call.%s" .Purpose)}}){{end}} · <code>{{.Model}}</code> · OpenCode <code>{{.Version}}</code> · <code>{{.Outcome}}</code> · 지침{{if .PackID}} <code>{{.PackID}}@{{.PackVersion}}</code>{{end}} <code>{{.PackDigest}}</code></li>{{end}}</ul>{{end}}
 <h3>{{.L.Label "coverage"}}</h3>
 <ul>
 <li>scope: <code>{{.R.Coverage.ScopeMode}}</code></li>
@@ -989,10 +990,15 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{if .Sources}}<div class="report-decision-sources">{{range .Sources}}{{template "citation" .}}{{end}}</div>{{end}}
 {{if .Action}}<p class="report-decision-next"><strong>{{$l.Label "decision.priority_action"}}</strong> {{.Action.State}}{{if .Action.Title}} · {{.Action.Title}}{{end}}</p>
 <div class="report-decision-sources">{{template "citation" .Action.Source}}</div>{{end}}
+<div class="report-document-assessment">
+<div class="report-document-assessment-header"><strong>{{$l.Label "decision.document_assessment"}}</strong>
+{{if .ComparisonCounts}}<dl>{{range .ComparisonCounts}}<div><dt>{{.Label}}</dt><dd data-comparison-status="{{.Name}}">{{.Value}}</dd></div>{{end}}</dl>
+{{else}}<p>{{$l.Label "decision.no_document_assessment"}}</p>{{end}}</div>
+{{if .ComparisonExample}}<p class="report-document-assessment-example"><strong>{{$l.Label "decision.document_claim"}}</strong> {{range inlineCodeParts .ComparisonExample}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{end}}</p>{{end}}
+<a href="#{{or .ComparisonAnchor "documents"}}" class="btn btn-sm btn-ghost-primary report-card-action">{{$l.Label "decision.documents"}}{{reportIcon "chevron-right"}}</a></div>
 {{if .Glossary}}<details class="report-glossary"><summary>{{reportIcon "chevron-down"}} {{$l.Label "decision.glossary"}}</summary><dl>
 {{range .Glossary}}<div><dt>{{.Name}}</dt><dd>{{.Definition}}</dd></div>{{end}}
 </dl></details>{{end}}
-{{if or .Coverage .ComparisonAnchor}}<div class="report-decision-coverage">{{if .Coverage}}<p>{{.Coverage}}</p>{{end}}<a href="#{{or .ComparisonAnchor "documents"}}" class="btn btn-sm btn-ghost-primary report-card-action">{{$l.Label "decision.documents"}}{{reportIcon "chevron-right"}}</a></div>{{end}}
 </div>
 </div>
 {{end}}{{end}}

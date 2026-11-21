@@ -18,7 +18,7 @@ const (
 // PublicLimitations omits raw navigation telemetry from task and report gaps.
 func (r Record) PublicLimitations() []string {
 	private := func(code string) bool {
-		return code == LimNavigationNoChoice || code == LimNavigationChoiceInvalid
+		return code == LimNavigationNoChoice || code == LimNavigationChoiceInvalid || code == LimWorkflowSelectionInvalid
 	}
 	if !slices.ContainsFunc(r.Limitations, private) {
 		return r.Limitations

@@ -40,6 +40,7 @@ func TestCitedDocumentExamples(t *testing.T) {
 
 func TestDocumentExampleKeepsCitationAndExportPolicy(t *testing.T) {
 	r := storedExample(t, "../../examples/report.json")
+	r.CodeReview.FindingIDs, r.CodeReview.Strengths = nil, nil
 	c := r.Documents.Comparisons[0]
 	c.Status = "unknown"
 	c.Statement = "preview('raw') returns '<img src=x>'."

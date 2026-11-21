@@ -24,8 +24,9 @@ type contractReviewInput struct {
 	Contract record.Contract           `json:"contract"`
 	Prior    record.ContractComparison `json:"prior"`
 	Scope    struct {
-		Snapshot string           `json:"snapshot_manifest_digest"`
-		Excerpts []record.Excerpt `json:"excerpts"`
+		Snapshot       string                  `json:"snapshot_manifest_digest"`
+		Excerpts       []record.Excerpt        `json:"excerpts"`
+		WorkflowRoutes []workflowEvidenceInput `json:"workflow_routes,omitempty"`
 	} `json:"scope"`
 	Repair *outputRepair `json:"repair,omitempty"`
 }
@@ -87,6 +88,14 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 		return s.contractInputFailure(err)
 	}
 	contract := doc.Contracts[prior.ContractIndex-1]
+	selectedWorkflow, missingWorkflow, workflowErr := s.selectedWorkflowRoutes(doc)
+	if s.ctx.Err() != nil {
+		return s.contractInputFailure(s.ctx.Err())
+	}
+	if missingWorkflow || workflowErr != nil {
+		s.rec.Limitations = addLim(s.rec.Limitations, limWorkflowUnavailable)
+	}
+	workflow := workflowFollowupLinks(selectedWorkflow, prior)
 	keep := len(prior.DocumentEvidenceIDs)
 	documents := context[:keep]
 	named, err := s.contractNamedExcerpts(contract, prior.AppliesTo, documents)
@@ -116,6 +125,18 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 	for _, e := range documents {
 		add(contractExcerpt{excerpt: e})
 	}
+	for _, link := range workflow {
+		for _, e := range []record.Excerpt{link.route.Decision, link.route.DecisionCall, link.route.Handler, link.route.Registration} {
+			if e.ID != "" {
+				add(contractExcerpt{excerpt: e})
+			}
+		}
+	}
+	for _, link := range workflow {
+		if e := link.route.Test; e.ID != "" {
+			add(contractExcerpt{excerpt: e})
+		}
+	}
 	for _, e := range named {
 		add(contractExcerpt{excerpt: e})
 	}
@@ -144,6 +165,7 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 	}
 	if len(whole) > 0 {
 		in.Scope.Excerpts = append(slices.Clone(documents), whole[0].excerpt)
+		in.Scope.WorkflowRoutes = workflowEvidence(workflow, in.Scope.Excerpts)
 		minimum, err := marshal(in)
 		if err != nil {
 			return s.contractInputFailure(err)
@@ -171,6 +193,40 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 	if fresh < 0 {
 		return result(domain.TaskSkippedPolicy, domain.ReasonNoReviewScope)
 	}
+	instructions := s.instructions(contractOutput)
+	build := func(list []record.Excerpt) ([]byte, error) {
+		in.Scope.Excerpts = list
+		in.Scope.WorkflowRoutes = workflowEvidence(workflow, list)
+		b, err := marshal(in)
+		if err != nil || len(in.Scope.WorkflowRoutes) == 0 {
+			return b, err
+		}
+		if _, fits := s.fits(instructions, b, true); fits {
+			return b, nil
+		}
+		in.Scope.WorkflowRoutes = nil
+		return marshal(in)
+	}
+	if len(workflow) > 0 {
+		// A selected implementation may be larger than an ordinary probe.
+		// Keep the earliest fresh window that can fit with the promise.
+		minimum := append(slices.Clone(documents), record.Excerpt{})
+		fresh = slices.IndexFunc(pool[keep:], func(e contractExcerpt) bool {
+			if !validImplementation[e.excerpt.ID] {
+				return false
+			}
+			minimum[keep] = e.excerpt
+			b, err := build(minimum)
+			if err != nil {
+				return false
+			}
+			_, fits := s.fits(instructions, b, true)
+			return fits
+		})
+		if fresh < 0 {
+			return s.inputFailure(errTooLarge)
+		}
+	}
 	first := pool[keep+fresh]
 	copy(pool[keep+1:], pool[keep:keep+fresh])
 	pool[keep] = first
@@ -178,11 +234,7 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 	for _, e := range pool[:min(len(pool), maxContractExcerpts)] {
 		ordered = append(ordered, e.excerpt)
 	}
-	build := func(list []record.Excerpt) ([]byte, error) {
-		in.Scope.Excerpts = list
-		return marshal(in)
-	}
-	sent, trimmed, err := s.fitExcerpts(s.instructions(contractOutput), keep+1, ordered, build)
+	sent, trimmed, err := s.fitExcerpts(instructions, keep+1, ordered, build)
 	if err != nil {
 		return s.inputFailure(err)
 	}

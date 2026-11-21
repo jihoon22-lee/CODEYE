@@ -2,7 +2,7 @@
   "schema_version": "0.4",
   "pack": {
     "id": "review",
-    "version": "2.4.0"
+    "version": "2.5.1"
   },
   "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
   "run_id": "0195f3a0-0000-7000-8000-000000000025",
@@ -13,12 +13,12 @@
     {
       "source": "review.environment",
       "state": "accepted",
-      "sha256": "3c529fc6ffb8be9cf39980e5e538a71f6e23230dd443488b8586e436f6e3768e"
+      "sha256": "ca86553b63069d597995c780e37ad21435c0b0ac7cfc192fcc87c67ce1753d06"
     },
     {
       "source": "review.documents",
       "state": "accepted",
-      "sha256": "d4fec82d12e6e120ebd7de76b455e963927c381fcce403d4ed636412d0c3ab04"
+      "sha256": "6d11ae446efada02dd1925b7e564bad8a8bb9f06b35d4bf495050145d2940b6e"
     }
   ],
   "evidence": [
@@ -139,8 +139,8 @@
       "model": "fake/scripted",
       "opencode_version": "1.19.5",
       "pack_id": "review",
-      "pack_version": "2.4.0",
-      "pack_sha256": "7516ffcfb77d79827b786fe48f2e80cdb8bd6a4b13c47db257899cea04f59a10",
+      "pack_version": "2.5.1",
+      "pack_sha256": "7339584583a82b045e6f36d11e09bc3fb04a835eb2bc5ea16d8cc395ae144568",
       "pack_files": [
         "00-core.md",
         "domains.md",
@@ -148,8 +148,8 @@
         "languages/go.md",
         "pack.yaml"
       ],
-      "request_sha256": "1d1ce4f3b82a84c11608a96996208692a14b2393132fcbc644addd0022e93d9f",
-      "request_bytes": 16343,
+      "request_sha256": "71f6b2a5992db917803af3a345c7d4097c9a2da8a170bb1d47382ec54115147a",
+      "request_bytes": 16933,
       "usage": {
         "input": 4455,
         "output": 50

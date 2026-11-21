@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { parseAnalysisReport } from './analysisReport';
 import { ReportDocument } from './ReportPanel';
+import { ReportCalls } from './ReportParts';
 
 afterEach(cleanup);
 
@@ -63,6 +64,17 @@ function doc() {
   };
 }
 describe('published report', () => {
+  it('identifies a supplemental route call in the details', () => {
+    const input = doc();
+    const primary = { role: 'documents', model: 'sample/model', outcome: 'accepted', opencode_version: '1.0', pack_sha256: 'a'.repeat(64) };
+    const report = parseAnalysisReport({
+      ...input, coverage: { ...input.coverage, review_calls: [primary, { ...primary, purpose: 'workflow_selection' }] },
+    }, 'run1');
+    render(<ReportCalls report={report} />);
+    fireEvent.click(screen.getByText('모델 호출 기록'));
+    expect(screen.getByText(/HTTP 경로 보충 선택/)).toBeTruthy();
+  });
+
   it('shows structured gaps, evidence and the pinned revision with code-free export as the default', () => {
     const r = parseAnalysisReport(doc(), 'run1');
     const { container } = render(<ReportDocument report={r} />);

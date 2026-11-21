@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
@@ -79,6 +80,79 @@ func exampleStages(t *testing.T) (map[string]*taskState, Report) {
 	return states, Report{Inputs: Inputs{SnapshotID: "snap"}, Observations: obs}
 }
 
+func TestWorkflowReviewDecoderAndOlderBuilder(t *testing.T) {
+	body, err := os.ReadFile("../../examples/review/documents-workflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec record.Record
+	if err := json.Unmarshal(body, &rec); err != nil {
+		t.Fatal(err)
+	}
+	entries := map[string]string{}
+	for _, e := range rec.Evidence {
+		entries[e.Path] = e.SHA256
+	}
+	ctx := DecodeContext{RunID: rec.RunID, AttemptID: rec.AttemptID, Snapshot: SnapshotFacts{ManifestDigest: rec.Snapshot},
+		Task: TaskFacts{Key: "review.documents", Required: true}, Source: &SourceIndex{entries: entries}}
+	art := ArtifactRef{Role: "other", MediaType: record.MediaType}
+	d, ok := DefaultRegistry().lookup(art, body)
+	if !ok {
+		t.Fatal("new document record is unregistered")
+	}
+	result, err := d.Decode(ctx, art, body)
+	if err != nil || result.Review == nil || !result.Review.Accepted || len(result.Review.Record.WorkflowSelections) != 1 {
+		t.Fatalf("invalid workflow contribution: %+v (%v)", result, err)
+	}
+	ctx.Task.Key = "review.investigate"
+	if _, err := d.Decode(ctx, art, body); err == nil {
+		t.Fatal("workflow record accepted on the wrong task")
+	}
+	r := exampleReport(t)
+	r.Builder.Version = "13"
+	if err := ValidateReport(r); err != nil {
+		t.Fatalf("legacy document record invalid: %v", err)
+	}
+	i := slices.IndexFunc(r.Artifacts, func(a Artifact) bool {
+		return deref(a.TaskKey) == "review.documents" && a.MediaType == record.MediaType
+	})
+	if i < 0 {
+		t.Fatal("report example lacks document artifact")
+	}
+	name := d.Key().String()
+	oldDecoder := r.Artifacts[i].Decoder
+	r.Artifacts[i].Decoder = &name
+	if err := ValidateReport(r); err == nil {
+		t.Fatal("old builder claimed a new artifact decoder")
+	}
+	r.Builder.Version = BuilderVersion
+	if err := ValidateReport(r); err != nil {
+		t.Fatalf("current builder cannot read workflow artifact: %v", err)
+	}
+	docCall := slices.IndexFunc(r.Coverage.ReviewCalls, func(c ReviewCall) bool { return c.TaskKey == "review.documents" })
+	if docCall < 0 {
+		t.Fatal("missing primary documents call")
+	}
+	supplement := r.Coverage.ReviewCalls[docCall]
+	supplement.Purpose = record.WorkflowSelectionPurpose
+	r.Coverage.ReviewCalls = append(r.Coverage.ReviewCalls, supplement)
+	if err := ValidateReport(r); err != nil {
+		t.Fatalf("current builder cannot read workflow call: %v", err)
+	}
+	const label = "HTTP 경로 보충 선택"
+	if md := string(RenderMarkdownAt(r, strings.Repeat("0", 64), Korean, DetailFull)); !strings.Contains(md, label) {
+		t.Fatal("workflow call purpose is missing from Markdown details")
+	}
+	if html, err := RenderHTMLAt(r, strings.Repeat("0", 64), Korean, DetailFull); err != nil || !bytes.Contains(html, []byte(label)) {
+		t.Fatalf("workflow call purpose is missing from HTML details: %v", err)
+	}
+	r.Artifacts[i].Decoder = oldDecoder
+	r.Builder.Version = "13"
+	if err := ValidateReport(r); err == nil {
+		t.Fatal("old builder claimed a new purpose for a call")
+	}
+}
+
 func compose(states map[string]*taskState, r Report) (Report, AIReview, []string) {
 	lim := newSet()
 	composeReviews(&r, states, lim)
@@ -112,7 +186,7 @@ func TestRequiredRolesFromPlan(t *testing.T) {
 		t.Fatalf("calls %d exposed %v", len(r.Coverage.ReviewCalls), r.Coverage.LLMExposedFiles)
 	}
 	for _, c := range r.Coverage.ReviewCalls {
-		if c.PackID != "review" || c.PackVersion != "2.4.0" || len(c.PackDigest) != 64 {
+		if c.PackID != "review" || c.PackVersion != "2.5.1" || len(c.PackDigest) != 64 {
 			t.Fatalf("call %+v", c)
 		}
 	}

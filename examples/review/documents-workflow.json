@@ -1,0 +1,77 @@
+{
+  "schema_version": "0.5",
+  "pack": {
+    "id": "review",
+    "version": "2.5.1"
+  },
+  "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+  "run_id": "0195f3a0-0000-7000-8000-000000000025",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000026",
+  "stage": "documents",
+  "outcome": "accepted",
+  "upstream": [
+    {
+      "source": "docs.discover",
+      "state": "accepted",
+      "sha256": "abf21233ac7c425e5647389b7919d3bbe0172ef1dedf046ed870e00e831e1725"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_9628fe6491b0258ec01f730a",
+      "path": "README.md",
+      "sha256": "e82b5939af482dc73c0b1c40720d15b8ab83efa59bf349ae0015c7c29f1f91c0",
+      "start_line": 1,
+      "end_line": 3,
+      "kind": "document"
+    }
+  ],
+  "observations": [],
+  "contracts": [
+    {
+      "statement": "선반에서 내린 찻잔은 이후 목록에서 제외된다.",
+      "applies_to": ".",
+      "evidence_ids": [
+        "ev_9628fe6491b0258ec01f730a"
+      ]
+    }
+  ],
+  "workflow_selections": [
+    {
+      "contract_index": 1,
+      "route_digests": [
+        "3dca7cb474491fdce8c42d7d7d45897d295fd61affdfcb47e969e3e5aa785620",
+        "e961af4b06a2af179af91a45c9c77829776956298b486e50860aaa6cc224990f"
+      ]
+    }
+  ],
+  "limitations": [
+    "model_input_not_secret_screened"
+  ],
+  "calls": [
+    {
+      "role": "documents",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_id": "review",
+      "pack_version": "2.5.1",
+      "pack_sha256": "52b3eac8c59fb7bbf5acfeae310e65952a168358f8c32242218961d35d03d33c",
+      "pack_files": [
+        "00-core.md",
+        "documents.md",
+        "domains.md",
+        "languages/go.md",
+        "pack.yaml"
+      ],
+      "request_sha256": "a8ec80870796180848cbe5ce2b4526cf42c20b8236d7e8ad706b301d9edceb82",
+      "request_bytes": 15020,
+      "usage": {
+        "input": 724,
+        "output": 50
+      },
+      "attempt": 1,
+      "outcome": "accepted",
+      "output_errors": []
+    }
+  ]
+}

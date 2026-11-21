@@ -243,6 +243,8 @@ const docsEvidenceContract = ` Each evidence_ids list in contracts, questions, a
 
 const docsPackageContract = ` A contract about a shown API call may use a cited excerpt's verified package_reference.scope if the statement names its callable. Keep each other item inside its cited excerpts' applies_to.`
 
+const docsWorkflowContract = ` With input.workflow_routes, optionally add "workflow_selections":[{"contract_index":1,"route_ids":["R1"]}] to the same object. An index is the one-based position in this response's contracts. Copy only offered route IDs; use at most four in total. Route IDs are not evidence IDs.`
+
 type docInput struct {
 	EvidenceID       string           `json:"evidence_id"`
 	Path             string           `json:"path"`
@@ -279,13 +281,15 @@ type docNotRead struct {
 }
 
 type docsInput struct {
-	Snapshot    string              `json:"snapshot_manifest_digest"`
-	Documents   []docInput          `json:"documents"`
-	NotRead     []docNotRead        `json:"not_read"`
-	Modules     []envdoc.ModuleDocs `json:"modules"`
-	Overlapping []envdoc.Overlap    `json:"overlapping_guidance"`
-	Limitations []string            `json:"limitations"`
-	Repair      *outputRepair       `json:"repair,omitempty"`
+	Snapshot           string               `json:"snapshot_manifest_digest"`
+	Documents          []docInput           `json:"documents"`
+	NotRead            []docNotRead         `json:"not_read"`
+	Modules            []envdoc.ModuleDocs  `json:"modules"`
+	Overlapping        []envdoc.Overlap     `json:"overlapping_guidance"`
+	Limitations        []string             `json:"limitations"`
+	WorkflowRouteScope string               `json:"workflow_route_scope,omitempty"`
+	WorkflowRoutes     []workflowRouteInput `json:"workflow_routes,omitempty"`
+	Repair             *outputRepair        `json:"repair,omitempty"`
 }
 
 // shortenOptionalLists makes room for document evidence when the discovery
@@ -302,11 +306,12 @@ func (in *docsInput) shortenOptionalLists() bool {
 }
 
 type docsOutput struct {
-	Contracts        []record.Contract        `json:"contracts"`
-	Conflicts        []record.Conflict        `json:"conflicts"`
-	Questions        []record.Question        `json:"questions"`
-	InstructionNotes []record.InstructionNote `json:"instruction_notes"`
-	DocumentQuality  []record.DocumentQuality `json:"document_quality"`
+	Contracts          []record.Contract        `json:"contracts"`
+	Conflicts          []record.Conflict        `json:"conflicts"`
+	Questions          []record.Question        `json:"questions"`
+	InstructionNotes   []record.InstructionNote `json:"instruction_notes"`
+	DocumentQuality    []record.DocumentQuality `json:"document_quality"`
+	WorkflowSelections json.RawMessage          `json:"workflow_selections,omitempty"`
 }
 
 func (s *roleStage) documents() analysis.TaskResult {
@@ -411,6 +416,22 @@ func (s *roleStage) documents() analysis.TaskResult {
 		s.rec.Limitations = addLim(s.rec.Limitations, "document_excerpt_only")
 	}
 	in = withDocuments(sent)
+	routes, routeErr := s.workflowRoutes()
+	var offeredRoutes []workflowRoute
+	if routeErr != nil {
+		s.rec.Limitations = addLim(s.rec.Limitations, limWorkflowUnavailable)
+	}
+	if len(routes) > 0 {
+		routeInstructions := s.instructions(contract + docsWorkflowContract)
+		in, offeredRoutes = s.workflowDocumentInput(in, routes, routeInstructions)
+		if len(offeredRoutes) > 0 {
+			contract += docsWorkflowContract
+			instructions = routeInstructions
+		}
+	}
+	if slices.Contains(in.Limitations, "document_lists_shortened") {
+		s.rec.Limitations = addLim(s.rec.Limitations, "document_lists_shortened")
+	}
 	catalog := catalogOf(sent)
 	byHandle := make(map[string]string, len(sent))
 	reading := documentScopeInputs{input: make(map[string]docInput, len(sent)), catalog: catalog}
@@ -436,6 +457,7 @@ func (s *roleStage) documents() analysis.TaskResult {
 		return errs
 	}
 	var accepted docsOutput
+	var selectedWorkflow []record.WorkflowSelection
 	var issues []documentScopeIssue
 	var scopeRepair bool
 	scopeError := func(p string, ids []string, statement string, packageAllowed bool) string {
@@ -462,6 +484,7 @@ func (s *roleStage) documents() analysis.TaskResult {
 			return []string{"too_many_items"}
 		}
 		kept := docsOutput{InstructionNotes: out.InstructionNotes, DocumentQuality: out.DocumentQuality}
+		acceptedIndices := map[int]int{}
 		narrowed := false
 		checkScope := func(collection string, i int, scope *string, ids []string, statement string, packageAllowed bool) bool {
 			code := scopeError(*scope, ids, statement, packageAllowed)
@@ -484,6 +507,7 @@ func (s *roleStage) documents() analysis.TaskResult {
 			errs = addLim(errs, row...)
 			if len(row) == 0 && checkScope("contracts", i, &c.AppliesTo, c.EvidenceIDs, c.Statement, true) {
 				kept.Contracts = append(kept.Contracts, c)
+				acceptedIndices[i+1] = len(kept.Contracts)
 			}
 		}
 		for i, c := range out.Conflicts {
@@ -530,6 +554,11 @@ func (s *roleStage) documents() analysis.TaskResult {
 		}
 		if len(errs) == 0 {
 			accepted = kept
+			var invalid bool
+			selectedWorkflow, invalid = s.workflowSelections(out.WorkflowSelections, in.WorkflowRoutes, offeredRoutes, acceptedIndices, kept.Contracts)
+			if invalid {
+				s.rec.Limitations = addLim(s.rec.Limitations, record.LimWorkflowSelectionInvalid)
+			}
 			if narrowed {
 				s.rec.Limitations = addLim(s.rec.Limitations, record.LimDocumentPackageNarrowed)
 			}
@@ -545,6 +574,13 @@ func (s *roleStage) documents() analysis.TaskResult {
 	}
 	s.rec.Contracts, s.rec.Conflicts, s.rec.Questions, s.rec.InstructionNotes = accepted.Contracts, accepted.Conflicts, accepted.Questions, accepted.InstructionNotes
 	s.rec.DocumentQuality = accepted.DocumentQuality
+	if len(selectedWorkflow) == 0 {
+		selectedWorkflow = s.supplementWorkflowChoices(routes, accepted.Contracts)
+	}
+	if len(selectedWorkflow) > 0 {
+		s.rec.WorkflowSelections = selectedWorkflow
+		s.rec.Schema = record.SchemaVersionWorkflow
+	}
 	return s.finish()
 }
 
@@ -553,13 +589,14 @@ func (s *roleStage) documents() analysis.TaskResult {
 const investigateContract = `For this role use exactly {"candidates":[{"title":"...","condition":"concrete trigger","impact":"...","improvement":"...","counterpoint":"actual counterevidence or remaining uncertainty","evidence_ids":["ev_..."]}],"strengths":[{"title":"specific engineering practice","benefit":"what it prevents or enables","scope":"directory","evidence_ids":["ev_..."]}],"contract_comparisons":[{"contract_index":1,"applies_to":"directory","status":"match|partial|mismatch|unknown","reason":"specific link or missing evidence","document_evidence_ids":["ev_..."],"code_evidence_ids":["ev_..."]}]}. Return at most 4 candidates and 3 strengths. Cite scope.excerpts code or test for candidates and scoped implementation code for strengths. For whole_run only, compare up to 6 documents.contracts, using its 1-based index, scope or narrower directory and unmodified evidence_ids. Cite scoped implementation for match, partial or mismatch. Unknown may cite no code. Slices return no comparisons. Do not claim reproduction or provide attack instructions.`
 
 type investigateScope struct {
-	WholeRun    bool             `json:"whole_run"`
-	Snapshot    string           `json:"snapshot_manifest_digest"`
-	Modules     []string         `json:"modules"`
-	Excerpts    []record.Excerpt `json:"excerpts"`
-	DirectCalls []directCall     `json:"direct_calls,omitempty"`
-	MemberTest  *memberTestHint  `json:"member_test,omitempty"`
-	Limitations []string         `json:"limitations"`
+	WholeRun       bool                    `json:"whole_run"`
+	Snapshot       string                  `json:"snapshot_manifest_digest"`
+	Modules        []string                `json:"modules"`
+	Excerpts       []record.Excerpt        `json:"excerpts"`
+	DirectCalls    []directCall            `json:"direct_calls,omitempty"`
+	MemberTest     *memberTestHint         `json:"member_test,omitempty"`
+	WorkflowRoutes []workflowEvidenceInput `json:"workflow_routes,omitempty"`
+	Limitations    []string                `json:"limitations"`
 }
 
 func (scope investigateScope) withExcerpts(list []record.Excerpt, links corpusLinks) investigateScope {
@@ -575,6 +612,7 @@ func (scope investigateScope) withExcerpts(list []record.Excerpt, links corpusLi
 		}
 	}
 	scope.MemberTest = links.member.hint(list)
+	scope.WorkflowRoutes = workflowEvidence(links.workflow, list)
 	return scope
 }
 
@@ -748,7 +786,11 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	contract := investigateContract
 	var navigation []contractNavigationCandidate
 	if s.slice == nil && uDoc.State == record.UpstreamAccepted {
-		navigation = s.fitNavigation(&in, s.navigationCatalog(docRec, sent, links.witnessSource))
+		locations := s.navigationCatalog(docRec, sent, links.witnessSource)
+		if len(links.workflow) > 0 {
+			locations = mergeWorkflowNavigation(s.workflowNavigation(docRec, links.workflow, sent), locations)
+		}
+		navigation = s.fitNavigation(&in, locations)
 		if len(navigation) > 0 {
 			contract += investigateProbeContract
 		}

@@ -231,7 +231,7 @@ func TestUnknownComparisonKeepsItsEvidenceAndStatus(t *testing.T) {
 		len(rows[1].Sources) != len(c.CodeEvidenceIDs) || len(d.Sources) != 0 || d.Next != "" {
 		t.Fatalf("the decision upgraded, duplicated or lost its unresolved comparison: %+v", d)
 	}
-	if d.Coverage != tf(Korean, "decision.comparison_all_unknown", 3) {
+	if len(d.ComparisonCounts) != 1 || d.ComparisonCounts[0].Name != "unknown" || d.ComparisonCounts[0].Value != "3" {
 		t.Fatal("document comparisons lost their overall unknown count")
 	}
 }
@@ -369,8 +369,90 @@ func TestDocumentOnlyDecisionRemainsUnverifiedInBothExports(t *testing.T) {
 	}
 }
 
+func TestProjectOpeningLeadsWithProductEvidenceWhenComparisonsAreUnknown(t *testing.T) {
+	r := storedExample(t, "../../examples/report.json")
+	docs, review := r.Documents, r.CodeReview
+	row := docs.Comparisons[0]
+	row.Status, row.CodeEvidenceIDs = "unknown", nil
+	row.Statement = "사용자는 이전의 알림을 다시 열 수 있다."
+	row.Reason = "알림을 다시 여는 진입점은 확인하지 못했다."
+	other := row
+	other.Statement = "지원 도구는 요청 전 환경을 확인한다."
+	fixture := row
+	fixture.AppliesTo = "fixtures"
+	fixture.Statement = "시험에서만 사용하는 동작"
+	docs.Comparisons = []DocComparison{row, other, fixture}
+	review.FindingIDs = nil
+	proof := review.Strengths[0]
+	review.Evidence = append(review.Evidence, SectionEvidence{
+		ID: "qa", Kind: "code", Path: "scripts/qa-reports.sh", StartLine: 1, EndLine: 4,
+	})
+	review.Strengths = append([]record.Strength{{
+		Title: "시험 준비", Benefit: "시험용 보고서를 생성한다.", Scope: ".", EvidenceIDs: []string{"qa"},
+	}}, review.Strengths...)
+	overview := overviewOf(r)
+	r.Overview = &overview
+
+	for _, include := range []bool{true, false} {
+		projection := Project(r, include)
+		d := newSummaryView(projection, "0", Korean).Decision
+		if d.State != Korean.Label("decision.preserve") || d.ComparisonAnchor != comparisonAnchor(0) ||
+			len(d.ComparisonCounts) != 1 || d.ComparisonCounts[0].Value != "2" || len(d.Sources) != 1 || len(d.ComparisonRows) != 0 {
+			t.Fatalf("include_code=%t: unexpected opening %+v", include, d)
+		}
+		if include && (d.Title != proof.Title || d.Reason != proof.Benefit || d.ComparisonExample != row.Statement) ||
+			!include && (d.Title != Korean.Label("decision.omitted") || d.Reason != "" || d.ComparisonExample != "") {
+			t.Fatalf("include_code=%t: unexpected visible prose %+v", include, d)
+		}
+		for _, detail := range []string{DetailSummary, DetailFull} {
+			h, err := RenderHTMLAt(projection, "0", Korean, detail)
+			if err != nil {
+				t.Fatal(err)
+			}
+			html := string(h)
+			md := string(RenderMarkdownAt(projection, "0", Korean, detail))
+			if !strings.Contains(html, `data-comparison-status="unknown">2`) ||
+				!strings.Contains(html, `href="#document-comparison-1"`) ||
+				!strings.Contains(html, `id="document-comparison-1"`) ||
+				!strings.Contains(md, "**문서 동작 대조** · 미확인 2") ||
+				!strings.Contains(md, "[문서 분석에서 보기](#document-comparison-1)") ||
+				!strings.Contains(md, `<a id="document-comparison-1"></a>`) {
+				t.Fatalf("%s export lost status counts or the detail destination", detail)
+			}
+			for _, out := range []string{html, md} {
+				opening, _, _ := strings.Cut(out, Korean.Label("opening.coverage_details"))
+				contains := func(s string) bool { return strings.Contains(opening, s) || strings.Contains(opening, mdText(s)) }
+				if contains(proof.Title) != include || contains(proof.Benefit) != include || contains(row.Statement) != include {
+					t.Fatalf("%s export exposed or hid the wrong prose (include_code=%t)", detail, include)
+				}
+			}
+		}
+	}
+}
+
+func TestStrengthOpeningKeepsSharedEvidenceWithoutRepeatingItsTitle(t *testing.T) {
+	r := storedExample(t, "../../examples/report.json")
+	r.Documents.Comparisons, r.CodeReview.FindingIDs = nil, nil
+	proof := &r.CodeReview.Strengths[0]
+	proof.Title, proof.Benefit = "재시도 중단", "재시도  중단."
+	e := *bestProductEvidence(proof.EvidenceIDs, r.CodeReview.Evidence, "code")
+	wider := e
+	wider.ID, wider.EndLine = "wider", e.EndLine+2
+	r.CodeReview.Evidence = append(r.CodeReview.Evidence, wider)
+	r.CodeReview.Strengths = append(r.CodeReview.Strengths, record.Strength{
+		Title: "재시도 제한", Benefit: "오류가 이어지면 요청 횟수를 제한한다.", EvidenceIDs: []string{wider.ID},
+	})
+	d := newSummaryView(r, "0", Korean).Decision
+	if d.Title != tf(Korean, "decision.related", proof.Title, r.CodeReview.Strengths[1].Title) ||
+		d.Reason != r.CodeReview.Strengths[1].Benefit || len(d.Sources) != 1 ||
+		d.Sources[0].Location != wider.Path+":"+itoa(wider.StartLine)+"-"+itoa(wider.EndLine) {
+		t.Fatalf("related strength lost its context, removed the useful effect or repeated its title: %+v", d)
+	}
+}
+
 func TestUnknownComparisonRowsEscapeTextAndKeepInlineCode(t *testing.T) {
 	r := storedExample(t, "../../examples/report.json")
+	r.CodeReview.FindingIDs, r.CodeReview.Strengths = nil, nil
 	c := r.Documents.Comparisons[0]
 	c.Status = "unknown"
 	c.Statement = "설명서는 `Read(path)` 호출을 설명한다. <img src=x>"
@@ -424,7 +506,7 @@ func TestRelatedConfirmedControlAndPendingBehaviorHaveSeparateRanges(t *testing.
 	}}
 	v := secView{view: view{R: r, L: Korean}}
 	d := v.projectDecision()
-	if d.Title != r.CodeReview.Strengths[2].Benefit || d.Boundary != finding.Title || d.Reason != "" ||
+	if d.Title != r.CodeReview.Strengths[2].Title || d.Boundary != finding.Title || d.Reason != r.CodeReview.Strengths[2].Benefit ||
 		d.Next != finding.Verification[1] || len(d.Sources) != 2 ||
 		d.Sources[0].Location != "backup.py:1-50" || d.Sources[1].Location != "backup.py:53-73" {
 		t.Fatalf("the established behavior and pending boundary were conflated: %+v", d)

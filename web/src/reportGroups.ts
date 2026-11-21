@@ -145,8 +145,8 @@ export function orderFindings(findings: Finding[]): Finding[] {
 export function secondaryReviewPath(path: string): boolean {
   const segments = path.toLowerCase().split('/');
   const file = segments.pop() ?? '';
-  return secondaryPath(path) || segments.some(dir => ['test', 'tests', '__tests__', 'spec', 'specs', 'fuzz', 'fuzzer', 'fuzzers', 'fuzzing'].includes(dir)) ||
-    /_test\.(go|py|rs)$|\.(test|spec)\.(js|jsx|ts|tsx|mjs|cjs|mts|cts)$|^test_.*\.py$/.test(file);
+  return secondaryPath(path) || segments.some(dir => ['test', 'tests', '__tests__', 'spec', 'specs', 'e2e', 'integration-tests', 'unit-tests', 'fuzz', 'fuzzer', 'fuzzers', 'fuzzing'].includes(dir)) ||
+    /_test\.(go|py|rs)$|\.(test|spec)\.(js|jsx|ts|tsx|mjs|cjs|mts|cts)$|^test_.*\.py$|^(test|qa)[_-].*\.(sh|bash)$/.test(file);
 }
 
 export function secondaryReviewScope(scope: string): boolean {
@@ -271,24 +271,33 @@ export function projectReadings(report: AnalysisReport, sections: Sections) {
   const { documents, codeReview } = sections;
   const cites = (catalog: Citation[], refs: string[], kind: 'document' | 'code') =>
     catalog.some(c => refs.includes(c.id) && primaryCitation(c, kind));
-  const hasComparisonEvidence = (row: typeof documents.comparisons[number]) =>
-    cites(documents.citations, row.documentRefs, 'document') && cites(documents.citations, row.codeRefs, 'code');
+  const productRows = documents.comparisons.filter(row => row.statement.trim() && !secondaryReviewScope(row.scope) &&
+    cites(documents.citations, row.documentRefs, 'document'));
+  const hasProductCode = (row: typeof documents.comparisons[number]) => cites(documents.citations, row.codeRefs, 'code');
+  const hasAdditionalCode = (row: typeof documents.comparisons[number]) =>
+    Boolean(row.additional && cites(documents.citations, row.additional.codeRefs, 'code'));
+  const comparisonCounts: { status: string; count: number }[] = [];
   const comparisons: Sections['documents']['comparisons'] = [];
-  for (const status of ['mismatch', 'partial', 'match']) {
-    const rows = documents.comparisons.filter(row => row.status === status && hasComparisonEvidence(row));
-    comparisons.push(...rows.sort((a, b) => Number(Boolean(b.followup)) - Number(Boolean(a.followup))).slice(0, 2));
+  let unresolvedComparison: typeof documents.comparisons[number] | undefined;
+  let exampleComparison: typeof documents.comparisons[number] | undefined;
+  for (const status of ['mismatch', 'partial', 'match', 'unknown']) {
+    const rows = productRows.filter(row => row.status === status && (status === 'unknown' || hasProductCode(row)));
+    if (rows.length === 0) continue;
+    comparisonCounts.push({ status, count: rows.length });
+    if (status !== 'unknown') {
+      comparisons.push(...rows.sort((a, b) => Number(Boolean(b.followup)) - Number(Boolean(a.followup))).slice(0, 2));
+    } else if (comparisons.length === 0) {
+      const observations = rows.filter(hasAdditionalCode);
+      const cited = rows.filter(hasProductCode);
+      const tied = observations.length > 0 ? observations : cited.length > 0 ? cited : rows;
+      exampleComparison = tied[0];
+      unresolvedComparison = report.includesCode === false ? tied[0] : questionComparison(documents, tied);
+    }
   }
-  const unknownRows = comparisons.length === 0 ? documents.comparisons.filter(row => row.status === 'unknown' && row.statement.trim() &&
-    cites(documents.citations, row.documentRefs, 'document')) : [];
-  const observations = unknownRows.filter(row => row.additional && cites(documents.citations, row.additional.codeRefs, 'code'));
-  const cited = unknownRows.filter(hasComparisonEvidence);
-  const tied = observations.length > 0 ? observations : cited.length > 0 ? cited : unknownRows;
-  const preferredUnknown = report.includesCode === false ? tied[0] : questionComparison(documents, tied);
-  const uncertainComparison = observations.length + cited.length > 0 ? preferredUnknown : undefined;
-  const strengths = codeReview.strengths.filter(row => cites(codeReview.citations, row.refs, 'code'));
+  const strengths = codeReview.strengths.filter(row => row.title.trim() && row.benefit.trim() && cites(codeReview.citations, row.refs, 'code'));
 
   let diagnostic: Observation | undefined;
-  if (!uncertainComparison && actions.length + comparisons.length + strengths.length + followups.length === 0) {
+  if (!unresolvedComparison && actions.length + comparisons.length + strengths.length + followups.length === 0) {
     const toolIDs = new Set(sections.staticAnalysis.languages.flatMap(lang => lang.tools)
       .filter(tool => (tool.purpose ?? 'diagnostics') === 'diagnostics').flatMap(tool => tool.observations));
     diagnostic = report.observations.find(o => {
@@ -297,8 +306,8 @@ export function projectReadings(report: AnalysisReport, sections: Sections) {
         loc && loc.path && loc.start > 0 && loc.end >= loc.start && !secondaryReviewPath(loc.path);
     });
   }
-  const documentedBehavior = uncertainComparison ? undefined : preferredUnknown;
-  return { actions: actions.slice(0, 3), comparisons: comparisons.slice(0, 3), uncertainComparison, documentedBehavior, strengths, followups: followups.slice(0, 2), diagnostic };
+  return { actions: actions.slice(0, 3), comparisons: comparisons.slice(0, 3), unresolvedComparison, exampleComparison,
+    comparisonCounts, strengths, followups: followups.slice(0, 2), diagnostic };
 }
 
 // moduleSecondary: the ledger row's class, or for an earlier builder the path rule.

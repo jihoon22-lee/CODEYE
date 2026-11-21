@@ -339,7 +339,7 @@ export function ReportCalls({ report }: { report: AnalysisReport }) {
       <ul>
         {report.calls.map((c, i) => (
           <li key={i}>
-            {label(t.roles, c.role)} · {c.model || t.unknown} · OpenCode {c.version || t.unknown} · {label(t.outcomes, c.outcome)} · {t.pack} <code>{c.pack.slice(0, 12)}</code>
+            {label(t.roles, c.role)}{c.purpose ? ` (${label(t.callPurposes, c.purpose)})` : ''} · {c.model || t.unknown} · OpenCode {c.version || t.unknown} · {label(t.outcomes, c.outcome)} · {t.pack} <code>{c.pack.slice(0, 12)}</code>
           </li>
         ))}
       </ul>

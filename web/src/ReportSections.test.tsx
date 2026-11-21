@@ -293,7 +293,12 @@ describe('analysis sections', () => {
     doc.documents.evidence.push(newEvidence);
     const refs = [newEvidence.id, priorEvidence.id];
     row.additional_observation = { reason: newReason, code_evidence_ids: refs };
-    const parse = () => parseAnalysisReport(doc, doc.run_id);
+    const parse = () => {
+      const report = parseAnalysisReport(doc, doc.run_id);
+      report.sections!.codeReview.findings = [];
+      report.sections!.codeReview.strengths = [];
+      return report;
+    };
     const { rerender } = render(<ReportDocument report={parse()} />);
     const opening = within(screen.getByRole('region', { name: t.reading.documentComparison }));
     expect(opening.getByText(t.reading.comparisonStatus.unknown)).toBeTruthy();
@@ -304,7 +309,7 @@ describe('analysis sections', () => {
     ]);
     expect(opening.queryByText(priorReason)).toBeNull();
     expect(opening.queryByText(t.reading.followedContract)).toBeNull();
-    expect(opening.getByText(t.reading.unknownContracts(doc.documents.comparisons.length, doc.documents.comparisons.length))).toBeTruthy();
+    expect(opening.getByText(t.reading.comparisonCount.unknown).nextElementSibling?.textContent).toBe(String(doc.documents.comparisons.length));
     fireEvent.click(opening.getByRole('button', { name: t.reading.openDocumentAnalysis }));
     const detail = within(screen.getByRole('tabpanel', { name: t.sections.titles.documents }));
     expect(detail.getByText(priorReason)).toBeTruthy();
@@ -369,7 +374,9 @@ describe('analysis sections', () => {
     const doc = example('report.json');
     doc.project = { name: 'Queue' };
     const report = parseAnalysisReport(doc, doc.run_id);
-    const { documents } = report.sections!;
+    const { documents, codeReview } = report.sections!;
+    codeReview.findings = [];
+    codeReview.strengths = [];
     const base = documents.comparisons.find(row => row.documentRefs.length > 0)!;
     const shared = base.documentRefs[0];
     const row = (statement: string) => ({ ...base, statement, scope: '.', status: 'unknown', codeRefs: [], followup: undefined });
@@ -466,7 +473,9 @@ describe('analysis sections', () => {
     const doc = example('report.json');
     doc.project = { name: 'Documentation' };
     const report = parseAnalysisReport(doc, doc.run_id);
-    const { documents } = report.sections!;
+    const { documents, codeReview } = report.sections!;
+    codeReview.findings = [];
+    codeReview.strengths = [];
     const base = documents.comparisons.find(row => row.documentRefs.length > 0)!;
     documents.comparisons = [{ ...base, status: 'unknown', codeRefs: [],
       statement: '설명서는 `Read(path)` 호출을 설명한다. <img src=x>',
@@ -482,11 +491,78 @@ describe('analysis sections', () => {
     expect(judgment.querySelectorAll('img, script')).toHaveLength(0);
   });
 
+  it('leads with a product behavior and keeps all unknown comparisons in a compact assessment', () => {
+    const doc = example('report.json');
+    doc.project = { name: 'Notifications' };
+    const report = parseAnalysisReport(doc, doc.run_id);
+    const { documents, codeReview } = report.sections!;
+    const base = documents.comparisons.find(row => row.documentRefs.length > 0)!;
+    const productRow = { ...base, status: 'unknown', statement: '이전에 받은 알림을 다시 열 수 있다.', codeRefs: [] };
+    const productProof = codeReview.strengths[0];
+    documents.comparisons = [
+      productRow,
+      { ...productRow, statement: '지원 도구는 요청 전 환경을 확인한다.' },
+      { ...productRow, statement: '시험 보고서를 만든다.', scope: 'fixtures' },
+    ];
+    codeReview.findings = [];
+    codeReview.citations = [
+      { id: 'qa', kind: 'code', path: 'scripts/qa-reports.sh', line: 1, end: 2, excerpt: null },
+      ...codeReview.citations,
+    ];
+    codeReview.strengths = [
+      { title: '시험 준비', benefit: '시험용 보고서를 생성한다.', scope: '.', refs: ['qa'] },
+      productProof,
+    ];
+    const { rerender } = render(<ReportDocument report={report} />);
+    const opening = within(screen.getByRole('region', { name: productProof.title }));
+    expect(opening.getByText(t.reading.recordedStrength)).toBeTruthy();
+    expect(opening.getByText(productProof.benefit)).toBeTruthy();
+    expect(opening.getByText(t.reading.comparisonCount.unknown).nextElementSibling?.textContent).toBe('2');
+    expect(opening.getByText(productRow.statement, { exact: false })).toBeTruthy();
+    expect(opening.queryByText('시험용 보고서를 생성한다.')).toBeNull();
+    expect(opening.queryByText(documents.comparisons[1].statement)).toBeNull();
+
+    fireEvent.click(opening.getByRole('button', { name: t.reading.openDocumentAnalysis }));
+    expect(document.activeElement?.closest('li')?.textContent).toContain(productRow.statement);
+    fireEvent.click(screen.getByRole('tab', { name: t.sections.overview }));
+
+    rerender(<ReportDocument report={{ ...report, includesCode: false }} />);
+    const codeFree = within(screen.getByRole('region', { name: t.reading.omitted }));
+    expect(codeFree.getByText(t.reading.comparisonCount.unknown).nextElementSibling?.textContent).toBe('2');
+    expect(codeFree.queryByText(productProof.title)).toBeNull();
+    expect(codeFree.queryByText(productProof.benefit)).toBeNull();
+    expect(codeFree.queryByText(productRow.statement, { exact: false })).toBeNull();
+  });
+
+  it('retains a related strength and its wider source without repeating a heading as its benefit', () => {
+    const doc = example('report.json');
+    doc.project = { name: 'Requests' };
+    const report = parseAnalysisReport(doc, doc.run_id);
+    const { documents, codeReview } = report.sections!;
+    documents.comparisons = [];
+    codeReview.findings = [];
+    const proof = codeReview.strengths[0];
+    const first = codeReview.citations.find(c => proof.refs.includes(c.id) && c.kind === 'code')!;
+    const wider = { ...first, id: 'wider', end: first.end + 2, excerpt: null };
+    const title = '재시도 중단';
+    const related = { ...proof, title: '재시도 제한', benefit: '오류가 이어지면 요청 횟수를 제한한다.', refs: [wider.id] };
+    codeReview.citations.push(wider);
+    codeReview.strengths = [{ ...proof, title, benefit: '재시도  중단.' }, related];
+
+    render(<ReportDocument report={report} />);
+    const opening = within(screen.getByRole('region', { name: t.reading.relatedStrengths(title, related.title) }));
+    expect(opening.getByText(related.benefit)).toBeTruthy();
+    expect(opening.queryByText('재시도 중단.')).toBeNull();
+    expect(opening.getByText(`${wider.path}:${wider.line}–${wider.end}`)).toBeTruthy();
+  });
+
   it('shows one literal document example with its source and omits it from code-free or older reports', () => {
     const doc = example('report.json');
     doc.project = { name: 'Examples' };
     const report = parseAnalysisReport(doc, doc.run_id);
-    const { documents } = report.sections!;
+    const { documents, codeReview } = report.sections!;
+    codeReview.findings = [];
+    codeReview.strengths = [];
     const first = documents.comparisons[0];
     const citation = documents.citations.find(c => first.documentRefs.includes(c.id))!;
     citation.excerpt = { start: 1, end: 4, text: '```js\npreview("raw");\n//=> "<img src=x>"\n```' };
@@ -672,13 +748,14 @@ describe('analysis sections', () => {
     render(<ReportDocument report={report} />);
 
     const overview = screen.getByRole('tabpanel', { name: t.sections.overview });
-    const judgment = within(overview).getByRole('region', { name: codeReview.strengths[2].benefit });
+    const judgment = within(overview).getByRole('region', { name: codeReview.strengths[2].title });
     expect(within(judgment).getByText(t.reading.recordedStrength)).toBeTruthy();
+    expect(within(judgment).getByText(codeReview.strengths[2].benefit)).toBeTruthy();
     expect(within(judgment).getByText(t.reading.unresolvedBehavior)).toBeTruthy();
     expect(judgment.textContent).toContain(pending.title);
     expect(judgment.textContent).toContain(pending.verification[1]);
     expect(judgment.textContent).not.toContain(pending.verification[0]);
-    expect(within(judgment).getByText(t.reading.unknownContracts(1, 1))).toBeTruthy();
+    expect(within(judgment).getByText(t.reading.noDocumentAssessment)).toBeTruthy();
     expect(within(judgment).queryByText(codeReview.strengths[0].benefit)).toBeNull();
     expect(within(judgment).queryByText(codeReview.strengths[1].benefit)).toBeNull();
     const confirmed = within(judgment).getByRole('link', { name: new RegExp(t.reading.confirmedCode) });

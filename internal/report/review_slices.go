@@ -425,7 +425,15 @@ func validateLedger(r Report) error {
 	}
 	n, _ := strconv.Atoi(r.Builder.Version)
 	_, planned := tasks[record.TaskScope]
+	workflow := false
 	for _, c := range r.Coverage.ReviewCalls {
+		if c.Purpose != "" {
+			if workflow || n < WorkflowReviewSince || c.Purpose != record.WorkflowSelectionPurpose ||
+				c.Role != record.StageDocuments || c.TaskKey != "review.documents" {
+				return invalidf("HTTP route selection call lacks its document task or builder")
+			}
+			workflow = true
+		}
 		if c.Role == record.StageContract &&
 			(n < ContractReviewSince || c.TaskKey != record.TaskContract || tasks[c.TaskKey].RequiredForVerdict) {
 			return invalidf("contract review call lacks an optional task")

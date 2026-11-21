@@ -249,6 +249,14 @@ TC-270의 긴 문서 시험은 첫 발췌와 뒤쪽 API 절 사이의 본문, �
 
 TC-270은 여러 모듈의 부가 목록으로 요청 한도가 부족한 프로젝트에서도 대표 README, 긴 제품 요구사항의 뒤쪽 사용자 흐름과 별도 안내의 원문을 함께 보내는지 확인한다. 지역 안내의 적용 디렉터리와 발췌 줄을 보존하고, 상한을 넘는 파일의 사유와 발췌·부가 목록의 제한을 기록한다. 문서 탐색 예산과 원래 모듈 연결은 유지한다(`TestDocumentRequestPreservesDistinctProductEvidenceUnderMetadataPressure`). 예제와 합성 입력이 많을 때는 대표 README에서 링크한 예제와 남은 제품 본문을 미연결 합성 입력보다 먼저 보낸다. 부차 경로만 범위에 든 경우에도 실제 안내를 보낸다(`TestDocumentSelectionFavorsProductTextOverUnlinkedFixtures`).
 
+TC-271은 여러 모듈의 Go HTTP 서비스에서 문서에 나온 변경과 이후 조회에 해당하는 경로를 함께 고른다. 문서 요청에 원문과 제한된 경로 선택지만 넣고, 선택을 수락한 뒤 전체 조사에 실제 처리기와 등록부를 보낸다. 거짓 경로 ID와 미선택은 문서 결과를 보존한다. 다른 attempt의 기록, 범위 밖·보류·부차 소스와 모호한 등록을 쓰지 않는다. 아직 읽지 않은 구현이 있는 경우 기존 후속 검토에서 실제 근거를 다시 읽는다. 생성기 13의 보고서는 계속 읽고 새 경로 선택 decoder는 생성기 14부터 쓴다(`TestWorkflowSelectionsReachReview`, `TestWorkflowContractFollowupReadsSelectedImplementation`, `TestWorkflowReviewDecoderAndOlderBuilder`, 경로 탐색 시험, `validate_bundle.py`). REQ-005,009,010,011,018,027과 NFR-006,008에 연결한다.
+
+TC-271은 긴 HTTP 헬퍼의 뒤쪽에서 응답과 앞선 읽기·오류 처리를 같은 한도 내 발췌에 담는지 확인한다. 짧은 헬퍼, 앞쪽에 이미 응답이 있는 헬퍼, 응답 후보가 여러 개이거나 다른 응답 객체·패키지를 사용하거나 바이트 한도를 넘는 헬퍼도 검증한다. 고정한 소스에서 같은 발췌 ID와 줄 범위를 다시 읽을 수 있어야 한다(`TestGoHTTPDecisionWindowsReadResponseAndItsPrecedingStatements`).
+
+TC-271의 보충 요청 시험은 유효한 첫 선택, 보충 응답의 유효 선택·빈 선택·허위 ID·거절·시간 초과·작업공간 오류, 코어 호출 예산이 남지 않은 실행을 포함한다. 최초 문서 응답을 보존하고, 실제 보충 호출만 일반 문서 응답과 구분해 장부에 센다(`TestSupplementalWorkflowChoices`).
+
+TC-271의 HTTP 테스트 발췌 시험은 리터럴 요청과 짧은 요청 생성 함수, 경로 변수, 변경 후 조회, 상태·본문 기대값을 대조한다. 테스트 원문의 스냅샷과 줄 범위를 확인한다. 다른 메서드·경로, recorder 재사용, 요청 경로 재할당, 단순 로그, 생성·보류·범위 밖·미변경 테스트와 여러 등록에 맞는 요청은 연결하지 않는다(`TestGoHTTPWorkflowUsesOneReadAfterChangeTestWindow`, `TestGoHTTPWorkflowTestRequiresMatchingExecutedRequestAndAssertion`, `TestGoHTTPWorkflowTestMatchesOnlyConcretePathShape`).
+
 TC-270의 목록 시험은 첫 발췌 바로 다음 줄에 마지막 항목이 있는 Markdown 순서 목록과 글머리 목록, 중첩·코드 블록, 남은 발췌 자리나 바이트가 없는 경우를 다룬다. 마지막 항목까지 전달할 수 있으면 연속한 원문 줄을 보내고, 실제 요청에 목록 일부만 남으면 `incomplete_list`를 붙인다(`TestDocumentRequestPreservesListBoundary`, `TestDocumentListBoundaryReflectsFittedWindows`).
 
 TC-267의 `TestNavigationReachesNestedTestAssertions`는 한 디렉터리에 읽기 상한보다 많은 테스트 파일이 있어도 중첩 디렉터리에 읽기 차례를 준다. 테스트 본문에 있는 단언으로 위치를 고르고 준비 함수에만 단언이 있으면 일반 위치를 유지한다. 요청 한도로 빠진 `L` 별칭과 그 정식 ID는 모두 거부하며 나머지 별칭은 같은 위치에 묶인다. 선택 누락·`null`과 유효하지 않은 객체의 차이는 검토 원시 기록에만 남는다.
@@ -352,7 +360,11 @@ TC-135에서 1~24줄을 인용한 모델 발췌를 열면 13줄의 입력 처리
 
 TC-134·TC-135에서 종합의 같은 파일과 주제에 속하는 확인된 동작과 후보는 각자의 줄 범위로 이동한다. 후보는 기록된 확인 방법을 보이고 발견을 확정한 상태로 바꾸지 않는다. 같은 호출과 정확히 같은 코드 줄을 인용한 일치 대조에서만 이름 있는 옵션의 조건을 함께 보인다. Git URL과 긴 NFS 경로가 표지에서 빠짐없이 보이며 사본 경로는 나타나지 않는다. 분석 대상 경로, 종합의 상태, 상세 근거의 파일·줄 범위와 발췌 조작은 390px·1280px Chromium에서도 확인한다. 코드 미포함 상태에서는 서술 생략을 밝히고 구조화된 상태와 위치를 유지한다.
 
-같은 우선순위의 미확인 대조는 저장된 문서 질문과 적용 범위·문서 인용·구체어가 모두 일치하고 후보가 하나일 때 그 대조를 먼저 보여 준다. 모호한 질문, 문장 없는 이전 보고서 및 코드 미포함에서는 저장 순서를 유지한다. 종합의 선택된 미확인 대조는 설명서와 코드 두 행에 실제 동작과 기존 이유 또는 추가 관찰을 표시한다. 웹·HTML·Markdown에서 링크가 같은 대조에 연결되며 코드 인용과 상세의 상태·집계를 보존한다. 짝을 이룬 백틱 안의 내용은 인라인 코드로 보이고 짝 없는 백틱과 태그처럼 보이는 문장은 평문으로 표시된다. 표지에서는 각각의 라벨로 시작·종료 시각과 작성 시각 대체 표시를 확인하고, 실제 고정 커밋과 시작·종료를 기록한 경우의 소요 시간만 표시되는지 확인한다.
+미확인 대조를 종합의 첫 판단으로 보여 줄 때 같은 우선순위에서는 저장된 문서 질문과 적용 범위·문서 인용·구체어가 모두 일치하고 후보가 하나일 때 그 대조를 먼저 보여 준다. 모호한 질문, 문장 없는 이전 보고서 및 코드 미포함에서는 저장 순서를 유지한다. 선택된 미확인 대조는 설명서와 코드 두 행에 실제 동작과 기존 이유 또는 추가 관찰을 표시한다. 웹·HTML·Markdown에서 링크가 같은 대조에 연결되며 코드 인용과 상세의 상태·집계를 보존한다. 짝을 이룬 백틱 안의 내용은 인라인 코드로 보이고 짝 없는 백틱과 태그처럼 보이는 문장은 평문으로 표시된다. 표지에서는 각각의 라벨로 시작·종료 시각과 작성 시각 대체 표시를 확인하고, 실제 고정 커밋과 시작·종료를 기록한 경우의 소요 시간만 표시되는지 확인한다.
+
+TC-134·TC-135에서 제품 문서 대조가 모두 미확인이고 주요 구현 근거가 있으면 코드에서 확인한 동작을 먼저 보여 준다. 같은 카드에서 제품 동작의 상태 수와 설명서 예시 하나를 확인하고 관련 대조로 이동할 수 있다. 시험 범위의 문서 대조는 제품 동작 수에서 제외하고, QA 스크립트에서만 확인한 강점은 앞세우지 않는다. 코드 미포함 내보내기에는 상태 수와 이동 위치가 남고 설명서 예시와 코드 서술은 생략된다(`TestProjectOpeningLeadsWithProductEvidenceWhenComparisonsAreUnknown`, `ReportSections.test.tsx`).
+
+TC-134에서 종합의 강점 제목·효과를 함께 읽을 수 있는지 확인한다. 효과가 제목을 반복하면 한 번만 표시한다. 관련 강점의 공통 코드 범위와 미확인 조건이 함께 있는 경우의 별도 인용 두 건을 확인한다(`TestStrengthOpeningKeepsSharedEvidenceWithoutRepeatingItsTitle`, `TestRelatedConfirmedControlAndPendingBehaviorHaveSeparateRanges`, `ReportSections.test.tsx`).
 
 TC-134·TC-135는 종합의 선택된 대조에 정확한 호출·입력·설정·반환값이 연결될 때 같은 저장 인용에서 읽은 설명서 예시 하나를 웹·HTML·Markdown에서 표시하는지 확인한다. 다른 호출, 옵션 누락과 중복, 서로 다른 제목이나 코드 블록 사이에 떨어진 결과, 서로 모순되는 결과, 잘린 발췌, 가린 값은 표시하지 않는다. HTML 태그처럼 보이는 값은 코드 글자로 읽히고 코드 미포함 보고서에는 예시가 없다. 웹 집계의 "도구가 보고한 항목"과 "소스 위치를 확인하지 못한 항목"은 게시된 수를 쓴다.
 

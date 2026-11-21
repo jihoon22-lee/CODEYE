@@ -33,19 +33,27 @@ type contractCandidateInput struct {
 	Kind            string `json:"kind"`
 	Symbol          string `json:"symbol,omitempty"`
 	ContractIndices []int  `json:"contract_indices"`
+	WorkflowRoute   string `json:"workflow_route,omitempty"`
 }
 
 type contractNavigationCandidate struct {
-	location record.ContractLocation
-	indices  []int
-	score    int
+	location      record.ContractLocation
+	indices       []int
+	score         int
+	workflowRoute string
+	symbolHint    string
 }
 
 func navigationAlias(i int) string { return "L" + strconv.Itoa(i+1) }
 
 func (c contractNavigationCandidate) input(i int) contractCandidateInput {
 	p := c.location
-	return contractCandidateInput{ID: navigationAlias(i), Path: p.Path, Start: p.Start, End: p.End, Kind: p.Kind, Symbol: p.Symbol, ContractIndices: c.indices}
+	symbol := p.Symbol
+	if symbol == "" {
+		symbol = c.symbolHint
+	}
+	return contractCandidateInput{ID: navigationAlias(i), Path: p.Path, Start: p.Start, End: p.End, Kind: p.Kind,
+		Symbol: symbol, ContractIndices: c.indices, WorkflowRoute: c.workflowRoute}
 }
 
 func (s *roleStage) fitNavigation(in *investigateInput, candidates []contractNavigationCandidate) []contractNavigationCandidate {

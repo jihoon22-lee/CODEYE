@@ -305,9 +305,7 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 			return s.fail(*r)
 		}
 		reply := s.h.Caller.Review(s.ctx, s.runner, q)
-		s.rec.Limitations = noteVersion(s.rec.Limitations, reply)
-		call := record.Call{Role: s.role, Model: reply.Model, Version: reply.Version, PackID: s.pack.ID, PackVersion: s.pack.Version, PackDigest: s.pack.Digest,
-			PackFiles: s.pack.Files, RequestDigest: reply.RequestDigest, RequestBytes: size, Usage: usage(reply.Usage), Attempt: attempt, OutputErrors: []string{}}
+		call := s.recordCall(reply, size, attempt)
 		if reply.Reason != "" && reply.Reason != "model_output_invalid" {
 			call.Outcome = reply.Reason
 			if !record.ValidCode(call.Outcome) {
@@ -358,6 +356,13 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 		repair = &outputRepair{OutputErrors: call.OutputErrors}
 	}
 	return s.fail(result(domain.TaskFailed, reasonOutputInvalid))
+}
+
+func (s *roleStage) recordCall(reply opencode.Reply, size, attempt int) record.Call {
+	s.rec.Limitations = noteVersion(s.rec.Limitations, reply)
+	return record.Call{Role: s.role, Model: reply.Model, Version: reply.Version, PackID: s.pack.ID, PackVersion: s.pack.Version,
+		PackDigest: s.pack.Digest, PackFiles: s.pack.Files, RequestDigest: reply.RequestDigest, RequestBytes: size,
+		Usage: usage(reply.Usage), Attempt: attempt, OutputErrors: []string{}}
 }
 
 // reserveCall checks the attempt's ledger before recording a call. Tasks
