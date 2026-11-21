@@ -6,7 +6,8 @@
 //     no type information, so it can finish honestly on a snapshot, which
 //     never holds node_modules.
 //   - javascript.eslint_typed, extra depth: typescript-eslint's type-aware
-//     rules (promises, any at boundaries) on TS modules with a tsconfig.json.
+//     rules (promises, any at boundaries) on TS modules with a tsconfig.json,
+//     and a bounded rejection-reason check on JS without a tsconfig.json.
 //     A missing dependency makes type information incomplete; the run then
 //     fails with the gap recorded and withholds every type-aware diagnostic
 //     (measured: they follow from the missing types, docs/ANALYZERS.md#의존성-공백).
@@ -44,11 +45,13 @@ const (
 	AdapterVersion  = "1"
 	// RulePackID/Version name the baseline selection (baselineConfig).
 	RulePackID      = "codeye-js-eslint"
-	RulePackVersion = "1"
+	RulePackVersion = "2"
 	// TypedRulePackID/Version name the type-aware selection (typedConfig).
 	TypedRulePackID      = "codeye-ts-eslint-typed"
 	TypedRulePackVersion = "1"
 )
+
+const promiseRejectRule = "prefer-promise-reject-errors"
 
 // Plugin packages loaded by the managed configuration from the directory
 // that holds the eslint package (the operator's tool node_modules), and the
@@ -96,7 +99,8 @@ func Plan(ctx context.Context, job analysis.Job) ([]pack.Task, error) {
 }
 
 // TypedPlan is the type-aware planner: one task per module with a
-// tsconfig.json and TypeScript source in scope, keyed eslint-typed, ...
+// tsconfig.json and TypeScript source in scope, or managed JavaScript inputs
+// without a tsconfig.json, keyed eslint-typed, ...
 func TypedPlan(ctx context.Context, job analysis.Job) ([]pack.Task, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -117,10 +121,15 @@ func plan(job analysis.Job, typed bool) ([]pack.Task, error) {
 	for _, m := range mods {
 		n := len(m.Files)
 		if typed {
-			if !m.TSConfig || len(m.TSFiles) == 0 {
+			n = len(m.TSFiles)
+			if !m.TSConfig {
+				if len(m.Files) == len(m.TSFiles) {
+					continue
+				}
+				n = len(managedJavaScriptFiles(m))
+			} else if n == 0 {
 				continue
 			}
-			n = len(m.TSFiles)
 		}
 		out = append(out, pack.Task{Spec: analysis.TaskSpec{Key: jsts.Key(name, m), Required: !typed, Title: title + strings.Join(m.Patterns, " ") + " in " + m.Dir,
 			Stage: domain.StageStaticAnalysis}, Module: m.Dir, Patterns: append([]string{}, m.Patterns...), FilesInScope: &n})
@@ -232,7 +241,14 @@ func (a *Analyzer) Selection() []string {
 			"--no-config-lookup", "--no-inline-config", "--suppressions-location empty"}
 	}
 	return []string{pkgESLintJS + "@" + p.eslintJS.Version + " recommended (JS and TS files)", pkgTSESLint + "@" + p.tseslint.Version + " recommended (TS files)",
-		"no-undef off", "parser " + pkgTypeScript + "@" + p.typescript.Version, "jsx in JS files", "--no-config-lookup", "--no-inline-config", "--suppressions-location empty"}
+		"no-undef off", promiseRejectRule + " warn (JS files, allowEmptyReject=true)", "parser " + pkgTypeScript + "@" + p.typescript.Version,
+		"jsx in JS files", "--no-config-lookup", "--no-inline-config", "--suppressions-location empty"}
+}
+
+func (a *Analyzer) managedJSSelection() []string {
+	return []string{pkgTSESLint + "@" + a.plugins.tseslint.Version + " " + typedRejectRule + " (known primitive types only)",
+		"parser " + pkgTypeScript + "@" + a.plugins.typescript.Version,
+		"isolated ES2022 and DOM types, no module or ambient resolution", "--no-config-lookup", "--no-inline-config", "--suppressions-location empty"}
 }
 
 // CheckArgs is the lint argv after the script: the managed configuration and
@@ -297,12 +313,14 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	}
 	files := jsts.Included(job.Snapshot.Manifest)
 	workspace := job.Snapshot.WorkspaceDir
-	roots := jsts.Roots(workspace)
-	moduleAbs := filepath.Join(workspace, filepath.FromSlash(mod.Dir))
-	in := assembleInput{Typed: a.typed, TaskKey: pt.Spec.Key, ManifestDigest: job.Snapshot.Digest, Module: mod, Patterns: pt.Patterns, Files: files,
+	managedJS := a.typed && !mod.TSConfig
+	in := assembleInput{Typed: a.typed, ManagedJS: managedJS, TaskKey: pt.Spec.Key, ManifestDigest: job.Snapshot.Digest, Module: mod, Patterns: pt.Patterns, Files: files,
 		Selection: a.Selection(), Plugins: a.plugins, NodeVersion: a.cfg.Node.Version, ModuleName: jsts.ModuleName(job.Snapshot.SnapshotDir, files, mod.Dir)}
 	in.Expected = mod.Files
-	if a.typed {
+	if managedJS {
+		in.Expected = managedJavaScriptFiles(mod)
+		in.Selection = a.managedJSSelection()
+	} else if a.typed {
 		in.Expected = mod.TSFiles
 	}
 	write := func(doc obsdoc.Document) analysis.TaskResult {
@@ -318,7 +336,30 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		return res
 	}
 	watched := append([]string{}, in.Expected...)
-	if a.typed {
+	if managedJS {
+		if len(in.Expected) == 0 {
+			in.Policy = managedJSNoSources
+			return write(assemble(in))
+		}
+		if managedJavaScriptOverBudget(in.Expected, files) {
+			in.Policy = managedJSBudget
+			return write(assemble(in))
+		}
+		workspace = filepath.Join(taskDir, "sources")
+		if err := stageManagedJavaScript(ctx, job.Snapshot.SnapshotDir, workspace, in.Expected, files); err != nil {
+			switch {
+			case errors.Is(err, errManagedJSSnapshot):
+				in.Integrity = true
+			case errors.Is(err, errManagedJSText):
+				in.Policy = managedJSInvalidInput
+			case ctx.Err() != nil:
+				in.Cancelled = true
+			default:
+				return pack.Failed(analysis.ReasonHandlerError, "scratch_unavailable")
+			}
+			return write(assemble(in))
+		}
+	} else if a.typed {
 		cfgPath := jsts.Join(mod.Dir, "tsconfig.json")
 		chain, err := jsts.ReadChain(job.Snapshot.SnapshotDir, files, cfgPath)
 		if err != nil {
@@ -344,11 +385,20 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 			return write(assemble(in))
 		}
 	}
+	roots := jsts.Roots(workspace)
+	moduleAbs := filepath.Join(workspace, filepath.FromSlash(mod.Dir))
 	in.Roots = roots
 	in.Mask = jsts.Masker(roots, a.script, a.plugins.dir, job.Scratch, job.Snapshot.Root)
 	configPath := filepath.Join(dirs["cfg"], "eslint.config.cjs")
 	body := baselineConfig(a.plugins, mod)
-	if a.typed {
+	args := pt.Patterns
+	if managedJS {
+		args = make([]string, 0, len(in.Expected))
+		for _, p := range in.Expected {
+			args = append(args, jsts.Rel(p, mod.Dir))
+		}
+		body = managedJavaScriptConfig(a.plugins, moduleAbs, args)
+	} else if a.typed {
 		body = typedConfig(a.plugins, mod, moduleAbs)
 	}
 	suppressions := filepath.Join(dirs["cfg"], "eslint-suppressions.json")
@@ -357,9 +407,14 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	}
 	protected := []string{job.Snapshot.SnapshotDir}
 	spec := func(args []string) executor.Spec {
-		return executor.Spec{Executable: a.script.Node.Executable, Args: a.script.Argv(args...), WorkspaceRoot: workspace, Dir: moduleAbs,
-			ProtectedRoots: protected, TempParent: dirs["tmp"], Env: a.script.Env(), Timeout: a.cfg.Timeout,
-			StdoutLimit: a.cfg.StdoutLimit, StderrLimit: a.cfg.StderrLimit, Redact: jsts.RedactForms(roots)}
+		argv, timeout, stdout := a.script.Argv(args...), a.cfg.Timeout, a.cfg.StdoutLimit
+		if managedJS {
+			argv = append([]string{managedJSNodeHeap}, argv...)
+			timeout, stdout = min(timeout, managedJSTimeout), min(stdout, 4*managedJSMaxSourceBytes)
+		}
+		return executor.Spec{Executable: a.script.Node.Executable, Args: argv, WorkspaceRoot: workspace, Dir: moduleAbs,
+			ProtectedRoots: protected, TempParent: dirs["tmp"], Env: a.script.Env(), Timeout: timeout,
+			StdoutLimit: stdout, StderrLimit: a.cfg.StderrLimit, Redact: jsts.RedactForms(roots)}
 	}
 	steps := []struct {
 		name string
@@ -367,7 +422,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		dst  **executor.Result
 	}{
 		{execVersion, []string{"--version"}, &in.Version},
-		{execCheck, CheckArgs(configPath, suppressions, pt.Patterns), &in.Check},
+		{execCheck, CheckArgs(configPath, suppressions, args), &in.Check},
 	}
 	writeFailed := false
 	for _, s := range steps {

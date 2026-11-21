@@ -275,13 +275,12 @@ def check_comparison_contracts(published: dict) -> None:
         ensure(doc["counts"] == {s: states.count(s) for s in api["ComparisonState"]["enum"]}, "Counts are not recomputed from entries")
         ensure(len({e["fingerprint"] for e in doc["entries"]}) == len(doc["entries"]), "Duplicate comparison entry")
         by_fp = {e["fingerprint"]: e for e in doc["entries"]}
-        # A resolved tool entry needs the same tool version and rule context on both sides (docs/REPORT.md#항목-상태).
-        rule_keys = {d["key"] for d in doc["differences"]}
+        # Rule-context equality is checked at the affected path in history.
+        # Analyzer-level differences do not expose that coverage.
         for e in doc["entries"]:
             ensure(e["state"] != "resolved_observed" or (e["producer"] == "tool" and e["current"] == [] and e["baseline"] and e["reason"] is None), "Resolved entry not observed by a tool")
-            ensure(e["state"] != "resolved_observed" or not ({"tool:" + e["analyzer"] + ":version", "tool:" + e["analyzer"] + ":rule_context"} & rule_keys),
-                   "Resolved entry despite a tool version or rule-context difference")
             ensure(e["state"] != "absent_unverified" or (e["current"] == [] and e["baseline"] and e["reason"] is not None), "Absent entry without a reason")
+            ensure(e["reason"] != "active_observation_remains" or (e["state"] == "absent_unverified" and e["producer"] == "tool"), "Active observation outside a vanished tool finding")
             ensure(e["state"] != "new" or (e["baseline"] == [] and e["current"]), "New entry with a baseline occurrence")
             ensure(e["state"] not in ("persisting", "changed") or (e["current"] and e["baseline"] and e["reason"] is None), "Matched entry missing a side")
             ensure((e["state"] == "changed") == bool(set(e["changes"]) - {"lines"}) or e["state"] not in ("persisting", "changed"), "changed/persisting disagree with changes")
@@ -352,10 +351,15 @@ def check_comparison_contracts(published: dict) -> None:
     bad["findings"][0]["publication_disposition"] = "ignored"
     reject("unknown disposition", check_comparison, bad)
     analyzer = comparison["entries"][resolved]["analyzer"]
-    for what, baseline, current in (("rule_context", "codeye-go-vet-default@1 config=none suppressions=none", "unknown"), ("version", "go1.27.4", "go1.28.0")):
-        bad = copy.deepcopy(comparison)
-        bad["differences"].append({"key": "tool:" + analyzer + ":" + what, "baseline": baseline, "current": current})
-        reject("resolved despite a " + what + " difference", check_comparison, bad)
+    unrelated = copy.deepcopy(comparison)
+    unrelated["differences"].append({"key": "tool:" + analyzer + ":version", "baseline": "go1.27.4", "current": "go1.27.4,go1.28.0"})
+    check_comparison(unrelated)
+    observed = copy.deepcopy(comparison)
+    observed["entries"][resolved].update(state="absent_unverified", reason="active_observation_remains")
+    observed["counts"].update(absent_unverified=1, resolved_observed=0)
+    check_comparison(observed)
+    observed["entries"][resolved]["producer"] = "model"
+    reject("active tool observation on a model candidate", check_comparison, observed)
     bad = copy.deepcopy(listing)
     bad["items"][0]["reason"] = "   "
     reject("blank review reason", check_reviews, bad)

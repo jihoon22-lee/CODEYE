@@ -221,6 +221,90 @@ func TestDocumentSelectionFavorsProductTextOverUnlinkedFixtures(t *testing.T) {
 	}
 }
 
+func TestDocumentSelectionRepresentsBehaviorBeyondTheIntroduction(t *testing.T) {
+	const meaning = "The service calculates the remaining quota from the accepted records. Archived records are excluded."
+	const exception = "A client cannot resume a request when its lease has expired. It must start again with a new request."
+	const readme = "README.md"
+	body := "# Record service\n\n" + strings.Repeat("The introduction describes the history of the product.\n", 48) +
+		"\n## Building\n\n" + strings.Repeat("When the build returns a result, the default installer writes its output.\n", 20) +
+		"\n## Current release\n\n" + meaning + "\n\n" + strings.Repeat("This paragraph links to the build archive.\n\n", 45) +
+		"## Caveats\n\n" + exception + "\n"
+	files := map[string]string{readme: body}
+	for i := range roleMaxDocs + 2 {
+		files[fmt.Sprintf("tests/tool%d/README.md", i)] = "This tool builds and runs the bundled test suite.\n"
+	}
+	in, stored, _ := collectDocumentSelection(t, files)
+	if len(in.Documents) != roleMaxDocs || in.Documents[0].Path != readme || in.Documents[0].StartLine != 1 {
+		t.Fatalf("introductory and bounded evidence changed: %+v", in.Documents)
+	}
+	covered := map[int]bool{}
+	for _, d := range in.Documents {
+		if d.Path == readme {
+			for i := d.StartLine; i <= d.EndLine; i++ {
+				if covered[i] {
+					t.Fatalf("README line %d was selected twice", i)
+				}
+				covered[i] = true
+			}
+		}
+	}
+	for _, clause := range []string{meaning, exception} {
+		if !slices.ContainsFunc(in.Documents[1:3], func(d docInput) bool {
+			lines := strings.Split(strings.TrimSuffix(body, "\n"), "\n")
+			return d.Path == readme && d.AppliesTo == "." && strings.Contains(d.Text, clause) &&
+				d.Text == strings.Join(lines[d.StartLine-1:d.EndLine], "\n")
+		}) {
+			t.Fatalf("behavior missing before bundled fixtures: %q", clause)
+		}
+	}
+	if !slices.Contains(stored.Limitations, "document_excerpt_only") || !slices.Contains(stored.Limitations, "documents_outside_review_input") {
+		t.Fatalf("missing limitations: %v", stored.Limitations)
+	}
+}
+
+func TestDocumentSelectionSpreadsAcrossShortSectionsBeforeNestedTestGuides(t *testing.T) {
+	const readme = "README.md"
+	const linked = "extensions/archive/docs/usage.md"
+	const middle = "Each lamp indicates the condition of its own bay."
+	const last = "The last open card reappears on the board after reloading."
+	readmeText := "# Board\n\n[Archive extension](" + linked + ")\n\n" +
+		strings.Repeat("The board was first designed for coordinating a group of stations.\n", 39) +
+		"\n## Controls\n\n" + strings.Repeat("When the caller supplies a filter, the board only returns matching slots.\n", 18) +
+		"\n## Storage\n\n" + strings.Repeat("The board must preserve each stored record unless the result is an error.\n", 18) +
+		"\n## Queue\n\n" + strings.Repeat("The queue displays changes in priority order.\n", 30) +
+		"\n## Bay indicators\n\n" + middle + "\n\n" +
+		"## Inspection\n\n" + strings.Repeat("This section illustrates a station layout.\n", 35) +
+		"\n## Reopening\n\n" + last + "\n"
+	files := map[string]string{
+		readme: readmeText, linked: "The archive extension keeps a separate record of open cards.\n",
+		"tests/README.md": "From the test directory, run the product's integration checks.\n",
+	}
+	for i := range roleMaxDocs {
+		files[fmt.Sprintf("tests/framework%d/README.md", i)] = "The bundled runner provides test assertions and output formatters.\n"
+	}
+	in, _, _ := collectDocumentSelection(t, files)
+	if len(in.Documents) > roleMaxDocs || in.Documents[0].Path != readme || in.Documents[0].StartLine != 1 {
+		t.Fatalf("README introduction or budget changed: %+v", in.Documents)
+	}
+	firstBundle := slices.IndexFunc(in.Documents, func(d docInput) bool { return strings.HasPrefix(d.Path, "tests/framework") })
+	if firstBundle < 0 {
+		firstBundle = len(in.Documents)
+	}
+	for _, p := range []string{linked, "tests/README.md"} {
+		if !slices.ContainsFunc(in.Documents[:firstBundle], func(d docInput) bool { return d.Path == p }) {
+			t.Fatalf("first-party guide %s displaced by nested test guides", p)
+		}
+	}
+	for _, body := range []string{middle, last} {
+		if !slices.ContainsFunc(in.Documents[:firstBundle], func(d docInput) bool {
+			return d.Path == readme && d.EndLine-d.StartLine < compactDocLines && record.JSONLen(d.Text) <= compactDocBytes &&
+				strings.Contains(d.Text, body)
+		}) {
+			t.Fatalf("short product section missing before test guides: %q", body)
+		}
+	}
+}
+
 func TestDocumentCoverageReadsPlainProseWithinSpareCapacity(t *testing.T) {
 	const prose = "The panel stays active.\n"
 	for _, tc := range []struct {

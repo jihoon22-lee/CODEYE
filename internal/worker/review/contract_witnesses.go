@@ -51,6 +51,8 @@ type witnessQuery struct {
 	navigationNames      []string
 	pythonDocs           map[string][]record.Excerpt
 	pythonCalls          []string
+	formula              pythonFormulaQuery
+	cFamilies            []cAPIFamily
 	packageEntry         string
 	goExamples           []goContractExample
 	goCommands           []goContractCommand
@@ -77,6 +79,8 @@ type contractSelection struct {
 	member                memberPair
 	sources               map[string]string
 	goTraces              []goWrapperTrace
+	cDefinitions          []contractWitness
+	cFamily               []contractWitness
 	queries               []witnessQuery
 }
 
@@ -98,7 +102,7 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 	if err != nil {
 		return contractSelection{}, err
 	}
-	var named, otherCode, otherTests []candidate
+	var named, formulaCode, otherCode, otherTests []candidate
 	firstNamed := make([]candidate, len(queries))
 	eligible := map[string]candidate{}
 	natural := 0
@@ -123,8 +127,10 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 			c.penalties = make([]int, len(queries))
 		}
 		var words []string
+		formulaScope := false
 		for i, q := range queries {
 			if record.ScopeUnder(e.Path, q.scope) {
+				formulaScope = formulaScope || q.formula.anchored()
 				if words == nil {
 					words = witnessTerms(path.Base(e.Path))
 				}
@@ -152,6 +158,10 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 			continue
 		}
 		eligible[e.Path] = c
+		if formulaScope && !maintenance[e.Path] && !benchmark && len(formulaCode) < witnessMaxFiles/3 &&
+			callLanguage(e.Path) == "python" && windowKind(e.Path) == "code" {
+			formulaCode = append(formulaCode, c)
+		}
 		switch {
 		case c.pathScore >= 4:
 			named = append(named, c)
@@ -167,6 +177,9 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 	namedFirst := min(len(named), witnessMaxFiles/3)
 	candidates := make([]candidate, 0, witnessMaxFiles)
 	candidates = append(candidates, firstNamed...)
+	// An accepted formula can name its subject in natural-language
+	// docstrings while file names and runtime identifiers use another language.
+	candidates = append(candidates, formulaCode...)
 	candidates = append(candidates, named[:namedFirst]...)
 	// Interleave fallback code and tests so a large corpus cannot spend
 	// the scan budget on either kind exclusively.
@@ -183,6 +196,10 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 	matches := make([][2][]contractWitness, len(queries))
 	pythonRuntime := make([]contractWitness, len(queries))
 	pythonTests := make([]contractWitness, len(queries))
+	formulas := make([]contractWitness, len(queries))
+	formulaTies := make([]bool, len(queries))
+	cRuntime := make(documentedCDefinitions, len(queries))
+	var cFamilies cFamilyCatalog
 	additional := make([][]contractWitness, len(queries))
 	calls := make([][]contractCall, len(queries))
 	members := memberWitnesses{sources: map[memberKey][]contractWitness{}, tests: map[string][]memberTest{}}
@@ -268,6 +285,20 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 		}
 		if !maintenance[e.Path] && !benchmarkPath(e.Path) && !typeDeclarationPath(e.Path) {
 			members.observe(e, content, queries, kind == 1)
+			cRuntime.observe(e, content, queries)
+			if s.j.PullRequest == nil || slices.Contains(s.j.PullRequest.Changed, e.Path) {
+				cFamilies.observe(e, content, queries)
+			}
+			for i, query := range queries {
+				if w, tied := pythonFormulaWitness(e, content, query); w.line > 0 {
+					w.query = i + 1
+					if w.score > formulas[i].score {
+						formulas[i], formulaTies[i] = w, tied
+					} else if w.score == formulas[i].score {
+						formulaTies[i] = true
+					}
+				}
+			}
 		}
 		for i, w := range found {
 			w.query = i + 1
@@ -377,6 +408,13 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 		}
 		hasCode[i] = seen[w.entry.Path]
 	}
+	for i, w := range formulas {
+		if len(out) < witnessMaxExcerpts && w.line > 0 && !formulaTies[i] && !seen[w.entry.Path] {
+			out = append(out, w)
+			seen[w.entry.Path], hasCode[i] = true, true
+			break
+		}
+	}
 	for i, list := range calls {
 		if len(out)+2 > witnessMaxExcerpts {
 			break
@@ -455,7 +493,8 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 			}
 		}
 	}
-	return contractSelection{witnesses: out, additional: extras, calls: linked, member: member, sources: contents, goTraces: goTraces, queries: queries}, nil
+	return contractSelection{witnesses: out, additional: extras, calls: linked, member: member, sources: contents,
+		goTraces: goTraces, cDefinitions: cRuntime.choose(queries), cFamily: cFamilies.choose(queries), queries: queries}, nil
 }
 
 func minifiedSource(path string) bool {
@@ -580,6 +619,8 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 	catalog := catalogOf(docs.Evidence)
 	files := s.entries()
 	cited := map[string]string{}
+	hasC := slices.Contains(languagesInScope(s.j), "cpp")
+	var cGuideCache cFamilyGuideCache
 	var out []witnessQuery
 	for i, c := range docs.Contracts {
 		statement := map[string]int{}
@@ -587,6 +628,8 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 		paths := map[string]bool{}
 		var pythonDocs map[string][]record.Excerpt
 		var pythonCalls []string
+		var formula pythonFormulaQuery
+		var cFamilies []cAPIFamily
 		statementCalls := pythonFreeCalls(c.Statement)
 		var packageEntry string
 		var goExamples []goContractExample
@@ -625,6 +668,14 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 			if x.DirectivePath == "" && c.AppliesTo == x.DocumentScope() {
 				goExamples = goExamplesInContract(goExamples, c.Statement, raw)
 				goCommands = goCommandsInContract(goCommands, c.Statement, raw)
+				formula.fromPassage(c.Statement, passage)
+				if hasC {
+					var err error
+					cFamilies, err = s.documentedCFamilies(&cGuideCache, files[x.Path], raw, names, cFamilies)
+					if err != nil {
+						return nil, err
+					}
+				}
 				if command, ok := standaloneGoCommand(x.Path, c.Statement, raw); ok && !slices.Contains(goCommands, command) {
 					goCommands = append(goCommands, command)
 				}
@@ -661,7 +712,7 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 			out = append(out, witnessQuery{contractIndex: i + 1, scope: c.AppliesTo, terms: terms, statement: statement, paths: paths,
 				operation: maintenanceOperation(c.Statement), typeContract: mentionsJavaScriptTypes(c.Statement),
 				performance: performanceContract(c.Statement), members: members, navigationNames: exactNames, pythonDocs: pythonDocs, pythonCalls: pythonCalls,
-				packageEntry: packageEntry, goExamples: goExamples, goCommands: goCommands})
+				formula: formula, cFamilies: cFamilies, packageEntry: packageEntry, goExamples: goExamples, goCommands: goCommands})
 		}
 	}
 	common := map[string]int{}

@@ -26,6 +26,7 @@ const (
 // A missing method means the registration has no explicit method constraint.
 type workflowRoute struct {
 	Method, Path, Symbol, PatternKind string
+	handlerOffset                     int // byte position of an eligible shared handler body, plus one
 	DecisionSymbol                    string
 	Registration, Handler             record.Excerpt
 	DecisionCall, Decision            record.Excerpt
@@ -33,6 +34,8 @@ type workflowRoute struct {
 	OutcomeSymbol                     string
 	OutcomeDepth                      int
 	Test                              record.Excerpt
+	state                             httpRouteState
+	relatedTest                       httpRelatedTest
 }
 
 type httpRouteName struct{ pkg, name string }
@@ -60,12 +63,13 @@ type httpRouteType struct {
 }
 
 type httpRouteIndex struct {
-	files      []*httpRouteFile
-	functions  map[httpRouteMethod][]httpRouteFunc
-	types      map[httpRouteName][]httpRouteType
-	bindings   map[httpRouteName]int
-	incomplete map[string]bool // directory with unread ordinary source
-	injections map[httpRouteField]httpRouteInjection
+	files        []*httpRouteFile
+	functions    map[httpRouteMethod][]httpRouteFunc
+	types        map[httpRouteName][]httpRouteType
+	bindings     map[httpRouteName]int
+	incomplete   map[string]bool // directory with unread ordinary source
+	injections   map[httpRouteField]httpRouteInjection
+	constructors map[httpRouteMethod][]httpRouteArgument
 }
 
 func (s *roleStage) workflowRoutes() ([]workflowRoute, error) {
@@ -373,9 +377,15 @@ func (s *roleStage) httpRouteWindows(idx *httpRouteIndex, r httpRouteRegistratio
 		return workflowRoute{}, false
 	}
 	x.Symbol = target.name
+	if call, factory := ast.Unparen(r.handler).(*ast.CallExpr); !factory || len(call.Args) == 0 {
+		x.handlerOffset = target.file.positions.PositionFor(target.node.Pos(), false).Offset + 1
+	}
 	x.Handler = s.httpRouteExcerpt(target.file, target.node, 24, 1000, false)
 	if x.Handler.ID == "" || x.Handler.End < target.file.line(target.body.Lbrace) {
 		return workflowRoute{}, false
+	}
+	if needsOutcome != nil && len(idx.constructors) != 0 {
+		x.state = idx.httpRouteState(r, target, x.Handler.End)
 	}
 	for _, d := range idx.decisions(target) {
 		f := target.file

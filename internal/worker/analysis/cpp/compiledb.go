@@ -3,6 +3,7 @@ package cpp
 import (
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -121,11 +122,22 @@ func (u Unit) safe() bool {
 		return false
 	}
 	for _, a := range u.Args {
-		if unsafeArg(a.Flag) || (a.Value != "" && (unsafeArg(a.Value) || strings.HasPrefix(a.Value, "-"))) || (a.Path != "" && domain.ValidateEvidencePath(a.Path) != nil) {
+		if unsafeArg(a.Flag) || (a.Value != "" && (unsafeArg(a.Value) || strings.HasPrefix(a.Value, "-"))) || !a.safePath() {
 			return false
 		}
 	}
 	return domain.ValidateEvidencePath(u.Rel) == nil
+}
+
+func (a Arg) safePath() bool {
+	if a.Path != "." {
+		return a.Path == "" || domain.ValidateEvidencePath(a.Path) == nil
+	}
+	// The project root can be a search directory. mapFlags always renders
+	// directory options joined to the absolute path in the working copy.
+	return a.Joined && a.Value == "" && slices.ContainsFunc(pathFlags, func(pf includePathFlag) bool {
+		return pf.name == a.Flag && !pf.file
+	})
 }
 
 // cxxDriver reports a C++ driver name (g++, clang++-18, c++).

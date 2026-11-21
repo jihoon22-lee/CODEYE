@@ -4,9 +4,11 @@ import type { Citation, Dependency, Ledger, LedgerModule, ModelState, SectionSta
 import { ComparisonSection } from './HistoryView';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
-import { Citations, FindingList, PinnedSourceLink, ReportCalls, ReportCounts, ReportExports, ReportIdentity, ReportReviewStatus, ReportScope, ReportTasks, TextList, explainReason, label, sourceLocation, type ReportHistory } from './ReportParts';
+import { Citations, FindingList, PinnedSourceLink, ReportCalls, ReportCounts, ReportExports, ReportIdentity, ReportReviewStatus, ReportScope, ReportTasks, TextList, WorkflowReading, explainReason, label, sourceLocation, type ReportHistory } from './ReportParts';
 import { ReportAction, ReportIcon, ReportLayout } from './ReportLayout';
 import { ProjectOverview } from './ProjectOverview';
+import { ReportSearch, focusReportFinding, focusReportSearchLocation, type ReportSearchTarget } from './ReportSearch';
+import { projectBehaviors } from './reportBehaviors';
 import { cutLine } from './format';
 import {
   gapGroups,
@@ -46,12 +48,18 @@ function shortList(list: string[]) {
 }
 // More is a disclosure whose rows render only when it is opened, so a long
 // list costs nothing until asked for (keyboard reachable through summary).
-function More({ title, children }: { title: string; children: () => ReactNode }) {
+function More({ title, children, reveal }: { title: string; children: () => ReactNode; reveal?: { id: string } }) {
   const [open, setOpen] = useState(false);
+  const [closedRequest, setClosedRequest] = useState<{ id: string }>();
+  const shown = open || reveal !== undefined && reveal !== closedRequest;
   return (
-    <details className="report-more" onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+    <details className="report-more" open={shown} onToggle={e => {
+      const isOpen = e.currentTarget.open;
+      setOpen(isOpen);
+      if (!isOpen) setClosedRequest(reveal);
+    }}>
       <summary><ReportIcon name="chevron" />{title}</summary>
-      {open && children()}
+      {shown && children()}
     </details>
   );
 }
@@ -149,12 +157,13 @@ type Reading = {
   secondary?: boolean;
   refs: string[];
   additional?: { reason: string; codeRefs: string[] };
+  workflow?: Sections['documents']['comparisons'][number]['workflow'];
 };
 
 function ReadingList({ rows, catalog }: { rows: Reading[]; catalog: Citation[] }) {
   return (
     <ul className="plain report-cards model-reading-list">
-      {rows.map(({ id, title, statement, scope, status, secondary, refs, additional }, i) => (
+      {rows.map(({ id, title, statement, scope, status, secondary, refs, additional, workflow }, i) => (
         <li className="card report-card model-reading-item" key={i}>
           <div className="card-body">
             <div className="reading-badges">
@@ -169,6 +178,7 @@ function ReadingList({ rows, catalog }: { rows: Reading[]; catalog: Citation[] }
               <p className="report-card-copy"><strong>{t.reading.additionalObservation}</strong>{' '}{additional.reason}</p>
               <div className="reading-refs"><Citations refs={additional.codeRefs} catalog={catalog} /></div>
             </>}
+            {workflow && <WorkflowReading workflow={workflow} catalog={catalog} />}
           </div>
         </li>
       ))}
@@ -368,6 +378,7 @@ function comparisonReading(row: Sections['documents']['comparisons'][number], ca
     secondary: row.codeRefs.length > 0 ? !hasPrimary : secondaryReviewScope(row.scope),
     refs: [...row.documentRefs, ...row.codeRefs.filter(id => !row.additional?.codeRefs.includes(id))],
     additional: row.additional,
+    workflow: row.workflow,
   };
 }
 
@@ -388,21 +399,38 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const id = useId();
   const documentTarget = useRef<string | null>(null);
   const [active,setActive] = useState('overview');
+  const [searchTarget, setSearchTarget] = useState<ReportSearchTarget>();
+  const findingTarget = searchTarget?.kind === 'finding' ? searchTarget : undefined;
+  const tabId = (key:string) => id + '-tab-' + key;
+  const comparisonId = (index: number) => id + '-document-comparison-' + (index + 1);
   useLayoutEffect(() => {
     if (documentTarget.current) {
       document.getElementById(documentTarget.current)?.focus();
       documentTarget.current = null;
     }
   }, [active, open]);
-  const tabId = (key:string) => id + '-tab-' + key;
-  const comparisonId = (index: number) => id + '-document-comparison-' + (index + 1);
+  useLayoutEffect(() => {
+    if (searchTarget?.kind === 'comparison') {
+      focusReportSearchLocation(document.getElementById(id + '-document-comparison-' + (searchTarget.index + 1)));
+    } else if (searchTarget?.kind === 'finding') {
+      focusReportFinding(document.getElementById(anchor(searchTarget.section)), searchTarget.id);
+    }
+  }, [id, searchTarget]);
+  const navigateSearch = (target: ReportSearchTarget) => {
+    const section = target.kind === 'comparison' ? 'documents' : target.section;
+    setSearchTarget({ ...target });
+    if (tabbed) setActive(section);
+    else setOpen(prev => new Set(prev).add(section));
+  };
   const select = (key:string) => {
+    setSearchTarget(undefined);
     setActive(key);
     document.getElementById(tabId(key))?.focus();
   };
   const byID = new Map(report.observations.map((o) => [o.id, o]));
   const go = (key: string) => {
     if (tabbed) {select(key); return;}
+    setSearchTarget(undefined);
     setOpen((prev) => new Set(prev).add(key));
     document.getElementById(anchor(key))?.querySelector('summary')?.focus();
   };
@@ -431,6 +459,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   };
   const e = sections.environment;
   const d = sections.documents;
+  const behaviors = projectBehaviors(d, report.includesCode !== false);
   const sa = sections.staticAnalysis;
   const m = sections.metrics;
   const sc = sections.secrets;
@@ -657,7 +686,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
                       <br />
                       <small>{g.analyzer}</small>
                     </span>,
-                    cutLine(g.message),
+                    t.ruleDescriptions[g.analyzer + ':' + g.rule] ?? cutLine(g.message),
                     g.count,
                     g.severity === null ? '—' : <span key="v" className={'pill sev sev-' + (Object.hasOwn(t.severity, g.severity) ? g.severity : 'unknown')}>{label(t.severity, g.severity)}</span>,
                     placesText(places(g.primary, g.secondary)),
@@ -669,7 +698,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
         })}
         <p className="small">{sm.rulesNote}</p>
         {suppressed > 0 && <p className="small">{sm.suppressedRows(suppressed)}</p>}
-        <More title={sm.allDiagnostics(allDiagnostics.length)}>
+        <More title={sm.allDiagnostics(allDiagnostics.length)} reveal={findingTarget?.section === 'static_analysis' ? findingTarget : undefined}>
           {() => (
             <>
               {sa.languages.map((lang) => (
@@ -702,7 +731,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
               <h6>{t.observations}</h6>
               <ObservationTable ids={allDiagnostics} byID={byID} />
               <h6>{s.staticFindings}</h6>
-              <FindingList findings={pick(report.findings, staticFindings)} history={history} empty={s.noFindings} />
+              <FindingList findings={pick(report.findings, staticFindings)} history={history} empty={s.noFindings} reveal={findingTarget} />
             </>
           )}
         </More>
@@ -759,12 +788,16 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       <>
         <StageLine stage={cr.stage} />
         <h6>{sm.supported}</h6>
-        <FindingList findings={reviewFirst} history={history} empty={cr.findings.length === 0 ? s.noFindings : sm.supportedNone} />
+        <FindingList findings={reviewFirst} history={history} empty={cr.findings.length === 0 ? s.noFindings : sm.supportedNone} reveal={findingTarget} />
         {reviewSecondary.length > 0 && (
-          <More title={sm.secondaryFindings(reviewSecondary.length)}>{() => <FindingList findings={reviewSecondary} history={history} empty={s.noFindings} />}</More>
+          <More title={sm.secondaryFindings(reviewSecondary.length)} reveal={reviewSecondary.some(f => f.id === findingTarget?.id) ? findingTarget : undefined}>
+            {() => <FindingList findings={reviewSecondary} history={history} empty={s.noFindings} reveal={findingTarget} />}
+          </More>
         )}
         {reviewRest.length > 0 && (
-          <More title={sm.otherFindings(reviewRest.length)}>{() => <FindingList findings={reviewRest} history={history} empty={s.noFindings} />}</More>
+          <More title={sm.otherFindings(reviewRest.length)} reveal={reviewRest.some(f => f.id === findingTarget?.id) ? findingTarget : undefined}>
+            {() => <FindingList findings={reviewRest} history={history} empty={s.noFindings} reveal={findingTarget} />}
+          </More>
         )}
         {cr.strengths.length > 0 && (
           <ModelReading title={t.strengthsTitle}>
@@ -852,11 +885,15 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       onClick={() => go(key)}><ReportIcon name={TAB_ICONS[key]} /><span>{label(s.titles, key)}</span></button>)}
   </nav>;
   return (
-    <ReportLayout report={report} rail={rail} className="sectioned-report">
+    <ReportLayout report={report} rail={<>
+      {rail}
+      {(d.comparisons.length > 0 || report.findings.length > 0) &&
+        <ReportSearch key={report.runID + ':' + report.revision} report={report} navigate={navigateSearch} />}
+    </>} className="sectioned-report" purpose={behaviors.description}>
       <section id={anchor('overview')} role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? tabId('overview') : 'report-overview'} hidden={tabbed && active!=='overview'} tabIndex={tabbed ? 0 : undefined}>
         <h5 id="report-overview" className="visually-hidden">{s.overview}</h5>
         {(!tabbed || active === 'overview') && <>
-          <ProjectOverview report={report} sections={sections} openDocuments={index => {
+          <ProjectOverview report={report} sections={sections} behaviors={behaviors} openDocuments={index => {
             documentTarget.current = index === undefined ? null : comparisonId(index);
             go('documents');
           }} />

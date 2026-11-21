@@ -91,6 +91,7 @@ func ValidateReport(r Report) error {
 	}
 	arts := map[string]bool{}
 	workflowKey := (WorkflowReviewDecoder{}).Key()
+	readingKey := (WorkflowReadingDecoder{}).Key()
 	for _, a := range r.Artifacts {
 		if !domain.ValidID(a.ID) || arts[a.ID] || !hex64.MatchString(a.SHA256) || a.SizeBytes < 0 {
 			return invalidf("artifact %s is invalid", a.ID)
@@ -100,6 +101,13 @@ func ValidateReport(r Report) error {
 			if err != nil || version < WorkflowReviewSince || strconv.Itoa(version) != r.Builder.Version ||
 				deref(a.TaskKey) != "review.documents" || a.Role != "other" || a.MediaType != workflowKey.MediaType {
 				return invalidf("workflow review artifact %s requires its document task and builder", a.ID)
+			}
+		}
+		if a.Decoder != nil && *a.Decoder == readingKey.String() {
+			version, err := strconv.Atoi(r.Builder.Version)
+			if err != nil || version < WorkflowReadingSince || strconv.Itoa(version) != r.Builder.Version ||
+				deref(a.TaskKey) != "review.investigate" || a.Role != "other" || a.MediaType != readingKey.MediaType {
+				return invalidf("workflow reading artifact %s requires its investigation task and builder", a.ID)
 			}
 		}
 		arts[a.ID] = true
@@ -447,6 +455,7 @@ var safeTemplates = map[string]bool{
 	textSeverityReason: true, textSeverityUnmapped: true, textCondition: true, textImpact: true, textRecommendation: true,
 	textVerification: true, textLimitManual: true, textLimitStaticOnly: true, textEvidenceTool: true, textEvidenceCode: true, textOmitted: true,
 	textToolSeverityReason: true, textToolCondition: true, textToolVerification: true, textToolEvidence: true,
+	textRejectImpact: true, textRejectAction: true, textRejectVerification: true,
 }
 
 func safeText(s string) string {

@@ -33,7 +33,7 @@ type goWrapperTrace struct {
 
 // Admit the whole trace only when its distinct, non-overlapping spans fit the
 // existing overview and per-file limits. Follow-up links use these exact IDs.
-func goWrapperWindows(existing, trace []record.Excerpt, remain int) ([]record.Excerpt, bool) {
+func wholeTraceWindows(existing, trace []record.Excerpt, remain, limit int) ([]record.Excerpt, bool) {
 	var windows []record.Excerpt
 	for _, x := range trace {
 		if slices.ContainsFunc(existing, func(e record.Excerpt) bool { return e.ID == x.ID }) ||
@@ -54,7 +54,7 @@ func goWrapperWindows(existing, trace []record.Excerpt, remain int) ([]record.Ex
 				bytes += record.JSONLen(e.Text)
 			}
 		}
-		if lines > roleMaxCodeLines || bytes > roleMaxCodeFile || remain < 128 || len(existing)+len(windows) >= maxGoWrapperWindows {
+		if lines > roleMaxCodeLines || bytes > roleMaxCodeFile || remain < 128 || len(existing)+len(windows) >= limit {
 			return nil, false
 		}
 		windows = append(windows, x)

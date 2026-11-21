@@ -2,7 +2,7 @@ import { createContext, useContext, useId, useState, type ReactNode } from 'reac
 import type { Api } from './api';
 import type { AnalysisReport, Evidence, Finding } from './analysisReport';
 import { formatInstant, runStatusLabel } from './format';
-import type { Citation, Excerpt } from './parseReportSections';
+import type { Citation, Excerpt, RelatedWorkflow } from './parseReportSections';
 import { reportURL, sourceEvidenceURL } from './analysisReport';
 import { FindingHistory, HIDDEN, findingBadge, type ComparisonLoad } from './HistoryView';
 import { ko } from './locales/ko';
@@ -130,6 +130,18 @@ export function sourceLocation(path: string, start: number, end: number) {
   return `${path}:${start === end ? start : `${start}–${end}`}`;
 }
 
+export function WorkflowReading({ workflow, catalog }: { workflow: RelatedWorkflow; catalog: Citation[] }) {
+  const labels = t.workflow;
+  return <details className="report-workflow-reading">
+    <summary>{labels.heading}</summary>
+    <p>{labels.context}</p>
+    <ul>{(['read', 'change', 'test'] as const).map(role => <li key={role}>
+      <strong>{labels[role]}</strong>
+      <Citations refs={[workflow[role]]} catalog={catalog} />
+    </li>)}</ul>
+  </details>;
+}
+
 export function TextList({ values }: { values: string[] }) {
   return (
     <ul>
@@ -225,18 +237,21 @@ export type ReportHistory = { load: ComparisonLoad; api: Api; reload: () => void
 // FindingList is a searchable list of findings grouped by category. A finding
 // whose loaded current disposition hides it is left out of the list unless
 // asked for; counts elsewhere keep it.
-export function FindingList({ findings, history, empty }: { findings: Finding[]; history?: ReportHistory; empty: string }) {
+export function FindingList({ findings, history, empty, reveal }: { findings: Finding[]; history?: ReportHistory; empty: string; reveal?: { id: string } }) {
   const [filter, setFilter] = useState('');
   const [showHidden, setShowHidden] = useState(false);
+  const [dismissed, setDismissed] = useState<{ id: string }>();
+  const revealedID = reveal !== dismissed ? reveal?.id : undefined;
   const comparison = history?.load.state === 'ready' ? history.load.value : null;
   const statuses = new Map(comparison?.findings.map((s) => [s.findingID, s]));
   const entries = new Map(comparison?.entries.map((e) => [e.fingerprint, e]));
   const hidden = findings.filter((f) => HIDDEN.has(statuses.get(f.id)?.current ?? 'open'));
+  const hiddenCount = hidden.filter(f => f.id !== revealedID).length;
   const grouped = new Map<string, Finding[]>();
   for (const item of findings) {
-    if (!showHidden && hidden.includes(item)) continue;
+    if (!showHidden && hidden.includes(item) && item.id !== revealedID) continue;
     if (
-      filter &&
+      filter && item.id !== revealedID &&
       !(item.title + ' ' + item.impact + ' ' + label(t.categories, item.category))
         .toLocaleLowerCase()
         .includes(filter.trim().toLocaleLowerCase())
@@ -251,15 +266,15 @@ export function FindingList({ findings, history, empty }: { findings: Finding[];
       {findings.length > 1 && (
         <label className="field">
           {t.filter}
-          <input type="search" value={filter} onChange={(e) => setFilter(e.target.value)} />
+          <input type="search" value={filter} onChange={e => { setFilter(e.target.value); setDismissed(reveal); }} />
         </label>
       )}
       {hidden.length > 0 && (
         <>
           <label>
-            <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} /> {ko.history.hiddenFilter(hidden.length)}
+            <input type="checkbox" checked={showHidden} onChange={e => { setShowHidden(e.target.checked); setDismissed(reveal); }} /> {ko.history.hiddenFilter(hidden.length)}
           </label>
-          {!showHidden && <p className="small">{ko.history.hiddenNote(hidden.length)}</p>}
+          {!showHidden && hiddenCount > 0 && <p className="small">{ko.history.hiddenNote(hiddenCount)}</p>}
         </>
       )}
       {grouped.size === 0 && (filter ? <p>{t.noMatch}</p> : hidden.length === 0 && <p>{empty}</p>)}

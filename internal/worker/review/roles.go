@@ -862,6 +862,10 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	if probeObservation != "" {
 		s.rec.Limitations = addLim(s.rec.Limitations, probeObservation)
 	}
+	if reading := s.submittedWorkflowReading(links.workflow, sent); reading != nil {
+		s.rec.WorkflowReading = reading
+		s.rec.Schema = record.SchemaVersionWorkflowReading
+	}
 	return s.finish()
 }
 

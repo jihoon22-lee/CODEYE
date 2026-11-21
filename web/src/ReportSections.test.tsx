@@ -249,7 +249,8 @@ describe('analysis sections', () => {
 
     action.severity = 'low';
     rerender(view());
-    expect(judgment.queryByText(t.reading.priorityAction)).toBeNull();
+    const currentDecision = screen.getByRole('tabpanel', { name: t.sections.overview }).querySelector<HTMLElement>('.report-executive')!;
+    expect(within(currentDecision).queryByText(t.reading.priorityAction)).toBeNull();
     action.severity = 'high';
 
     const modelText = row.reason;
@@ -455,7 +456,7 @@ describe('analysis sections', () => {
     codeReview.findings = [];
     codeReview.strengths = [];
     const { rerender } = render(<ReportDocument report={report} />);
-    const overview = () => screen.getByRole('tabpanel', { name: t.sections.overview });
+    const overview = () => screen.getByRole('tabpanel', { name: t.sections.overview }).querySelector<HTMLElement>('.report-executive')!;
     expect(within(overview()).getByText(t.reading.codeEvidenceMissing)).toBeTruthy();
     expect(within(overview()).getByRole('heading', { name: t.reading.documentComparison })).toBeTruthy();
     expect(within(overview()).getByText(t.reading.comparisonCode, {exact:true})).toBeTruthy();

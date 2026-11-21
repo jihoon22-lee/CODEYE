@@ -1,3 +1,5 @@
+const promiseRejectionDescription = 'Promise 거부 사유에 Error 객체의 메시지와 스택이 필요한지 인용된 호출에서 확인합니다.';
+
 export const reportKo = {
   sourcePath: '분석 경로', commit: '커밋', start: '시작 시각', finish: '종료 시각', published: '작성 시각',
   duration: '소요 시간',
@@ -17,7 +19,20 @@ export const reportKo = {
   viewTestCode: '테스트 코드 보기',
   sourceActionAt: (action: string, location: string) => `${action} (${location})`,
   qualityTitle: '문서 품질', comparisonsTitle: '문서와 구현', modelReading: 'AI 해석',
+  ruleDescriptions: {
+    'javascript.eslint:prefer-promise-reject-errors': promiseRejectionDescription,
+    'javascript.eslint_typed:@typescript-eslint/prefer-promise-reject-errors': promiseRejectionDescription,
+  } as Partial<Record<string, string>>,
   strengthsTitle: '유지할 만한 구현', scopeTitle: '적용 범위',
+  behavior: {
+    heading: '프로젝트 사용 흐름', documented: '사용 설명',
+    recordedComparison: '대조 내용', previewSource: '인용된 코드', openComparison: '대조 근거와 범위 보기',
+  },
+  workflow: {
+    heading: '함께 읽은 코드와 테스트',
+    context: '조회와 변경 처리, 테스트 단언의 인용 위치입니다. 테스트 실행 상태는 분석 기록에서 확인할 수 있습니다.',
+    read: '조회 처리기', change: '변경 처리기', test: '테스트 단언',
+  },
   reading: {
     nextAction: '다음 조치', nextCheck: '확인 방법',
     priorityAction: '우선 조치',
@@ -162,6 +177,13 @@ export const reportKo = {
     private_modules_seeded: '노드 모듈 캐시에 있던 비공개 모듈을 썼습니다.',
     cleanup_uncertain: '하위 프로세스 정리를 확인하지 못했습니다.',
     dependency_unavailable: '필요한 의존성이 노드에 없어 분석하지 못했습니다.',
+    javascript_type_input_budget_exceeded: '모듈의 소스가 JavaScript 보강 검사의 입력 한도를 초과했습니다.',
+    javascript_type_input_unsupported: 'JavaScript 보강 검사가 소스 인코딩을 지원하지 않습니다.',
+    javascript_type_no_eligible_files: '선택 범위에 JavaScript 보강 검사 대상 파일이 없습니다.',
+    javascript_type_files_excluded: 'JavaScript 보강 검사의 대상 범위에서 벤더·생성·예제 등 일부 파일을 제외했습니다.',
+    javascript_type_module_resolution_disabled: 'JavaScript 보강 검사는 import와 프로젝트의 선언 타입을 해석하지 않습니다.',
+    javascript_type_builtins_es2022_dom: 'JavaScript 보강 검사는 ES2022와 DOM 표준 타입을 사용합니다.',
+    javascript_type_primitive_rejections_only: 'JavaScript 보강 검사는 거부 사유가 원시값으로 확인된 호출을 검사합니다.',
     // 의존성 받기: 공통과 Python (deps.python)
     dynamic_dependencies_not_read: 'pyproject.toml이 의존성을 dynamic으로 두어 빌드하지 않고는 읽을 수 없습니다.',
     no_binary_distribution: 'wheel이 없는 패키지가 있어 빼고 받았습니다(소스 빌드는 하지 않습니다).',

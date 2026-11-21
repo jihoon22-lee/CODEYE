@@ -306,6 +306,57 @@ def check_workflow_example(validator, pack: dict, roles: dict) -> int:
         bad = copy.deepcopy(example)
         edit(bad)
         expect_invalid(name, check, bad)
+    return len(negatives) + check_workflow_reading_example(validator, pack, roles)
+
+
+def check_workflow_reading_example(validator, pack: dict, roles: dict) -> int:
+    root = ROOT / "fixtures/modules/workflow-reading/input"
+    docs_path = ROOT / "examples/review/documents-workflow-reading.json"
+    raw_docs = docs_path.read_text(encoding="utf-8")
+    documents = json.loads(raw_docs)
+    investigation = json.loads((ROOT / "examples/review/investigate-workflow-reading.json").read_text(encoding="utf-8"))
+    validator.validate(documents)
+
+    def check(doc: dict) -> None:
+        validator.validate(doc)
+        ensure(all(doc[k] == documents[k] for k in ("snapshot_manifest_digest", "run_id", "attempt_id", "pack")), "workflow reading attempt binding")
+        ensure(doc["pack"] == {"id": pack["id"], "version": pack["version"]}, "workflow reading pack")
+        for record in (documents, doc):
+            for call in record["calls"]:
+                role = roles[record["stage"]]
+                ensure(call["pack_files"] == role["files"] and call["pack_sha256"] == role["digest"], "workflow reading role digest")
+        upstream = next(u for u in doc["upstream"] if u["source"] == "review.documents")
+        ensure(upstream["state"] == "accepted" and upstream["sha256"] == hashlib.sha256(compact_json(raw_docs)).hexdigest(), "workflow reading document digest")
+        reading = doc["workflow_reading"]
+        matching = [s for s in documents["workflow_selections"] if s["contract_index"] == reading["contract_index"]]
+        ensure(len(matching) == 1 and reading["route_digest"] in matching[0]["route_digests"], "workflow reading has no selected route")
+        scope = PurePosixPath(documents["contracts"][reading["contract_index"] - 1]["applies_to"])
+        catalog = {e["id"]: e for e in doc["evidence"]}
+        ids = [reading[k] for k in ("read_evidence_id", "change_evidence_id", "test_evidence_id")]
+        ensure(len(set(ids)) == 3 and all(e in catalog for e in ids), "workflow reading has duplicate or missing source")
+        ensure([catalog[id]["kind"] for id in ids] == ["code", "code", "test"], "workflow reading source kinds")
+        for id in ids:
+            e = catalog[id]
+            path = source_location(e, root)
+            sha = hashlib.sha256(path.read_bytes()).hexdigest()
+            bind = "\0".join([doc["snapshot_manifest_digest"], e["path"], sha, f'{e["start_line"]}:{e["end_line"]}'])
+            ensure(e["origin"] == "context" and PurePosixPath(e["path"]).is_relative_to(scope) and
+                   e["sha256"] == sha and id == "ev_" + hashlib.sha256(bind.encode()).hexdigest()[:24], "workflow reading source binding")
+        comparison, = doc["contract_comparisons"]
+        ensure(comparison["status"] == "unknown" and comparison["code_evidence_ids"] == ids[:1], "workflow context changed model comparison")
+
+    check(investigation)
+    negatives = {
+        "workflow reading on an older record": lambda d: d.update(schema_version="0.2"),
+        "workflow reading unselected route": lambda d: d["workflow_reading"].update(route_digest="0" * 64),
+        "workflow reading missing test": lambda d: d["workflow_reading"].update(test_evidence_id="ev_" + "0" * 24),
+        "workflow reading test replaced by handler": lambda d: d["workflow_reading"].update(test_evidence_id=d["workflow_reading"]["read_evidence_id"]),
+        "workflow reading promoted to model citation": lambda d: d["contract_comparisons"][0]["code_evidence_ids"].append(d["workflow_reading"]["test_evidence_id"]),
+    }
+    for name, edit in negatives.items():
+        bad = copy.deepcopy(investigation)
+        edit(bad)
+        expect_invalid(name, check, bad)
     return len(negatives)
 
 

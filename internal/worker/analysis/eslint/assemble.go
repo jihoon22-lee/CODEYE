@@ -69,6 +69,7 @@ const tsconfigUnparsed = "Unable to parse the specified 'tsconfig' file"
 
 type assembleInput struct {
 	Typed                   bool
+	ManagedJS               bool
 	TaskKey, ManifestDigest string
 	Module                  jsts.Module
 	Patterns                []string
@@ -110,12 +111,13 @@ var maintainability = map[string]bool{
 	"@typescript-eslint/no-duplicate-type-constituents": true, "@typescript-eslint/no-redundant-type-constituents": true,
 }
 
-// category is the policy of codeye-js-eslint / codeye-ts-eslint-typed v1:
+// category is the policy of codeye-js-eslint and codeye-ts-eslint-typed:
 // what a rule is about, not its impact.
 func category(rule string) string {
 	switch rule {
 	case "@typescript-eslint/no-floating-promises", "@typescript-eslint/no-misused-promises", "@typescript-eslint/await-thenable", "@typescript-eslint/require-await",
-		"@typescript-eslint/only-throw-error", "@typescript-eslint/prefer-promise-reject-errors", "no-async-promise-executor", "no-unsafe-finally", "preserve-caught-error":
+		"@typescript-eslint/only-throw-error", "@typescript-eslint/prefer-promise-reject-errors", promiseRejectRule,
+		"no-async-promise-executor", "no-unsafe-finally", "preserve-caught-error":
 		return "error_handling"
 	case "@typescript-eslint/no-implied-eval":
 		return "security"
@@ -142,6 +144,9 @@ func assemble(in assembleInput) obsdoc.Document {
 	if in.Typed {
 		id, name, rp, rpv = TypedAnalyzerID, TypedName, TypedRulePackID, TypedRulePackVersion
 	}
+	if in.ManagedJS {
+		rp, rpv = ManagedJSRulePackID, managedJSRulePackVersion
+	}
 	doc := obsdoc.New(obsdoc.Analyzer{ID: id, Ecosystem: jsts.Ecosystem, Required: !in.Typed}, obsdoc.Component{ID: name, Version: AdapterVersion},
 		obsdoc.Component{ID: ParserID, Version: ParserVersion}, in.TaskKey, in.ManifestDigest)
 	doc.Module.Dir = in.Module.Dir
@@ -154,7 +159,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	// (disabled). The type-aware task also honors the module's tsconfig.
 	doc.RulePack = obsdoc.RulePack{ID: rp, Version: rpv, Selection: append([]string{}, in.Selection...), RepositoryConfig: obsdoc.RepoConfigOverridden,
 		SourceSuppressions: obsdoc.SuppressDisabled, ConfigFiles: []obsdoc.ConfigFile{}, UnreportedSuppressionRules: []string{}}
-	if in.Typed {
+	if in.Typed && !in.ManagedJS {
 		doc.RulePack.RepositoryConfig = obsdoc.RepoConfigHonored
 		doc.RulePack.ConfigFiles = nil
 		if !in.Chain.Unreadable && len(in.Chain.Packages) == 0 && !in.Chain.Outside && len(in.Chain.Files) > 0 {
@@ -165,8 +170,11 @@ func assemble(in assembleInput) obsdoc.Document {
 		"tsconfig": "not_used"}
 	if !in.Typed {
 		props["eslint_js"] = in.Plugins.eslintJS.Version
-	} else {
+	} else if !in.ManagedJS {
 		props["tsconfig"] = "tsconfig.json"
+	}
+	if in.ManagedJS {
+		props["type_analysis"] = "isolated_javascript_primitive_rejections"
 	}
 	for k, v := range props {
 		if v == "" || !obsdoc.SafeText(v, 64) || strings.ContainsAny(v, "/\\\n") {
@@ -180,7 +188,13 @@ func assemble(in assembleInput) obsdoc.Document {
 	if in.Module.Implicit {
 		addLim(&limitations, "no_package_json_module")
 	}
-	if in.Typed {
+	if in.ManagedJS {
+		addLim(&limitations, "javascript_type_module_resolution_disabled", "javascript_type_builtins_es2022_dom", "javascript_type_primitive_rejections_only")
+		if excluded := len(in.Module.Files) - len(in.Module.TSFiles) - len(in.Expected); excluded > 0 {
+			addLim(&limitations, managedJSExcluded)
+			doc.Target.Properties["javascript_files_excluded"] = strconv.Itoa(excluded)
+		}
+	} else if in.Typed {
 		addLim(&limitations, "javascript_files_not_type_checked")
 		if in.Dependencies != "" {
 			addLim(&limitations, in.Dependencies)
@@ -320,10 +334,10 @@ func assemble(in assembleInput) obsdoc.Document {
 		for _, m := range r.Messages {
 			text := jsts.WithholdHostPaths(mask(m.Text))
 			switch {
-			case m.Fatal && in.Typed && strings.Contains(m.Text, outsideProgram):
+			case m.Fatal && in.Typed && !in.ManagedJS && strings.Contains(m.Text, outsideProgram):
 				state = FileOutsideTSConfig
 				continue
-			case m.Fatal && in.Typed && (strings.Contains(m.Text, tsconfigUnparsed) || strings.Contains(m.Text, "parserOptions")):
+			case m.Fatal && in.Typed && !in.ManagedJS && (strings.Contains(m.Text, tsconfigUnparsed) || strings.Contains(m.Text, "parserOptions")):
 				// Any other parser-options message is about the program too,
 				// never a syntax error of the file.
 				// The tsconfig did not load (measured: an unresolved
@@ -341,7 +355,7 @@ func assemble(in assembleInput) obsdoc.Document {
 				// left out and its parse error is the file's observation.
 				parseErr = true
 				state = FileParseError
-				if !parseSeen[rel] {
+				if !in.ManagedJS && !parseSeen[rel] {
 					parseSeen[rel] = true
 					parseObs = append(parseObs, observe(r.FilePath, rel, ParseErrorRule, "correctness", m, text))
 				}
@@ -373,6 +387,9 @@ func assemble(in assembleInput) obsdoc.Document {
 				continue
 			case strings.HasPrefix(m.RuleID, "codeye/"):
 				addLim(&limitations, "tool_notices")
+				continue
+			}
+			if in.ManagedJS && m.RuleID != typedRejectRule {
 				continue
 			}
 			cands = append(cands, observe(r.FilePath, rel, m.RuleID, category(m.RuleID), m, text))
@@ -412,9 +429,8 @@ func assemble(in assembleInput) obsdoc.Document {
 	if in.Check != nil && in.Check.Status == executor.StatusExited && in.Check.ExitCode != nil {
 		exit = *in.Check.ExitCode
 	}
-	// Every selected rule is an error: exit 1 iff an error-severity message
-	// (fatal parse errors included), exit 0 iff none; 2 is a crash or a
-	// configuration error.
+	// Exit 1 iff an error-severity message exists (including fatal parse
+	// errors), exit 0 iff none. Warnings leave the exit code at zero.
 	consistent := (exit == 0 && errorsN == 0) || (exit == 1 && errorsN > 0)
 	processed := []string{}
 	skipped := 0

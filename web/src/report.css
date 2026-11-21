@@ -253,6 +253,17 @@
   .web-report .report-group { margin-block: 1.2rem; }
   .web-report .report-group-title h6 { font-size: 1.04rem; }
   .web-report :is(.report-excerpt, .report-more) > summary { min-height: 2.55rem; }
+  .web-report:has(.report-purpose, .report-behaviors) .report-hero { padding: .85rem; }
+  .web-report:has(.report-purpose, .report-behaviors) .report-hero .report-kicker { display: none; }
+  .web-report:has(.report-purpose, .report-behaviors) .report-hero-source {
+    display: block;
+    margin-block-start: .35rem;
+    line-height: 1.4;
+  }
+  .web-report:has(.report-purpose, .report-behaviors) .report-hero-source span { margin-inline-end: .4rem; white-space: nowrap; }
+  .web-report:has(.report-purpose, .report-behaviors) .report-verdict { gap: .25rem .55rem; margin-block-start: .55rem; }
+  .web-report:has(.report-purpose, .report-behaviors) .report-rail .nav-link { min-height: 2.75rem; }
+  .web-report .report-behaviors { margin-block-start: .45rem; }
 }
 
 @media print {

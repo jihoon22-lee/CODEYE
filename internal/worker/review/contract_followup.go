@@ -146,6 +146,9 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 		if e := link.route.Test; e.ID != "" {
 			add(contractExcerpt{excerpt: e})
 		}
+		if e := link.route.relatedTest.handler; e.ID != "" {
+			add(contractExcerpt{excerpt: e})
+		}
 	}
 	for _, e := range named {
 		add(contractExcerpt{excerpt: e})

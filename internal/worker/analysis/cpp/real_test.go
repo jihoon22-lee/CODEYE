@@ -155,6 +155,32 @@ func TestRealFixtureCases(t *testing.T) {
 	}
 }
 
+func TestRealCompileDBRootInclude(t *testing.T) {
+	// Only the mapped project-root include makes this header reachable from
+	// the nested source file. Acquire and run both tools on a working copy.
+	files := map[string]string{
+		CompileDBName:   `[{"directory":"/build/project","file":"src/main.c","arguments":["cc","-iquote",".","-I.","-c","src/main.c"]}]`,
+		"root_config.h": "#define ROOT_VALUE 42\n",
+		"src/main.c":    "#include \"root_config.h\"\nint configured(void) { return ROOT_VALUE; }\n",
+	}
+	for _, tool := range []struct {
+		name string
+		make func(*testing.T) planner
+	}{
+		{"cppcheck", func(t *testing.T) planner { return newCppcheck(t) }},
+		{"clang-tidy", func(t *testing.T) planner { return newClangTidy(t, 1) }},
+	} {
+		t.Run(tool.name, func(t *testing.T) {
+			r := runReal(t, tool.make(t), files, domain.Scope{})
+			if !slices.Equal(r.doc.Coverage.ProcessedPaths, []string{"src/main.c"}) ||
+				slices.Contains(r.doc.Limitations, LimEntriesExcluded) {
+				t.Fatalf("project-root include did not reach the analyzer: outcome %+v, coverage %+v, limitations %v",
+					r.doc.Outcome, r.doc.Coverage, r.doc.Limitations)
+			}
+		})
+	}
+}
+
 // Security: a repository source that includes files outside the workspace
 // copy by absolute path makes the tools read them (the node account can
 // read them), but nothing of their content is stored: not in the stored

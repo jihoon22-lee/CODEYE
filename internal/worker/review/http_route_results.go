@@ -135,7 +135,7 @@ func (f *httpRouteFile) httpResponseCall(call *ast.CallExpr, writer *ast.Object)
 		case "Write":
 			return responseContent
 		case "WriteHeader":
-			if f.successResponseStatus(call.Args[0]) {
+			if f.httpSuccessfulStatus(call.Args[0], true) {
 				return responseStatus
 			}
 		}
@@ -158,19 +158,20 @@ func (f *httpRouteFile) httpResponseCall(call *ast.CallExpr, writer *ast.Object)
 	return noHTTPResponse
 }
 
-func (f *httpRouteFile) successResponseStatus(expr ast.Expr) bool {
+func (f *httpRouteFile) httpSuccessfulStatus(expr ast.Expr, redirects bool) bool {
 	switch expr := ast.Unparen(expr).(type) {
 	case *ast.BasicLit:
 		n, err := strconv.ParseInt(expr.Value, 0, 32)
-		return expr.Kind == token.INT && err == nil && n >= 200 && n < 400
+		return expr.Kind == token.INT && err == nil && n >= 200 && (n < 300 || redirects && n < 400)
 	case *ast.SelectorExpr:
 		if f.imported(expr.X) == "net/http" {
 			switch expr.Sel.Name {
 			case "StatusOK", "StatusCreated", "StatusAccepted", "StatusNonAuthoritativeInfo", "StatusNoContent",
-				"StatusResetContent", "StatusPartialContent", "StatusMultiStatus", "StatusAlreadyReported", "StatusIMUsed",
-				"StatusMultipleChoices", "StatusMovedPermanently", "StatusFound", "StatusSeeOther", "StatusNotModified",
-				"StatusUseProxy", "StatusTemporaryRedirect", "StatusPermanentRedirect":
+				"StatusResetContent", "StatusPartialContent", "StatusMultiStatus", "StatusAlreadyReported", "StatusIMUsed":
 				return true
+			case "StatusMultipleChoices", "StatusMovedPermanently", "StatusFound", "StatusSeeOther", "StatusNotModified",
+				"StatusUseProxy", "StatusTemporaryRedirect", "StatusPermanentRedirect":
+				return redirects
 			}
 		}
 	}

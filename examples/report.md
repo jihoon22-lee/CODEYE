@@ -14,6 +14,17 @@ CODEYE 분석 보고서
 
 ## 종합
 
+### 프로젝트 사용 흐름
+
+**결제 호출은 요청마다 정확히 한 번만 한다\.**
+
+사용 설명 · 구현 미확인
+
+`svc/b/README.md:1-5`
+
+**대조 내용** 이 문서 계약에 대한 코드 대조 결과가 기록되지 않았습니다\.
+[대조 근거와 범위 보기](#document-comparison-2)
+
 ### 게이트웨이에서 하위 호출이 실패하면 최대 3번 재시도한다\.
 
 문서와 구현 일치
@@ -278,6 +289,8 @@ caller instead.
   const MaxRetries = 3
   ```
 
+
+<a id="document-comparison-2"></a>
 
 ### 구현 미확인
 
@@ -688,7 +701,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 | 항목 | 값 |
 |---|---|
 | report | `0195f3a0-0000-7000-8000-000000000504` rev `1` |
-| digest | `e6044cd12aff` |
+| digest | `539522ba2428` |
 | status | `partial` |
 | quality\_verdict | `attention_required` |
 | run | `0195f3a0-0000-7000-8000-000000000501` |
@@ -698,4 +711,4 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 | created\_at | `2026-11-18T00:10:00Z` |
 | export | 코드 포함 내보내기\(권한 있는 사용자 전용\) |
 
-digest sha256: `e6044cd12affb36f7abd29f534e87b711dc65972224e3c6fa7aaf56f64655bac`
+digest sha256: `539522ba24280b020d164d410cd2d870a9a1cf30a0d7f172cfa756b1dd128833`

@@ -51,7 +51,9 @@ func withInsights(v secView) secView {
 				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Heading: l.Label("insight."+q.Aspect) + " · " + l.Label("insight."+q.Assessment), Paras: []string{q.Statement}, Sources: v.sourceCitations(q.EvidenceIDs, doc.Evidence)})
 			}
 			for i, c := range doc.Comparisons {
-				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Anchor: comparisonAnchor(i), Heading: l.Label("decision.comparison." + c.Status), Paras: []string{c.Statement}, List: v.comparisonDetails(c, doc.Evidence)})
+				parts = append(parts, secPart{Model: l.Label("insight.interpretation"), Anchor: comparisonAnchor(i),
+					Heading: l.Label("decision.comparison." + c.Status), Paras: []string{c.Statement},
+					List: v.comparisonDetails(c, doc.Evidence), Workflow: v.workflowCitations(c.RelatedWorkflow, doc.Evidence)})
 			}
 		case SectionCodeReview:
 			for i, s := range v.R.CodeReview.Strengths {
@@ -61,6 +63,40 @@ func withInsights(v secView) secView {
 		block.Parts = append(parts, block.Parts...)
 	}
 	return v
+}
+
+type workflowReadingView struct {
+	Heading, Context string
+	Items            []secItem
+}
+
+func (v secView) workflowCitations(w *RelatedWorkflow, evidence []SectionEvidence) *workflowReadingView {
+	if w == nil {
+		return nil
+	}
+	ids := w.evidenceIDs()
+	items := make([]secItem, 0, len(ids))
+	for i, role := range []string{"read", "change", "test"} {
+		sources := v.sourceCitations([]string{ids[i]}, evidence)
+		if len(sources) > 0 {
+			items = append(items, secItem{Label: v.L.Label("workflow." + role), Sources: sources})
+		}
+	}
+	return &workflowReadingView{Heading: v.L.Label("workflow.heading"), Context: v.L.Label("workflow.context"), Items: items}
+}
+
+func mdWorkflowCitations(p func(...string), reading *workflowReadingView) {
+	if reading == nil {
+		return
+	}
+	p("**", mdText(reading.Heading), "**")
+	p()
+	p(mdText(reading.Context))
+	p()
+	for _, item := range reading.Items {
+		p(mdText(item.Label))
+		mdCitations(p, item.Sources)
+	}
 }
 
 func comparisonAnchor(i int) string { return "document-comparison-" + strconv.Itoa(i+1) }

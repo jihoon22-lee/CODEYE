@@ -1,11 +1,12 @@
-import type { ReactNode } from 'react';
-import type { AnalysisReport } from './analysisReport';
+import { useContext, type ReactNode } from 'react';
+import { sourceEvidenceURL, type AnalysisReport } from './analysisReport';
 import type { Citation, Sections } from './parseReportSections';
-import { Citations, FindingSourceLink, PinnedSourceLink, label, sourceLocation } from './ReportParts';
+import { Citations, FindingSourceLink, PinnedSourceLink, ReportSourceContext, WorkflowReading, label, sourceLocation } from './ReportParts';
 import { ReportAction } from './ReportLayout';
 import { ReportGlossary } from './ReportGlossary';
 import { citedDocumentExample } from './reportExample';
 import { matchingDocumentCondition, primaryCitation, projectReadings, relatedStrength, shareTitleSubject } from './reportGroups';
+import { maxProjectBehaviorRows, projectBehaviors } from './reportBehaviors';
 import { cutLine } from './format';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
@@ -14,6 +15,7 @@ const s = t.sections;
 
 type OverviewReading = {
   comparisonIndex?: number;
+  comparison?: boolean;
   comparisonExample?: string;
   title: string;
   text?: string;
@@ -76,6 +78,7 @@ function selectedReading(report: AnalysisReport, sections: Sections, readings: R
       (condition && !newCode ? findExample(condition.statement, conditionRef) : undefined);
     return {
       comparisonIndex: documents.comparisons.indexOf(comparison),
+      comparison: true,
       title: !included ? t.reading.omitted : paired ? t.reading.documentComparison : unknown ? t.reading.documentClaim : comparison.statement,
       model: included ? !unknown || Boolean(newObservation) : true,
       documentClaim: included && unknown && !paired ? comparison.statement : undefined,
@@ -195,10 +198,58 @@ function inlineComparisonCode(text: string): ReactNode[] {
   return parts;
 }
 
-export function ProjectOverview({ report, sections, openDocuments }: { report: AnalysisReport; sections: Sections; openDocuments: (index?: number) => void }) {
+function ProjectBehaviors({ rows, catalog, openDocuments }: {
+  rows: ReturnType<typeof projectBehaviors>['rows']; catalog: Citation[]; openDocuments: (index?: number) => void;
+}) {
+  const base = useContext(ReportSourceContext);
+  const { heading, documented, recordedComparison, previewSource, openComparison } = t.behavior;
+  return <section className="card report-card report-behaviors" aria-labelledby="report-behaviors">
+    <div className="card-body">
+      <h6 id="report-behaviors">{heading}</h6>
+      {rows.map((row, i) => {
+        const claim = inlineComparisonCode(row.statement);
+        const preview = row.preview;
+        const previewLink = preview && sourceEvidenceURL(base, preview.path, preview.line, preview.end);
+        const place = preview && <code>{sourceLocation(preview.path, preview.line, preview.end)}</code>;
+        const evidence = <>
+          <p className="report-behavior-status">{documented} · {label(t.reading.comparisonStatus, row.status)}</p>
+          {preview && <div className="report-behavior-preview">
+            <p>{previewSource} · {previewLink ? <a href={previewLink} target="_blank" rel="noopener noreferrer">{place}</a> : place}</p>
+            <pre tabIndex={0}><code>{preview.excerpt?.text}</code></pre>
+          </div>}
+          {row.additional && <p className="report-behavior-explanation">
+            <strong>{t.reading.additionalObservation}</strong>{' '}{inlineComparisonCode(row.additional)}
+          </p>}
+          {row.explanation.trim() && <p className="report-behavior-explanation">
+            <strong>{recordedComparison}</strong>{' '}{inlineComparisonCode(row.explanation)}
+          </p>}
+          <div className="report-behavior-links">
+            <Citations catalog={[row.document]} refs={[row.document.id]} />
+            {!preview && row.code && <Citations catalog={[row.code]} refs={[row.code.id]} />}
+            <ReportAction onClick={() => openDocuments(row.index)}>{openComparison}</ReportAction>
+          </div>
+          {row.workflow && <WorkflowReading workflow={row.workflow} catalog={catalog} />}
+        </>;
+        return i === 0
+          ? <article key={row.index} className="report-behavior"><h6>{claim}</h6>{evidence}</article>
+          : <details key={row.index} className="report-behavior"><summary>{claim}</summary>{evidence}</details>;
+      })}
+    </div>
+  </section>;
+}
+
+export function ProjectOverview({ report, sections, behaviors, openDocuments }: {
+  report: AnalysisReport; sections: Sections; behaviors: ReturnType<typeof projectBehaviors>; openDocuments: (index?: number) => void;
+}) {
   const readings = projectReadings(report, sections);
-  const { status, title, text, documentClaim, reasonLabel, comparisonRows, condition, limitation, scope, comparisonIndex, comparisonExample, followedContract, action, unresolved, next, sources, model } =
+  const { status, title, text, documentClaim, reasonLabel, comparisonRows, condition, limitation, scope, comparisonIndex,
+    comparisonExample, comparison, followedContract, action, unresolved, next, sources, model } =
     selectedReading(report, sections, readings);
+  const priority = Boolean(action) || status === t.reading.comparisonStatus.mismatch || status === t.reading.comparisonStatus.partial ||
+    status === t.reading.supported || status === t.reading.reproduced;
+  const rows = (priority && comparison ? behaviors.rows.filter(row => row.index !== comparisonIndex) : behaviors.rows)
+    .slice(0, maxProjectBehaviorRows);
+  const showExample = comparisonExample && !rows.some(row => row.statement === comparisonExample) ? comparisonExample : undefined;
   const heading = cutLine(title, 165);
   const detail = text !== title ? cutLine(text ?? null, 205) : '';
   const claim = cutLine(documentClaim ?? null, 205);
@@ -206,7 +257,7 @@ export function ProjectOverview({ report, sections, openDocuments }: { report: A
   const nextStep = cutLine(next?.text ?? null, 165);
   const limitationText = cutLine(limitation ?? null, 205);
   const comparisonCount = sections.documents.comparisons.length;
-  return (
+  const decision = (
     <section className="card report-card report-executive" aria-labelledby="report-judgment">
       <div className="card-body">
         {status && <div className="report-executive-status"><strong>{status}</strong>{model && <span>{t.modelReading}</span>}</div>}
@@ -240,8 +291,8 @@ export function ProjectOverview({ report, sections, openDocuments }: { report: A
               </div>)}</dl>
               : <p>{t.reading.noDocumentAssessment}</p>}
           </div>
-          {comparisonExample && <p className="report-document-assessment-example">
-            <strong>{t.reading.documentClaim}</strong>{' '}{inlineComparisonCode(cutLine(comparisonExample, 165))}
+          {showExample && <p className="report-document-assessment-example">
+            <strong>{t.reading.documentClaim}</strong>{' '}{inlineComparisonCode(cutLine(showExample, 165))}
           </p>}
           <ReportAction onClick={() => openDocuments(comparisonIndex)}>{t.reading.openDocumentAnalysis}</ReportAction>
         </div>
@@ -250,4 +301,13 @@ export function ProjectOverview({ report, sections, openDocuments }: { report: A
       </div>
     </section>
   );
+  if (rows.length === 0) return decision;
+  return <>
+    {priority && decision}
+    <ProjectBehaviors rows={rows} catalog={sections.documents.citations} openDocuments={openDocuments} />
+    {!priority && <details className="report-section report-behavior-assessment">
+      <summary>{t.reading.documentAssessment}</summary>
+      {decision}
+    </details>}
+  </>;
 }

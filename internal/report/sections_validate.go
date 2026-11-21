@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/progress"
@@ -382,6 +383,10 @@ func projectSections(out *Report, r Report) {
 			if original := d.Comparisons[i].AdditionalObservation; original != nil {
 				c.Comparisons[i].AdditionalObservation = &AdditionalCodeObservation{Reason: textOmitted, CodeEvidenceIDs: slices.Clone(original.CodeEvidenceIDs)}
 			}
+			if original := d.Comparisons[i].RelatedWorkflow; original != nil {
+				location := *original
+				c.Comparisons[i].RelatedWorkflow = &location
+			}
 		}
 		c.Contracts = make([]DocContract, len(d.Contracts))
 		for i, x := range d.Contracts {
@@ -483,7 +488,7 @@ func validateInsights(r Report) error {
 			return invalidf("document quality is invalid")
 		}
 	}
-	followups := 0
+	followups, workflows := 0, 0
 	for i, x := range docs.Comparisons {
 		d := docs.Contracts[i]
 		comparison := record.ContractComparison{ContractIndex: i + 1, AppliesTo: x.AppliesTo,
@@ -510,6 +515,12 @@ func validateInsights(r Report) error {
 				return invalidf("additional document observation is invalid")
 			}
 		}
+		if workflow := x.RelatedWorkflow; workflow != nil {
+			workflows++
+			if workflows > 1 || !hasAcceptedWorkflowReading(r) || !validWorkflowCitations(*workflow, d.AppliesTo, byDoc) {
+				return invalidf("related workflow evidence is invalid")
+			}
+		}
 	}
 	for _, x := range code.Strengths {
 		if !x.Valid(byCode) || !text(x.Title) || !text(x.Benefit) {
@@ -517,4 +528,35 @@ func validateInsights(r Report) error {
 		}
 	}
 	return nil
+}
+
+func validWorkflowCitations(workflow RelatedWorkflow, scope string, catalog map[string]record.Excerpt) bool {
+	ids := workflow.evidenceIDs()
+	if ids[0] == ids[1] || ids[0] == ids[2] || ids[1] == ids[2] {
+		return false
+	}
+	for i, kind := range []string{"code", "code", "test"} {
+		e := catalog[ids[i]]
+		if ids[i] == "" || e.Kind != kind || record.SourceKind(e.Path) != kind ||
+			!strings.HasSuffix(e.Path, ".go") || !record.ScopeUnder(e.Path, scope) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasAcceptedWorkflowReading(r Report) bool {
+	version, _ := strconv.Atoi(r.Builder.Version)
+	const taskKey = "review.investigate"
+	decoder := (WorkflowReadingDecoder{}).Key().String()
+	return version >= WorkflowReadingSince && r.CodeReview != nil &&
+		slices.ContainsFunc(r.Tasks, func(t Task) bool {
+			return t.Key == taskKey && t.Status == string(domain.TaskSucceeded)
+		}) &&
+		slices.ContainsFunc(r.CodeReview.Roles, func(t AIReviewTask) bool {
+			return t.Key == taskKey && t.Result == "accepted" && deref(t.TaskStatus) == string(domain.TaskSucceeded)
+		}) &&
+		slices.ContainsFunc(r.Artifacts, func(a Artifact) bool {
+			return deref(a.TaskKey) == taskKey && deref(a.Decoder) == decoder
+		})
 }

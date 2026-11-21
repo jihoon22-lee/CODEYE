@@ -37,7 +37,8 @@ func contractLineActivity(raw string) (action, decision bool) {
 // matcher while preserving byte and line positions in the snapshot.
 func contractExecutableSource(text, ecosystem string) string {
 	javascript, rust := ecosystem == "javascript", ecosystem == "rust"
-	if !javascript && !rust {
+	c := ecosystem == "c"
+	if !javascript && !rust && !c {
 		return text
 	}
 	out := []byte(text)
@@ -60,7 +61,7 @@ func contractExecutableSource(text, ecosystem string) string {
 			}
 		case rust && rustRawStringSize(tail) > 0:
 			n = rustRawStringSize(tail)
-		case tail[0] == '"' || (javascript && tail[0] == '\''):
+		case tail[0] == '"' || ((javascript || c) && tail[0] == '\''):
 			n = contractQuotedSize(tail)
 		case rust && tail[0] == '\'':
 			if n = contractQuotedSize(tail); n <= 1 || n > 8 {

@@ -151,10 +151,10 @@ func (s *roleStage) goCommandTraces(g codeGroups, queries []witnessQuery, read f
 		if len(trace.excerpts) == 0 {
 			continue
 		}
-		windows, ok := goWrapperWindows(used, trace.excerpts, remaining)
+		windows, ok := wholeTraceWindows(used, trace.excerpts, remaining, maxGoWrapperWindows)
 		if !ok && command.dir != "" && len(trace.excerpts) > 1 {
 			trace.excerpts, trace.callees = trace.excerpts[:1], nil
-			windows, ok = goWrapperWindows(used, trace.excerpts, remaining)
+			windows, ok = wholeTraceWindows(used, trace.excerpts, remaining, maxGoWrapperWindows)
 		}
 		if !ok {
 			continue

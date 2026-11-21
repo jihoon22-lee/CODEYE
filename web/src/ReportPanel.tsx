@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { Api } from './api';
 import type { AnalysisReport } from './analysisReport';
 import { describeError } from './format';
@@ -7,6 +7,7 @@ import { reportKo as t } from './locales/report-ko';
 import { ReportIdentity, FindingList, ReportCalls, ReportCounts, ReportExports, ReportReviewStatus, ReportScope, ReportSourceContext, ReportTasks, TextList, explainReason, type ReportHistory } from './ReportParts';
 import { ReportGroup, ReportIcon, ReportLayout } from './ReportLayout';
 import { SectionedReport } from './ReportSections';
+import { ReportSearch, focusReportFinding } from './ReportSearch';
 
 export type { ReportHistory } from './ReportParts';
 
@@ -18,6 +19,11 @@ export function ReportDocument({ report, history }: { report: AnalysisReport; hi
 
 // Revisions published before the analysis sections keep this flat layout.
 function FlatReport({ report, history }: { report: AnalysisReport; history?: ReportHistory }) {
+  const findingList = useRef<HTMLDivElement>(null);
+  const [finding, setFinding] = useState<{ id: string }>();
+  useLayoutEffect(() => {
+    if (finding) focusReportFinding(findingList.current, finding.id);
+  }, [finding]);
   const rail = <nav aria-label={t.title} className="nav report-tabs">
     <button type="button" className="nav-link" aria-controls="report-findings" onClick={() => document.getElementById('report-findings')?.focus()}>
       <ReportIcon name="findings" /><span>{t.findings}</span>
@@ -36,9 +42,13 @@ function FlatReport({ report, history }: { report: AnalysisReport; history?: Rep
     </button>
   </nav>;
   return (
-    <ReportLayout report={report} rail={rail}>
+    <ReportLayout report={report} rail={<>
+      {rail}
+      {report.findings.length > 0 && <ReportSearch key={report.runID + ':' + report.revision} report={report}
+        navigate={target => { if (target.kind === 'finding') setFinding({ id: target.id }); }} />}
+    </>}>
       <ReportGroup title={t.findings} tone="neutral" icon="findings" id="report-findings">
-        <FindingList findings={report.findings} history={history} empty={t.empty} />
+        <div ref={findingList}><FindingList findings={report.findings} history={history} empty={t.empty} reveal={finding} /></div>
       </ReportGroup>
       <ReportGroup title={t.reading.operations} tone="neutral" icon="chart"><ReportReviewStatus report={report} /><ReportCounts report={report} /></ReportGroup>
       {report.limitations.length > 0 && (
