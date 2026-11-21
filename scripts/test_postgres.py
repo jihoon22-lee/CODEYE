@@ -77,7 +77,9 @@ def main():
             # final line then does not claim the storage integration tests ran.
             go_suite = "--smokes-only" not in sys.argv[1:]
             if go_suite:
-                subprocess.run(["go", "test", "-race", "-count=1", "./..."], cwd=ROOT, env=env, check=True)
+                # Cumulative deadline for each package's race-enabled test binary.
+                subprocess.run(["go", "test", "-race", "-count=1", "-timeout=15m", "./..."],
+                               cwd=ROOT, env=env, check=True)
             subprocess.run(["go", "build", "-o", str(base / "codeye"), "./cmd/codeye"], cwd=ROOT, env=env, check=True)
             env["CODEYE_DATABASE_URL"] = url
             for _ in range(2):
