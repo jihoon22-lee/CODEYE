@@ -20,6 +20,7 @@ func TestProjectBehaviorsRankStoredComparisonsBeforeTakingFour(t *testing.T) {
 	}
 	r.Documents.Evidence = []SectionEvidence{
 		cite("guide", "document", "README.md", "# Delivery\n\n## Features\n\nDeliver and calculate totals."),
+		cite("notes", "document", "README.md", "## Development history\n\nIn this release, the total reflects all items."),
 		cite("imports", "code", "src/overview.ts", "import { StatusReady } from './state';\nimport type { Options } from './options';"),
 		cite("execution", "code", "src/totals.py", "    return total * multiplier"),
 	}
@@ -34,6 +35,9 @@ func TestProjectBehaviorsRankStoredComparisonsBeforeTakingFour(t *testing.T) {
 		row("unknown", "네 번째 약속입니다."),
 		row("unknown", "다섯 번째 동작은 합계를 반환합니다.", "execution"),
 		row("unknown", "같은 수준의 후속 동작도 값을 반환합니다.", "execution"),
+	}
+	for i := 4; i <= 5; i++ {
+		r.Documents.Comparisons[i].DocumentEvidenceIDs = []string{"notes"}
 	}
 	anchors := func(rows []projectBehavior) []string {
 		out := make([]string, 0, len(rows))
@@ -51,7 +55,12 @@ func TestProjectBehaviorsRankStoredComparisonsBeforeTakingFour(t *testing.T) {
 		row("match", "저장된 일치입니다.", "execution"),
 		row("partial", "저장된 부분 일치입니다.", "execution"),
 		row("mismatch", "저장된 불일치입니다.", "execution"),
+		row("unknown", "릴리스 안내가 아직 확인되지 않았습니다.", "imports"),
+		row("unknown", "배포 명령은 별도 옵션을 받습니다.", "execution"),
 	)
+	for i := 9; i <= 10; i++ {
+		r.Documents.Comparisons[i].DocumentEvidenceIDs = []string{"notes"}
+	}
 	stored := slices.Clone(r.Documents.Comparisons)
 	view := newSummaryView(r, "x", Korean)
 	if view.Decision.ComparisonAnchor != "document-comparison-9" ||
@@ -66,6 +75,9 @@ func TestProjectBehaviorsRankStoredComparisonsBeforeTakingFour(t *testing.T) {
 	if next := newSummaryView(r, "x", Korean); !reflect.DeepEqual(view.Behaviors, next.Behaviors) ||
 		!reflect.DeepEqual(r.Documents.Comparisons, stored) {
 		t.Fatal("rendering changed the stored or rerendered order")
+	}
+	if rows := view.projectBehaviors().Rows; len(rows) != 9 {
+		t.Fatalf("heading fallback admitted imports or operational guidance: %v", anchors(rows))
 	}
 	codeFree := Project(r, false)
 	if view := newSummaryView(codeFree, "x", Korean); len(view.Behaviors.Rows) != 0 ||
@@ -132,6 +144,11 @@ func TestProjectBehaviorsRetainDocumentAndConditionalResponse(t *testing.T) {
 			!strings.Contains(hero, "README.md:3") {
 			t.Fatal("the project purpose is missing from the report header")
 		}
+		_, behaviorHTML, _ := strings.Cut(string(html), "프로젝트 사용 흐름")
+		behaviorHTML, _, _ = strings.Cut(behaviorHTML, "</section>")
+		if !strings.Contains(behaviorHTML, "인용 코드 전체 보기") || !strings.Contains(behaviorHTML, "print(receipt)") {
+			t.Fatal("the full stored citation is missing from the behavior card")
+		}
 		for _, output := range []string{markdown, string(html)} {
 			start := strings.Index(output, "프로젝트 사용 흐름")
 			if start < 0 {
@@ -171,5 +188,15 @@ func TestProjectBehaviorsRetainDocumentAndConditionalResponse(t *testing.T) {
 	preview, _ := behaviorPreview(branch)
 	if preview.StartLine != 21 || preview.EndLine != 24 || preview.Excerpt.Text != strings.Join(strings.Split(branch.Excerpt.Text, "\n")[1:5], "\n") {
 		t.Fatalf("preview does not preserve the exact cited lines: %+v", preview)
+	}
+	for i := range report.Documents.Evidence {
+		if report.Documents.Evidence[i].ID == branch.ID {
+			report.Documents.Evidence[i] = preview
+		}
+	}
+	for _, row := range newSummaryView(report, "x", Korean).Behaviors.Rows {
+		if row.Preview == nil || row.CodeSource.Location != "" {
+			t.Fatalf("identical preview and source was duplicated: %+v", row)
+		}
 	}
 }

@@ -26,7 +26,7 @@ export const reportKo = {
   strengthsTitle: '유지할 만한 구현', scopeTitle: '적용 범위',
   behavior: {
     heading: '프로젝트 사용 흐름', documented: '사용 설명',
-    recordedComparison: '대조 내용', previewSource: '인용된 코드', openComparison: '대조 근거와 범위 보기',
+    recordedComparison: '대조 내용', previewSource: '인용된 코드', fullSource: '인용 코드 전체 보기', openComparison: '대조 근거와 범위 보기',
   },
   workflow: {
     heading: '함께 읽은 코드와 테스트',

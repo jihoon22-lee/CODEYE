@@ -1033,7 +1033,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{if .Explanation}}<p class="report-behavior-explanation"><strong>{{$l.Label "behavior.recorded_comparison"}}</strong> {{range inlineCodeParts .Explanation}}{{if .Code}}<code>{{.Text}}</code>{{else}}{{.Text}}{{end}}{{end}}</p>{{end}}
 <div class="report-behavior-links">
 {{template "citation" .DocumentSource}}
-{{if and (not .Preview) .CodeSource.Location}}{{template "citation" .CodeSource}}{{end}}
+{{if .CodeSource.Location}}{{template "citation" .CodeSource}}{{end}}
 <a class="btn btn-sm btn-ghost-primary" href="#{{.Anchor}}">{{$l.Label "behavior.open_comparison"}}{{reportIcon "chevron-right"}}</a>
 </div>
 {{template "workflow_reading" .Workflow}}

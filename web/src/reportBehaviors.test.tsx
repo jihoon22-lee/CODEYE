@@ -24,6 +24,7 @@ it('places the fifth implemented behavior before bare promises and leaves stored
   };
   documents.citations = [
     cite('guide', 'document', 'README.md', '# Delivery\n\n## Features\n\nDeliver and calculate totals.'),
+    cite('notes', 'document', 'README.md', '## Development history\n\nIn this release, the total reflects all items.'),
     cite('imports', 'code', 'src/overview.ts', "import { StatusReady } from './state';\nimport type { Options } from './options';"),
     cite('execution', 'code', 'src/totals.py', '    return total * multiplier'),
   ];
@@ -38,6 +39,7 @@ it('places the fifth implemented behavior before bare promises and leaves stored
     row('다섯 번째 동작은 합계를 반환합니다.', 'unknown', 'execution'),
     row('같은 수준의 후속 동작도 값을 반환합니다.', 'unknown', 'execution'),
   ];
+  for (const i of [4, 5]) documents.comparisons[i].documentRefs = ['notes'];
   const { rerender } = render(<ReportDocument report={report} />);
   const titles = () => [...screen.getByRole('region', { name: t.behavior.heading })
     .querySelectorAll('.report-behavior > h6, .report-behavior > summary')].map(node => node.textContent);
@@ -47,11 +49,14 @@ it('places the fifth implemented behavior before bare promises and leaves stored
     row('저장된 일치입니다.', 'match', 'execution'),
     row('저장된 부분 일치입니다.', 'partial', 'execution'),
     row('저장된 불일치입니다.', 'mismatch', 'execution'),
+    { ...row('릴리스 안내가 아직 확인되지 않았습니다.', 'unknown', 'imports'), documentRefs: ['notes'] },
+    { ...row('배포 명령은 별도 옵션을 받습니다.', 'unknown', 'execution'), documentRefs: ['notes'] },
   ];
   const stored = structuredClone(documents.comparisons);
   rerender(<ReportDocument report={report} />);
   expect(titles()).toEqual([7, 6, 4, 5].map(index => stored[index].statement));
   expect(screen.getByText(stored[8].statement, { selector: '#report-judgment' })).toBeTruthy();
+  expect(projectBehaviors(documents, true).rows).toHaveLength(9);
   expect(projectBehaviors(documents, true)).toEqual(projectBehaviors(documents, true));
   expect(projectBehaviors(documents, false).rows).toHaveLength(0);
   expect(documents.comparisons).toEqual(stored);
@@ -71,7 +76,7 @@ it('puts workflows and exact code excerpts before configuration and opens the se
   const module = cite('module-use', 'document', 'receipts/README.md', 1, '# Receipts\n\nSave or email copies of receipts.');
   const config = cite('readme-config', 'document', 'README.md', 22, '## Parameters\n\nStore path defaults to receipts.db.');
   const branch = cite('handler', 'code', 'receipts/server.ts', 16,
-    "if (error instanceof ReceiptNotFound) {\n  return res.status(404).send('unknown receipt');\n}");
+    "if (error instanceof ReceiptNotFound) {\n  return res.status(404).send('unknown receipt');\n}\nauditReceipt(receipt);");
   documents.citations = [usage, module, config, branch];
   const reason = '생성된 링크의 유효 기간은 확인하지 못했습니다.';
   const additional = '요청한 항목이 없을 때의 응답 분기를 확인했습니다.';
@@ -89,6 +94,12 @@ it('puts workflows and exact code excerpts before configuration and opens the se
   expect(hero.querySelector('.report-purpose')?.textContent).toContain('Parcel delivers receipts to customers. README.md:3');
   expect(screen.getByRole('article', { name: t.title }).querySelectorAll('.report-purpose')).toHaveLength(1);
   expect(overview.querySelector('pre')?.textContent).toBe(branch.excerpt!.text.split('\n').slice(0, 2).join('\n'));
+  const expandCode = within(overview).getAllByLabelText(t.sourceActionAt(t.behavior.fullSource, 'receipts/server.ts:16–19'))[0];
+  const fullCode = expandCode.closest('details')!;
+  expect(fullCode.open).toBe(false);
+  fireEvent.click(expandCode);
+  expect(fullCode.open).toBe(true);
+  expect(fullCode.querySelector('pre')?.textContent).toContain('auditReceipt(receipt);');
   expect(overview.textContent).toContain('receipts/server.ts:16–17');
   expect(overview.textContent).toContain(reason);
   expect(overview.textContent).toContain(additional);
@@ -104,6 +115,10 @@ it('puts workflows and exact code excerpts before configuration and opens the se
   expect(document.activeElement?.textContent).toContain('사본을 저장할 수 있습니다.');
 
   fireEvent.click(screen.getByRole('tab', { name: t.sections.overview }));
+  documents.citations = documents.citations.map(citation => citation.id !== branch.id ? citation : {
+    ...citation, excerpt: { start: 16, end: 17, text: branch.excerpt!.text.split('\n').slice(0, 2).join('\n') },
+  });
+  expect(projectBehaviors(documents, true).rows[0].code).toBeUndefined();
   rerender(<ReportDocument report={{ ...report, includesCode: false }} />);
   expect(screen.queryByRole('region', { name: t.behavior.heading })).toBeNull();
   expect(screen.queryByText('Parcel delivers receipts to customers.', { exact: false })).toBeNull();

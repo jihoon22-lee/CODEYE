@@ -225,7 +225,7 @@ function ProjectBehaviors({ rows, catalog, openDocuments }: {
           </p>}
           <div className="report-behavior-links">
             <Citations catalog={[row.document]} refs={[row.document.id]} />
-            {!preview && row.code && <Citations catalog={[row.code]} refs={[row.code.id]} />}
+            {row.code && <Citations catalog={[row.code]} refs={[row.code.id]} actionLabel={preview ? t.behavior.fullSource : undefined} />}
             <ReportAction onClick={() => openDocuments(row.index)}>{openComparison}</ReportAction>
           </div>
           {row.workflow && <WorkflowReading workflow={row.workflow} catalog={catalog} />}

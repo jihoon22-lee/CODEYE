@@ -338,6 +338,7 @@ var koSectionLabels = map[string]string{
 	"behavior.documented":               "사용 설명",
 	"behavior.recorded_comparison":      "대조 내용",
 	"behavior.preview_source":           "인용된 코드",
+	"behavior.full_source":              "인용 코드 전체 보기",
 	"behavior.open_comparison":          "대조 근거와 범위 보기",
 	"workflow.heading":                  "함께 읽은 코드와 테스트",
 	"workflow.context":                  "조회와 변경 처리, 테스트 단언의 인용 위치입니다. 테스트 실행 상태는 분석 기록에서 확인할 수 있습니다.",

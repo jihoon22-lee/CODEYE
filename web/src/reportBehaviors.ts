@@ -54,13 +54,17 @@ const implementationUpdate = /^\s*[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?\s*(?:\+=|-=|\*
 const statusRank: Record<string, number> = { mismatch: 0, partial: 1, match: 2 };
 export const maxProjectBehaviorRows = 4;
 
-function hasImplementation(citation: Citation) {
+function implementationRank(citation: Citation) {
   const excerpt = citation.excerpt;
-  return excerpt?.text.split('\n').some((line, offset) => {
+  if (!excerpt) return 0;
+  let rank = 0;
+  for (const [offset, line] of excerpt.text.split('\n').entries()) {
     const n = excerpt.start + offset;
-    return n >= citation.line && n <= citation.end &&
-      (implementationOutcome.test(line) || implementationBranch.test(line) || implementationUpdate.test(line));
-  }) ?? false;
+    if (n < citation.line || n > citation.end) continue;
+    if (implementationOutcome.test(line)) return 2;
+    if (implementationBranch.test(line) || implementationUpdate.test(line)) rank = 1;
+  }
+  return rank;
 }
 
 // Keep the preview as a verbatim window. Lexical cues choose a smaller range
@@ -99,7 +103,7 @@ export function projectBehaviors(documents: Sections['documents'], includesCode:
   }[] = [];
   let description: Citation | undefined;
   if (!includesCode) return { rows, description };
-  const usage = new Map<string, NonNullable<ReturnType<typeof usageDocument>>>();
+  const guides = new Map<string, NonNullable<ReturnType<typeof usageDocument>>>();
   for (const citation of documents.citations) {
     if (!primaryCitation(citation, 'document')) continue;
     const document = usageDocument(citation);
@@ -108,32 +112,41 @@ export function projectBehaviors(documents: Sections['documents'], includesCode:
       (!description || document.description.line < description.line)) {
       description = document.description;
     }
-    if (document.usage) usage.set(citation.id, document);
+    guides.set(citation.id, document);
   }
   const seen = new Set<string>();
   const primaryCode = documents.citations.filter(citation => primaryCitation(citation, 'code'));
   for (const [index, comparison] of documents.comparisons.entries()) {
     const key = comparison.statement.trim().split(/\s+/).join(' ').toLowerCase().replace(/[.。!?！？]+$/, '').trimEnd();
     if (!key || seen.has(key) || secondaryReviewScope(comparison.scope)) continue;
-    const document = comparison.documentRefs.map(id => usage.get(id)).find(d => d && !(d.operational && operationalClaim.test(comparison.statement)))?.citation
+    const citedGuides = comparison.documentRefs.map(id => guides.get(id));
+    let document = citedGuides.find(d => d?.usage && !(d.operational && operationalClaim.test(comparison.statement)))?.citation
       ?? (comparison.workflow && documents.citations.find(c => comparison.documentRefs.includes(c.id) && primaryCitation(c, 'document')));
-    if (!document) continue;
     const code = primaryCode.filter(citation => comparison.codeRefs.includes(citation.id));
     if (comparison.status !== 'unknown' && code.length === 0) continue;
-    seen.add(key);
     const extra = comparison.additional;
     const extraCode = extra?.reason.trim() ? primaryCode.filter(citation => extra.codeRefs.includes(citation.id)) : [];
     const sources = [...extraCode, ...code.filter(citation => !extraCode.includes(citation))];
     let preview: ReturnType<typeof codePreview>;
+    let source = primaryCode.find(citation => sources.includes(citation));
     for (const citation of primaryCode) {
       if (!sources.includes(citation)) continue;
       const visible = codePreview(citation);
-      if (visible && visible.rank > (preview?.rank ?? 0)) preview = visible;
+      if (visible && visible.rank > (preview?.rank ?? 0)) {
+        preview = visible;
+        source = citation.excerpt?.start === visible.source.line && citation.excerpt.end === visible.source.end ? undefined : citation;
+      }
     }
+    const rank = sources.reduce((best, citation) => Math.max(best, implementationRank(citation)), 0);
+    if (!document && (rank === 2 || preview) && !operationalClaim.test(comparison.statement)) {
+      document = citedGuides.find(d => d && !d.operational)?.citation;
+    }
+    if (!document) continue;
+    seen.add(key);
     rows.push({ index, statement: comparison.statement, status: comparison.status, explanation: comparison.reason,
       additional: extraCode.length > 0 && extra!.reason.trim() !== comparison.reason.trim() ? extra!.reason : undefined,
-      document, code: primaryCode.find(citation => sources.includes(citation)), preview: preview?.source,
-      workflow: comparison.workflow, implementation: comparison.status === 'unknown' && sources.some(hasImplementation) });
+      document, code: source, preview: preview?.source,
+      workflow: comparison.workflow, implementation: comparison.status === 'unknown' && (rank > 0 || Boolean(preview)) });
   }
   rows.sort((a, b) => (statusRank[a.status] ?? 3) - (statusRank[b.status] ?? 3) || Number(b.implementation) - Number(a.implementation));
   return { rows, description };

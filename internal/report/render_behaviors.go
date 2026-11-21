@@ -91,18 +91,24 @@ var implementationUpdate = regexp.MustCompile(`^\s*[A-Za-z_]\w*(?:\.[A-Za-z_]\w*
 
 const maxProjectBehaviorRows = 4
 
-func behaviorHasImplementation(e SectionEvidence) bool {
+func behaviorImplementationRank(e SectionEvidence) int {
 	if e.Excerpt == nil {
-		return false
+		return 0
 	}
+	rank := 0
 	for i, line := range strings.Split(e.Excerpt.Text, "\n") {
 		n := e.Excerpt.StartLine + i
-		if n >= e.StartLine && n <= e.EndLine &&
-			(implementationOutcome.MatchString(line) || implementationBranch.MatchString(line) || implementationUpdate.MatchString(line)) {
-			return true
+		if n < e.StartLine || n > e.EndLine {
+			continue
+		}
+		if implementationOutcome.MatchString(line) {
+			return 2
+		}
+		if implementationBranch.MatchString(line) || implementationUpdate.MatchString(line) {
+			rank = 1
 		}
 	}
-	return false
+	return rank
 }
 
 func behaviorStatusRank(status string) int {
@@ -177,7 +183,7 @@ func (v secView) projectBehaviors() projectBehaviors {
 	if doc == nil {
 		return result
 	}
-	usage := make(map[string]behaviorDoc)
+	guides := make(map[string]behaviorDoc)
 	descriptionLine := 0
 	for _, e := range doc.Evidence {
 		if e.Kind != "document" || !productLocation(e.Path, e.StartLine, e.EndLine) {
@@ -189,8 +195,8 @@ func (v secView) projectBehaviors() projectBehaviors {
 			result.Description, descriptionLine = strings.TrimSpace(d.description.Excerpt.Text), d.description.StartLine
 			result.Source = v.citeSectionEvidence(*d.description)
 		}
-		if d.usage {
-			usage[e.ID] = d
+		if e.Excerpt != nil && usageFile.MatchString(path.Base(e.Path)) {
+			guides[e.ID] = d
 		}
 	}
 	seen := make(map[string]bool)
@@ -202,7 +208,7 @@ func (v secView) projectBehaviors() projectBehaviors {
 		}
 		var cited behaviorDoc
 		for _, id := range comparison.DocumentEvidenceIDs {
-			if d := usage[id]; d.evidence.ID != "" && !(d.operational && operationalClaim.MatchString(comparison.Statement)) {
+			if d := guides[id]; d.usage && !(d.operational && operationalClaim.MatchString(comparison.Statement)) {
 				cited = d
 				break
 			}
@@ -212,19 +218,11 @@ func (v secView) projectBehaviors() projectBehaviors {
 				cited.evidence = *e
 			}
 		}
-		if cited.evidence.ID == "" {
-			continue
-		}
 		if comparison.Status != "unknown" && !hasProductSectionEvidence(comparison.CodeEvidenceIDs, doc.Evidence, "code") {
 			continue
 		}
-		seen[key] = true
-		row := projectBehavior{
-			Anchor: comparisonAnchor(i), Claim: comparison.Statement, Status: comparison.Status,
-			Explanation:    openingText(comparison.Reason, ""),
-			DocumentSource: v.citeDecisionDocument(cited.evidence, comparison.Statement),
-			Workflow:       v.workflowCitations(comparison.RelatedWorkflow, doc.Evidence),
-		}
+		var row projectBehavior
+		row.Explanation = openingText(comparison.Reason, "")
 		codeRefs := comparison.CodeEvidenceIDs
 		if extra := comparison.AdditionalObservation; extra != nil && openingText(extra.Reason, "") != "" && additionalPrimaryCode(comparison, doc.Evidence) != nil {
 			if strengthTextKey(extra.Reason) != strengthTextKey(row.Explanation) {
@@ -235,20 +233,40 @@ func (v secView) projectBehaviors() projectBehaviors {
 		if source := bestProductEvidence(codeRefs, doc.Evidence, "code"); source != nil {
 			row.CodeSource = v.citeSectionEvidence(*source)
 		}
-		var bestRank int
+		var implementationRank, bestRank int
 		for _, e := range doc.Evidence {
 			if e.Kind != "code" || !slices.Contains(codeRefs, e.ID) || !productLocation(e.Path, e.StartLine, e.EndLine) {
 				continue
 			}
-			if row.Status == "unknown" {
-				row.implementation = row.implementation || behaviorHasImplementation(e)
-			}
+			implementationRank = max(implementationRank, behaviorImplementationRank(e))
 			if excerpt, rank := behaviorPreview(e); rank > bestRank {
 				source := v.citeSectionEvidence(excerpt)
 				source.ActionLabel = v.L.Label("behavior.preview_source")
 				row.Preview, bestRank = &source, rank
+				if e.Excerpt.StartLine == excerpt.StartLine && e.Excerpt.EndLine == excerpt.EndLine {
+					row.CodeSource = sourceCitation{}
+				} else {
+					row.CodeSource = v.citeSectionEvidence(e)
+					row.CodeSource.ActionLabel = v.L.Label("behavior.full_source")
+				}
 			}
 		}
+		if cited.evidence.ID == "" && (implementationRank == 2 || row.Preview != nil) && !operationalClaim.MatchString(comparison.Statement) {
+			for _, id := range comparison.DocumentEvidenceIDs {
+				if guide := guides[id]; guide.evidence.ID != "" && !guide.operational {
+					cited = guide
+					break
+				}
+			}
+		}
+		if cited.evidence.ID == "" {
+			continue
+		}
+		seen[key] = true
+		row.Anchor, row.Claim, row.Status = comparisonAnchor(i), comparison.Statement, comparison.Status
+		row.DocumentSource = v.citeDecisionDocument(cited.evidence, comparison.Statement)
+		row.Workflow = v.workflowCitations(comparison.RelatedWorkflow, doc.Evidence)
+		row.implementation = row.Status == "unknown" && (implementationRank > 0 || row.Preview != nil)
 		result.Rows = append(result.Rows, row)
 	}
 	slices.SortStableFunc(result.Rows, func(a, b projectBehavior) int {
