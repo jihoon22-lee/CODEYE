@@ -1,7 +1,7 @@
-import { createContext, useContext, useId, useState, type ReactNode } from 'react';
+import { Fragment, createContext, useContext, useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { Api } from './api';
 import type { AnalysisReport, Evidence, Finding } from './analysisReport';
-import { formatInstant, runStatusLabel } from './format';
+import { formatInstant, label, runStatusLabel } from './format';
 import type { Citation, Excerpt, RelatedWorkflow } from './parseReportSections';
 import { reportURL, sourceEvidenceURL } from './analysisReport';
 import { FindingHistory, HIDDEN, findingBadge, type ComparisonLoad } from './HistoryView';
@@ -14,10 +14,9 @@ import bootstrapLicense from '../../internal/report/reportui/LICENSE.bootstrap?u
 import fontLicense from '../../internal/report/reportui/LICENSE.noto-sans-kr?url&no-inline';
 import { secondaryReviewFinding } from './reportGroups';
 import type { DocumentExample } from './reportExample';
+import { ReportFindingWorkbench } from './ReportFindingWorkbench';
 
-export function label(labels: Record<string, string>, key: string) {
-  return Object.hasOwn(labels, key) ? labels[key] : key;
-}
+export { label } from './format';
 // A reason code ("code" or "code:detail") in words: the report's wording, else the stage
 // wording the run page uses, else the code itself.
 export function explainReason(value: string) {
@@ -80,18 +79,50 @@ function sourceFocus(title: string | undefined, lines: string[], excerpt: Excerp
   if (start >= excerpt.start && end <= excerpt.end && end - start < 5) return start;
 }
 
+const sourceWrapQuery = '(max-width: 36rem)';
+
+function watchSourceWidth(change: () => void) {
+  const query = typeof window.matchMedia === 'function' ? window.matchMedia(sourceWrapQuery) : null;
+  query?.addEventListener('change', change);
+  return () => query?.removeEventListener('change', change);
+}
+
+function sourceWrapDefault() {
+  return typeof window.matchMedia === 'function' && window.matchMedia(sourceWrapQuery).matches;
+}
+
+export function ReportPath({ value, className }: { value: string; className?: string }) {
+  return <code className={className ? `report-path-text ${className}` : 'report-path-text'}>{value.split(/(?<=\/)/).map((part, index) =>
+    <Fragment key={index}>{index > 0 && <wbr />}{part}</Fragment>)}</code>;
+}
+
 export function ReportPreview({ path, start, end, excerpt, title }: { path: string; start: number; end: number; excerpt: Excerpt; title?: string }) {
+  const [full, setFull] = useState(false);
+  const wrapDefault = useSyncExternalStore(watchSourceWidth, sourceWrapDefault, () => false);
+  const [wrapPreference, setWrap] = useState<boolean>();
+  const wrap = wrapPreference ?? wrapDefault;
   const lines = excerpt.text.split('\n');
   const focus = sourceFocus(title, lines, excerpt, start, end);
   const first = focus === undefined ? excerpt.start : Math.max(excerpt.start, Math.min(focus - 1, excerpt.end - 4));
   const last = focus === undefined ? excerpt.end : Math.min(excerpt.end, first + 4);
-  const text = lines.slice(first - excerpt.start, last - excerpt.start + 1).join('\n');
-  const location = sourceLocation(path, first, last);
-  const broadCitation = end - start >= 5 && (start !== first || end !== last);
-  return <div className="report-selected-source">
-    <p className="report-excerpt-label">{t.savedExcerpt} <code>{location}</code></p>
-    {broadCitation && <p className="report-excerpt-label">{t.citedRange} <code>{sourceLocation(path, start, end)}</code></p>}
-    <CodeWindow location={location} excerpt={{ start: first, end: last, text }} focusLine={focus} />
+  const previewRange = first === last ? String(first) : `${first}–${last}`;
+  const citedRange = start === end ? String(start) : `${start}–${end}`;
+  const canExpand = first !== excerpt.start || last !== excerpt.end;
+  const shown = full && canExpand ? excerpt : { start: first, end: last, text: lines.slice(first - excerpt.start, last - excerpt.start + 1).join('\n') };
+  const windowTitle = sourceLocation(path, shown.start, shown.end);
+  const savedIsCitation = excerpt.start === start && excerpt.end === end;
+  return <div className="report-selected-source" data-wrap={wrap}>
+    <p className="report-excerpt-label"><ReportPath value={path} /></p>
+    <div className="report-source-toolbar">
+      {canExpand ? <>
+        <button type="button" aria-pressed={!full} onClick={() => setFull(false)}>{t.savedExcerpt} {previewRange}</button>
+        <button type="button" aria-pressed={full} onClick={() => setFull(true)}>{savedIsCitation ? t.citedRange : t.fullSavedExcerpt} {excerpt.start}–{excerpt.end}</button>
+      </> : <span>{t.savedExcerpt} {previewRange}</span>}
+      {!savedIsCitation && citedRange !== previewRange && <span>{t.citedRange} {citedRange}</span>}
+      <button type="button" aria-pressed={wrap} onClick={() => setWrap(!wrap)}>{t.wrapSource}</button>
+    </div>
+    <p className="report-print-ranges">{t.savedExcerpt} {previewRange} · {t.citedRange} {citedRange}</p>
+    <CodeWindow location={windowTitle} excerpt={shown} focusLine={focus} />
   </div>;
 }
 
@@ -109,13 +140,13 @@ function EvidenceLocation({ location, href, excerpt, path, kind, actionLabel, ex
 }) {
   const isDocument = kind === 'document';
   const action = actionLabel ?? (isDocument ? t.viewDocument : kind === 'test' ? t.viewTestCode : kind === 'manifest' ? t.viewManifest : t.viewCode);
-  const file = <span className="report-file"><ReportIcon name="file" /><code>{location}</code></span>;
+  const file = <span className="report-file"><ReportIcon name="file" /><ReportPath value={location} /></span>;
   return <div className="report-evidence">
     {example && <p className="report-document-example"><strong>{t.reading.documentExample}</strong>{' '}
       <code>{example.call}</code> → <code>{example.output}</code></p>}
     {excerpt ? <details className="report-excerpt">
       <summary className="btn btn-sm btn-ghost-primary" aria-label={t.sourceActionAt(action, location)}>
-        <ReportIcon name={isDocument ? 'file' : 'code'} />{showLocation ? <code>{location}</code> : action}<ReportIcon name="chevron" />
+        <ReportIcon name={isDocument ? 'file' : 'code'} />{showLocation ? <ReportPath value={location} /> : action}<ReportIcon name="chevron" />
       </summary>
       <div className="report-evidence-row">
         {file}{href && <SourceAnchor href={href} location={location} />}
@@ -274,7 +305,7 @@ export type ReportHistory = { load: ComparisonLoad; api: Api; reload: () => void
 // FindingList is a searchable list of findings grouped by category. A finding
 // whose loaded current disposition hides it is left out of the list unless
 // asked for; counts elsewhere keep it.
-export function FindingList({ findings, history, empty, reveal, groupByCategory = true }: { findings: Finding[]; history?: ReportHistory; empty: string; reveal?: { id: string }; groupByCategory?: boolean }) {
+export function FindingList({ findings, history, empty, reveal, groupByCategory = true, inspect = false }: { findings: Finding[]; history?: ReportHistory; empty: string; reveal?: { id: string }; groupByCategory?: boolean; inspect?: boolean }) {
   const detailGroup = useId();
   const [filter, setFilter] = useState('');
   const [showHidden, setShowHidden] = useState(false);
@@ -318,12 +349,15 @@ export function FindingList({ findings, history, empty, reveal, groupByCategory 
       )}
       {grouped.size === 0 && (filter ? <p>{t.noMatch}</p> : hidden.length === 0 && <p>{empty}</p>)}
       {Array.from(grouped, ([category, items]) => {
-        const card = (f: Finding) => {
+        const historyFor = (f: Finding) => {
           const status = statuses.get(f.id);
-          return <FindingCard key={f.id} f={f} badge={findingBadge(status)} detailGroup={groupByCategory ? undefined : detailGroup}
-            history={comparison && status && history && <FindingHistory api={history.api} comparison={comparison} status={status}
-              entry={status.fingerprint ? entries.get(status.fingerprint) : undefined} onChanged={history.reload} />} />;
+          return comparison && status && history && <FindingHistory api={history.api} comparison={comparison} status={status}
+            entry={status.fingerprint ? entries.get(status.fingerprint) : undefined} onChanged={history.reload} />;
         };
+        const card = (f: Finding) => <FindingCard key={f.id} f={f} badge={findingBadge(statuses.get(f.id))} detailGroup={groupByCategory ? undefined : detailGroup}
+          history={historyFor(f)} />;
+        if (inspect) return <ReportFindingWorkbench key={category} findings={items} reveal={revealedID ? reveal : undefined}
+          detail={f => <FindingDetails key={f.id} f={f} history={historyFor(f)} />} />;
         if (!groupByCategory) return <div className="table report-detail-index report-finding-index" key={category}><table>
           <thead><tr><th scope="col">{t.reading.detailItem}</th><th scope="col">{t.sections.col.status}</th><th scope="col">{t.sections.col.location}</th></tr></thead>
           <tbody>{items.map(f => <tr key={f.id}><td colSpan={3}>{card(f)}</td></tr>)}</tbody>

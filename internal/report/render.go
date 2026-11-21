@@ -576,9 +576,12 @@ var htmlFuncs = template.FuncMap{
 	"packages":        packages,
 	"artref":          artRef,
 	"pair":            func(l Locale, p secPart) partArgs { return partArgs{L: l, P: p} },
+	"inspectionPair":  func(l Locale, d secTableDetail) inspectionDetailArgs { return inspectionDetailArgs{L: l, D: d} },
 	"tf":              tf,
 	"reportIcon":      reportIcon,
 	"sectionIcon":     sectionIcon,
+	"displayLocation": displayLocation,
+	"pathSegments":    func(value string) []string { return strings.SplitAfter(value, "/") },
 	"groupIcon":       groupIcon,
 	"findingCitation": findingCitation,
 }

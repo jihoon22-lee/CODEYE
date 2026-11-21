@@ -279,6 +279,7 @@ type toolLocation struct {
 type toolObservation struct {
 	ID, Tool, RuleID, RawMessage, LocationState string
 	Location                                    *toolLocation
+	Related                                     []obsdoc.Related
 	// Severity is the tool's raw severity; it orders review.scope's slots
 	// and is never part of a request.
 	Severity *string
@@ -327,6 +328,14 @@ func (s *roleStage) readToolDoc(key string, files map[string]source.Entry) (tool
 			to := toolObservation{ID: o.ID, Tool: d.Analyzer.ID, RuleID: o.RuleID, RawMessage: o.RawMessage, LocationState: o.LocationState, Severity: o.RawSeverity}
 			if o.Location != nil {
 				to.Location = &toolLocation{Path: o.Location.Path, StartLine: o.Location.StartLine, EndLine: o.Location.EndLine}
+			}
+			if d.Analyzer.ID == "cpp.cppcheck" || d.Analyzer.ID == "cpp.clang_tidy" {
+				for _, r := range o.Related {
+					if r.LocationState == obsdoc.LocationResolved && r.Location != nil && r.RawSpan != nil &&
+						obsdoc.ValidRelatedKind(r.Kind) && !slices.Contains(d.WorkspaceDrift, r.Location.Path) {
+						to.Related = append(to.Related, r)
+					}
+				}
 			}
 			sum.Observations = append(sum.Observations, to)
 		}
@@ -449,14 +458,37 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 		lims = addLim(lims, limWorkflowUnavailable)
 	}
 	links.workflow = workflow
-	for _, x := range workflowOverviewWindows(workflow) {
-		keep(x, x.End+1)
-	}
 	selected, err := s.contractWitnesses(g, documents)
 	if err != nil {
 		return nil, corpusLinks{}, nil, err
 	}
 	links.member, links.witnessSource = selected.member, selected.sources
+	keepOption := func(trace goOptionTrace) {
+		if windows, ok := wholeTraceWindows(out, trace.windows, remain, roleMaxCodeFiles-1); ok {
+			for _, x := range windows {
+				keep(x, x.End+1)
+			}
+			links.directCalls = append(links.directCalls, directCall{
+				CallerEvidenceID: trace.windows[1].ID, CalleeEvidenceID: trace.windows[2].ID, Symbol: trace.symbol,
+			})
+		}
+	}
+	trace := selected.goOption
+	if trace.delivers {
+		keepOption(trace)
+	}
+	for _, x := range workflowOverviewWindows(workflow) {
+		if !trace.delivers {
+			keep(x, x.End+1)
+			continue
+		}
+		if windows, ok := wholeTraceWindows(out, []record.Excerpt{x}, remain, roleMaxCodeFiles-1); ok && len(windows) > 0 {
+			keep(x, x.End+1)
+		}
+	}
+	if !trace.delivers && len(trace.windows) != 0 {
+		keepOption(trace)
+	}
 	for _, trace := range selected.goTraces {
 		windows, ok := wholeTraceWindows(out, trace.excerpts, remain, maxGoWrapperWindows)
 		if !ok {
@@ -641,15 +673,23 @@ func (s *roleStage) additionalWitnesses(out []record.Excerpt, candidates []contr
 
 // observation input of the interpret role
 type obsInput struct {
-	ID            string   `json:"id"`
-	TaskKey       string   `json:"task_key"`
-	RuleID        string   `json:"rule_id"`
-	Message       string   `json:"message"`
-	Path          string   `json:"path,omitempty"`
-	StartLine     int      `json:"start_line,omitempty"`
-	EndLine       int      `json:"end_line,omitempty"`
-	LocationState string   `json:"location_state"`
-	EvidenceIDs   []string `json:"evidence_ids"`
+	ID            string            `json:"id"`
+	TaskKey       string            `json:"task_key"`
+	RuleID        string            `json:"rule_id"`
+	Message       string            `json:"message"`
+	Path          string            `json:"path,omitempty"`
+	StartLine     int               `json:"start_line,omitempty"`
+	EndLine       int               `json:"end_line,omitempty"`
+	LocationState string            `json:"location_state"`
+	EvidenceIDs   []string          `json:"evidence_ids"`
+	Related       []obsRelatedInput `json:"related,omitempty"`
+}
+
+type obsRelatedInput struct {
+	Kind       string `json:"kind"`
+	EvidenceID string `json:"evidence_id"`
+	StartLine  int    `json:"start_line"`
+	EndLine    int    `json:"end_line"`
 }
 
 type toolInput struct {
@@ -729,7 +769,11 @@ func (s *roleStage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput,
 		// A tool message about a file the secrets screen withholds may quote
 		// the value (e.g. a hardcoded-password rule): only its rule and place
 		// reach the model.
-		if o.Location != nil && s.secretFiles()[o.Location.Path] && in.Message != "(omitted by the platform)" {
+		withheld := o.Location != nil && s.secretFiles()[o.Location.Path]
+		withheld = withheld || slices.ContainsFunc(o.Related, func(r obsdoc.Related) bool {
+			return s.secretFiles()[r.Location.Path]
+		})
+		if withheld && in.Message != "(omitted by the platform)" {
 			in.Message = "(omitted by the platform)"
 			lims = append(lims, limSecretWithheld)
 		}
@@ -765,6 +809,7 @@ func (s *roleStage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput,
 		obs = append(obs, in)
 		refs = append(refs, ref)
 	}
+	windows, lims = s.relatedObservationWindows(all, obs, windows, files, lims)
 	return tools, obs, refs, windows, addLim(nil, lims...), nil
 }
 

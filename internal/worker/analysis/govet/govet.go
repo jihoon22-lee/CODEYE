@@ -411,6 +411,9 @@ func (h *Handler) Run(ctx context.Context, job analysis.Job, task analysis.TaskS
 		return result
 	}
 	result.Artifacts = []analysis.ArtifactFile{art}
+	if graph, ok := savePackageGraph(ctx, job, taskDir, in, doc); ok {
+		result.Artifacts = append(result.Artifacts, graph)
+	}
 	return result
 }
 

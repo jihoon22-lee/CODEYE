@@ -178,14 +178,37 @@ export function StaticDiagnosticReading({ languages, findings, byID, severityOf 
         detail: () => <>
           <InspectionExcerpt place={o.location} excerpt={evidenceByObservation.get(o.id)} />
           {o.message && o.message.trim() !== message && <p>{o.message}</p>}
+          <RelatedEvidence observation={o} />
           {candidates.length > 1 && <details className="inspection-paths"><summary>{i.otherLocations(candidates.length - 1)}</summary>
-            <ul className="plain">{candidates.slice(1).map(other => <li key={other.id}><Place value={other.location} /></li>)}</ul>
+            <ul className="plain">{candidates.slice(1).map(other => <li key={other.id}>{other.related?.length
+              ? <details><summary>{other.path ?? i.noLocation}</summary><RelatedEvidence observation={other} /></details>
+              : <Place value={other.location} />}</li>)}</ul>
           </details>}
         </>,
       };
     });
     return <InspectionDetailTable key={lang.ecosystem ?? 'unknown'} head={[s.col.rule, s.col.message, s.col.count, s.col.severity, s.col.location]} rows={rows} selection={{ value, set }} diagnostics />;
   })}</>;
+}
+
+function RelatedEvidence({ observation }: { observation: Observation }) {
+  const [selected, setSelected] = useState<number | null>(null);
+  if (!observation.related?.length) return null;
+  return <section className="report-inspection-notes">
+    <p>{i.relatedExplanation}</p>
+    <ol>{observation.related.map((note, index) => <li key={index}>
+      <strong>{label(i.relatedKind, note.kind)}</strong>
+      {note.message && <span> {note.message}</span>}
+      {note.location ? <Place value={note.location} /> : <small>{i.noLocation}</small>}
+      {note.location && note.excerpt && <>
+        <button type="button" className="btn btn-sm btn-ghost-primary" aria-expanded={selected === index}
+          onClick={() => setSelected(selected === index ? null : index)}>
+          {selected === index ? i.hideRelatedSource : i.showRelatedSource}
+        </button>
+        {selected === index && <ReportPreview path={note.location.path} start={note.location.start} end={note.location.start} excerpt={note.excerpt} />}
+      </>}
+    </li>)}</ol>
+  </section>;
 }
 
 function thirdParty(value?: ObservationPlace | null) {

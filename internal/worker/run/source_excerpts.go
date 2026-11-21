@@ -14,6 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
@@ -33,6 +34,10 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 	var model, workflow, diagnostics [][]sourceexcerpt.Key
 	modelEnds := map[sourceexcerpt.Key]int{}
 	withheld := map[string]bool{}
+	var scope domain.Scope
+	if len(a.job.Scope) > 0 {
+		_ = json.Unmarshal(a.job.Scope, &scope)
+	}
 	var host *taskRun
 	for _, task := range tasks {
 		if !task.started || a.ctx.Err() != nil {
@@ -45,7 +50,7 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 				if len(body) == 0 {
 					continue
 				}
-				keys := diagnosticAnchors(body, task.spec.Key, a.snapshot.Digest, lookup, withheld)
+				keys := diagnosticAnchors(body, task.spec.Key, a.snapshot.Digest, lookup, withheld, scope)
 				if len(keys) > 0 {
 					diagnostics = append(diagnostics, keys)
 				}
@@ -170,7 +175,7 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 	}
 }
 
-func diagnosticAnchors(body []byte, task, snapshot string, lookup func(string) (string, bool), withheld map[string]bool) []sourceexcerpt.Key {
+func diagnosticAnchors(body []byte, task, snapshot string, lookup func(string) (string, bool), withheld map[string]bool, scope domain.Scope) []sourceexcerpt.Key {
 	if d, err := obsdoc.Decode(body, obsdoc.Expect{TaskKey: task, Snapshot: snapshot, Lookup: lookup}); err == nil {
 		if d.Analyzer.IsSecrets() {
 			for _, o := range d.Observations {
@@ -190,6 +195,18 @@ func diagnosticAnchors(body []byte, task, snapshot string, lookup func(string) (
 		for _, o := range d.Observations {
 			if l := o.Location; l != nil && !o.Suppressed {
 				keys = append(keys, sourceexcerpt.Key{Path: l.Path, SHA256: l.BlobSHA256, Line: l.StartLine})
+			}
+		}
+		if d.Analyzer.ID == "cpp.cppcheck" || d.Analyzer.ID == "cpp.clang_tidy" {
+			for _, o := range d.Observations {
+				if o.Suppressed {
+					continue
+				}
+				for _, related := range o.Related {
+					if l := related.Location; l != nil && pack.PathInScope(l.Path, scope) {
+						keys = append(keys, sourceexcerpt.Key{Path: l.Path, SHA256: l.BlobSHA256, Line: l.StartLine})
+					}
+				}
 			}
 		}
 		return slices.Compact(keys)

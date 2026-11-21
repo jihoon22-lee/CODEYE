@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.codeye.invalid/v0.1/go-package-graph.schema.json",
+  "title": "CODEYE Go package graph v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_key", "snapshot_manifest_digest", "go_list_sha256", "module", "module_dir", "platform", "scope", "status", "parsed_files", "ignored_variant_files", "incomplete_packages", "unresolved_internal_imports", "unparsed_files", "limitations", "packages", "edges"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "task_key": {"type": "string", "pattern": "^go-vet(\\.m[0-9]+)?$"},
+    "snapshot_manifest_digest": {"$ref": "#/$defs/digest"},
+    "go_list_sha256": {"$ref": "#/$defs/digest"},
+    "module": {"$ref": "#/$defs/import"},
+    "module_dir": {"type": "string", "minLength": 1},
+    "platform": {"type": "string", "minLength": 1, "maxLength": 80},
+    "scope": {"enum": ["all_module_packages", "selected_packages"]},
+    "status": {"enum": ["complete", "partial", "unavailable"]},
+    "parsed_files": {"type": "integer", "minimum": 0, "maximum": 12000},
+    "ignored_variant_files": {"type": "integer", "minimum": 0},
+    "unlisted_files": {"type": "integer", "minimum": 0, "description": "범위에는 있으나 확보한 전체 go list 파일 목록에 없던 Go 파일 수. 전체 목록을 확보하지 못했거나 이전 산출물이면 생략한다."},
+    "incomplete_packages": {"type": "integer", "minimum": 0, "maximum": 1024},
+    "unresolved_internal_imports": {"type": "integer", "minimum": 0, "maximum": 12000},
+    "unparsed_files": {"type": "integer", "minimum": 0, "maximum": 12000},
+    "limitations": {"type": "array", "maxItems": 16, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}},
+    "packages": {"type": "array", "maxItems": 1024, "items": {
+      "type": "object", "additionalProperties": false, "required": ["import_path", "directory"],
+      "properties": {"import_path": {"$ref": "#/$defs/import"}, "directory": {"type": "string", "minLength": 1}}
+    }},
+    "edges": {"type": "array", "maxItems": 12000, "items": {
+      "type": "object", "additionalProperties": false, "required": ["from", "to", "kind", "witness"],
+      "properties": {
+        "from": {"$ref": "#/$defs/import"},
+        "to": {"$ref": "#/$defs/import"},
+        "kind": {"enum": ["production", "internal_test", "external_test"]},
+        "witness": {
+          "type": "object", "additionalProperties": false, "required": ["path", "line", "blob_sha256"],
+          "properties": {"path": {"type": "string", "minLength": 1}, "line": {"type": "integer", "minimum": 1}, "blob_sha256": {"$ref": "#/$defs/digest"}}
+        }
+      }
+    }}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "import": {"type": "string", "minLength": 1, "maxLength": 512}
+  }
+}

@@ -121,18 +121,18 @@ test('comparison rows keep the example and opened document within the web report
   }
 });
 
-test('focused source wraps inside the mobile excerpt while context stays scrollable', async ({page}) => {
+test('mobile source wraps every code line and can scroll complete unwrapped code', async ({page}) => {
   const assets = new URL('../../internal/report/reportui/', import.meta.url);
-  const css = ['tabler.css', 'report.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
+  const css = ['tabler.css', 'report.css', 'workbench.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
   const line = '    fmt.Printf("the report records this format expression", firstArgument, secondArgument)';
   await page.setViewportSize({width:390,height:844});
   await page.setContent(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style>
-    <article class="report-document review-theme"><div class="report-selected-source"><pre class="source-window" tabindex="0"><code>
+    <article class="report-document review-theme web-report"><div class="report-selected-source"><pre class="source-window" tabindex="0"><code>
     <span class="source-line"><span class="source-line-number" aria-hidden="true">4</span><span class="source-line-code">${'long_context_'.repeat(34)}</span></span>
     <span class="source-line" data-focus="true"><span class="source-line-number" aria-hidden="true">5</span><span class="source-line-code">${line}</span></span>
     </code></pre></div></article>`);
   const source = page.locator('.source-window');
-  expect(await source.evaluate(pre => pre.scrollWidth > pre.clientWidth)).toBe(true);
+  expect(await source.evaluate(pre => pre.scrollWidth - pre.clientWidth)).toBeLessThanOrEqual(1);
   const selection = await source.locator('[data-focus] .source-line-code').evaluate(element => {
     const range = document.createRange();
     range.selectNodeContents(element);
@@ -142,6 +142,68 @@ test('focused source wraps inside the mobile excerpt while context stays scrolla
   });
   expect(selection.count).toBeGreaterThan(1);
   expect(selection.contained).toBe(true);
+  expect(await source.locator('.source-line:first-child .source-line-code').evaluate(line => line.getBoundingClientRect().height)).toBeGreaterThan(20);
+  await page.locator('.report-selected-source').evaluate(preview => { preview.dataset.wrap = 'false'; });
+  expect(await source.evaluate(pre => pre.scrollWidth > pre.clientWidth)).toBe(true);
+  expect(await source.evaluate(pre => {
+    pre.scrollLeft = pre.scrollWidth;
+    return pre.scrollLeft > 0 && Math.abs(pre.scrollWidth - pre.clientWidth - pre.scrollLeft) < 2;
+  })).toBe(true);
+});
+
+test('saved report focuses one mobile finding while retaining its list, links and print source', async ({page}) => {
+  const assets = new URL('../../internal/report/reportui/', import.meta.url);
+  const css = ['tabler.css', 'report.css', 'workbench.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
+  const script = readFileSync(new URL('export-navigation.js', assets), 'utf8');
+  const finding = (id: string, title: string) => `
+    <section class="report-group"><div class="report-export-workbench">
+    <div class="report-workbench-index"><table class="report-workbench-table export-workbench-table"><tbody><tr><td colspan="4">
+    <details class="report-result-details" name="report-finding-rows"><summary id="${id}" class="export-workbench-select"><strong>${title}</strong></summary>
+    <div class="export-workbench-body"><button type="button" data-report-inspector-close>결과 목록</button>
+    <h6 class="report-finding-heading" tabindex="-1">${title}</h6>
+    <div class="report-selected-source" data-wrap="false"><pre class="source-window" data-mode="short"><code>
+    <span class="source-line"><span class="source-line-number">18</span><span class="source-line-code">${'long_source_line_'.repeat(25)}</span></span>
+    </code></pre><pre class="source-window" data-mode="full" hidden>full source</pre></div>
+    <details class="report-excerpt" data-preview-covered><summary>코드 보기</summary><pre>duplicate stored source</pre></details>
+    </div></details></td></tr></tbody></table></div><aside class="export-inspector report-workbench-detail" hidden></aside>
+    </div></section>`;
+  await page.setViewportSize({width:390,height:844});
+  await page.setContent(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style>
+    <article class="report-export review-theme"><nav class="report-rail"><a href="#code_review">코드 분석</a></nav>
+    <main class="report-main"><section class="export-section" id="code_review"><h2>코드 분석</h2>
+    ${finding('finding-one', '첫 번째 결과')}${finding('finding-two', '두 번째 결과')}</section></main></article>`);
+  const first = page.locator('#finding-one');
+  const second = page.locator('#finding-two');
+  const heading = page.getByRole('heading', {name:'두 번째 결과', exact:true});
+  await second.press('Enter');
+  await expect(heading).toBeVisible();
+  await expect(first).toBeVisible();
+  await second.press('Enter');
+
+  await page.addScriptTag({content:script});
+  await page.evaluate(() => { location.hash = '#finding-two'; });
+  await expect(heading).toBeFocused();
+  await expect(page.locator('.export-workbench-select:visible')).toHaveCount(0);
+  await expect(page.getByText('두 번째 결과', {exact:true}).filter({visible:true})).toHaveCount(1);
+  expect(await heading.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+  const selected = heading.locator('..');
+  const source = selected.locator('.source-window[data-mode=short]');
+  await selected.locator('.report-selected-source').evaluate(element => { element.dataset.wrap = 'false'; });
+  expect(await source.evaluate(pre => pre.scrollWidth > pre.clientWidth)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+
+  await page.emulateMedia({media:'print'});
+  await page.evaluate(() => dispatchEvent(new Event('beforeprint')));
+  await expect(page.getByText('두 번째 결과', {exact:true}).filter({visible:true})).toHaveCount(1);
+  await expect(source).toBeVisible();
+  await expect(selected.locator('.report-excerpt')).toBeHidden();
+  expect((await heading.evaluate(element => parseFloat(getComputedStyle(element).fontSize))) * .75).toBeGreaterThanOrEqual(11);
+  await page.evaluate(() => dispatchEvent(new Event('afterprint')));
+  await page.emulateMedia({media:'screen'});
+  await page.getByRole('button', {name:'결과 목록'}).press('Enter');
+  await expect(second).toBeFocused();
+  await expect(first).toBeVisible();
+  await expect(second).toBeVisible();
 });
 
 test('published report exposes the same counts, evidence and revision in the browser and exports', async ({page}) => {
@@ -281,8 +343,12 @@ test('published report exposes the same counts, evidence and revision in the bro
     const more = report.locator('details.report-more:not([open]) > summary:visible');
     while (await more.count() > 0) await more.first().click();
     const item = doc.findings[0];
-    const card = report.locator('#report-section-' + key).locator('details.finding-card').filter({has: page.locator('summary > strong').getByText(item.title, {exact:true})}).first();
-    await card.locator('summary').first().click();
+    const section = report.locator('#report-section-' + key);
+    const indexed = section.locator('button.report-finding-select').filter({ hasText: item.title }).first();
+    const card = await indexed.count() ? section.locator('.report-workbench-detail') :
+      section.locator('details.finding-card').filter({has: page.locator('summary > strong').getByText(item.title, {exact:true})}).first();
+    if (await indexed.count()) await indexed.press('Enter');
+    else await card.locator('summary').first().click();
     await expect(card.getByText(item.impact, {exact:true}).first()).toBeVisible();
     // The claims and evidence sit behind the card's own disclosure.
     await card.locator('details.finding-evidence > summary').click();

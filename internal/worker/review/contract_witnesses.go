@@ -80,6 +80,7 @@ type contractSelection struct {
 	member                memberPair
 	sources               map[string]string
 	goTraces              []goWrapperTrace
+	goOption              goOptionTrace
 	cDefinitions          []contractWitness
 	cFamily               []contractWitness
 	queries               []witnessQuery
@@ -375,6 +376,10 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 		}
 	}
 
+	goOption, err := s.goOptionWitness(queries, contents, readSafe)
+	if err != nil {
+		return contractSelection{}, err
+	}
 	hasTests := false
 	for i := range matches {
 		hasTests = hasTests || len(matches[i][1]) > 0
@@ -527,7 +532,7 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 		}
 	}
 	return contractSelection{witnesses: out, additional: extras, calls: linked, member: member, sources: contents,
-		goTraces: goTraces, cDefinitions: cRuntime.choose(queries), cFamily: cFamilies.choose(queries), queries: queries}, nil
+		goTraces: goTraces, goOption: goOption, cDefinitions: cRuntime.choose(queries), cFamily: cFamilies.choose(queries), queries: queries}, nil
 }
 
 func minifiedSource(path string) bool {

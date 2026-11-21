@@ -90,6 +90,7 @@ func ValidateReport(r Report) error {
 		return invalidf("quality verdict does not follow the rules")
 	}
 	arts := map[string]bool{}
+	artifactSizes := map[string]int64{}
 	workflowKey := (WorkflowReviewDecoder{}).Key()
 	readingKey := (WorkflowReadingDecoder{}).Key()
 	for _, a := range r.Artifacts {
@@ -111,6 +112,7 @@ func ValidateReport(r Report) error {
 			}
 		}
 		arts[a.ID] = true
+		artifactSizes[a.ID] = a.SizeBytes
 	}
 	execs := map[string]bool{}
 	for _, e := range r.Executions {
@@ -146,6 +148,10 @@ func ValidateReport(r Report) error {
 			return invalidf("test status differs from accepted task and execution records")
 		}
 	}
+	if err := validateGoGraphs(r); err != nil {
+		return err
+	}
+	version, _ := strconv.Atoi(r.Builder.Version)
 	obs, suppressed, metrics := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, o := range r.Observations {
 		if obs[o.ID] || !taskKeys[o.TaskKey] || !arts[o.RawRef.ArtifactID] || (o.RawSeverity != nil && !rawSeverityPattern.MatchString(*o.RawSeverity)) {
@@ -159,6 +165,31 @@ func ValidateReport(r Report) error {
 		}
 		if o.EvidenceState == EvidenceVerified && o.Location == nil {
 			return invalidf("verified observation without location")
+		}
+		if len(o.Related) > 64 || len(o.Related) > 0 && (version < AnalysisEvidenceSince || o.Metric != nil || o.Tool != "cpp.cppcheck" && o.Tool != "cpp.clang_tidy") {
+			return invalidf("invalid related diagnostic locations")
+		}
+		next := o.RawRef.ByteStart
+		for _, related := range o.Related {
+			loc := related.Location
+			if !obsdoc.ValidRelatedKind(related.Kind) || (loc != nil) != (related.LocationState == obsdoc.LocationResolved) ||
+				related.RawMessage != nil && (!r.Export.IncludeCode || !obsdoc.SafeText(*related.RawMessage, 8192) || !sourceexcerpt.SafeDiagnosticText(*related.RawMessage)) {
+				return invalidf("invalid related diagnostic note")
+			}
+			if loc != nil && (loc.SnapshotID != r.Inputs.SnapshotID || domain.ValidateEvidencePath(loc.Path) != nil ||
+				loc.StartLine < 1 || loc.EndLine < loc.StartLine || loc.ColumnUnit != "byte" || !hex64.MatchString(loc.BlobSHA256)) {
+				return invalidf("invalid related diagnostic location")
+			}
+			if ex := related.Excerpt; ex != nil && (!r.Export.IncludeCode || loc == nil || !sourceexcerpt.SafePath(loc.Path) || !ex.ValidDiagnostic(loc.StartLine)) {
+				return invalidf("invalid related diagnostic excerpt")
+			}
+			if ref := related.RawRef; ref != nil {
+				if ref.ArtifactID != o.RawRef.ArtifactID || ref.SHA256 != o.RawRef.SHA256 || ref.StreamIndex != o.RawRef.StreamIndex ||
+					ref.ByteStart < next || ref.ByteEnd <= ref.ByteStart || ref.ByteEnd > o.RawRef.ByteEnd || ref.ByteEnd > artifactSizes[ref.ArtifactID] || ref.JSONPointer != "" {
+					return invalidf("invalid related diagnostic raw reference")
+				}
+				next = ref.ByteEnd
+			}
 		}
 		obs[o.ID] = true
 		if o.Suppressed {
@@ -419,6 +450,10 @@ func Project(r Report, includeCode bool) Report {
 	rules := map[string]Observation{}
 	for i, o := range r.Observations {
 		o.RawMessage = nil
+		o.Related = slices.Clone(o.Related)
+		for j := range o.Related {
+			o.Related[j].RawMessage, o.Related[j].Excerpt = nil, nil
+		}
 		if o.Metric != nil {
 			m := *o.Metric
 			m.Excerpt, m.CounterpartExcerpt = nil, nil

@@ -11,7 +11,7 @@ export const reportKo = {
     `${seconds % 60}초`,
   ].filter(Boolean).join(' '),
   status: '분석 상태', excerptAt: (location: string) => `${location} 원문 발췌`,
-  savedExcerpt: '발췌', citedRange: '인용 범위',
+  savedExcerpt: '발췌', citedRange: '인용 범위', wrapSource: '줄바꿈', fullSavedExcerpt: '저장 원문',
   target: '분석 대상',
   projectIntro: '프로젝트 소개',
   executionStatus: (status: string) => `분석 ${status}`,
@@ -49,6 +49,7 @@ export const reportKo = {
   },
   codeReading: {
     results: '코드 검토 결과',
+    resultList: '결과 목록', pickResult: '항목을 선택하면 근거를 읽을 수 있습니다.',
     requestCounts: (investigation: number, verification: number) => `모델 조사 요청 ${investigation}회 · 후보 검증 요청 ${verification}회`,
     actions: '근거를 확인한 문제와 개선 기회',
     limited: (count: number) => `추가 확인이 필요한 후보(${count}건)`,
@@ -87,7 +88,16 @@ export const reportKo = {
     metricOutcome: (name: string, count: number) => `${name} 기록 ${n(count)}건`,
     metricsEmpty: '기준 초과 기록 0건',
     secretsOutcome: (count: number) => `검사에서 보고한 탐지 ${count}건`,
+    secretsDetected: '탐지 있음',
+    secretsClear: '탐지 없음',
+    secretsUndetermined: '탐지 결과 미확정',
+    secretsWorkspaceScope: 'Git 이력 미검사',
     contextDetails: '문서 대조와 판단 근거',
+    goGraphLabel: 'Go 패키지 의존 관계', graphReady: '관계 확인', graphPartial: '일부 확인', graphUnavailable: '미확인',
+    graphOutcome: (graphs: number, packages: number, selected: boolean) =>
+      `그래프 ${n(graphs)}개 · 기록된 패키지 합계 ${n(packages)}개${selected ? ' · 선택 패키지 범위 포함' : ''}`,
+    complexityLabel: '복잡도', duplicationLabel: '코드 중복', measuredState: '측정 완료',
+    requestedState: '발췌 요청', availableState: '파일 발췌 확보', partialInvestigation: '일부 조사', incompleteState: '미완료',
     actionCounts: (primary: number, secondary: number) => `주요 코드 조치 ${primary}건${secondary > 0 ? ` · 시험·예제 등 조치 ${secondary}건` : ''}`,
     modelScope: (accepted: number, eligible: number, lines?: { accepted: number; total: number }) =>
       `발췌 포함 ${n(accepted)}/${n(eligible)}파일${lines?.total ? ` · ${n(lines.accepted)}/${n(lines.total)}줄` : ''}`,
@@ -157,6 +167,7 @@ export const reportKo = {
     gitleaks: '저장소에 포함된 인증정보 후보의 위치를 찾습니다.',
   } as Record<string,string>,
   reasons: {
+    imports_unresolved: '가져온 라이브러리를 찾지 못함',
     credential_like_content: '자격증명과 비슷한 내용이 있어 문서 검토 입력에서 제외했습니다.',
     documents_not_selected: '탐색에서 검토할 문서가 선택되지 않았습니다.',
     excerpt_only: '검토는 선택된 코드 발췌 범위에 한정됩니다.',

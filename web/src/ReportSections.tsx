@@ -11,6 +11,7 @@ import { ProjectOverview } from './ProjectOverview';
 import { ReportDocumentReading } from './ReportDocumentReading';
 import { ReportOverviewTable } from './ReportOverviewTable';
 import { InspectionReading, MeasurementReading, StaticDiagnosticReading } from './ReportInspections';
+import { ReportGoDependencies } from './ReportGoDependencies';
 import { ReportCodeStrengths } from './ReportCodeStrengths';
 import { ReportSearch, focusReportFinding, focusReportSearchLocation, type ReportSearchTarget } from './ReportSearch';
 import { projectBehaviors } from './reportBehaviors';
@@ -515,7 +516,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
 
   const detectionsPrimary = sc.detections.filter((x) => !secondaryPath(locationPath(x.place)));
   const detectionsSecondary = sc.detections.filter((x) => secondaryPath(locationPath(x.place)));
-  const detectionRow = (x: (typeof sc.detections)[number]) => [<code key="r">{x.rule}</code>, <code key="p">{x.place}</code>, <code key="f">{or(x.finding)}</code>];
+  const detectionRow = (x: (typeof sc.detections)[number]) => [<code key="r">{x.rule}</code>, <code key="p">{x.place}</code>];
   // Environment and document rows of modules below a secondary path move behind
   // a disclosure; a mismatch stays in view because the overview points at it.
   const envModules = e.modules.filter((x) => !modSecondary(x.id));
@@ -671,6 +672,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       <>
         <StageLine stage={m.stage} />
         <p>{s.metricsLead}</p>
+        <ReportGoDependencies graphs={m.goDependencies ?? []} />
         <MeasurementReading sections={sections} byID={byID} />
         <details><summary>{inspectionsKo.counts}</summary><SectionCounts sections={sections} keyName="metrics" /></details>
       </>
@@ -693,9 +695,9 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
           })}
           empty={s.gapLabels.not_planned}
         />
-        <Table head={[s.col.rule, s.col.location, s.col.finding]} rows={detectionsPrimary.map(detectionRow)} empty={detectionsSecondary.length > 0 ? undefined : s.noSecrets} />
+        <Table head={[s.col.rule, s.col.location]} rows={detectionsPrimary.map(detectionRow)} empty={detectionsSecondary.length > 0 ? undefined : s.noSecrets} />
         {detectionsSecondary.length > 0 && (
-          <More title={sm.secondaryDetections(detectionsSecondary.length)}>{() => <Table head={[s.col.rule, s.col.location, s.col.finding]} rows={detectionsSecondary.map(detectionRow)} />}</More>
+          <More title={sm.secondaryDetections(detectionsSecondary.length)}>{() => <Table head={[s.col.rule, s.col.location]} rows={detectionsSecondary.map(detectionRow)} />}</More>
         )}
       </>
     ),
@@ -703,7 +705,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       <>
         <p className="small">{t.codeReading.requestCounts(investigationRequests, verificationRequests)}</p>
         <h6>{t.codeReading.results}</h6>
-        <FindingList findings={[...reviewFirst, ...reviewRest, ...reviewSecondary]} history={history} empty={hasCodeReview ? t.codeReading.none : t.codeReading.noEvidence} reveal={findingTarget} groupByCategory={false} />
+        <FindingList findings={[...reviewFirst, ...reviewRest, ...reviewSecondary]} history={history} empty={hasCodeReview ? t.codeReading.none : t.codeReading.noEvidence} reveal={findingTarget} groupByCategory={false} inspect={tabbed} />
         <ReportCodeStrengths review={cr} includesCode={report.includesCode !== false} id={id} />
         {refuted.length > 0 && (
           <More title={t.codeReading.refuted(refuted.length)} reveal={refuted.some(f => f.id === findingTarget?.id) ? findingTarget : undefined}>
@@ -792,15 +794,20 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       </>
     ),
   };
+  const railCounts = new Map<string, string>();
+  for (const row of readingSignals) {
+    if (row.count && !railCounts.has(row.section)) railCounts.set(row.section, row.count);
+  }
+  if (reviewable.length) railCounts.set('code_review', String(reviewable.length));
   const rail = tabbed ? <div role="tablist" aria-label={t.title} className="nav report-tabs">
-    {TABS.map((key, i) => <button key={key} id={tabId(key)} type="button" role="tab" className="nav-link" aria-selected={active === key}
+    {TABS.map((key, i) => <button key={key} id={tabId(key)} type="button" role="tab" className="nav-link" aria-label={key === 'overview' ? s.overview : label(s.titles, key)} aria-selected={active === key}
       aria-controls={anchor(key)} tabIndex={active === key ? 0 : -1} onClick={() => select(key)}
       onKeyDown={e => {
         const next = (i + 1) % TABS.length;
         const previous = (i + TABS.length - 1) % TABS.length;
         const to = { ArrowRight: next, ArrowDown: next, ArrowLeft: previous, ArrowUp: previous, Home: 0, End: TABS.length - 1 }[e.key];
         if (to !== undefined) { e.preventDefault(); select(TABS[to]); }
-      }}><ReportIcon name={TAB_ICONS[key]} /><span>{key === 'overview' ? s.overview : label(s.titles, key)}</span></button>)}
+      }}><ReportIcon name={TAB_ICONS[key]} /><span>{key === 'overview' ? s.overview : label(s.titles, key)}</span>{railCounts.has(key) && <small className="report-rail-count" aria-hidden="true">{railCounts.get(key)}</small>}</button>)}
   </div> : <nav aria-label={t.title} className="nav report-tabs">
     {ORDER.map(key => <button key={key} type="button" className="nav-link" aria-controls={anchor(key)}
       aria-current={readingSection === key ? 'location' : undefined}

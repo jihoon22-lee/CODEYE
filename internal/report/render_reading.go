@@ -2,6 +2,7 @@ package report
 
 import (
 	"cmp"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -474,7 +475,40 @@ func mdReadingAnchor(p func(...string), id string) {
 	}
 }
 
-type overviewReadingRow struct{ Section, Label, Value, Status string }
+type overviewReadingRow struct{ Section, Label, Value, Status, Tone, Count string }
+
+var reportResultNumber = regexp.MustCompile(`[0-9]+(?:[.,/][0-9]+)*`)
+
+func (r overviewReadingRow) ValueParts() []secCell {
+	var parts []secCell
+	from := 0
+	for _, span := range reportResultNumber.FindAllStringIndex(r.Value, -1) {
+		parts = append(parts, txt(r.Value[from:span[0]]), code(r.Value[span[0]:span[1]]))
+		from = span[1]
+	}
+	return append(parts, txt(r.Value[from:]))
+}
+
+func reportStageTone(state string) string {
+	switch state {
+	case "succeeded":
+		return "ready"
+	case "partial":
+		return "partial"
+	case "failed", "cancelled":
+		return "failed"
+	default:
+		return "neutral"
+	}
+}
+
+func reportStageLabel(l Locale, state string) string {
+	text := lab(l, "state", state)
+	for _, prefix := range []string{"○ ", "· ", "◷ ", "◉ ", "✓ ", "– ", "✕ ", "■ ", "△ "} {
+		text = strings.TrimPrefix(text, prefix)
+	}
+	return text
+}
 
 func groupedCount(value int) string {
 	digits := strconv.Itoa(value)
@@ -486,16 +520,22 @@ func groupedCount(value int) string {
 
 func (v secView) ReadingOverview() []overviewReadingRow {
 	var rows []overviewReadingRow
-	add := func(section, label, value string) {
-		status := ""
-		for _, block := range v.Sections {
-			if block.ID == section {
-				status = block.State
-				break
-			}
+	states := make(map[string]string, len(v.R.Overview.Sections))
+	for _, state := range v.R.Overview.Sections {
+		if state.State != nil {
+			states[state.Key] = *state.State
 		}
-		rows = append(rows, overviewReadingRow{section, v.L.Label(label), value, status})
 	}
+	add := func(section, label, value string) *overviewReadingRow {
+		state := states[section]
+		row := overviewReadingRow{Section: section, Label: v.L.Label(label), Value: value, Tone: reportStageTone(state)}
+		if state != "" {
+			row.Status = reportStageLabel(v.L, state)
+		}
+		rows = append(rows, row)
+		return &rows[len(rows)-1]
+	}
+
 	primary, secondary := 0, 0
 	var actionable []Finding
 	for _, finding := range v.R.Findings {
@@ -534,9 +574,9 @@ func (v secView) ReadingOverview() []overviewReadingRow {
 		}
 	}
 	if secondary > 0 {
-		add(SectionCodeReview, "reading.code_outcome", tf(v.L, "reading.action_counts", primary, secondary))
+		add(SectionCodeReview, "reading.code_outcome", tf(v.L, "reading.action_counts", primary, secondary)).Count = groupedCount(primary)
 	} else if primary > 0 || knownAccepted && accepted > 0 {
-		add(SectionCodeReview, "reading.code_outcome", tf(v.L, "reading.action_primary", primary))
+		add(SectionCodeReview, "reading.code_outcome", tf(v.L, "reading.action_primary", primary)).Count = groupedCount(primary)
 	}
 	if eligible > 0 {
 		if knownAccepted {
@@ -544,11 +584,17 @@ func (v secView) ReadingOverview() []overviewReadingRow {
 			if totalLines > 0 {
 				value += " · " + tf(v.L, "reading.model_lines", groupedCount(reviewedLines), groupedCount(totalLines))
 			}
-			add(SectionCodeReview, "reading.model_scope_label", value)
+			row := add(SectionCodeReview, "reading.model_scope_label", value)
+			row.Count = groupedCount(accepted) + "/" + groupedCount(eligible)
+			row.Status, row.Tone = v.L.Label("reading.model_partial"), "partial"
+			if accepted == eligible {
+				row.Status, row.Tone = v.L.Label("reading.model_available"), "ready"
+			}
 		} else {
-			add(SectionCodeReview, "reading.model_scope_label", tf(v.L, "reading.model_sent", groupedCount(sent), groupedCount(eligible)))
+			row := add(SectionCodeReview, "reading.model_scope_label", tf(v.L, "reading.model_sent", groupedCount(sent), groupedCount(eligible)))
+			row.Count = groupedCount(sent) + "/" + groupedCount(eligible)
+			row.Status, row.Tone = v.L.Label("reading.model_requested"), "neutral"
 		}
-		rows[len(rows)-1].Status = ""
 	}
 	languages := regularStaticLanguages(v.R)
 	planned, accepted := staticCheckCounts(languages)
@@ -570,7 +616,13 @@ func (v secView) ReadingOverview() []overviewReadingRow {
 				primary++
 			}
 		}
-		add(SectionStaticAnalysis, "section.static_analysis", tf(v.L, "reading.static_results", accepted, planned)+" · "+tf(v.L, "reading.static_diagnostics", primary))
+		row := add(SectionStaticAnalysis, "section.static_analysis", tf(v.L, "reading.static_results", accepted, planned)+" · "+tf(v.L, "reading.static_diagnostics", primary))
+		row.Count = groupedCount(accepted) + "/" + groupedCount(planned)
+		if accepted == planned {
+			row.Status, row.Tone = reportStageLabel(v.L, "succeeded"), "ready"
+		} else if accepted > 0 {
+			row.Status, row.Tone = reportStageLabel(v.L, "partial"), "partial"
+		}
 	}
 	if test := v.TestRunPart(); test.Fold != "" {
 		status, _, _ := strings.Cut(test.Fold, " · ")
@@ -582,14 +634,20 @@ func (v secView) ReadingOverview() []overviewReadingRow {
 			statusCounts[task.Status]++
 		}
 	}
-	var states []string
+	var outcomes []string
+	totalIncomplete := 0
 	for _, status := range []string{"failed", "timed_out", "unsupported", "skipped_policy"} {
 		if count := statusCounts[status]; count > 0 {
-			states = append(states, lab(v.L, "task_status", status)+" "+strconv.Itoa(count))
+			outcomes = append(outcomes, tf(v.L, "reading.outcome."+status, count))
+			totalIncomplete += count
 		}
 	}
-	if len(states) > 0 {
-		add(SectionGaps, "reading.required_outcome", strings.Join(states, " · "))
+	if len(outcomes) > 0 {
+		row := add(SectionGaps, "reading.required_outcome", strings.Join(outcomes, " · "))
+		row.Status, row.Tone, row.Count = v.L.Label("reading.incomplete_state"), "attention", groupedCount(totalIncomplete)
+		if statusCounts["failed"] > 0 {
+			row.Tone = "failed"
+		}
 	}
 	if d := v.R.Documents; len(d.Items)+len(d.Comparisons) > 0 {
 		read, assessed := 0, 0
@@ -611,11 +669,12 @@ func (v secView) ReadingOverview() []overviewReadingRow {
 		if unknown > 0 {
 			values = append(values, tf(v.L, "reading.documents_unknown", unknown))
 		}
-		add(SectionDocuments, "section.documents", strings.Join(values, " · "))
+		row := add(SectionDocuments, "section.documents", strings.Join(values, " · "))
+		row.Count = groupedCount(read)
 		if unknown > 0 {
-			rows[len(rows)-1].Status = v.L.Label("reading.documents_pending")
+			row.Status, row.Tone = v.L.Label("reading.documents_pending"), "attention"
 		} else if read > 0 {
-			rows[len(rows)-1].Status = v.L.Label("reading.documents_read")
+			row.Status = v.L.Label("reading.documents_read")
 		}
 	}
 	if environment := v.R.Environment; len(environment.Modules) > 0 {
@@ -625,37 +684,98 @@ func (v secView) ReadingOverview() []overviewReadingRow {
 				mismatches++
 			}
 		}
-		add(SectionEnvironment, "section.environment", tf(v.L, "reading.environment_outcome", len(environment.Modules), mismatches))
+		row := add(SectionEnvironment, "section.environment", tf(v.L, "reading.environment_outcome", len(environment.Modules), mismatches))
+		row.Count = groupedCount(len(environment.Modules))
 		if mismatches > 0 {
-			rows[len(rows)-1].Status = v.L.Label("reading.environment_mismatch")
+			row.Status, row.Tone = v.L.Label("reading.environment_mismatch"), "attention"
 		}
 	}
 	if metrics := v.R.Metrics; len(metrics.TaskKeys) > 0 {
-		var values []string
 		for _, metric := range metrics.Metrics {
 			count := groupedCount(len(metric.ObservationIDs))
+			label, value := metric.Name, tf(v.L, "reading.metric_outcome", metric.Name, count)
 			switch metric.Name {
 			case "cyclomatic_complexity":
-				values = append(values, tf(v.L, "reading.complexity_outcome", count))
+				label, value = "reading.complexity_label", tf(v.L, "reading.complexity_outcome", count)
 			case "duplicated_lines":
-				values = append(values, tf(v.L, "reading.duplication_outcome", count))
-			default:
-				values = append(values, tf(v.L, "reading.metric_outcome", metric.Name, count))
+				label, value = "reading.duplication_label", tf(v.L, "reading.duplication_outcome", count)
+			}
+			row := add(SectionMetrics, label, value)
+			row.Count = count
+			if row.Tone == "ready" {
+				row.Status = v.L.Label("reading.measured_state")
 			}
 		}
-		if len(values) == 0 {
-			values = append(values, v.L.Label("reading.metrics_empty"))
+		if len(metrics.Metrics) == 0 {
+			add(SectionMetrics, "section.metrics", v.L.Label("reading.metrics_empty"))
 		}
-		add(SectionMetrics, "section.metrics", strings.Join(values, " · "))
+	}
+	if graphs := v.R.Metrics.GoDependencies; len(graphs) > 0 {
+		complete, available, selected := true, false, false
+		packages := 0
+		for _, graph := range graphs {
+			complete = complete && graph.Status == "complete"
+			available = available || graph.Status != "unavailable"
+			selected = selected || graph.Scope == "selected_packages"
+			packages += len(graph.Nodes)
+		}
+		value := tf(v.L, "reading.graph_outcome", groupedCount(len(graphs)), groupedCount(packages))
+		if selected {
+			value += " · " + v.L.Label("reading.graph_selected")
+		}
+		row := add(SectionMetrics, "graph.title", value)
+		row.Count = groupedCount(len(graphs))
+		switch {
+		case complete:
+			row.Status, row.Tone = v.L.Label("reading.graph_ready"), "ready"
+		case available:
+			row.Status, row.Tone = v.L.Label("reading.graph_partial"), "partial"
+		default:
+			row.Status, row.Tone = v.L.Label("reading.graph_unavailable"), "neutral"
+		}
 	}
 	if secrets := v.R.Secrets; len(secrets.TaskKeys) > 0 {
-		add(SectionSecrets, "section.secrets", tf(v.L, "reading.secrets_outcome", len(secrets.Detections)))
+		count, state := len(secrets.Detections), secrets.Stage.State
+		complete := state == "succeeded"
+		status, tone := reportStageLabel(v.L, state), reportStageTone(state)
+		values := []string{v.L.Label("reading.secrets_undetermined")}
+		if complete || count > 0 {
+			values[0] = tf(v.L, "reading.secrets_outcome", count)
+		}
+		if count > 0 {
+			if !complete && state != "" {
+				values = append(values, status)
+			}
+			status, tone = v.L.Label("reading.secrets_detected"), "attention"
+		} else if complete {
+			status = v.L.Label("reading.secrets_clear")
+		}
+		if slices.ContainsFunc(v.R.Gaps, func(gap Gap) bool {
+			return gap.Section == SectionSecrets && gap.Code == "history_not_scanned"
+		}) {
+			values = append(values, v.L.Label("reading.secrets_workspace_scope"))
+		}
+		row := add(SectionSecrets, "section.secrets", strings.Join(values, " · "))
+		row.Status, row.Tone, row.Count = status, tone, groupedCount(count)
 	}
 	flow := []string{SectionEnvironment, SectionDocuments, SectionStaticAnalysis, SectionMetrics, SectionSecrets, SectionCodeReview, "test-results", SectionGaps}
 	slices.SortStableFunc(rows, func(a, b overviewReadingRow) int {
 		return cmp.Compare(slices.Index(flow, a.Section), slices.Index(flow, b.Section))
 	})
 	return rows
+}
+
+func (v secView) CodeIndexCount() int {
+	total := 0
+	for _, section := range v.Sections {
+		if section.ID != SectionCodeReview {
+			continue
+		}
+		for _, part := range section.Parts {
+			total += len(part.Cards) + len(part.Findings)
+		}
+	}
+	return total
 }
 
 func mdReadingOverview(p func(...string), v secView) {

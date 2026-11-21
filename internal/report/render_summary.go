@@ -463,24 +463,32 @@ func (v secView) summaryCodeReview(b secBlock, findings map[string]Finding) secB
 
 func (v secView) findingCard(f Finding) secCard {
 	l := v.L
-	c := secCard{ID: f.ID, Title: f.Title, State: lab(l, "validation", f.Validation) + " · " + lab(l, "severity", f.Severity)}
+	c := secCard{ID: f.ID, Title: f.Title, State: lab(l, "validation", f.Validation), Severity: lab(l, "severity", f.Severity), Tone: "attention"}
+	if f.Validation == ValidationSupported || f.Validation == ValidationReproduced {
+		c.Tone = "ready"
+	}
 	if len(f.Locations) > 0 {
 		location := f.Locations[0]
 		c.Location = sourceRange(location.Path, location.StartLine, location.EndLine)
+		c.ShortLocation = c.Location
+		if slash := strings.LastIndexByte(location.Path, '/'); slash >= 0 {
+			c.ShortLocation = "…/" + sourceRange(location.Path[slash+1:], location.StartLine, location.EndLine)
+		}
 	}
+	var previewSource sourceCitation
 	if v.R.Export.IncludeCode {
 		for _, evidence := range f.Evidence {
 			if evidence.Kind == "code" && evidence.Location != nil && !slices.Contains(f.CounterevidenceIDs, evidence.ID) {
-				c.Preview = findingCitation(l, evidence).previewFor(f.Title)
-				if c.Preview != nil {
+				source := findingCitation(l, evidence)
+				if preview := source.previewFor(f.Title); preview != nil {
+					c.Preview, previewSource = preview, source
 					break
 				}
 			}
 		}
 	}
-	c.Lines = append(c.Lines, secItem{Label: l.Label("opening.disposition"), Text: lab(l, "disposition", f.Disposition)})
 	seen := make(map[string]bool, len(f.Evidence))
-	add := func(label, text string, refs []string) {
+	add := func(target *[]secItem, label, text string, refs []string) {
 		item := secItem{Label: l.Label(label), Text: openingText(text, "")}
 		for _, e := range f.Evidence {
 			if e.Location == nil || !slices.Contains(refs, e.ID) {
@@ -488,35 +496,39 @@ func (v secView) findingCard(f Finding) secCard {
 			}
 			x := v.citeEvidence(e.Kind, e.Location.Path, e.Location.StartLine, e.Location.EndLine, e.Excerpt)
 			if !seen[x.Location] {
+				if c.Preview != nil && x.Text != "" && x.ExcerptLocation == previewSource.ExcerptLocation && x.Text == previewSource.Text {
+					x.CoveredByPreview = true
+					x.PrintLocation = x.Location != previewSource.Location
+				}
 				item.Sources = append(item.Sources, x)
 				seen[x.Location] = true
 			}
 		}
 		if item.Text != "" || len(item.Codes) > 0 || len(item.Sources) > 0 {
-			c.Lines = append(c.Lines, item)
+			*target = append(*target, item)
 		}
-	}
-	for _, x := range f.Conditions {
-		add("opening.condition."+x.Status, x.Statement, x.EvidenceIDs)
 	}
 	var impactRefs []string
 	for _, x := range f.Claims {
 		if x.Assertion == f.Impact {
 			impactRefs = append(impactRefs, x.EvidenceIDs...)
-			continue
-		}
-		if x.Assertion != f.Title || len(f.Conditions) == 0 {
-			add("opening.claim."+x.Kind, x.Assertion, x.EvidenceIDs)
 		}
 	}
-	add("opening.impact", f.Impact, impactRefs)
-	add("opening.recommendation", f.Recommendation.Summary, nil)
+	add(&c.Lines, "opening.impact", f.Impact, impactRefs)
+	add(&c.Lines, "opening.recommendation", f.Recommendation.Summary, nil)
+	add(&c.Lines, "opening.severity_reason", f.SeverityReason, nil)
+	for _, x := range f.Conditions {
+		add(&c.Context, "opening.condition."+x.Status, x.Statement, x.EvidenceIDs)
+	}
+	for _, x := range f.Claims {
+		if x.Assertion != f.Impact && (x.Assertion != f.Title || len(f.Conditions) == 0) {
+			add(&c.Context, "opening.claim."+x.Kind, x.Assertion, x.EvidenceIDs)
+		}
+	}
 	for _, x := range f.Verification {
-		if !nonempty(x) {
-			continue
-		}
-		add("opening.verification", x, nil)
+		add(&c.Context, "opening.verification", x, nil)
 	}
+	add(&c.Context, "opening.disposition", lab(l, "disposition", f.Disposition), nil)
 	return c
 }
 
@@ -688,6 +700,17 @@ func (v secView) summaryStatic(b secBlock, obs map[string]Observation, findings 
 		if len(groups) == 0 {
 			continue
 		}
+		withRelated := slices.ContainsFunc(groups, func(group ruleGroup) bool {
+			return slices.ContainsFunc(group.ObservationIDs, func(id string) bool {
+				return len(obs[id].Related) > 0
+			})
+		})
+		if withRelated {
+			part := v.staticResults(lang, obs)
+			part.Heading = tf(l, "summary.static_rules", heading)
+			parts = append(parts, part)
+			continue
+		}
 		gt := &secTable{Head: []string{l.Label("col.tool"), l.Label("col.rule"), l.Label("col.count"), l.Label("col.severity"), l.Label("col.message"), l.Label("col.location")}}
 		for _, g := range groups {
 			message := g.Message
@@ -720,7 +743,8 @@ func (v secView) summaryStatic(b secBlock, obs map[string]Observation, findings 
 }
 
 func (v secView) summaryMetrics(b secBlock, obs map[string]Observation) secBlock {
-	b.Parts = append([]secPart{b.Parts[0]}, v.measurementParts(obs, false)...)
+	b.Parts = append([]secPart{b.Parts[0]}, v.goDependencyParts(true)...)
+	b.Parts = append(b.Parts, v.measurementParts(obs, false)...)
 	return b
 }
 
@@ -730,7 +754,7 @@ func (v secView) summarySecrets(b secBlock) secBlock {
 	l := v.L
 	sc := v.R.Secrets
 	parts := []secPart{b.Parts[0], b.Parts[1]}
-	dt := &secTable{Head: []string{l.Label("col.rule"), l.Label("col.location"), l.Label("col.evidence_state"), l.Label("col.finding")}, RowIDs: []string{}}
+	dt := &secTable{Head: []string{l.Label("col.rule"), l.Label("col.location"), l.Label("col.evidence_state")}, RowIDs: []string{}}
 	rules := map[string]int{}
 	var ruleOrder []string
 	for _, x := range sc.Detections {
@@ -741,12 +765,8 @@ func (v secView) summarySecrets(b secBlock) secBlock {
 			rules[x.RuleID]++
 			continue
 		}
-		f := secCell{Text: "-"}
-		if x.FindingID != nil {
-			f = link(*x.FindingID)
-		}
 		dt.RowIDs = append(dt.RowIDs, x.ObservationID)
-		dt.Rows = append(dt.Rows, []secCell{code(x.RuleID), code(detectionPlace(l, x)), code(x.EvidenceState), f})
+		dt.Rows = append(dt.Rows, []secCell{code(x.RuleID), code(detectionPlace(l, x)), txt(l.Label("secrets.location_" + x.EvidenceState))})
 	}
 	p := secPart{Heading: l.Label("secrets.detections"), Table: dt, Empty: l.Label("secrets.none")}
 	if len(ruleOrder) > 0 {
@@ -1304,11 +1324,13 @@ func mdCards(p func(...string), cards []secCard) {
 		p("#### ", mdText(c.Title))
 		p()
 		if c.State != "" {
-			p(mdText(c.State))
+			p(mdText(c.State + " · " + c.Severity))
 			p()
 		}
-		for _, it := range c.Lines {
-			mdItem(p, it)
+		for _, items := range [][]secItem{c.Lines, c.Context} {
+			for _, it := range items {
+				mdItem(p, it)
+			}
 		}
 		p()
 	}

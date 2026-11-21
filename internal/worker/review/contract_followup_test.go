@@ -3,6 +3,7 @@ package review
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -435,6 +436,60 @@ func TestContractFollowupRereadsAcceptedSliceEvidence(t *testing.T) {
 	found, err = stage.contractSliceExcerpts(probe, prior, nil, docs, overview, files, nil, nil)
 	if err != nil || len(found) != 0 {
 		t.Fatalf("slice evidence from scope with different overview digest: %+v, %v", found, err)
+	}
+}
+
+func TestContractFollowupPrioritizesSelectedLateSliceBeforeOrdinaryReadLimit(t *testing.T) {
+	const selected = "z_selection.go"
+	tree := map[string]string{
+		"go.mod":    "module example.org/recipes\n\ngo 1.23\n",
+		"README.md": "# Catalogue\n\nRules guide the result.\n",
+		selected:    "package recipes\n\nfunc selectEntry() string { return \"vegetarian\" }\n",
+	}
+	for i := range 112 {
+		tree[fmt.Sprintf("record%03d.go", i)] = fmt.Sprintf("package recipes\n\nfunc entry%03d() int { return %d }\n", i, i)
+	}
+	j := treeJob(t, tree)
+	script := coverageScript(t)
+	script["investigate"] = func(_ int, _ opencode.Request) opencode.Reply {
+		return asJSON(map[string]any{"candidates": []any{}})
+	}
+	h := Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: script}}
+	runRoleWith(t, j, h, "1.27.4")
+	stage := roleStage{h: h, j: j, ctx: t.Context()}
+	_, docs := stage.prior(record.StageDocuments)
+	_, overview := stage.prior(record.StageInvestigate)
+	scope, scopeUp := stage.readScope()
+	var want record.Excerpt
+	var wantSource record.Upstream
+	earlier := 0
+	for _, slot := range scope.Slices {
+		inv, up := stage.prior(record.StageInvestigate + "." + slot.Key)
+		if up.State != record.UpstreamAccepted {
+			continue
+		}
+		for _, e := range inv.Evidence {
+			if e.Path == selected {
+				want, wantSource = e, up
+				break
+			}
+			if e.Kind == "code" {
+				earlier++
+			}
+		}
+		if want.ID != "" {
+			break
+		}
+	}
+	if earlier <= maxContractSliceReads || want.ID == "" {
+		t.Fatalf("fixture failed to place target past read limit: %d excerpts, want %s", earlier, want.ID)
+	}
+	probe := record.ContractProbe{Candidates: []record.ContractLocation{{Path: selected}}, Literals: []string{"selectEntry"}}
+	got, err := stage.contractSliceExcerpts(probe, record.ContractComparison{AppliesTo: "."}, nil, docs, overview, stage.entries(), nil, nil)
+	if err != nil || len(got) == 0 || got[0].excerpt.ID != want.ID ||
+		!strings.Contains(got[0].excerpt.Text, "return \"vegetarian\"") ||
+		!slices.Equal(got[0].sources, []record.Upstream{scopeUp, wantSource}) {
+		t.Fatalf("late selected slice evidence was displaced or lost provenance: %+v, %v", got, err)
 	}
 }
 

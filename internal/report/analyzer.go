@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
 
 // Fixed template texts of findings decoded from the generic analyzer
@@ -122,6 +124,33 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 		obs := Observation{ID: o.ID, TaskKey: ctx.Task.Key, TaskExecutionID: ctx.TaskExecutionID, Tool: d.Analyzer.ID, ToolVersion: d.Tool.Version, RuleID: o.RuleID,
 			RawSeverity: severity, RawMessage: &msg, LocationState: o.LocationState, EvidenceState: EvidenceUnresolved, SuggestedFixes: o.SuggestedFixes, Suppressed: o.Suppressed,
 			RawRef: RawRef{ArtifactID: a.ID, SHA256: a.SHA256, StreamIndex: o.RawRef.RecordIndex, JSONPointer: o.RawRef.JSONPointer, ByteStart: o.RawRef.ByteStart, ByteEnd: o.RawRef.ByteEnd}}
+		if obs.Tool == "cpp.cppcheck" || obs.Tool == "cpp.clang_tidy" {
+			for _, r := range o.Related {
+				kind := r.Kind
+				if kind == "" {
+					kind = obsdoc.RelatedPosition
+					if obs.Tool == "cpp.clang_tidy" {
+						kind = obsdoc.RelatedNote
+					}
+				}
+				rel := RelatedObservation{Kind: kind, LocationState: r.LocationState}
+				if r.RawMessage != "" && sourceexcerpt.SafeDiagnosticText(r.RawMessage) {
+					rel.RawMessage = strPtr(r.RawMessage)
+				}
+				if l := r.Location; l != nil && slices.Contains(d.WorkspaceDrift, l.Path) {
+					rel.LocationState = obsdoc.LocationSourceDrift
+				} else if l != nil {
+					rel.Location = &ObservationLocation{SnapshotID: ctx.Snapshot.ID, Path: l.Path, StartLine: l.StartLine, EndLine: l.EndLine, ColumnUnit: "byte", BlobSHA256: l.BlobSHA256}
+					if l.ColumnUnit == "byte" {
+						rel.Location.StartCol, rel.Location.EndCol = l.StartCol, l.EndCol
+					}
+				}
+				if span := r.RawSpan; span != nil {
+					rel.RawRef = &RawRef{ArtifactID: a.ID, SHA256: a.SHA256, StreamIndex: o.RawRef.RecordIndex, ByteStart: span.Start, ByteEnd: span.End}
+				}
+				obs.Related = append(obs.Related, rel)
+			}
+		}
 		if m := o.Metric; m != nil {
 			obs.Metric = &ObservationMetric{Name: m.Name, Value: m.Value, Threshold: m.Threshold, Unit: m.Unit}
 		}

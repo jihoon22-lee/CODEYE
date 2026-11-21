@@ -27,6 +27,9 @@ var reportThemeCSS string
 //go:embed reportui/export.css
 var reportExportCSS string
 
+//go:embed reportui/workbench.css
+var reportWorkbenchCSS string
+
 //go:embed reportui/export-navigation.js
 var reportExportNavigation string
 
@@ -51,7 +54,7 @@ var notoSansKRNotice string
 // no companion files, so use a data URL for the font in this renderer.
 var reportFontURL = "data:font/woff2;base64," + base64.StdEncoding.EncodeToString(reportFont)
 var sectionedExportCSS = strings.Replace(reportFontCSS, "./noto-sans-kr.woff2", reportFontURL, 1) +
-	reportTablerCSS + reportThemeCSS + reportExportCSS
+	reportTablerCSS + reportThemeCSS + reportExportCSS + reportWorkbenchCSS
 
 type reportTimestamp struct {
 	Label, Original, Display string
@@ -84,7 +87,7 @@ func recordedTimestamp(label, raw string) reportTimestamp {
 	if err != nil {
 		return reportTimestamp{}
 	}
-	return reportTimestamp{label, raw, at.UTC().Format("2006-01-02 15:04 MST"), at}
+	return reportTimestamp{label, raw, at.UTC().Format("2006-01-02 15:04:05 MST"), at}
 }
 
 func (v secView) HeaderTiming() reportTiming {

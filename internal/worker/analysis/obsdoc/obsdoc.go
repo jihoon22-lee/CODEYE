@@ -272,12 +272,35 @@ type RawRef struct {
 	ByteEnd      int64  `json:"byte_end"`
 }
 
+const (
+	RelatedPosition   = "reported_position"
+	RelatedNote       = "tool_note"
+	RelatedAssumption = "condition_assumption"
+	RelatedBranch     = "assumed_branch"
+)
+
+func ValidRelatedKind(kind string) bool {
+	switch kind {
+	case RelatedPosition, RelatedNote, RelatedAssumption, RelatedBranch:
+		return true
+	}
+	return false
+}
+
 // Related is a secondary location the tool attached to a diagnostic.
 type Related struct {
+	Kind          string    `json:"kind,omitempty"`
+	RawSpan       *ByteSpan `json:"raw_span,omitempty"`
 	RawMessage    string    `json:"raw_message"`
 	Path          *string   `json:"path"`
 	Location      *Location `json:"location"`
 	LocationState string    `json:"location_state"`
+}
+
+// ByteSpan refers to the same execution stream as the primary diagnostic.
+type ByteSpan struct {
+	Start int64 `json:"byte_start"`
+	End   int64 `json:"byte_end"`
 }
 
 // Observation is one raw tool diagnostic. RawMessage is the tool text with
@@ -811,6 +834,17 @@ func checkObservations(d Document, execs map[string]Execution, lookup func(strin
 		}
 		if ref.StreamSHA256 != s.SHA256 || ref.ByteEnd > s.CapturedBytes {
 			return invalid("observation %s raw reference is not bound to its stream", o.ID)
+		}
+		next := ref.ByteStart
+		for _, related := range o.Related {
+			if related.RawSpan == nil && related.Kind == "" { // earlier envelopes
+				continue
+			}
+			span := related.RawSpan
+			if !ValidRelatedKind(related.Kind) || span == nil || span.Start < next || span.End <= span.Start || span.End > ref.ByteEnd {
+				return invalid("observation %s related raw reference", o.ID)
+			}
+			next = span.End
 		}
 		if o.LocationState != LocationResolved {
 			unresolved++

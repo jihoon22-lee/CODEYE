@@ -12,6 +12,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/gograph"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/deps/depdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
@@ -300,7 +301,7 @@ func (r *Registry) lookup(art ArtifactRef, body []byte) (ArtifactDecoder, bool) 
 // Wants reports whether some decoder could own artifacts of this media type,
 // so the publisher loads only bytes a decoder may read.
 func (r *Registry) Wants(mediaType string) bool {
-	if mediaType == sourceexcerpt.MediaType {
+	if mediaType == sourceexcerpt.MediaType || mediaType == gograph.MediaType {
 		return true
 	}
 	if r == nil {

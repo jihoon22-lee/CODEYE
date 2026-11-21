@@ -385,6 +385,8 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 
 `observations[].metric.counterpart`는 중복 쌍의 두 번째 블록을 가리킨다. 첫 블록은 같은 관찰의 `location`이다. 두 위치는 고정 스냅샷의 경로·줄 범위·파일 해시로 구성되며 코드 미포함 응답에도 남는다. 예전 리비전 또는 상대 위치를 확인할 수 없는 관찰은 선택 필드를 생략한다.
 
+C/C++ 진단의 `observations[].related_locations`에는 도구가 근거로 제시한 위치와 가정이 순서대로 들어간다. 코드 미포함 응답은 위치와 유형을 남기고 원문 메시지와 발췌를 생략한다. `metrics.go_package_dependencies`는 Go 모듈별 import 관계와 해당 줄을 제공한다. 패키지 목록을 끝까지 읽었으면 `unlisted_files`로 목록에 없던 후보 파일 수를 표시한다. 이전 리비전이나 집계가 불가능한 실행에서는 이 필드를 생략할 수 있다.
+
 보고서의 `documents.quality`, `documents.comparisons`, `code_review.strengths`는 수락된 모델 해석과 근거 ID를 담는 선택 필드다. `findings[].evidence[]`와 분석 절 근거의 `excerpt`에는 고정 스냅샷에서 저장한 실제 줄 범위와 원문이 들어간다. 도구 진단의 문맥은 최대 9줄이며 새 모델 발췌는 인용 시작 줄부터 최대 50줄이다. JSON 인코딩 1,800바이트에 닿으면 마지막으로 저장할 수 있는 완전한 줄까지 담는다. `include_code=false`에서는 발췌 필드를 생략하고 모델 문장을 생략 문구로 바꾼다. 이전 보고서에는 이 필드가 없을 수 있다.
 
 수락된 최종 대조가 기존 미확인 계약 하나의 판정을 갱신한 경우, 해당 비교에 선택 필드 `followup: true`가 있다. 계약 문서와 적용 범위는 기존과 같고 새 근거는 `code_evidence_ids`에 들어간다. 근거의 종류는 `documents.evidence[].kind`에서 코드와 테스트를 구별한다. `coverage.review_calls[].task_key`가 `review.contract`이면 이 작업의 호출 기록이다. 최종 대조가 여전히 미확인이면서 새 구현을 인용한 경우에는 `additional_observation`의 `reason`에 확인한 범위를 담는다. 그 안의 `code_evidence_ids`는 처음 조사에서 읽은 호출부와 함께 인용한 테스트를 포함해 최종 대조의 인용 순서를 유지한다. 원래 비교의 `status`, `reason`, `code_evidence_ids`는 그대로다. 이전 리비전은 선택 필드 없이 읽을 수 있다. 코드 미포함 응답은 상태와 근거 ID를 유지하고 추가 관찰의 `reason`도 다른 모델 문장과 같은 생략 문구로 바꾼다.

@@ -1,6 +1,7 @@
 package report
 
 import (
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/gograph"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
@@ -385,9 +386,10 @@ type RuleTally struct {
 // They are never defects. TaskKeys are the analyzer tasks of purpose
 // metrics; Stage is their state with the stage classifier.
 type MetricsSection struct {
-	Stage    SectionStage  `json:"stage"`
-	TaskKeys []string      `json:"task_keys"`
-	Metrics  []MetricGroup `json:"metrics"`
+	Stage          SectionStage       `json:"stage"`
+	TaskKeys       []string           `json:"task_keys"`
+	Metrics        []MetricGroup      `json:"metrics"`
+	GoDependencies []gograph.Document `json:"go_package_dependencies,omitempty"`
 }
 
 type MetricGroup struct {

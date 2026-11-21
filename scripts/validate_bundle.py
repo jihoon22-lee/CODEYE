@@ -91,6 +91,10 @@ def main() -> None:
     validators["snapshot-manifest.schema.json"].validate(pull_manifest)
     for bad in (pull_manifest | {"source_branch": "main"}, {k: v for k, v in pull_manifest.items() if k != "source_ref"}, pull_manifest | {"source_ref": "refs/heads/main"}):
         ensure(not validators["snapshot-manifest.schema.json"].is_valid(bad), "snapshot manifest must have exactly one of source_branch and source_ref")
+    go_graph = json_file(ROOT / "examples/go-package-graph.json")
+    validators["go-package-graph.schema.json"].validate(go_graph)
+    ensure([edge["kind"] for edge in go_graph["edges"]] == ["external_test", "production"],
+           "Go package graph example has no separate production and test evidence")
     plan = json_file(ROOT / "examples/plan.json")
     report = json_file(ROOT / "examples/report.json")
     analyzer = yaml_file(ROOT / "examples/analyzer-ruff.yaml")

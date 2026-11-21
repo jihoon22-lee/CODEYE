@@ -36,6 +36,9 @@ export type Finding = {
 export type Task = { key: string; status: string; reason: string | null; required?: boolean };
 type TestResult = Task & { attempted: boolean; directory: string | null; exit: number | null; result: 'passed' | 'failed' | 'unverified' };
 export type ObservationPlace = { path: string; start: number; end: number };
+export type RelatedObservation = {
+  kind: string; message: string | null; location: ObservationPlace | null; state: string; excerpt: Excerpt | null;
+};
 export type Observation = {
   id: string;
   rule: string;
@@ -48,6 +51,7 @@ export type Observation = {
   // The tool's own severity, and whether an in-source suppression hid it.
   severity: string | null;
   suppressed: boolean;
+  related?: RelatedObservation[];
   // Structure or duplication measurement (never a finding).
   metric: { name: string; value: number; threshold: number; unit: string; counterpart?: ObservationPlace; excerpt?: Excerpt | null; counterpartExcerpt?: Excerpt | null } | null;
 };
@@ -238,6 +242,19 @@ export function parseAnalysisReport(
       location,
       severity: nullable(o.raw_severity),
       suppressed: o.suppressed === true,
+      related: array(o.related_locations ?? [], item => {
+        const note = object(item);
+        const kind = str(note.kind);
+        const state = str(note.location_state);
+        const excerpt = parseExcerpt(note.excerpt);
+        const loc = note.location == null ? null : object(note.location);
+        const position = loc && { path: str(loc.path), start: count(loc.start_line), end: count(loc.end_line) };
+        if (!['reported_position', 'tool_note', 'condition_assumption', 'assumed_branch'].includes(kind) ||
+          Boolean(position) !== (state === 'resolved') || loc && loc.snapshot_id !== object(r.inputs).snapshot_id ||
+          position && (position.start < 1 || position.end < position.start) ||
+          excerpt && (!position || !excerptFits(excerpt, position.start, position.end, false))) invalid();
+        return { kind, message: nullable(note.raw_message), location: position, state, excerpt };
+      }),
       metric: o.metric == null ? null : (() => {
         const m = object(o.metric);
         const name = str(m.name);
@@ -272,6 +289,9 @@ export function parseAnalysisReport(
   })();
   const includesCode = r.export != null && object(r.export).include_code === true;
   for (const observation of observations) {
+    if (observation.related.length > 64 || observation.related.length > 0 &&
+      (!['cpp.cppcheck', 'cpp.clang_tidy'].includes(observation.tool ?? '') ||
+        observation.related.some(note => !includesCode && (note.message !== null || note.excerpt !== null)))) invalid();
     const metric: Observation['metric'] = observation.metric;
     if (!metric) continue;
     for (const [excerpt, place] of [[metric.excerpt, observation.location], [metric.counterpartExcerpt, metric.counterpart]] as const) {

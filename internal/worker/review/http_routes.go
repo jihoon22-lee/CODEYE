@@ -112,6 +112,10 @@ func (s *roleStage) workflowRoutesFor(needsOutcome func(workflowRoute) bool) ([]
 }
 
 func (s *roleStage) httpRouteIndex() (*httpRouteIndex, error) {
+	return s.httpRouteIndexFrom(s.readSource)
+}
+
+func (s *roleStage) httpRouteIndexFrom(read func(source.Entry) (string, bool, error)) (*httpRouteIndex, error) {
 	manifest := s.j.Snapshot.Manifest
 	scope := normalizedScope(s.j.Scope)
 	groups := planCodeGroupsFor(manifest, scope, s.h.secondary(), changedPaths(s.j))
@@ -145,7 +149,7 @@ func (s *roleStage) httpRouteIndex() (*httpRouteIndex, error) {
 			continue
 		}
 		moduleReads++
-		content, ok, err := s.readSource(e)
+		content, ok, err := read(e)
 		if err != nil {
 			return idx, err
 		}
@@ -167,7 +171,7 @@ func (s *roleStage) httpRouteIndex() (*httpRouteIndex, error) {
 			continue
 		}
 		scanned += *e.Size
-		content, ok, err := s.readSource(e)
+		content, ok, err := read(e)
 		if err != nil {
 			return idx, err
 		}

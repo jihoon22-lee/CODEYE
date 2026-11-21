@@ -448,7 +448,10 @@ func assembleCppcheck(doc obsdoc.Document, in ccInput) obsdoc.Document {
 				break
 			}
 			rp, rl, rst := rs.resolve(l.File, l.Line, l.Col)
-			o.Related = append(o.Related, obsdoc.Related{RawMessage: mask(l.Info), Path: rp, Location: rl, LocationState: rst})
+			o.Related = append(o.Related, obsdoc.Related{
+				Kind: obsdoc.RelatedPosition, RawSpan: &obsdoc.ByteSpan{Start: l.ByteStart, End: l.ByteEnd},
+				RawMessage: mask(l.Info), Path: rp, Location: rl, LocationState: rst,
+			})
 		}
 		doc.Observations = append(doc.Observations, o)
 		if unit != "" {

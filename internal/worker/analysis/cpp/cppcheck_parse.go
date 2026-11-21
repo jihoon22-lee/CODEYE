@@ -20,9 +20,10 @@ const (
 
 // ccLocation is one <location> of an <error>.
 type ccLocation struct {
-	File      string
-	Line, Col int
-	Info      string
+	File               string
+	Line, Col          int
+	Info               string
+	ByteStart, ByteEnd int64
 }
 
 // ccRecord is one <error> element with its byte range in stderr.
@@ -180,7 +181,7 @@ func parseCppcheckXML(data []byte) ccStream {
 				if !ok || a["file"] == "" || e1 != nil || e2 != nil || line < 0 || col < 0 {
 					bad = true
 				} else if cur != nil {
-					cur.Locations = append(cur.Locations, ccLocation{File: a["file"], Line: line, Col: col, Info: a["info"]})
+					cur.Locations = append(cur.Locations, ccLocation{File: a["file"], Line: line, Col: col, Info: a["info"], ByteStart: start, ByteEnd: dec.InputOffset()})
 				}
 			case parent == "error" && name == "symbol":
 				if len(t.Attr) != 0 {

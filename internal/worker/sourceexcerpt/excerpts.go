@@ -72,6 +72,9 @@ func safeText(b []byte) bool {
 	return utf8.Valid(b) && !bytes.ContainsRune(b, 0) && !record.Sensitive(b) && !moreCredentials.Match(b)
 }
 
+// SafeDiagnosticText applies the code excerpt credential screen to tool notes.
+func SafeDiagnosticText(text string) bool { return safeText([]byte(text)) }
+
 func (e Excerpt) validText(anchor int) bool {
 	return e.StartLine >= 1 && anchor >= e.StartLine && anchor <= e.EndLine &&
 		e.EndLine-e.StartLine == strings.Count(e.Text, "\n") &&

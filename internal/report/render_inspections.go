@@ -301,23 +301,50 @@ func (v secView) staticResults(language StaticLanguage, obs map[string]Observati
 		if isPromiseRejectDiagnostic(g.Analyzer, g.Rule) {
 			summary = l.Label("rule.promise_rejection")
 		}
-		detail := secTableDetail{ID: "static-detail-" + o.ID, Label: g.Rule}
-		if summary != strings.TrimSpace(message) {
-			detail.Text = message
+		detail := v.staticDiagnosticDetail(o, excerpts[o.ID], summary)
+		if len(detail.Sources) > 0 {
+			location = detail.Sources[0].Location
 		}
-		if o.Location != nil {
-			source := v.inspectionCitation(o.Location, excerpts[o.ID])
-			location = source.Location
-			detail.Label += " · " + location
-			detail.Sources = []sourceCitation{source}
-			if source.Text == "" {
-				detail.Text = strings.TrimSpace(detail.Text + " " + l.Label("inspection.no_excerpt"))
+		for _, id := range g.ObservationIDs {
+			other := obs[id]
+			if id != o.ID && len(other.Related) > 0 {
+				detail.OtherDiagnostics = append(detail.OtherDiagnostics, v.staticDiagnosticDetail(other, excerpts[id], ""))
 			}
 		}
 		table.Rows = append(table.Rows, []secCell{code(g.Analyzer), code(g.Rule), txt(summary), num(g.Count), txt(lab(l, "severity", g.Severity)), code(location)})
 		table.Details = append(table.Details, detail)
 	}
 	return secPart{Table: table}
+}
+
+func (v secView) staticDiagnosticDetail(o Observation, excerpt *sourceexcerpt.Excerpt, shownMessage string) secTableDetail {
+	l := v.L
+	detail := secTableDetail{ID: "static-detail-" + o.ID, Label: o.RuleID}
+	if message := v.Message[o.ID]; shownMessage != strings.TrimSpace(message) {
+		detail.Text = message
+	}
+	if o.Location != nil {
+		source := v.inspectionCitation(o.Location, excerpt)
+		detail.Label += " · " + source.Location
+		detail.Sources = []sourceCitation{source}
+		if source.Text == "" {
+			detail.Text = strings.TrimSpace(detail.Text + " " + l.Label("inspection.no_excerpt"))
+		}
+	}
+	for _, related := range o.Related {
+		note := inspectionNote{Label: l.Label("inspection.related." + related.Kind), Text: optText(related.RawMessage, "")}
+		if related.Location != nil {
+			source := v.inspectionCitation(related.Location, related.Excerpt)
+			note.Source = &source
+		} else if note.Text == "" {
+			note.Text = reasonText(l, related.LocationState)
+		}
+		detail.Notes = append(detail.Notes, note)
+	}
+	if len(detail.Notes) > 0 {
+		detail.Text = strings.TrimSpace(detail.Text + " " + l.Label("inspection.related_explanation"))
+	}
+	return detail
 }
 
 func (v secView) measurementParts(obs map[string]Observation, detail bool) []secPart {
