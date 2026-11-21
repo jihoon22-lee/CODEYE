@@ -1,149 +1,64 @@
 # CODEYE 사용 안내서
 
-Linux(WSL2 포함) 머신에서 `codeye up`으로 CODEYE 서비스를 띄워 쓰는 방법이다. 시작 → 열기 → 분석 → 다른 사람 초대 → 다른 사람이 분석할 수 있는 것의 순서로 읽으면 된다. 혼자 쓰든 여럿이 쓰든 같은 서비스이고, 로그인한 사람이 무엇을 분석할 수 있는지는 사람마다 받은 권한이 정한다. 그 뒤에 보고서 읽기, 예약, 이전 실행과 비교, 정지, 저장 공간, 백업·복원, 업그레이드, 문제 해결을 다룬다. 설정 필드 전체 표와 명령의 동작 계약, 지원 범위는 [운영](OPERATIONS.md)에 있다.
-
-아래 명령은 이 저장소의 빌드에서 Linux(WSL2)와 PostgreSQL 17.10으로 실제 실행해 확인했다. 실행하지 않은 절차는 **(설계 절차, 시험 안 함)**으로 표시했다. 경로와 이름은 예시다.
+Linux에서 CODEYE 웹 서비스를 시작하고 프로젝트를 분석하는 안내서다. 설치 뒤에는 같은 화면에서 보고서를 보고 구성원을 초대할 수 있다. 설정 필드, 지원 환경, 백업·복원은 [운영](OPERATIONS.md)에 있다. 아래 경로와 이름은 예시다.
 
 ## 준비물
 
-- **Linux.** `codeye up`·`start`·`stop`·`status`·`backup`·`restore`는 Linux 전용이다. Windows에서는 미지원 오류로 끝난다. RHEL 8에서는 실행하지 않았다([지원 범위](OPERATIONS.md#지원-범위)).
-- **CODEYE 바이너리와 웹 화면.** 저장소에서 빌드한다. 외부에서 아무것도 내려받지 않는다. `codeye`는 실행 파일 옆의 `web/dist`(또는 `../web/dist`)를 화면으로 쓴다.
+| 하려는 일 | 준비물 |
+|---|---|
+| 웹 서비스 시작 | Linux x86-64 또는 ARM64, 일반 Linux 계정, CODEYE 실행 파일과 웹 화면, PostgreSQL 서버 프로그램 14 이상. 시험한 환경은 [지원 범위](OPERATIONS.md#지원-범위)에 있다 |
+| 폴더 분석 | 서비스 Linux 계정이 읽을 수 있는 프로젝트 폴더의 절대 경로. WSL 파일과 서버에 마운트한 NFS 경로도 같은 방식으로 입력한다 |
+| Git 저장소 분석 | `git`과 저장소 HTTPS 주소. 비공개 GitHub.com·GHES는 [플랫폼 GitHub 계정](GITHUB.md#플랫폼-github-계정)에 읽기 권한을 준다 |
+| 추가 정적 분석 | Go의 `go vet`, Python의 Ruff처럼 프로젝트 언어에 맞는 도구. 설치된 도구는 `./codeye tools`에서 확인한다. [분석기](ANALYZERS.md) |
+| 모델 검토 | OpenCode와 사용할 모델. 공급자가 인증을 요구하면 API 키도 준비한다. [모델 설정](#모델-설정) |
 
-  ```sh
-  go build -o codeye ./cmd/codeye
-  cd web && npm ci && npm run build      # 결과: web/dist
-  ```
-
-- **PostgreSQL 프로그램.** 설치만 되어 있으면 된다. 서버를 띄우거나 DB·사용자를 만들 필요는 없다. CODEYE가 상태 디렉터리 안에 자기 전용 cluster를 만들고 띄운다. 주 버전 14 이상의 `initdb`·`pg_ctl`·`postgres`·`pg_dump`·`pg_restore`가 필요하다. Ubuntu는 `sudo apt install postgresql`이면 된다(`/usr/lib/postgresql/*/bin`에서 찾는다). 다른 위치에 있으면 `codeye up --postgres-bin-dir DIR`로 한 번 알려 주면 설정에 저장된다.
-- **분석 도구.** Go 프로젝트에는 Go toolchain(`go vet`)이 필요하다. `codeye up`은 PATH의 `go`를 쓴다. Staticcheck·cppcheck·Ruff 같은 다른 도구는 설치한 것만 설정 `agent.tools`에 적는다. 적지 않은 도구는 보고서에 "미지원"으로 나온다. 0건 통과로 세지 않는다. 도구별 요구는 [분석기](ANALYZERS.md)에 있다.
-- **디스크.** 상태 디렉터리에는 데이터베이스, 소스 사본, 작업 사본, 로그, 산출물이 쌓인다. 크기 상한은 [저장 공간](#저장-공간)에서 정한다.
+Ubuntu는 `sudo apt install postgresql`로 PostgreSQL을 설치할 수 있다. CODEYE는 `initdb`, `pg_ctl`, `postgres`, `pg_dump`, `pg_restore`가 있는 디렉터리를 찾아 전용 데이터베이스를 만든다. 별도 위치는 `./codeye up --postgres-bin-dir /절대/경로/bin`로 지정한다. 기존 데이터베이스 서버를 쓸 때는 [외부 PostgreSQL](OPERATIONS.md#외부-postgresql)을 따른다.
 
 ## 첫 시작
 
-```sh
-codeye up ~/src/myproject
-```
+CPU에 맞는 배포 파일과 SHA-256 검증 파일을 같은 폴더에 받는다. 배포 파일을 이미 풀었다면 그 안의 `INSTALL.md`를 연다.
 
-이 한 줄이 다음을 한다.
+- Linux x86-64(amd64) [배포 파일](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.0/codeye-v0.1.0-linux-amd64.tar.gz) · [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.0/codeye-v0.1.0-linux-amd64.tar.gz.sha256)
+- Linux ARM64 [배포 파일](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.0/codeye-v0.1.0-linux-arm64.tar.gz) · [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.0/codeye-v0.1.0-linux-arm64.tar.gz.sha256)
 
-1. 설정 파일(`~/.config/codeye/config.json`)이 없으면 `schema_version`만 담아 만든다. 비어 있는 필드는 기본값이다. 상태 디렉터리는 `~/.local/state/codeye`(`XDG_STATE_HOME`을 따른다)다.
-2. PostgreSQL을 찾아 상태 디렉터리의 `postgres/data`에 cluster를 만들고 127.0.0.1의 빈 포트(55432부터)로 띄운다. 비밀번호는 만들어 `postgres/password`(0600)에 둔다. 셸의 `PG*` 변수와 `CODEYE_DATABASE_URL`은 무시하고 그렇다고 알린다.
-3. schema를 만든다. 데이터가 있는 DB의 schema가 이전 버전이면 먼저 `pg_dump` 사본을 백업 디렉터리에 쓰고 migration을 적용한다.
-4. controller(`127.0.0.1:7331`, 쓰이고 있으면 7340까지 다음 빈 포트)와 로컬 에이전트를 띄운다.
-5. 홈 디렉터리 아래 폴더는 기본 root `home` 아래 상대 경로로, 그 밖의 폴더는 그 폴더 자체를 root로 설정에 더해 프로젝트로 등록하고 분석을 요청한다. 이미 등록한 폴더면 그 프로젝트에 새 분석을 요청한다(분석이 아직 대기·실행 중이면 그것을 보여 준다).
-6. 로그인된 주소를 출력하고 브라우저로 연다. WSL에서는 `wslview` 또는 `explorer.exe`로 Windows 브라우저를 연다. 그 주소는 해당 프로젝트와 실행 화면으로 바로 간다.
-
-명령 목록은 `codeye --help`가 자주 쓰는 명령부터 보이고, 한 명령의 옵션은 `codeye up --help`처럼 그 명령에 `--help`를 붙여 본다.
-
-첫 실행의 출력(실제 실행의 출력에서 경로·ID·pid만 예시로 바꾸고, 찾은 도구 줄은 줄였다):
-
-```text
-wrote a new configuration: /home/user/.config/codeye/config.json
-TOOL         STATUS   VERSION   WHERE / HOW TO ADD
-go           found    1.27.4    /usr/local/go/bin/go
-…
-opencode     missing  -         not found - install OpenCode (`curl -fsSL https://opencode.ai/install | bash`) or set `agent.model.opencode`
-go module cache: ~/go/pkg/mod; python type checkers: mypy and pyright both run
-model: none (set OPENAI_API_KEY, ANTHROPIC_API_KEY or OPENCODE_API_KEY and run codeye up again) - static analysis only
-github: platform account codeye-platform on github.com
-initialized a PostgreSQL 17.10 cluster in /home/user/.local/state/codeye/postgres/data (binaries: /usr/lib/postgresql/17/bin)
-PostgreSQL 17.10 started on 127.0.0.1:55432 (log /home/user/.local/state/codeye/logs/postgres.log)
-database schema created (migration 16)
-created the administrator user 2ce93dc8-…
-registered source root "home" (f655c03e-…)
-registered the Git host github.com
-CODEYE is running at http://127.0.0.1:7331 (controller pid 4101, agent pid 4113); logs in /home/user/.local/state/codeye/logs
-registered project "myproject" (/home/user/src/myproject)
-queued an analysis of "myproject" (run 4699c64a-…); the browser shows its progress and the report
-
-Open CODEYE (signed in; the link works once, within 10 minutes):
-  http://127.0.0.1:7331/#launch=…&project=26a4247c-…&run=4699c64a-…
-
-opened the browser with xdg-open
-The browser stays signed in for 7 days. New link: codeye open. Stop: codeye stop.
-```
-
-- 주소의 `#launch=` 값은 한 번만 쓰는 10분짜리 로그인 토큰이다. 브라우저가 읽자마자 주소창에서 지운다. 화면을 다시 열 때는 `codeye open`을 한다(새 링크를 출력하고 브라우저를 연다). 브라우저를 열지 않으려면 `up`·`open`에 `--no-open`을 준다.
-- 로그인은 7일 동안 유지된다.
-- 경로 없이 `codeye up`만 하면 시작(또는 이미 실행 중이면 새 링크)만 한다. 다른 폴더를 지정하면 서비스 계정으로 읽을 수 있는지 확인하고 그 폴더의 분석을 요청한다. 새 경로를 분석할 때마다 에이전트를 재시작할 필요는 없다.
-- 상태 디렉터리나 백업 디렉터리를 품거나 그 안에 있는 폴더(예: 홈 디렉터리 전체)는 받지 않는다. 오류가 문제의 폴더를 알려 주므로 프로젝트가 든 하위 폴더를 준다. 화면에서 등록하든 root와 상대 경로로 등록하든 같고, 에이전트도 소스를 읽기 전에 다시 확인한다.
-- 홈 디렉터리는 설정에 적지 않아도 읽을 수 있는 폴더(`home` root)다. 다른 곳의 폴더는 처음 한 번 `codeye up <폴더>`로 더한다.
-
-**공개 Git 저장소**는 주소를 그대로 준다. 브랜치를 비우면 저장소의 기본 브랜치다.
+x86-64에서 시작하는 예다. ARM64는 명령의 `amd64`를 `arm64`로 바꾼다.
 
 ```sh
-codeye up https://github.com/BurntSushi/termcolor
-codeye up https://github.com/OWNER/REPO/tree/release   # 그 브랜치
+sha256sum -c codeye-v0.1.0-linux-amd64.tar.gz.sha256 &&
+  tar -xzf codeye-v0.1.0-linux-amd64.tar.gz &&
+  cd codeye-v0.1.0-linux-amd64 &&
+  ./codeye up
 ```
 
-실제 출력(이미 실행 중인 설치에서, 도구 표를 빼고 링크 토큰만 줄였다):
+- `up`은 설정 파일과 데이터베이스를 만들고 웹 서버와 로컬 에이전트를 시작한다. 기본 주소는 `http://127.0.0.1:7331`이며 사용 중이면 다음 빈 포트(7340까지)를 고른다. [실행 명령과 설정 경로](OPERATIONS.md#up-open-start-stop-status)
+- 첫 로그인은 관리자 계정으로 한다. 브라우저가 열리지 않으면 터미널에 출력된 로그인 링크를 연다. 링크는 10분 안에 한 번 쓸 수 있고, 로그인은 7일 동안 유지된다. 새 링크는 `./codeye open`, 링크만 출력하려면 `./codeye open --no-open`으로 받는다.
+- 첫 화면의 **폴더 경로 또는 Git 주소**에 프로젝트를 입력하고 **분석**을 누른다. 분석 사본과 결과가 생길 때까지 화면에서 진행 상황을 볼 수 있다.
+- 아래에서 사용하는 `codeye`는 PATH에 둔 실행 파일을 뜻한다. 풀어 놓은 폴더에서 직접 실행할 때는 `./codeye`를 쓴다. 명령 옵션은 `./codeye up --help`처럼 확인한다.
 
-```text
-go module cache: ~/go/pkg/mod; python type checkers: mypy and pyright both run
-model: none (set OPENAI_API_KEY, ANTHROPIC_API_KEY or OPENCODE_API_KEY and run codeye up again) - static analysis only
-CODEYE is already running at http://127.0.0.1:7331 (controller pid 1673797, agent pid 1673812)
-registered project "termcolor" (https://github.com/BurntSushi/termcolor)
-queued an analysis of "termcolor" (run 9e411b16-4873-401b-a7d2-6b490c2566a6); the browser shows its progress and the report
-
-Open CODEYE (signed in; the link works once, within 10 minutes):
-  http://127.0.0.1:7331/#launch=…&project=b97f6ebe-f847-460f-b65a-c94f1583e752&run=9e411b16-4873-401b-a7d2-6b490c2566a6
-```
-
-- 받는 주소는 `https://HOST/OWNER/REPO`다(`https://`는 생략해도 된다). 허용 호스트는 설정의 `git_hosts`이고 기본은 `["github.com"]`이다. `git`이 없으면 주소를 받지 않고 그렇다고 알린다.
-- **비공개 GitHub.com·GHES 저장소**는 플랫폼 GitHub 계정에 읽기 권한을 주고 주소를 붙여넣는다. 서비스 시작 때 호스트별 계정이 표시된다. 토큰 설정과 갱신은 [플랫폼 GitHub 계정](GITHUB.md#플랫폼-github-계정)을 따른다.
-- 저장소의 빌드 스크립트(`cargo check` 등)는 기본으로 실행하지 않는다([프로젝트별 분석 선택](#프로젝트별-분석-선택)).
-- `web/dist`가 없으면 화면 없이 API만 뜨고 `web UI not built - run …`을 출력한다.
-- `codeye up`을 실행한 사람(설정의 사용자)은 관리자다. 사용자 이름과 비밀번호 없이 로그인 링크로 들어간다. 관리자 역할은 계정·폴더·Git host·서비스 스위치를 다룰 뿐 프로젝트 권한은 아니며, 각 사람은 자기가 등록한 프로젝트의 소유자다. 다른 사람을 들이는 방법은 [다른 사람 초대](#다른-사람-초대)에 있다.
-
-**pull request**는 그 주소를 준다. 변경 파일을 먼저 검토하고 보고서가 변경 부분과 기존 코드를 나눈다.
+브라우저를 여는 동시에 첫 분석을 요청할 수도 있다.
 
 ```sh
-codeye up https://github.com/OWNER/REPO/pull/123
-codeye up --comment https://github.com/OWNER/REPO/pull/123          # 결과 댓글 하나를 남긴다(프로젝트마다 기억)
-codeye up --dry-run-comment https://github.com/OWNER/REPO/pull/123  # 게시하지 않고 댓글 본문만 출력
+./codeye up ~/src/my-project
+./codeye up https://github.com/OWNER/REPO
+./codeye up https://github.com/OWNER/REPO/tree/release
+./codeye up https://github.com/OWNER/REPO/pull/123
 ```
 
-실제 출력(공개 저장소 `spf13/cobra`의 fork pull request, 모델 없음, `--dry-run-comment`. 도구 표를 빼고 계정 이름을 바꿨으며 ID·링크 토큰만 줄였다):
-
-```text
-github: platform account codeye-platform on github.com
-registered project "cobra" (https://github.com/spf13/cobra)
-queued an analysis of pull request #2580 of spf13/cobra (feat/completion-install from A-RYAN-1/cobra, head 75f6f3e, base main adbc881, 7 changed files; comment: dry run (nothing is posted)) (run 2a2fccd3-…)
-…
-waiting for the report of run 2a2fccd3-… to preview its pull-request comment (nothing is posted)...
-
------ pull-request comment preview (not posted) -----
-<!-- codeye:pull-request-comment project=42d3ea27-… -->
-<!-- codeye:publication run=2a2fccd3-… version=1795110153725612 head=75f6f3e9b1ebb7ee0f89fd91cc3ebc5e49036a89 -->
-### CODEYE 분석 결과
-…
------ end of preview -----
-```
-
-- GitHub.com과 승인한 GHES의 `…/pull/N` 주소를 받는다. 비공개 저장소는 해당 호스트의 플랫폼 계정에 PR 읽기 권한이 있어야 한다.
-- run은 그때의 head SHA를 고정해 분석한다. 새 push 뒤 같은 명령을 다시 하면 새 head로 새 run을 만들고, 비교 기준은 같은 pull request의 이전 run이다.
-- 결과 댓글은 기본으로 꺼져 있다. `--comment`(화면은 "고급"의 "pull request에 결과 댓글 남기기")로 켜면 그 프로젝트의 다음 pull request run에도 남긴다. `--comment=false`로 끈다. 댓글은 pull request마다 하나이고 새 run이 같은 댓글을 고친다. 게시가 실패해도 분석 결과는 그대로이고 실행 화면에 댓글 상태와 이유가 나온다. 댓글에는 코드·도구 원문·비밀정보를 싣지 않는다([결과 댓글](GITHUB.md#결과-댓글)).
-- `--dry-run-comment`는 아무것도 게시하지 않고 보고서를 기다려(`--comment-wait`, 기본 1시간) 댓글 본문을 출력한다. 화면에서는 실행 화면의 pull request 줄에서 "미리 보기"를 누른다.
-
-`codeye status`로 상태를 본다. `postgres running port=…`가 관리형 PostgreSQL이다.
-
-`codeye start`도 같은 일을 하지만 경로를 받지 않고 브라우저를 열지 않는다. 로그인 링크는 `state_dir/login-link`(0600) 파일에 쓴다.
+브랜치를 생략하면 저장소의 기본 브랜치를 쓴다. PR은 당시 head 커밋을 고정하고 변경 파일부터 검토한다. 댓글은 기본으로 꺼져 있다. 게시 없이 확인하려면 `--dry-run-comment` 또는 실행 화면의 **미리 보기**를 쓴다. 게시하려면 `--comment` 또는 프로젝트 **고급** 설정에서 켠다. [결과 댓글](GITHUB.md#결과-댓글)
 
 ## 다른 사람 초대
 
 ### 다른 머신에서 열 수 있게 하기
 
-기본 주소 `127.0.0.1:7331`은 이 머신에서만 열린다. 다른 머신에서 열려면 듣는 주소를 정해 한 번 `up`을 한다. 값은 설정 파일에 저장되므로 다음부터는 `codeye up`만 하면 된다.
+기본 주소는 이 머신에서만 열린다. 다른 머신에서 열려면 서비스가 받을 주소와 브라우저에 알려 줄 주소를 정한다. 아래 설정은 저장되므로 다음부터는 `codeye up`으로 시작한다.
 
 ```sh
-# 믿을 수 있는 LAN·VPN에서 평문 HTTP를 명시적으로 고를 때
-codeye up --listen 0.0.0.0:7331 --plain-http
-
-# TLS: 인증서와 키(PEM), 사람들이 여는 https 주소
 codeye up --listen 0.0.0.0:7443 --tls-cert /etc/codeye/cert.pem --tls-key /etc/codeye/key.pem --public-origin https://codeye.example:7443
 ```
 
-**WSL에서 나만 접속하기.** 아래 예시는 WSL 안에서 Tailscale을 실행하고 본인 기기만 이 포트에 접속하도록 tailnet 접근 정책을 정한 경우다. CODEYE는 loopback에서 받고, Tailscale Serve는 같은 머신의 TCP 포트로 전달한다. 브라우저에는 `--public-origin`에 지정한 주소를 입력한다. [Tailscale Serve 포트 전달](https://tailscale.com/docs/reference/tailscale-cli/serve)
+신뢰하는 LAN·VPN에서는 `codeye up --listen 0.0.0.0:7331 --plain-http`로 평문 HTTP를 선택할 수 있다. 이 경우 로그인 비밀번호와 쿠키도 암호화 없이 전송된다. 명령이 출력한 주소 중 상대의 네트워크에서 닿는 것을 공유한다. [TLS 수신](OPERATIONS.md#tls-수신) · [받는 주소](OPERATIONS.md#받는-주소)
+
+**WSL에서 내 기기만 연결.** WSL 안에서 Tailscale을 실행하고 tailnet 접근 정책으로 접속 기기를 제한했다면 CODEYE는 loopback에 두고 Tailscale Serve로 TCP 포트를 전달할 수 있다. [Tailscale Serve 포트 전달](https://tailscale.com/docs/reference/tailscale-cli/serve)
 
 ```sh
 tailnet_ip=$(tailscale ip -4) && test -n "$tailnet_ip" &&
@@ -151,23 +66,7 @@ tailnet_ip=$(tailscale ip -4) && test -n "$tailnet_ip" &&
   codeye up --listen 127.0.0.1:7331 --plain-http --public-origin "http://${tailnet_ip}:7331"
 ```
 
-`up`은 서비스가 받는 주소를 모두 출력한다. 상대의 네트워크에서 닿는 주소를 골라 알려 준다.
-
-```text
-The service answers on:
-  LAN           http://192.168.0.10:7331
-  VPN           http://100.101.102.103:7331
-  name          http://mybox:7331
-  this machine  http://127.0.0.1:7331  http://localhost:7331
-```
-
-- 평문 HTTP는 시작할 때 `plain HTTP on 0.0.0.0:7331 (plain_http): sign-in cookies and passwords travel unencrypted on this network`를 한 줄 출력한다. 막지는 않는다.
-- 다른 머신에 열면 서비스는 이 머신의 이름과 모든 주소(LAN, Tailscale 같은 VPN, loopback)로 들어오는 요청을 받는다. 기본(loopback만)은 `127.0.0.1`·`localhost`만 받는다. 로그인 쿠키는 연 주소마다 따로다(TLS면 `__Host-` 쿠키에 Secure).
-- `--public-origin`은 이 머신의 것이 아닌 주소를 더한다. 예를 들어 다른 머신이 포트를 전달해 주는 주소나 DNS 이름이다. 여러 번 줄 수 있고 첫 값이 "Other people open …"의 주소가 된다. TLS에서는 하나 이상 필요하다.
-- 받지 않는 주소로 열면 "이 주소로는 CODEYE에 들어올 수 없습니다" 화면이 쓴 주소, 받는 주소, 더하는 명령(`codeye up --public-origin http://그주소:7331`)을 보인다. 그 명령을 서비스를 띄운 머신에서 실행하면 controller만 다시 뜬다.
-- 출력되는 로그인 링크와 "Other people open …" 줄은 알려 줄 주소(첫 설정 주소, 없으면 첫 LAN·VPN 주소)를 쓴다. 관리 화면에서 만든 로그인 링크는 관리자가 지금 연 주소를 쓴다(VPN 주소로 열었으면 VPN 주소의 링크). 이 머신의 에이전트와 명령은 loopback의 따로 된 주소(기본 듣는 포트 + 1, 설정 `local_listen`)로 controller에 붙는다.
-- 인증서는 운영자가 준비한다. 자체 서명 인증서면 다른 사람의 브라우저가 경고를 보이므로 그 인증서를 믿게 해야 한다.
-- 되돌리려면 설정 파일에서 `listen`·`tls_cert`·`tls_key`·`public_origins`·`plain_http`를 지운다.
+기본 수신으로 돌아가려면 설정 파일에서 `listen`·`tls_cert`·`tls_key`·`public_origins`·`plain_http`를 지우고 `codeye up`으로 반영한다.
 
 ### 사용자 더하기
 
@@ -196,29 +95,7 @@ The service answers on:
 
 ## 설정 파일
 
-기본 위치는 `~/.config/codeye/config.json`이다(`XDG_CONFIG_HOME`을 따른다). 다른 위치는 모든 명령에 `--config PATH`로 준다. `codeye up`이 만든 파일은 `schema_version`뿐이고, `up`은 자기가 다루는 필드(`database.postgres_bin_dir`, `--listen`·`--tls-cert`·`--tls-key`·`--public-origin`·`--plain-http`로 준 수신 설정)만 고친다. 기본값은 파일에 쓰지 않는다. 더 정하고 싶은 것만 적는다. 예시는 [examples/config.json](../examples/config.json)이다.
-
-```json
-{
-  "schema_version": "0.1",
-  "source_roots": [{"label": "work", "path": "/home/user/src"}],
-  "agent": {"max_workers": 2, "tools": {"staticcheck": "/home/user/go/bin/staticcheck"}},
-  "quota": {"workspace_bytes": 10737418240, "artifacts_bytes": 21474836480},
-  "backup_dir": "/home/user/codeye-backups"
-}
-```
-
-- 경로는 모두 절대 경로다. `state_dir`와 source root는 서로 포함하면 안 된다. 알 수 없는 필드가 있으면 설정 전체를 거부한다.
-- `listen`은 기본 `127.0.0.1:7331`이다. 적으면 그 주소만 쓴다(쓰이고 있으면 시작하지 않는다). loopback이 아닌 주소는 TLS(`tls_cert`·`tls_key`·`public_origins`)나 `plain_http`가 있어야 한다([다른 사람 초대](#다른-사람-초대)).
-- 필드 전체 표는 [서비스 설정 파일](OPERATIONS.md#서비스-설정-파일)에 있다.
-
-**이미 있는 PostgreSQL을 쓰려면**(`"database": {"mode": "external", "postgres_bin_dir": "/usr/pgsql-17/bin"}`) 운영자가 서버와 CODEYE 전용의 빈 데이터베이스·사용자를 준비하고, 연결은 명령을 실행하는 셸의 `CODEYE_DATABASE_URL` 환경변수로 준다. 형식은 `postgresql://USER:PASSWORD@127.0.0.1:5432/DBNAME?sslmode=disable`이다. loopback이 아니면 `sslmode`를 생략해 `verify-full`로 둔다. 이 모드에서는 `codeye migrate`를 직접 하고, `PG*` 변수가 환경에 있으면 DB 열기를 거부하며, 백업·복원의 `pg_dump`·`pg_restore`는 `postgres_bin_dir`에서만 찾는다.
-
-```sh
-export CODEYE_DATABASE_URL="$(cat ~/.config/codeye/database-url)"
-codeye migrate
-codeye start
-```
+기본 파일은 `~/.config/codeye/config.json`이다(`XDG_CONFIG_HOME`을 따름). `codeye up --config PATH`로 다른 설치를 열 수 있다. 수신 주소, 별도 DB, 상태 디렉터리, 분석기 경로를 바꿀 때 수정한다. [서비스 설정 파일](OPERATIONS.md#서비스-설정-파일)
 
 ## 프로젝트와 source root
 
@@ -324,16 +201,31 @@ codeye tools
 
 ## 모델 설정
 
-모델 검토에는 OpenCode(`~/.opencode/bin/opencode`)와 API 키 하나만 있으면 된다. OpenAI 키를 쓰는 예:
+모델 검토에는 서버에 설치된 OpenCode와 사용할 모델이 필요하다. 인증을 요구하는 공급자에는 해당 모델의 API 키를 준비한다. 인증이 필요 없는 사내 endpoint도 연결할 수 있다. 모델 설정 전에도 정적 분석을 할 수 있다.
+
+### 관리자 화면에서 연결하기
+
+1. 웹에서 **관리 > OpenCode 연결**을 연다. **도구** 화면의 **OpenCode 연결**에서도 갈 수 있다.
+2. 서버에서 실행할 OpenCode의 경로를 입력한다. 기존 `opencode.json` 또는 `opencode.jsonc`를 쓸 때는 그 경로를 지정한다. 절대 경로나 `~/`로 시작하는 경로를 쓸 수 있다. `~/`는 CODEYE 서비스 Linux 계정의 홈이다.
+3. 필요한 경우에만 인증 파일의 경로와 `공급자/모델` 이름을 준다. API 키 방식의 OpenCode `auth.json` 또는 CODEYE 모델 키 파일을 사용할 수 있다. OpenCode에서 OAuth로만 로그인했다면 공급자가 지원하는 API 인증정보를 별도로 준비한다. 비운 항목에는 설치의 기본 설정을 적용한다.
+4. **설정 저장**을 누른 뒤 **저장한 설정으로 연결 확인**을 누른다. 공급자에 실제 요청 한 번을 보낸다. 결과에 표시된 경로나 모델 인증 상태를 확인하고 필요하면 고친다.
+
+`codeye up` 또는 `codeye start`로 운영하는 설치는 새 분석이 시작될 때 저장한 값을 읽는다. 별도로 실행한 서버와 노드의 모델은 운영자가 각 실행 설정에서 관리한다.
+
+인터넷 없는 머신에서는 사내 endpoint와 인증 경로를 설정하고 [오프라인 모드](OPERATIONS.md#오프라인-모드)의 조건을 따른다.
+
+### 터미널에서 연결하기
+
+OpenCode의 기본 탐색 경로는 `~/.opencode/bin/opencode`와 PATH다. 서비스 계정의 OpenCode `auth.json`에 API 키가 있으면 사용할 수 있다. 터미널에서 OpenAI 키를 전달하는 예다.
 
 ```bash
 export OPENAI_API_KEY=sk-...      # 이미 ~/.bashrc에 있으면 그대로 둔다
 codeye up
 ```
 
-- `codeye up`은 `OPENAI_API_KEY`(또는 `ANTHROPIC_API_KEY`, `OPENCODE_API_KEY`)를 `<state_dir>/secrets/model.json`(본인만 읽을 수 있는 파일)에 저장하고, 모델 `openai/gpt-6.2-sol`로 한 번 시험 호출(`codeye model probe`)한 뒤 결과를 보여 준다. 키를 바꾼 뒤 다시 `codeye up`을 하면 새 키로 다시 시험한다.
+- `codeye up`은 `OPENAI_API_KEY`(또는 `ANTHROPIC_API_KEY`, `OPENCODE_API_KEY`)를 `<state_dir>/secrets/model.json`(본인만 읽을 수 있는 파일)에 저장하고, 선택한 모델로 한 번 시험 호출한 뒤 결과를 보여 준다. 키를 바꾼 뒤 다시 `codeye up`을 하면 새 키로 다시 시험한다.
 - 키는 이 파일에만 남는다. 로그·보고서·화면·프로세스 인자에는 나오지 않는다. 키를 지우려면 그 파일을 지운다.
-- 모델을 바꾸려면 설정에 `"agent": {"model": {"name": "gpt-6.1-sol"}}`처럼 이름만 적는다(`PROVIDER/MODEL`도 된다). OpenCode에 `opencode auth login`으로 API 키를 넣어 두었다면 환경변수 없이 그 키를 쓴다.
+- 모델을 바꾸려면 설정에 `"agent": {"model": {"name": "openai/gpt-6.1-sol"}}`처럼 이름을 적는다.
 - 시험 호출이 실패해도 분석은 실행된다. 보고서의 코드 분석 절에 모델 검토를 하지 못한 이유(예: "모델 공급자가 API 키를 거부했다")가 나온다. 언제든 `codeye model probe`로 다시 확인한다. 실제 추론을 한 번 요청하므로 비용이 조금 든다.
 - 모델이 설정되면 "소스를 모델에 보냄"이 켜진 프로젝트(기본 켬, 로컬 폴더와 Git 저장소 모두)의 코드를 모델에 보낸다. 빼려면 등록할 때 고급에서 끈다. 비밀값으로 선별된 파일은 보내지 않는다.
 - OpenAI 호환 서버(사내 게이트웨이, 로컬 추론 서버)를 쓰려면 `model.json`에 `"base_url": "https://…/v1"`을 더한다. chat completions만 지원하는 서버면 `"openai_compatible": true`도 더한다([검토](REVIEW.md#모델-설정)).
@@ -347,127 +239,36 @@ codeye up
 ```json
 "agent": {
   "model": {"name": "openai/gpt-6.2-sol", "opencode": "/home/user/.opencode/bin/opencode",
+            "config_file": "/home/user/.config/opencode/opencode.jsonc",
             "credential_file": "/home/user/.config/codeye/model.json", "timeout_seconds": 180,
             "review_max_calls": 99}
 }
 ```
 
-- `opencode`를 비우면 `~/.opencode/bin/opencode`, 없으면 PATH의 `opencode`를 쓴다. `name`을 비우면 키 provider의 기본 모델이다. `credential_file`은 키 파일을 다른 곳에 둘 때만 적는다. `timeout_seconds`는 모델 호출 한 번의 제한시간이다(기본 180).
+- `opencode`를 비우면 `~/.opencode/bin/opencode`, 없으면 PATH의 `opencode`를 쓴다. `config_file`은 기존 OpenCode JSON/JSONC 설정을 지정할 때 쓴다. `name`은 모델을 덮어쓸 때, `credential_file`은 기존 인증 파일을 다른 곳에 둘 때 적는다. `timeout_seconds`는 모델 호출 한 번의 제한시간이다(기본 180초).
 - `relay_file`은 승인된 로컬 relay를 쓸 때만 넣는다. 이 저장소의 `scripts/model_budget_relay.py`는 예산 상한을 강제하는 QA 전용 relay이며 제품 구성요소가 아니다. 사용법은 그 파일의 머리말과 `--help`에 있다.
-- `review_max_calls`는 run 하나(시도 하나)가 쓸 수 있는 모델 호출 수의 상한이다. 비우면 99이고 15~207을 받는다. 처음 다섯 역할이 최대 15회를 쓰고, 남은 호출로 overview가 보내지 못한 파일을 모듈 단위로 더 검토한다. 기본값으로 중간 규모 저장소의 대부분이 모델에 간다. 비용: 회귀 실행에서 실모델 호출 55회의 비용은 보고된 사용량으로 약 USD 0.94, 보수적 장부 차감으로 USD 2.02였다. 기본 상한 99회를 다 쓰는 run은 그 대략 두 배(보고 사용량 약 USD 1.7, 장부 차감 약 USD 3.6)다. 실제 비용은 모델·저장소 크기·형식 복구 횟수에 따라 다르다. 비용을 줄이려면 `review_max_calls`를 낮춘다(예: 33). 상한이 15여도 처음 검토를 마치고 여섯 호출 이상 남으면 다음 파일 묶음을 검토할 수 있다. 실제로 본 범위는 보고서의 코드 분석에서 확인한다. 비밀값 선별(`agent.tools.gitleaks`)이 있으면 선별된 파일을 빼고 보내고, 없으면 기본 민감값 패턴 필터만 거쳐 보내며 보고서에 "비밀값 미선별"이 표시된다([검토](REVIEW.md#모듈-단위-검토-분할)).
+- `review_max_calls`는 분석 시도 하나가 쓸 모델 호출 수의 상한이다(15~207회, 기본 99). 비용과 검토 범위는 모델, 프로젝트 크기와 재시도 횟수에 따라 달라진다. 실제로 모델에 보낸 범위와 선별하지 못한 정보는 보고서에서 확인한다. [모듈 단위 검토와 호출 한도](REVIEW.md#모듈-단위-검토-분할)
 - 모델 연결은 `codeye model probe`(서비스 설정의 모델) 또는 `codeye model probe --executable PATH --model PROVIDER/MODEL [--credential-file PATH | --relay-file PATH]`로 확인한다. 이 명령은 실제 추론을 요청하므로 비용이 들 수 있다. `codeye doctor`는 모델을 호출하지 않는다.
 
 ## 저장 공간
 
-설정 `quota`에 영역별 상한(바이트)을 둔다. 영역은 소스 사본(`snapshot_bytes`), 작업 사본(`workspace_bytes`), 도구 cache(`cache_bytes`), 로그(`logs_bytes`), 분석 산출물(`artifacts_bytes`)이다. 0이나 생략은 상한 없음이다.
-
-- 상한에 도달하면 **새 분석만** 시작하지 않는다. 실행 중인 분석은 끝까지 하며, 그동안 상한을 넘을 수 있다. 보고서와 산출물은 지우지 않는다.
-- 사용량은 `codeye status`(적용 기준)와 `codeye doctor --config PATH`(지금 디렉터리를 잰 값과 파일시스템 여유)로 본다.
-
-```text
-storage workspace  0 bytes limit=2000000000 exceeded=false (node_heartbeat)
-storage artifacts  19459 bytes limit=1000000000 exceeded=false (database_accounting)
-```
-
-- 받은 의존성은 도구 cache 영역(`state_dir/cache/deps`)에 센다. 지워도 되고, 다음 분석이 다시 받는다. 지우기 전에 `codeye stop`을 한다.
-- 공간이 부족하면 정리하거나 상한을 늘린다. 상한을 늘리려면 설정을 바꾸고 `codeye stop` → `codeye up`을 한다. CODEYE는 오래된 파일을 자동으로 지우지 않는다.
-- 오래된 도구 원시 출력과 작업 사본은 `codeye cleanup`으로 지운다. 먼저 무엇을 지울지 보고(`codeye cleanup --older-than 30d`, 아무것도 바꾸지 않는다), 맞으면 `--apply`를 붙인다. 보고서는 그대로 열리고 실행 화면에 "원시 증거가 삭제됨"이 보인다. 실행 중이면 snapshot 사본은 남기므로 `codeye stop` 뒤에 하면 더 많이 비운다([보존 정리](OPERATIONS.md#보존-정리)).
+상태 디렉터리에 DB, 소스·작업 사본, 로그, 산출물이 쌓인다. `codeye status`에서 사용량을 보고 필요하면 설정의 `quota`로 새 작업에 적용할 상한을 둔다. 오래된 도구 출력과 작업 사본을 지우기 전에는 `codeye cleanup --older-than 30d`로 대상을 확인한다. [저장 영역과 상한](OPERATIONS.md#저장-영역과-상한) · [보존 정리](OPERATIONS.md#보존-정리)
 
 ### 로그아웃 뒤에도 실행
 
-```sh
-codeye service install               # ~/.config/systemd/user/codeye.service, enable만 한다
-systemctl --user start codeye        # codeye start
-loginctl enable-linger "$USER"       # 로그아웃 뒤에도 유지(선택)
-codeye open                          # 로그인 링크
-codeye service uninstall             # 끄고 지운다
-```
-
-Linux의 systemd 사용자 서비스다. 재부팅 뒤 유지는 시험하지 않았다([사용자 서비스](OPERATIONS.md#사용자-서비스)).
+Linux의 systemd 사용자 서비스에서 실행한다. `codeye service install`로 등록하고 `systemctl --user start codeye`로 시작한다. 로그인 링크는 `codeye open`으로 받는다. 로그아웃 뒤 유지 조건과 해제 방법은 [사용자 서비스](OPERATIONS.md#사용자-서비스)에 있다.
 
 ## 정지
 
-```sh
-codeye stop
-```
-
-1. 에이전트에 drain을 요청한다. 새 작업을 받지 않고 실행 중인 분석을 끝낸다.
-2. `stop.drain_timeout_seconds`(기본 300초) 안에 끝나지 않으면 실행 중인 분석을 취소하고 정리를 확인한다. 취소된 run은 `failed`로 남는다. 다시 분석하려면 새로 요청한다.
-3. 에이전트가 끝나면 controller를 멈춘다.
-4. 둘 다 멈췄으면 관리형 PostgreSQL을 멈춘다(`postgres   stopped`). 에이전트나 controller가 남아 있으면 PostgreSQL도 남겨 둔다(`left_running`).
-
-다음 `codeye up`은 같은 cluster와 데이터를 그대로 쓴다.
-
-마지막 줄의 `outcome`을 확인한다.
-
-| outcome | 뜻과 조치 |
-|---|---|
-| `stopped` | 정상 정지 |
-| `not_running` | 이미 멈춰 있었다 |
-| `recovery_required` | 정리를 확인하지 못했다. 에이전트가 아직 실행 중이면 controller도 남겨 둔다. `codeye status`와 `state_dir/logs`를 확인하고 잠시 뒤 `codeye stop`을 다시 한다 |
-| `failed` | controller나 PostgreSQL이 멈추지 않았다. 강제 종료하지 않았다 |
-
-CODEYE는 프로세스를 강제 종료(SIGKILL)하지 않는다. 기록한 프로세스와 시작 시각이 같은 프로세스에만 신호를 보낸다.
+`codeye stop`은 새 분석을 받지 않고 진행 중인 작업의 종료를 기다린다. 시간 안에 끝나지 않으면 취소와 정리 확인을 거친다. 마지막 줄의 `outcome`이 `recovery_required`이면 `codeye status`와 로그를 확인한다. 다음 `codeye up`은 같은 설치의 데이터를 이어서 쓴다. [정지 결과](OPERATIONS.md#stop)
 
 ## 백업과 복원
 
-**백업.** 실행 중에도 할 수 있다. 다만 정지 뒤에 하면 진행 중인 분석이 없어 복원 결과가 깔끔하다.
-
-```sh
-codeye stop
-codeye backup                     # backup_dir/codeye-<UTC 시각>에 만든다
-codeye backup --output /mnt/backup/codeye-1   # 위치를 직접 줄 때(없거나 빈 디렉터리)
-```
-
-`backup_dir`를 적지 않았으면 상태 디렉터리 옆의 `<state_dir>-backups`(기본 `~/.local/state/codeye-backups`)에 만든다. 관리형 PostgreSQL이 멈춰 있으면 백업 동안만 띄웠다가 다시 멈춘다. `pg_dump`는 그 cluster의 프로그램을 쓴다.
-
-```text
-backup written to /…/codeye-backups/codeye-20261118T191428Z
-  database: migration 9, PostgreSQL 17.10, dump 175706 bytes sha256 8ea9902…
-  artifacts: 14 contents, 19418 bytes (finalized at the same snapshot)
-  rows: projects 1, runs 1, reports 1, evidence 0, schedules 0
-```
-
-백업 세트에는 DB dump와 확정된 산출물이 같은 시점으로 들어 있다. 연결 정보와 비밀번호는 없지만 프로젝트·보고서 같은 운영 데이터가 있다. 세트는 권한을 지켜 보관한다. 백업은 전체 세트만 만든다. 증분·압축·암호화·보존 개수·자동 예약 백업은 없다.
-
-**복원.** 새 빈 데이터베이스와 새 `state_dir`에만 복원한다. 기존 설치를 덮어쓰지 않는다. 관리형 PostgreSQL이면 새 `state_dir`를 적은 설정 파일 하나만 만든다. restore가 그 상태 디렉터리에 새 cluster와 빈 DB를 만들고 복원한다.
-
-```sh
-echo '{"schema_version": "0.1", "state_dir": "/home/user/.local/state/codeye-restored"}' > ~/.config/codeye/restored.json
-codeye restore --config ~/.config/codeye/restored.json --from /…/codeye-backups/codeye-20261118T191428Z
-codeye up --config ~/.config/codeye/restored.json
-```
-
-`database.mode: external`이면 빈 데이터베이스를 직접 만들고(`codeye migrate`는 하지 않는다), 새 `state_dir`로 설정을 만들고, `CODEYE_DATABASE_URL`을 그 DB로 둔 셸에서 같은 restore·start를 한다.
-
-```text
-restored /…/codeye-20261118T191428Z (created 2026-11-18T19:14:28Z, migration 9)
-  verified: dump and 14 artifact contents by sha256; every restored artifact row has its bytes
-  rows: projects 1, runs 1, reports 1, evidence 0, finding reviews 1, schedules 0
-  fenced: 1 nodes revoked, 1 sessions revoked, 0 leased attempts -> recovery_required (0 reservations kept)
-next: codeye up (the local agent enrolls as a new node)
-```
-
-복원은 세트의 hash부터 모두 확인한다. 이전 노드, 로그인 세션, 쓰지 않은 링크는 무효가 된다. 그래서 복원본의 `up`이 새 로그인 링크를 주고, 에이전트는 새 노드로 등록한다. 백업 때 실행 중이던 분석은 `recovery_required`로 남는다. 그 run은 다시 요청한다. 이 run이 쥔 예약을 풀어 주는 운영자 명령은 아직 없다([백업과 복원](OPERATIONS.md#백업과-복원)).
+`codeye backup`으로 DB와 확정 산출물을 한 세트로 보관한다. 복원에는 빈 상태 디렉터리와 데이터베이스가 필요하다. 새 설치에서 `codeye restore --config PATH --from DIR`로 복원하고 `codeye up --config PATH`로 시작해 새 로그인 링크를 받는다. [백업과 복원](OPERATIONS.md#백업과-복원)
 
 ## 인터넷 없는 머신
 
-연결된 머신에서 `python3 scripts/offline_pack.py build`로 만든 묶음(`codeye-VERSION-linux-amd64.tar.gz`)을 옮긴다. 묶음에는 실행 파일, 웹 화면, 문서, 설정 예시, `INSTALL.md`가 있고 분석 도구·PostgreSQL·OpenCode는 없다.
-
-```sh
-sha256sum -c codeye-VERSION-linux-amd64.tar.gz.sha256
-tar -xzf codeye-VERSION-linux-amd64.tar.gz && cd codeye-VERSION-linux-amd64
-sha256sum -c SHA256SUMS
-./codeye tools --checklist       # 없는 도구와 옮기는 방법
-./codeye doctor --config ~/.config/codeye/config.json   # "Offline readiness"
-./codeye up --offline ~/src/my-project
-```
-
-- `--offline`은 설정에 `"offline": true`로 저장된다. 그 뒤로 CODEYE는 설정에 적은 미러·Git 호스트·모델 endpoint와 사용자의 `go env`·npm 설정이 정한 미러 밖으로 스스로 접속하지 않는다(저장소 빌드 스크립트 실행을 허가한 프로젝트의 스크립트는 예외다). 미러가 없는 의존성은 받지 않고 보고서에 `offline_no_registry_configured`로 남는다. Go는 `agent.go_mod_cache`에 옮겨 둔 모듈 캐시를 쓴다.
-- 모델 검토는 키 파일에 사내 endpoint(`base_url`)가 있을 때만 한다. 환경변수의 API 키는 쓰지 않는다.
-- 사내 CA가 있으면 시스템 CA와 합친 PEM 파일을 `ca_bundle`에 적는다. 인증서 검증을 끄지 않는다.
-
-미러 설정, CA, 점검 항목은 [운영](OPERATIONS.md#폐쇄망-배포팩)에 있다.
+연결된 머신에서 배포 파일과 검증 파일을 받아 함께 옮긴다. 묶음 안 `INSTALL.md`의 검증 절차를 마친 뒤 `./codeye up --offline /절대/프로젝트/경로`를 실행한다. 한 번 지정한 오프라인 설정은 저장된다. 필요한 PostgreSQL, 분석 도구, 모델 실행기는 대상과 같은 OS/arch용으로 따로 준비한다. [폐쇄망 배포팩](OPERATIONS.md#폐쇄망-배포팩)
 
 ## 업그레이드 (설계 절차, 시험 안 함)
 

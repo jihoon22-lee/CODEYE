@@ -314,6 +314,7 @@ ul.projects > li > a { align-self: flex-start; margin: var(--s1) var(--s4) 0; }
 .tabs button:hover:not(:disabled) { background: transparent; color: var(--text); }
 .tabs button[aria-current='page'], .tabs button[aria-current='page']:hover:not(:disabled) { color: var(--accent); border-bottom-color: var(--accent); background: transparent; }
 .tabs + .panel, .tabs + section { margin-top: var(--s4); }
+.opencode-form { max-width: 42rem; }
 @media (min-width: 1050px) {
   .project-workspace.has-project { display: grid; grid-template-columns: minmax(14rem, 22%) minmax(0, 1fr); align-items: start; gap: var(--s5); }
   .project-workspace.has-project .list-panel { padding: var(--s4); }

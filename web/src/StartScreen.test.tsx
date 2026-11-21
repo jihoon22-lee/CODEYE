@@ -4,7 +4,7 @@ import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import sectioned from '../../examples/report.json';
 import { backend, flush, renderApp } from './harness';
 import { ko as t } from './locales/ko';
-import { PROJECT, apiError, json, runView, type Call } from './test-utils';
+import { PROJECT, SESSION, apiError, json, runView, type Call } from './test-utils';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -287,6 +287,38 @@ describe('tools panel', () => {
     await flush();
     expect(screen.getByText(t.tools.pathsAdminOnly)).toBeTruthy();
     expect(screen.queryByText(t.tools.addAfter)).toBeNull();
+  });
+
+  it('shows members overall model availability and gives only administrators the OpenCode shortcut', async () => {
+    const title = t.accounts.admin.tabs.opencode;
+    const model = { configured: true, id: 'local/internal', probe: 'verified' };
+    let admin = false;
+    const { calls } = renderApp(service({
+      'GET /api/v1/session': () => json(200, { ...SESSION, is_admin: admin }),
+      'GET /api/v1/setup': () => json(200, { ...SETUP, is_admin: admin, model }),
+    }));
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: t.nav.doctor }));
+    await flush();
+    expect(screen.getByText(t.tools.modelAvailable)).toBeTruthy();
+    expect(screen.queryByText(/local\/internal/)).toBeNull();
+    expect(screen.queryByRole('button', { name: title })).toBeNull();
+    expect(calls.some(c => c.url.includes('/admin/opencode'))).toBe(false);
+
+    cleanup();
+    admin = true;
+    renderApp(service({
+      'GET /api/v1/session': () => json(200, { ...SESSION, is_admin: admin }),
+      'GET /api/v1/setup': () => json(200, { ...SETUP, is_admin: admin, model }),
+      'GET /api/v1/admin/opencode': () => json(200, { editable: true, executable: '', config_file: '', credential_file: '', model: '', configured: true, effective_model: model.id, probe: model.probe }),
+    }));
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: t.nav.doctor }));
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: title }));
+    await flush();
+    expect(screen.getByRole('heading', { name: title })).toBeTruthy();
+    expect(screen.getByLabelText(t.accounts.admin.opencode.fields.executable.label)).toBeTruthy();
   });
 
   it('keeps the doctor file view on a controller that recorded no setup', async () => {
