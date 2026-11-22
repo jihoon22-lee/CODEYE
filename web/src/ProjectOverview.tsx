@@ -179,7 +179,7 @@ function selectedReading(report: AnalysisReport, sections: Sections, readings: R
 
 // Only pairs of single backticks format code. Text and unmatched delimiters
 // stay as React children, including any markup-like characters.
-function inlineComparisonCode(text: string): ReactNode[] {
+export function inlineComparisonCode(text: string): ReactNode[] {
   const parts: ReactNode[] = [];
   let start = 0;
   let open = -1;

@@ -1,0 +1,69 @@
+/* The action-first opening of the overview: finding cards, document
+   mismatch cards, collapsed candidate and diagnostic lists. Shared by the
+   web panel and the saved HTML export. */
+.review-theme .report-actions { margin-block: 1rem 1.4rem; min-width: 0; }
+.review-theme .report-actions .report-group { margin-block: 1.1rem; }
+.review-theme .report-actions-lead { margin: .1rem 0 .55rem; color: var(--report-ink); font-weight: 650; }
+.review-theme .report-actions-note { margin: .1rem 0 .55rem; color: var(--report-muted); font-size: .88rem; }
+.review-theme .report-actions-notices { margin: 0; padding-inline-start: 1.1rem; }
+.review-theme .report-coverage-note { margin: .5rem 0 0; color: var(--report-warn); font-size: .86rem; line-height: 1.5; }
+.review-theme .report-coverage-note a { color: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: .18em; white-space: nowrap; }
+
+.review-theme .report-action-card {
+  --report-severity: var(--report-muted);
+  min-width: 0;
+  margin-block: .65rem;
+  background: var(--report-surface);
+  border: 1px solid var(--report-line);
+  border-inline-start: 4px solid var(--report-severity);
+  border-radius: .48rem;
+}
+.review-theme .report-action-card[data-severity='critical'],
+.review-theme .report-action-card[data-severity='high'] { --report-severity: var(--report-bad); }
+.review-theme .report-action-card[data-severity='medium'] { --report-severity: var(--report-warn); }
+.review-theme .report-action-card[data-severity='low'] { --report-severity: var(--report-good); }
+.review-theme .report-mismatch-card { --report-severity: var(--report-warn); }
+.review-theme .report-action-card .card-body { min-width: 0; padding: .8rem .95rem; }
+.review-theme .report-action-head { display: grid; gap: .35rem; margin-block-end: .55rem; }
+.review-theme .report-action-head :is(h4, h6) { margin: 0; color: var(--report-ink); font-size: 1.04rem; font-weight: 750; overflow-wrap: anywhere; }
+.review-theme .report-action-badges { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; margin: 0; }
+.review-theme .report-action-severity { color: var(--report-ink); font-size: .84rem; font-weight: 700; }
+.review-theme .report-action-badges .report-group-note { margin: 0; }
+
+.review-theme .report-action-rows { display: grid; gap: .5rem; margin: .5rem 0; }
+.review-theme .report-action-rows > div { display: grid; grid-template-columns: minmax(6.5rem, 9.5rem) minmax(0, 1fr); gap: .15rem .8rem; min-width: 0; }
+.review-theme .report-action-rows dt { margin: 0; color: var(--report-muted); font-size: .8rem; font-weight: 700; }
+.review-theme .report-action-rows dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.review-theme .report-action-rows dd .report-evidence { margin-block: .3rem 0; }
+.review-theme .report-action-location { margin: .4rem 0; }
+.review-theme .report-action-card .report-selected-source { margin-block: .5rem; }
+.review-theme .report-action-card .report-card-action { margin-block-start: .35rem; }
+
+.review-theme .report-action-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: .6rem; margin: .4rem 0 0; padding: 0 0 .7rem; list-style: none; }
+.review-theme .report-action-list > li { display: grid; grid-template-columns: minmax(0, 1fr); gap: .2rem; min-width: 0; padding-block-start: .6rem; border-top: 1px solid var(--report-line); }
+.review-theme .report-action-list-head { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .6rem; }
+.review-theme .report-action-list-head strong { flex: 1 1 14rem; min-width: 0; overflow-wrap: anywhere; }
+.review-theme .report-action-list p { margin: 0; }
+.review-theme .report-action-link { color: var(--report-blue); font-size: .86rem; font-weight: 650; }
+
+.review-theme .report-diag-groups { display: grid; grid-template-columns: minmax(0, 1fr); gap: .35rem; margin-block: .5rem .7rem; }
+.review-theme .report-diag-group { border: 1px solid var(--report-line); border-radius: .42rem; background: var(--report-surface); padding-inline: .7rem; min-width: 0; }
+.review-theme .report-diag-group > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .6rem; min-height: 2.5rem; padding-block: .4rem; cursor: pointer; }
+.review-theme .report-diag-name { min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
+.review-theme .report-diag-count { font-variant-numeric: tabular-nums; font-weight: 700; }
+.review-theme .report-diag-severity { color: var(--report-muted); font-size: .82rem; }
+.review-theme .report-diag-description { flex-basis: 100%; color: var(--report-muted); font-size: .86rem; font-weight: 500; }
+.review-theme .report-diag-group ul { margin: .2rem 0 .5rem; padding-inline-start: 1.1rem; }
+.review-theme .report-diag-group li { min-width: 0; overflow-wrap: anywhere; }
+
+@container codeye-report (max-width: 36rem) {
+  .review-theme .report-action-rows > div { grid-template-columns: minmax(0, 1fr); gap: .05rem; }
+  .review-theme .report-action-card .card-body { padding: .7rem .75rem; }
+}
+@media (max-width: 36rem) {
+  .review-theme .report-action-rows > div { grid-template-columns: minmax(0, 1fr); gap: .05rem; }
+  .review-theme .report-action-card .card-body { padding: .7rem .75rem; }
+}
+@media print {
+  .review-theme .report-action-card { break-inside: avoid; }
+}

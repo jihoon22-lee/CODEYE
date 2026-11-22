@@ -27,6 +27,8 @@ type secView struct {
 	OverviewDetail []secPart
 	Decision       projectDecision
 	Behaviors      projectBehaviors
+	// Actions is the opening of the overview: what to act on first.
+	Actions actionBlock
 	// Summary selects the summary layout (render_summary.go): the appendix
 	// is Appendix instead of the full record tables.
 	Summary bool
@@ -804,11 +806,13 @@ func renderMarkdownSections(r Report, digest string, l Locale) []byte {
 		b.WriteByte('\n')
 	}
 	mdHeader(p, r, v.view, l)
+	mdCoverageLine(p, v.Actions)
 	for _, s := range v.Sections {
 		mdSectionAnchor(p, s.ID)
 		p("## ", mdText(s.Title))
 		p()
 		if s.ID == "overview" {
+			mdActionBlock(p, v.Actions, l)
 			mdReadingOverview(p, v)
 		}
 		for _, part := range s.Parts {
@@ -901,6 +905,9 @@ func mdPart(p func(...string), part secPart, l Locale) {
 		p()
 	}
 	if t := part.Table; t != nil && len(t.Rows) > 0 {
+		for _, id := range t.RowIDs {
+			mdReadingAnchor(p, id)
+		}
 		var head, sep []string
 		for _, h := range t.Head {
 			head, sep = append(head, mdText(h)), append(sep, "---")
@@ -1027,12 +1034,14 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{if .HasStatusBanner}}<p class="report-hero-note" role="status">{{.Banner}}</p>{{end}}
 {{if not .R.Export.IncludeCode}}<p class="report-hero-note">{{.L.Label "opening.code_free"}}</p>{{end}}
 </header>
+{{template "action_coverage" .}}
 {{$l := .L}}{{range .Sections}}<section id="{{.ID}}" data-section="{{.ID}}" class="export-section">
 <h2>{{.Title}}</h2>
 {{if eq .ID "overview"}}
+{{if $.Summary}}{{range .Parts}}{{template "part" (pair $l .)}}{{end}}{{end}}
+{{template "action_block" $}}
 {{template "reading_overview" $}}
 {{if eq $.R.Inputs.Profile "with-tests"}}<div id="test-results" class="report-test-results" data-test-status="{{$.R.Coverage.TestStatus}}">{{template "part" (pair $l $.TestRunPart)}}</div>{{end}}
-{{if $.Summary}}{{range .Parts}}{{template "part" (pair $l .)}}{{end}}{{end}}
 <details class="card report-disclosure">
 <summary>{{reportIcon "chevron-down"}} {{$l.Label "reading.context_details"}}</summary>
 {{template "decision" $}}
@@ -1101,7 +1110,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <script id="report-export-navigation">` + reportExportNavigation + `</script>
 </body>
 </html>
-{{define "reading_overview"}}{{$l := .L}}{{with .ReadingOverview}}<section class="report-overview-results" aria-label="{{$l.Label "reading.outcome"}}">
+{{define "reading_overview"}}{{$l := .L}}{{with .ReadingOverview}}<section class="report-overview-results" id="coverage" aria-label="{{$l.Label "reading.outcome"}}">
 <h3>{{$l.Label "reading.outcome"}}</h3>
 <table><thead><tr><th scope="col">{{$l.Label "reading.area"}}</th><th scope="col">{{$l.Label "col.status"}}</th><th scope="col">{{$l.Label "reading.result"}}</th></tr></thead>
 <tbody>{{range .}}<tr><th scope="row"><a class="report-overview-link" href="#{{.Section}}" aria-label="{{tf $l "reading.view_area" .Label}}">{{.Label}}{{reportIcon "chevron-right"}}</a></th><td class="report-result-status">{{if .Status}}<span class="report-status-badge" data-tone="{{.Tone}}">{{.Status}}</span>{{end}}</td><td class="report-result-value">{{range .ValueParts}}{{if .Code}}<span class="report-result-number">{{.Text}}</span>{{else}}{{.Text}}{{end}}{{end}}</td></tr>{{end}}</tbody></table>

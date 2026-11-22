@@ -8,6 +8,7 @@ import '../../internal/report/reportui/tabler.css';
 import '../../internal/report/reportui/report.css';
 import './report.css';
 import '../../internal/report/reportui/workbench.css';
+import '../../internal/report/reportui/actions.css';
 
 type IconName = 'alert' | 'chart' | 'check' | 'chevron' | 'clock' | 'code' | 'external' | 'file' | 'findings' | 'jump' | 'mark' | 'overview' | 'secret' | 'server' | 'terminal';
 

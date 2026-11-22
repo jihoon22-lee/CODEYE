@@ -47,6 +47,7 @@
     const target = document.getElementById(id);
     const section = target?.closest('.export-section');
     if (section) {
+      for (let block = target.closest('details'); block; block = block.parentElement?.closest('details')) block.open = true;
       const result = target.closest('.report-result-details');
       if (result) {
         result.open = true;

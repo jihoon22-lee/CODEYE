@@ -1045,11 +1045,12 @@ describe('analysis sections', () => {
     report.sections!.codeReview.strengths = main.sections!.codeReview.strengths;
     report.sections!.codeReview.citations.push(...main.sections!.codeReview.citations);
     render(<ReportDocument report={report} />);
-    const overview = screen.getByRole('tabpanel', { name: t.sections.overview });
-    expect(within(overview).getAllByText(t.validation.inconclusive)).toHaveLength(1);
-    expect(within(overview).getAllByText(t.reading.nextCheck)).toHaveLength(1);
-    expect(within(overview).queryByText(t.reading.recordedStrength)).toBeNull();
-    expect(within(overview).queryByText(t.reading.nextAction)).toBeNull();
+    // The candidates fold below the action items lists every pending finding; the decision is one card.
+    const overview = within(screen.getByRole('tabpanel', { name: t.sections.overview }).querySelector<HTMLElement>('.report-executive')!);
+    expect(overview.getAllByText(t.validation.inconclusive)).toHaveLength(1);
+    expect(overview.getAllByText(t.reading.nextCheck)).toHaveLength(1);
+    expect(overview.queryByText(t.reading.recordedStrength)).toBeNull();
+    expect(overview.queryByText(t.reading.nextAction)).toBeNull();
   });
 
   it('joins a recorded strength to a verification step only when the subject and product source agree', () => {

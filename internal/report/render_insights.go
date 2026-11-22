@@ -56,6 +56,7 @@ func withInsights(v secView) secView {
 			block.Parts = v.codeReviewReadingOrder(block.Parts)
 		}
 	}
+	v.Actions = v.buildActions()
 	return v
 }
 

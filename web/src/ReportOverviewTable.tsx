@@ -11,7 +11,7 @@ function ResultText({ value }: { value: string }) {
 
 export function ReportOverviewTable({ rows, open }: { rows: ReadingSummaryRow[]; open: (section: string) => void }) {
   if (!rows.length) return null;
-  return <section className="report-overview-results" aria-label={t.reading.outcome}>
+  return <section className="report-overview-results" id="report-coverage" tabIndex={-1} aria-label={t.reading.outcome}>
     <h6>{t.reading.outcome}</h6>
     <table>
       <thead><tr><th scope="col">{t.reading.area}</th><th scope="col">{t.sections.col.status}</th><th scope="col">{t.reading.result}</th></tr></thead>

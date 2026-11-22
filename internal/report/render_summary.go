@@ -316,6 +316,32 @@ func newSummaryView(r Report, digest string, l Locale) secView {
 	return v
 }
 
+// reviewScopeLine says how many code and test files of the primary paths the
+// model was sent. It is empty when the ledger lists no module.
+func reviewScopeLine(l Locale, c *CodeReviewSection) string {
+	x := c.Ledger
+	if x == nil || len(x.Modules) == 0 {
+		return ""
+	}
+	var primary, primarySent, secondary, secondarySent int
+	for _, m := range x.Modules {
+		sec := m.FilesSecondary
+		secSent := m.FilesSecondarySent
+		if m.Class == "" && secondaryDir(moduleDir(m.ModuleID)) {
+			sec, secSent = m.FilesEligible, m.FilesSentToModel
+		}
+		primary += m.FilesEligible - sec
+		primarySent += m.FilesSentToModel - secSent
+		secondary += sec
+		secondarySent += secSent
+	}
+	s := tf(l, "summary.review_scope", primary, primarySent)
+	if secondary > 0 {
+		s += " " + tf(l, "summary.review_scope_secondary", secondary, secondarySent)
+	}
+	return s
+}
+
 // summarySentences say in words what the run found and covered, from the
 // stored sections only.
 func summarySentences(r Report, l Locale, obs map[string]Observation) []string {
@@ -344,23 +370,7 @@ func summarySentences(r Report, l Locale, obs map[string]Observation) []string {
 		} else if len(c.Roles) > 0 {
 			out = append(out, l.Label("summary.model_none"))
 		}
-		if x := c.Ledger; x != nil && len(x.Modules) > 0 {
-			var primary, primarySent, secondary, secondarySent int
-			for _, m := range x.Modules {
-				sec := m.FilesSecondary
-				secSent := m.FilesSecondarySent
-				if m.Class == "" && secondaryDir(moduleDir(m.ModuleID)) {
-					sec, secSent = m.FilesEligible, m.FilesSentToModel
-				}
-				primary += m.FilesEligible - sec
-				primarySent += m.FilesSentToModel - secSent
-				secondary += sec
-				secondarySent += secSent
-			}
-			s := tf(l, "summary.review_scope", primary, primarySent)
-			if secondary > 0 {
-				s += " " + tf(l, "summary.review_scope_secondary", secondary, secondarySent)
-			}
+		if s := reviewScopeLine(l, c); s != "" {
 			out = append(out, s)
 		}
 	}
@@ -528,6 +538,11 @@ func (v secView) findingCard(f Finding) secCard {
 	for _, x := range f.Verification {
 		add(&c.Context, "opening.verification", x, nil)
 	}
+	for _, e := range f.Evidence {
+		if slices.Contains(f.CounterevidenceIDs, e.ID) {
+			add(&c.Context, "opening.counterevidence", e.Description, []string{e.ID})
+		}
+	}
 	add(&c.Context, "opening.disposition", lab(l, "disposition", f.Disposition), nil)
 	return c
 }
@@ -678,16 +693,7 @@ func (v secView) summaryLedger(x ReviewLedger) []secPart {
 func (v secView) summaryStatic(b secBlock, obs map[string]Observation, findings map[string]Finding) secBlock {
 	l := v.L
 	languages := regularStaticLanguages(v.R)
-	sevOf := map[string]string{}
-	for _, id := range StaticFindingIDs(v.R) {
-		if f, ok := findings[id]; ok {
-			for _, o := range f.ObservationIDs {
-				if sevRank(f.Severity) > sevRank(sevOf[o]) {
-					sevOf[o] = f.Severity
-				}
-			}
-		}
-	}
+	sevOf := staticSeverities(v.R, findings)
 	parts := []secPart{b.Parts[0]}
 	for _, lang := range languages {
 		reading := v.staticInspectionParts(lang, obs)
@@ -1154,6 +1160,7 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 		p(mdText(l.Label("opening.code_free")))
 		p()
 	}
+	mdCoverageLine(p, v.Actions)
 
 	for _, s := range v.Sections {
 		mdSectionAnchor(p, s.ID)
@@ -1164,6 +1171,7 @@ func renderMarkdownSummary(r Report, digest string, l Locale) []byte {
 			mdPart(p, part, l)
 		}
 		if s.ID == "overview" {
+			mdActionBlock(p, v.Actions, l)
 			mdReadingOverview(p, v)
 			p("### ", mdText(l.Label("opening.coverage_details")))
 			p()
@@ -1315,6 +1323,7 @@ func mdComparisonAnchor(p func(...string), d projectDecision, behaviors projectB
 // mdCards renders the finding cards of a part.
 func mdCards(p func(...string), cards []secCard) {
 	for _, c := range cards {
+		mdReadingAnchor(p, c.ID)
 		p("#### ", mdText(c.Title))
 		p()
 		if c.State != "" {

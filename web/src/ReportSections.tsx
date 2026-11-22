@@ -10,6 +10,7 @@ import { ReportAction, ReportIcon, ReportLayout } from './ReportLayout';
 import { ProjectOverview } from './ProjectOverview';
 import { ReportDocumentReading } from './ReportDocumentReading';
 import { ReportOverviewTable } from './ReportOverviewTable';
+import { ReportActions, ReportCoverageNote } from './ReportActions';
 import { InspectionReading, MeasurementReading, StaticDiagnosticReading } from './ReportInspections';
 import { ReportGoDependencies } from './ReportGoDependencies';
 import { ReportCodeStrengths } from './ReportCodeStrengths';
@@ -870,6 +871,17 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
       <section id={anchor('overview')} role={tabbed ? 'tabpanel' : undefined} aria-labelledby={tabbed ? tabId('overview') : 'report-overview'} hidden={tabbed && active!=='overview'} tabIndex={tabbed ? 0 : undefined}>
         <h5 id="report-overview" className="visually-hidden">{s.overview}</h5>
         {(!tabbed || active === 'overview') && <>
+          <ReportCoverageNote report={report} sections={sections} openCoverage={() => {
+            const table = document.getElementById('report-coverage');
+            table?.scrollIntoView?.({ block: 'start' });
+            table?.focus({ preventScroll: true });
+          }} />
+          <ReportActions report={report} sections={sections} isDisposed={isDisposed} openSection={go}
+            openFinding={findingID => navigateSearch({ kind: 'finding', section: 'code_review', id: findingID })}
+            openComparison={index => {
+              documentTarget.current = comparisonId(index);
+              go('documents');
+            }} />
           <ReportOverviewTable rows={readingSignals} open={section => {
             if (section !== 'tests') { go(section); return; }
             const tests = document.getElementById(testsId) as HTMLDetailsElement | null;

@@ -30,6 +30,9 @@ var reportExportCSS string
 //go:embed reportui/workbench.css
 var reportWorkbenchCSS string
 
+//go:embed reportui/actions.css
+var reportActionsCSS string
+
 //go:embed reportui/export-navigation.js
 var reportExportNavigation string
 
@@ -54,7 +57,7 @@ var notoSansKRNotice string
 // no companion files, so use a data URL for the font in this renderer.
 var reportFontURL = "data:font/woff2;base64," + base64.StdEncoding.EncodeToString(reportFont)
 var sectionedExportCSS = strings.Replace(reportFontCSS, "./noto-sans-kr.woff2", reportFontURL, 1) +
-	reportTablerCSS + reportThemeCSS + reportExportCSS + reportWorkbenchCSS
+	reportTablerCSS + reportThemeCSS + reportExportCSS + reportWorkbenchCSS + reportActionsCSS
 
 type reportTimestamp struct {
 	Label, Original, Display string
