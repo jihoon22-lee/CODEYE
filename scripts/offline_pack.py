@@ -42,7 +42,7 @@ SCHEMA_VERSION = "0.1"
 MANIFEST = "MANIFEST.json"
 SUMS = "SHA256SUMS"
 # User-facing documentation and examples, kept in their repository layout.
-DOCS = ["docs/ANALYZERS.md", "docs/API.md", "docs/ARCHITECTURE.md", "docs/EXECUTION.md",
+DOCS = ["CHANGELOG.md", "docs/ANALYZERS.md", "docs/API.md", "docs/ARCHITECTURE.md", "docs/EXECUTION.md",
         "docs/GITHUB.md", "docs/GUIDE.md", "docs/OPERATIONS.md", "docs/REPORT.md",
         "docs/REQUIREMENTS.md", "docs/REVIEW.md", "docs/SECURITY.md"]
 EXAMPLES = ["examples/config-offline.json"]
@@ -135,7 +135,7 @@ def elf_machine(path: Path) -> int:
     return int.from_bytes(head[18:20], "little" if head[5] == 1 else "big")
 
 
-def release_doc(text: str, path: str, commit: str) -> str:
+def release_doc(text: str, path: str, commit: str, *, destination: str | None = None) -> str:
     """Keep shipped links local and point source-only references at the commit."""
     shipped = set(DOCS + EXAMPLES + ["INSTALL.md"])
 
@@ -144,7 +144,12 @@ def release_doc(text: str, path: str, commit: str) -> str:
         if target.scheme or target.netloc or not target.path or target.path.startswith("/"):
             return m[0]
         resolved = posixpath.normpath(posixpath.join(posixpath.dirname(path), target.path))
-        if resolved in shipped or resolved == ".." or resolved.startswith("../"):
+        if resolved in shipped:
+            if destination is None:
+                return m[0]
+            relative = posixpath.relpath(resolved, posixpath.dirname(destination) or ".")
+            return f"]({target._replace(path=relative).geturl()})"
+        if resolved == ".." or resolved.startswith("../"):
             return m[0]
         kind = "tree" if (ROOT / resolved).is_dir() else "blob"
         link = f"{SOURCE_URL}/{kind}/{commit}/{quote(resolved, safe='/')}"
@@ -292,7 +297,8 @@ def build(args) -> int:
         for rel in EXAMPLES:
             (stage / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / rel, stage / rel)
-        install = INSTALL_TEMPLATE.read_text(encoding="utf-8")
+        install = release_doc(INSTALL_TEMPLATE.read_text(encoding="utf-8"),
+                              INSTALL_TEMPLATE.relative_to(ROOT).as_posix(), commit, destination="INSTALL.md")
         (stage / "INSTALL.md").write_text(install.replace("{{version}}", version).replace("{{top}}", top).replace("{{os}}", goos).replace("{{arch}}", goarch), encoding="utf-8")
         files = []
         for p in sorted(x for x in stage.rglob("*") if x.is_file()):

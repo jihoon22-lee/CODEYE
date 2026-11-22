@@ -1,20 +1,17 @@
 openapi: 3.1.0
 info:
   title: CODEYE Core API
-  version: 0.1.0
+  version: 0.1.1
   description: >-
-    핵심 수직 경로의 계약이다. `x-codeye-status` 값이 `implemented`인 operation을
-    `codeye serve`(controller)가 실제로 제공하며 나머지는 아직 설계 계약이다
-    (docs/API.md, docs/EXECUTION.md, docs/REPORT.md). 운영 CRUD 전체는 docs/API.md에 따라 확장한다.
-    의미 제약과 lease fencing은 JSON Schema 검증 외에 서버에서 검사한다.
-    사용자 인증은 UserSession cookie뿐이다(로그인 링크 또는 사용자 이름·비밀번호로 만든다). UserBearer는 구현되지 않았다.
-    상태 변경 요청(POST/PUT/PATCH/DELETE)은 Origin이 서버 origin과 정확히 같아야 하고,
-    POST /session을 제외하면 X-CODEYE-CSRF header가 필요하다. loopback 수신은 평문 HTTP와 loopback Host
-    allowlist를 쓴다. 그 밖의 주소는 TLS가 필수이며 Host는 public origin의 host, Origin은 public origin과 같아야 하고,
-    cookie 이름은 __Host-codeye_session(Secure)이며 Strict-Transport-Security를 보낸다(docs/SECURITY.md).
-    비밀번호 변경이 필요한 세션(must_change_password)은 GET/DELETE /session과 POST /session/password 밖의
-    사용자 경로에서 403 PASSWORD_CHANGE_REQUIRED를 받는다. 관리자(is_admin)는 계정·source root 허가·감사 기록을
-    다루며 어떤 프로젝트도 열지 못한다.
+    CODEYE 웹 서비스의 HTTP API다. 기본 경로는 /api/v1이며 서버가 제공하는 operation은
+    x-codeye-status가 implemented다. 요청 조건과 응답의 의미는 docs/API.md에서 설명한다.
+    사용자는 이메일·비밀번호 또는 일회용 로그인 링크로 세션을 만든다. 기존 사용자 이름도 로그인에 쓸 수 있다.
+    브라우저의 상태 변경 요청은 Origin을 검사한다. 세션을 사용하는 상태 변경에는 X-CODEYE-CSRF가 필요하다.
+    회원가입과 로그인은 세션 없이 요청한다. 수신 주소와 공개 주소에 따라 Host를 검사한다.
+    loopback 외 수신은 TLS 또는 명시적 --plain-http 설정을 사용한다. TLS 응답에는
+    Strict-Transport-Security를 보내며 세션에는 Secure cookie를 사용한다(docs/SECURITY.md).
+    비밀번호 변경 대기 세션은 세션 조회·종료와 비밀번호 변경만 할 수 있다.
+    관리자는 계정과 서비스 설정을 관리한다. 프로젝트와 보고서에는 관리자도 구성원 권한으로 접근한다.
     모든 응답은 X-Request-ID header를 가지며 오류 envelope의 request_id와 같다.
     노드 경로(NodeBearer)는 cookie를 읽지 않고 CSRF를 쓰지 않으며 Origin header가 있으면 403으로 거부한다.
 servers:

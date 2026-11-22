@@ -1,50 +1,50 @@
 # CODEYE 사용 안내서
 
-Linux에서 CODEYE 웹 서비스를 시작하고 프로젝트를 분석하는 안내서다. 설치 뒤에는 같은 화면에서 보고서를 보고 구성원을 초대할 수 있다. 설정 필드, 지원 환경, 백업·복원은 [운영](OPERATIONS.md)에 있다. 아래 경로와 이름은 예시다.
+Linux에서 CODEYE를 시작하고 첫 프로젝트를 등록하는 방법이다. 설정, 백업과 서비스 운영은 [운영](OPERATIONS.md)에 있다.
 
 ## 준비물
 
 | 하려는 일 | 준비물 |
 |---|---|
-| 웹 서비스 시작 | Linux x86-64 또는 ARM64, 일반 Linux 계정, CODEYE 실행 파일과 웹 화면, PostgreSQL 서버 프로그램 14 이상. 시험한 환경은 [지원 범위](OPERATIONS.md#지원-범위)에 있다 |
-| 폴더 분석 | 서비스 Linux 계정이 읽을 수 있는 프로젝트 폴더의 절대 경로. WSL 파일과 서버에 마운트한 NFS 경로도 같은 방식으로 입력한다 |
-| Git 저장소 분석 | `git`과 저장소 HTTPS 주소. 비공개 GitHub.com·GHES는 [플랫폼 GitHub 계정](GITHUB.md#플랫폼-github-계정)에 읽기 권한을 준다 |
-| 추가 정적 분석 | Go의 `go vet`, Python의 Ruff처럼 프로젝트 언어에 맞는 도구. 설치된 도구는 `./codeye tools`에서 확인한다. [분석기](ANALYZERS.md) |
-| 모델 검토 | OpenCode와 사용할 모델. 공급자가 인증을 요구하면 API 키도 준비한다. [모델 설정](#모델-설정) |
+| 웹 서비스 시작 | Linux x86-64 또는 ARM64(WSL2 포함), 일반 Linux 계정, CODEYE 배포 파일, PostgreSQL 서버 프로그램 14 이상. [지원 범위](OPERATIONS.md#지원-범위) |
+| 폴더 분석 | 서비스 Linux 계정이 읽을 수 있는 프로젝트 폴더의 절대 경로. WSL 파일과 서버에 마운트된 NFS도 같은 방식으로 입력한다 |
+| Git 저장소 분석 | `git`과 HTTPS 주소. 비공개 GitHub.com·GHES는 [플랫폼 GitHub 계정](GITHUB.md#플랫폼-github-계정)에 읽기 권한을 준다 |
+| 정적 분석과 모델 검토 | 프로젝트 언어의 [분석 도구](ANALYZERS.md), 모델 검토를 쓸 경우 [서버의 OpenCode와 사용할 모델](#모델-설정) |
 
-Ubuntu는 `sudo apt install postgresql`로 PostgreSQL을 설치할 수 있다. CODEYE는 `initdb`, `pg_ctl`, `postgres`, `pg_dump`, `pg_restore`가 있는 디렉터리를 찾아 전용 데이터베이스를 만든다. 별도 위치는 `./codeye up --postgres-bin-dir /절대/경로/bin`로 지정한다. 기존 데이터베이스 서버를 쓸 때는 [외부 PostgreSQL](OPERATIONS.md#외부-postgresql)을 따른다.
+Ubuntu에서는 `sudo apt install postgresql`로 PostgreSQL을 설치할 수 있다. CODEYE가 `initdb`, `pg_ctl`, `postgres`, `pg_dump`, `pg_restore`를 찾아 전용 DB를 준비한다. 별도 경로는 `./codeye up --postgres-bin-dir /절대/경로/bin`으로 지정한다. 기존 DB 서버를 쓰려면 [외부 PostgreSQL](OPERATIONS.md#외부-postgresql)을 따른다.
 
 ## 첫 시작
 
-CPU에 맞는 배포 파일과 SHA-256 검증 파일을 같은 폴더에 받는다. 배포 파일을 이미 풀었다면 그 안의 `INSTALL.md`를 연다.
+CPU에 맞는 배포 파일과 SHA-256 검증 파일을 같은 폴더에 받는다. 압축을 이미 풀었다면 그 안의 `INSTALL.md`를 연다.
 
-- Linux x86-64(amd64) [배포 파일](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.0/codeye-v0.1.0-linux-amd64.tar.gz) · [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.0/codeye-v0.1.0-linux-amd64.tar.gz.sha256)
-- Linux ARM64 [배포 파일](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.0/codeye-v0.1.0-linux-arm64.tar.gz) · [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.0/codeye-v0.1.0-linux-arm64.tar.gz.sha256)
+| Linux CPU | CODEYE v0.1.1 | 검증 파일 |
+|---|---|---|
+| x86-64 (`amd64`) | [다운로드](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.1/codeye-v0.1.1-linux-amd64.tar.gz) | [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.1/codeye-v0.1.1-linux-amd64.tar.gz.sha256) |
+| ARM64 (`arm64`) | [다운로드](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.1/codeye-v0.1.1-linux-arm64.tar.gz) | [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.1/codeye-v0.1.1-linux-arm64.tar.gz.sha256) |
 
-x86-64에서 시작하는 예다. ARM64는 명령의 `amd64`를 `arm64`로 바꾼다.
+**v0.1.0을 사용 중이라면** 기존 설정과 상태 디렉터리에서 계속 실행한다. 백업, 배포 파일 교체와 DB 처리 순서는 [배포판 업그레이드](OPERATIONS.md#배포판-업그레이드)를 따른다.
+
+처음 설치하는 x86-64 머신에서는 내려받은 폴더에서 다음과 같이 실행한다. ARM64는 명령의 `amd64`를 `arm64`로 바꾼다.
 
 ```sh
-sha256sum -c codeye-v0.1.0-linux-amd64.tar.gz.sha256 &&
-  tar -xzf codeye-v0.1.0-linux-amd64.tar.gz &&
-  cd codeye-v0.1.0-linux-amd64 &&
+sha256sum -c codeye-v0.1.1-linux-amd64.tar.gz.sha256 &&
+  tar --keep-old-files -xzf codeye-v0.1.1-linux-amd64.tar.gz &&
+  cd codeye-v0.1.1-linux-amd64 &&
+  sha256sum -c SHA256SUMS &&
   ./codeye up
 ```
 
-- `up`은 설정 파일과 데이터베이스를 만들고 웹 서버와 로컬 에이전트를 시작한다. 기본 주소는 `http://127.0.0.1:7331`이며 사용 중이면 다음 빈 포트(7340까지)를 고른다. [실행 명령과 설정 경로](OPERATIONS.md#up-open-start-stop-status)
-- 첫 로그인은 관리자 계정으로 한다. 브라우저가 열리지 않으면 터미널에 출력된 로그인 링크를 연다. 링크는 10분 안에 한 번 쓸 수 있고, 로그인은 7일 동안 유지된다. 새 링크는 `./codeye open`, 링크만 출력하려면 `./codeye open --no-open`으로 받는다.
-- 첫 화면의 **폴더 경로 또는 Git 주소**에 프로젝트를 입력하고 **분석**을 누른다. 분석 사본과 결과가 생길 때까지 화면에서 진행 상황을 볼 수 있다.
-- 아래에서 사용하는 `codeye`는 PATH에 둔 실행 파일을 뜻한다. 풀어 놓은 폴더에서 직접 실행할 때는 `./codeye`를 쓴다. 명령 옵션은 `./codeye up --help`처럼 확인한다.
+1. `up`이 데이터베이스, 웹 서버와 로컬 에이전트를 시작한다. 기본 주소는 `http://127.0.0.1:7331`이다. 사용 중이면 7340까지 다음 빈 포트를 고른다. [실행 명령과 설정 경로](OPERATIONS.md#up-open-start-stop-status)
+2. 열린 브라우저에서 관리자 계정으로 로그인한다. 브라우저가 열리지 않으면 터미널에 출력된 링크를 연다. 링크는 10분 동안 한 번 쓸 수 있고 로그인은 7일 동안 유지된다. 새 링크는 `./codeye open`, 링크만 출력하려면 `./codeye open --no-open`을 쓴다.
+3. **폴더 경로 또는 Git 주소**에 절대 경로, HTTPS 저장소·브랜치·PR 주소를 넣고 **분석**을 누른다. **고급**에서 이름과 분석 조건을 바꿀 수 있다. 분석 전에 등록만 하려면 **프로젝트 등록만 하기**를 연다. [프로젝트별 분석 선택](#프로젝트별-분석-선택) · [Git 주소 예시](GITHUB.md#저장소-등록)
+4. 실행 화면에서 진행 단계를 확인한다. 분석이 끝나면 그 화면에 보고서가 열린다. 모델을 연결하려면 **관리 > OpenCode 연결**을 연다. [보고서 읽기](#보고서-읽기) · [OpenCode 연결](#관리자-화면에서-연결하기)
 
-브라우저를 여는 동시에 첫 분석을 요청할 수도 있다.
+터미널에서 바로 분석을 요청할 수도 있다. 이 안내서의 `codeye`는 PATH에 둔 실행 파일을 뜻한다. 배포 폴더에서 직접 실행하면 `./codeye`를 쓴다.
 
 ```sh
 ./codeye up ~/src/my-project
 ./codeye up https://github.com/OWNER/REPO
-./codeye up https://github.com/OWNER/REPO/tree/release
-./codeye up https://github.com/OWNER/REPO/pull/123
 ```
-
-브랜치를 생략하면 저장소의 기본 브랜치를 쓴다. PR은 당시 head 커밋을 고정하고 변경 파일부터 검토한다. 댓글은 기본으로 꺼져 있다. 게시 없이 확인하려면 `--dry-run-comment` 또는 실행 화면의 **미리 보기**를 쓴다. 게시하려면 `--comment` 또는 프로젝트 **고급** 설정에서 켠다. [결과 댓글](GITHUB.md#결과-댓글)
 
 ## 다른 사람 초대
 
@@ -70,60 +70,42 @@ tailnet_ip=$(tailscale ip -4) && test -n "$tailnet_ip" &&
 
 ### 사용자 더하기
 
-다른 사람에게 **관리** 화면의 서비스 주소를 알려 준다. 그 주소에서 **회원가입**을 눌러 이메일과 비밀번호를 입력하면 바로 로그인된다. 이후에는 같은 이메일과 비밀번호로 들어간다. 이메일의 대소문자와 앞뒤 공백은 무시한다. 이메일 확인 메일은 보내지 않는다.
+**관리 > 서비스**의 주소를 공유한다. 다른 사람은 **회원가입**에서 이메일과 비밀번호를 입력해 바로 로그인한다. 이메일의 대소문자와 앞뒤 공백은 무시하며 확인 메일은 보내지 않는다. 기존 사용자 이름으로 로그인하거나, 관리자가 만든 일회용 링크를 쓸 수도 있다. [계정과 관리자 CLI](OPERATIONS.md#계정과-관리자-cli)
 
-기존 사용자 이름과 비밀번호 또는 일회용 로그인 링크로도 로그인할 수 있다. 관리자가 일회용 링크로 사용자를 추가하는 방법은 [계정과 관리자 CLI](OPERATIONS.md#계정과-관리자-cli)에 있다. 같은 저장소 주소를 입력해도 각 사용자는 자기 프로젝트와 보고서를 갖는다. 프로젝트를 공유하려면 **구성원**에서 상대방의 이메일이나 기존 사용자 이름을 입력한다.
+같은 소스를 각자 등록하면 각자의 프로젝트와 보고서가 생긴다. 공유하려면 프로젝트의 **구성원**에 상대의 이메일이나 기존 사용자 이름을 입력하고 보기·실행·관리 권한을 고른다. 서비스 관리자도 다른 사람의 프로젝트를 열려면 그 프로젝트의 구성원 권한이 필요하다. [프로젝트 구성원](API.md#구성원)
 
 ### 다른 사람이 분석할 수 있는 것
 
-새 사용자도 같은 첫 화면을 본다. 입력란에 GitHub 주소를 붙여넣고 **분석**을 누르면 된다. 무엇을 쓸 수 있는지는 그 사람의 권한과 관리자 설정이 정하고, 쓸 수 없는 것은 첫 화면의 "이 서비스에서 쓸 수 없는 것"이 이유와 함께 보여 준다.
+CODEYE 웹 계정은 프로젝트를 열거나 실행할 권한을 정한다. 소스 읽기는 서버의 서비스 계정과 플랫폼 GitHub 계정의 권한을 따른다. 적용되지 않는 기능과 이유는 첫 화면의 **이 서비스에서 지금 쓸 수 없는 것**에 표시된다.
 
-| 할 수 있는 것 | 누가 | 정하는 곳 |
-|---|---|---|
-| 공개 Git 저장소 분석 | 모두 | 승인된 Git host(기본 github.com, **관리 > Git 공급자**에서 GitHub Enterprise Server host를 더함) |
-| 비공개 GitHub.com·GHES 저장소, pull request 결과 댓글 | 프로젝트를 실행할 수 있는 사용자 | 플랫폼 GitHub 계정의 저장소 읽기 권한과 선택적인 댓글 쓰기 권한 |
-| 서버 폴더를 경로로 분석 | 로그인한 사용자 | 서비스 Linux 계정이 읽을 수 있는 프로젝트 폴더의 절대 경로 |
-| 모델 검토 | 관리자, 그리고 "다른 사용자도 모델 검토 사용"이 켜져 있으면(기본 켬) 모두 | **관리 > 서비스** |
-| 저장소의 빌드 스크립트 실행 | 관리자, 그리고 "다른 사용자의 저장소 빌드 스크립트 실행 허용"이 켜져 있으면(기본 끔) 모두 | **관리 > 서비스** |
-| 다른 사람의 프로젝트 | 소유자가 구성원으로 더한 사람(보기·실행·관리) | 프로젝트의 **구성원** |
-
-- 요청자는 CODEYE 웹 계정으로 기록된다. Git fetch, PR 확인과 댓글 게시에는 호스트별 플랫폼 계정을 사용한다.
-- 서버 폴더를 입력할 때는 서버 Linux 계정에서 읽을 수 있는 절대 경로를 준다. WSL 경로와 서버에 마운트된 NFS 경로는 같은 방식으로 쓴다. 상태·백업 폴더를 담는 경로는 거부한다.
-- 관리자 스위치는 관리자가 아닌 사람이 시작한 분석에 적용된다. 관리자가 시작한 분석은 영향을 받지 않는다. 스위치 때문에 빠진 검토는 보고서에 "관리자가 다른 사용자의 모델 검토를 허용하지 않아 …"처럼 그 이유로 나온다.
-- 사람마다 남의 프로젝트·보고서·감사 기록은 보이지 않는다(구성원이 아니면 없는 것처럼 404).
-- 새 사용자가 만든 프로젝트와 보고서는 그 사용자의 것이다. 기존 프로젝트에 함께 접근하려면 [구성원](API.md#구성원)에 추가한다.
+| 기능 | 권한과 설정 |
+|---|---|
+| Git 저장소 분석 | 승인된 호스트의 공개 저장소를 읽는다. 비공개 저장소와 그 PR에는 플랫폼 GitHub 계정의 읽기 권한이 필요하고 결과 댓글에는 쓰기 권한이 필요하다. [플랫폼 GitHub 계정](GITHUB.md#플랫폼-github-계정) |
+| 서버 폴더 분석 | 서비스 Linux 계정이 읽을 수 있는 절대 경로를 입력한다. 상태·백업 디렉터리를 포함하거나 그 안에 있는 경로는 거부한다 |
+| 모델 검토 | 관리자는 모델 설정이 있으면 사용할 수 있다. 다른 사용자는 **관리 > 서비스 > 다른 사용자도 모델 검토 사용**을 따른다(기본 켬) |
+| 저장소 코드 실행 | 관리자가 아닌 사용자가 시작한 분석에는 **관리 > 서비스 > 다른 사용자의 저장소 빌드 스크립트 실행 허용**도 필요하다(기본 끔) |
 
 ## 설정 파일
 
-기본 파일은 `~/.config/codeye/config.json`이다(`XDG_CONFIG_HOME`을 따름). `codeye up --config PATH`로 다른 설치를 열 수 있다. 수신 주소, 별도 DB, 상태 디렉터리, 분석기 경로를 바꿀 때 수정한다. [서비스 설정 파일](OPERATIONS.md#서비스-설정-파일)
+기본 경로는 `~/.config/codeye/config.json`이며 `XDG_CONFIG_HOME`을 따른다. `codeye up --config PATH`로 특정 설치의 설정을 지정할 수 있다. [서비스 설정 파일](OPERATIONS.md#서비스-설정-파일)
 
 ## 프로젝트와 source root
 
-**source root**는 실행 노드의 내부 경로 매핑이다. `codeye up PATH`와 웹 등록은 경로를 해석해 기존 매핑을 재사용하거나 새 매핑을 DB에 기록한다.
+`source root`는 실행 노드에서 서버 폴더를 찾는 매핑이다. 웹이나 CLI에 절대 경로를 입력하면 CODEYE가 기존 매핑을 찾아 쓰거나 새 매핑을 등록한다. 운영자는 설정의 `source_roots`에 따로 추가할 수 있다. `codeye up`을 다시 실행하면 로컬 에이전트가 설정 변경을 반영한다. [서비스 설정 파일](OPERATIONS.md#서비스-설정-파일)
 
-설정에 직접 root를 더해도 된다(`{"label": "more", "path": "/home/user/more"}`). 그 뒤 `codeye up`을 하면 root를 등록하고 에이전트를 다시 등록한다. 이전 에이전트 상태는 지우지 않고 이름만 바꿔 둔다.
-
-```text
-registered source root "more" (b54bb497-…)
-restarting the agent: its configuration changed (running work finishes first, up to 300s)
-re-enrolling the local agent: the configured source roots changed (previous state kept in /…/state/agent.retired-…)
-```
-
-화면에서는 "분석할 코드"의 **폴더 경로 또는 Git 주소** 입력란에 절대 경로나 저장소 주소를 붙여넣고 **분석**을 누른다. 프로젝트를 등록하고(같은 폴더·저장소면 그 프로젝트를 쓴다) 분석을 요청한 뒤 바로 그 실행 화면으로 간다. 분석이 아직 진행 중이면 새로 요청하지 않고 그 실행을 보여 준다. 접힌 **고급**에는 이름, 브랜치(`…/tree/브랜치` 주소면 채워진다), 아래의 선택이 있다. pull request 주소(`…/pull/N`)를 넣으면 "pull request에 결과 댓글 남기기"도 있다. 실행 없이 먼저 등록하려면 **프로젝트 등록만 하기**를 연다. 등록한 프로젝트는 입력란 아래 "프로젝트 목록"에 카드로 보이고, 카드를 고르면 그 프로젝트의 최근 실행과 보고서가 열린다. 프로젝트 설명이나 요구사항 문서는 필요 없다. CODEYE가 문서·환경·소스를 직접 조사한다.
+같은 폴더나 저장소를 다시 입력하면 내 기존 프로젝트에서 새 분석을 시작한다. 일반 분석이 진행 중이면 그 실행 화면을 연다. PR은 요청 시점의 head를 고정한다. 프로젝트 카드에서 이전 실행과 보고서를 볼 수 있다. 분석을 요청하면 문서·환경·소스를 자동으로 찾아 읽는다.
 
 ### 프로젝트별 분석 선택
 
-프로젝트마다 세 가지를 고른다. 등록할 때 고급에서 정하고, 나중에는 보고서의 "더 나은 결과를 얻으려면"에서 켠다.
+처음 등록할 때 **고급**에서 설정한다. 보고서의 **더 나은 결과를 얻으려면**에도 결과에 따라 프로젝트 관리자가 쓸 수 있는 설정 버튼이 나온다.
 
-| 선택 | 뜻 | 로컬 폴더 기본 | Git 저장소 기본 |
+| 선택 | 동작 | 로컬 기본 | Git 기본 |
 |---|---|---|---|
-| 소스를 모델에 보냄 | 설정한 검토 모델이 이 프로젝트의 소스를 읽는다. 끄면 정적 분석만 한다 | 켬 | 켬 |
-| 저장소의 빌드 스크립트 실행 | build script·`cargo check`·plugin처럼 저장소의 코드를 실행하는 분석기를 돌린다([저장소 코드 실행 허가](ANALYZERS.md)) | 켬 | 끔 |
-| 의존성 받기 | 분석 전에 모듈마다 의존성을 레지스트리에서 받아 분석기가 읽게 한다. Go 모듈, Rust crate(빌드 스크립트 실행도 켜야 한다), JS/TS 패키지(npm·pnpm·yarn 1), Python 패키지(wheel만)다. 저장소 코드는 실행하지 않는다([의존성 준비](ARCHITECTURE.md#의존성-준비)) | 켬 | 켬 |
+| 소스를 모델에 보냄 | 연결한 모델이 검토할 소스와 문서를 읽는다. 끄면 모델 검토를 생략한다 | 켬 | 켬 |
+| 저장소의 빌드 스크립트 실행 | 빌드 스크립트·Cargo·플러그인 등 저장소 코드가 실행되는 분석과 **테스트 포함 분석**을 허용한다. 작업 사본에서 서비스 Linux 계정 권한으로 실행한다 | 켬 | 끔 |
+| 의존성 받기 | 분석기가 읽을 Go 모듈, Rust crate, JS/TS 패키지와 Python wheel을 준비한다. Rust는 빌드 스크립트 실행도 켜야 한다. 레지스트리 접근과 필요한 패키지 관리자는 실행 환경에 따른다. [의존성 준비](ARCHITECTURE.md#의존성-준비) | 켬 | 켬 |
 
-- 내 폴더는 내 코드라 둘 다 켠다. Git 저장소는 누구의 코드든 될 수 있어 빌드 스크립트를 실행하지 않는다. 그래서 Rust 저장소는 처음에 `cargo check`·clippy가 "저장소 코드 실행이 허가되지 않아 실행하지 않음"으로 빠진다. 켜면 그 저장소의 코드가 이 컴퓨터에서 내 권한으로 실행된다.
-- 의존성 받기는 "고급"의 "의존성 받기"다. 켜면 분석이 인터넷(Go는 `proxy.golang.org`, Rust는 crates.io, JS/TS는 `registry.npmjs.org`, Python은 PyPI)에 접속하고 처음 받는 것은 시간이 걸린다. 받은 것은 `state_dir/cache/deps`에 남아 다음 분석은 빠르다. 끄면 의존성이 있는 모듈의 go vet·Staticcheck, cargo check·clippy, tsc·type-aware ESLint가 `dependency_unavailable`로 끝나거나 mypy·pyright가 import를 풀지 못할 수 있고, 보고서의 "더 나은 결과를 얻으려면"이 다시 켜기를 권한다. 사용자의 `go env`에 `GOPROXY`·`GOPRIVATE` 등을 정해 두었으면 그 값을 따른다. 비공개 모듈은 공개 proxy에 묻지 않고, 내 Go 모듈 캐시에 이미 있는 것만 쓴다. npm 설정(`npm config get registry`)에 기본값과 다른 레지스트리가 있으면 JS/TS 받기가 그것을 쓰고(인증정보가 든 주소는 쓰지 않는다), 따로 정하려면 `agent.dependencies.npm_registry`다. JS/TS 패키지는 이번 분석의 작업 사본에 설치되고 분석이 끝나면 함께 지워진다. pnpm·yarn은 `codeye tools`가 없다고 하면 안내대로 설치한다. Python은 mypy·pyright가 있을 때 `uv.lock`, `pyproject.toml`, `requirements*.txt`의 패키지를 PyPI(또는 `agent.dependencies.pip_index_url`)에서 wheel로만 받는다. 이 컴퓨터에 uv나 pip이 있는 Python이 있어야 한다(`codeye tools`의 uv·python). 저장소의 `setup.py`는 실행하지 않으므로 wheel이 없는 패키지는 빠지고 보고서에 남는다. 컴퓨터 전체에서 끄려면 설정 `agent.dependencies.enabled: false`다.
-- 이 선택을 따르는 것은 `codeye up`이 띄운 에이전트다. 관리자가 아닌 사람이 시작한 분석은 관리자 스위치(**관리 > 서비스**)가 허용하는 것만 한다. 따로 띄운 노드(`codeye agent`)는 운영자의 root별 허가(설정 source root의 `repository_code`·`model_review`, 노드 플래그)를 상한으로 두고 그 안에서 프로젝트 선택을 따른다.
+관리자 스위치나 별도로 실행한 노드의 허가가 이 선택을 제한할 수 있다. 빠진 작업, 필요한 도구나 설정은 보고서에 사유가 기록된다. [분석기와 실행 조건](ANALYZERS.md)
 
 ## 사용할 수 있는 도구 확인
 
@@ -135,149 +117,65 @@ codeye tools
 
 ## 분석 실행
 
-위의 입력란으로 시작하거나, 프로젝트를 고르고 "새로 분석"을 누른다. 요청은 대기열에 저장되고 에이전트가 가져가 실행한다. 화면에는 실행 상태, 진행 막대와 단계별 상태가 표시된다. 테스트 포함 요청은 기존 테스트 단계도 표시한다. 실행 ID·스냅샷·진행률 계산 근거는 "실행 세부 정보"를 펼쳐 본다. 브라우저 탭 제목에도 실행 상태와 진행률이 나온다.
+첫 화면에서 소스를 입력하거나 프로젝트의 **새로 분석**을 누른다. 실행 화면은 대기 사유와 단계별 상태를 표시한다. **실행 세부 정보**에서 실행 ID, 스냅샷과 진행률 계산 근거를 확인할 수 있다.
 
-저장소 코드 실행이 허용된 프로젝트는 **테스트 포함 분석**을 요청할 수 있다. 처음 입력하는 곳에서는 **고급 > 기존 테스트 포함**을 선택한다. Linux 에이전트는 전용 루프백 네트워크에서 작업 사본의 지원 테스트를 실행한다. 종합의 **기존 테스트**에서 결과를 열면 테스트와 명령의 종료 코드를 볼 수 있다. Go에서 실패한 테스트를 확인했으면 이름과 **테스트 선언 위치**를 표시한다. 코드 미포함 내보내기에는 위치만 나온다. 명령만 실패한 경우 **개별 테스트 미식별**을 표시하며, 실행할 수 없었던 경우에는 해당 사유가 나온다. [실행 정책](EXECUTION.md)
-
-등록한 프로젝트에서 폴더나 파일을 골라 새로 분석하려면 **분석 설정 > 분석할 상대 경로**에 한 줄씩 적는다. 화면에 표시된 경로와 개수를 확인하고 **선택한 경로 분석**을 누른다. 입력을 비우면 프로젝트 전체를 분석한다. 선택 범위는 등록 브랜치의 다음 고정 커밋이나 다음 로컬 사본에 적용된다. 이미 게시된 보고서는 이전 실행의 기록을 유지한다.
-
-큰 프로젝트의 원문을 더 많이 조사하려면 **분석 설정 > 확장 코드 검토**를 선택한다. 노드 운영자가 `agent.model.review_max_calls`를 207회보다 높여야 일반 검토의 96개 작업을 넘어 실행할 수 있다. 예를 들어 폐쇄망 모델 노드의 설정을 600으로 변경하고 서비스를 다시 시작한다. 작업은 요청당 원문 한도와 비밀값 선별을 적용하며, 끝까지 포함하지 못한 파일과 줄은 모듈별 검토 장부에 남는다. 모델 공급자에 따라 비용과 실행 시간이 늘 수 있다.
-
-- **일부만 완료(partial)**: 일부 작업을 하지 못했다는 뜻이다. 화면에 이유가 나온다. 예: "이 분석 도구가 설치·설정되지 않아 실행하지 않음", "이 프로젝트는 소스를 모델에 보내지 않도록 설정되어 제외됨".
-- **대기 사유**: 시작하지 않은 run에는 이유가 표시된다. 저장 공간 상한에 걸리면 "저장 공간 상한에 도달해 새 작업을 시작하지 않습니다"가 나온다([저장 공간](#저장-공간)).
-- 실행을 취소하면 실행 중인 도구 프로세스를 정리하고 정리 결과를 확인한 뒤 취소로 표시한다. 확인하지 못하면 "정리 확인 필요"(`recovery_required`)로 남는다.
-- **다시 시도**: 실패·일부 완료·취소된 실행에 "다시 시도" 버튼이 있다. 고정한 입력이 노드에 남아 있는 실패·취소 실행은 같은 입력으로 다시 하고, 그 밖(소스 확보 실패, 도구를 설치하거나 선택을 바꾼 뒤)에는 소스를 다시 받아 새 실행을 시작한다. 화면은 그 실행을 따라간다. `recovery_required`는 다시 시도하지 못한다.
-- 소스를 읽지 못한 실행은 이유를 보여 준다. 비공개 저장소의 읽기 권한을 플랫폼 GitHub 계정에 부여했는지와 주소를 확인한다.
+- **범위 선택.** 등록된 프로젝트에서 **분석 설정 > 분석할 상대 경로**에 파일이나 폴더를 한 줄씩 넣고 선택한 경로의 분석 버튼을 누른다. 비우면 전체를 분석한다. 다음 Git 커밋 또는 로컬 사본에 범위를 적용하며 이미 게시된 보고서는 유지한다. 한 동작을 보려면 사용 문서와 구현 경로, 그 코드를 호출하는 곳, 관련 테스트를 함께 선택한다.
+- **테스트 포함 분석.** 첫 화면의 **고급 > 기존 테스트 포함**이나 프로젝트의 **테스트 포함 분석**을 선택한다. 저장소 코드 실행이 허용된 분석에서 Linux 노드는 작업 사본과 전용 loopback 네트워크를 사용한다. Go, npm의 지원 스크립트, Python unittest, Cargo 테스트를 대상으로 한다. [기존 테스트 실행](EXECUTION.md#기존-테스트-실행)
+- **확장 코드 검토.** 더 넓은 모델 조사 범위가 필요하면 **분석 설정 > 확장 코드 검토**를 선택한다. 노드 설정의 `agent.model.review_max_calls`가 207회를 넘어야 일반 검토보다 많은 원문을 조사할 수 있다. 실행 시간과 비용이 늘 수 있다. [모델 검토 설정](#모델-검토-설정)
+- **다시 시도.** 실패·일부 완료·취소된 실행에서 요청할 수 있다. 실패·취소 때 고정한 입력이 노드에 남아 있으면 그 입력을 다시 사용한다. 소스 확보에 실패했거나 도구·분석 설정을 바꿨다면 새로 분석한다. 취소나 제한시간 뒤 정리를 확인하지 못한 실행은 **정리 확인 필요**(`recovery_required`)로 남으며 확인 뒤 다시 실행할 수 있다. [장애 대응](OPERATIONS.md#장애-대응-runbook)
 
 ## 보고서 읽기
 
-한 동작을 깊게 보려면 경로를 선택할 때 설명 문서와 실제 처리 코드, 호출자, 테스트를 함께 포함한다. 예를 들어 내보내기를 확인하려면 요청을 받는 코드와 내보낼 값을 만드는 코드를 모두 선택한다. 문서 분석에서 주장별 판정과 인용한 줄을 확인하고, 코드 분석에서는 해당 조건을 지지하거나 반박하는 호출부와 테스트를 펼칠 수 있다. 테스트를 읽은 근거와 실제 수행 결과는 별도로 표시한다.
+1. **종합 > 주요 분석 결과**에서 영역별 상태와 조치할 항목을 확인한다. **분석 공백**에서는 미지원·실패·정책 제외·조사 한도로 빠진 범위와 원인을 읽는다. 일부만 완료된 실행에도 확보한 근거가 남는다. 도구를 추가했다면 `codeye up`으로 탐색을 갱신한 뒤 새로 분석한다.
+2. **문서 분석**에서 문서에 적힌 동작과 구현을 대조하고 인용된 원문을 펼친다. **코드 분석**에서 판정을 고르면 근거 파일·줄, 발생 조건과 관련 코드·테스트를 볼 수 있다. **정적 분석**의 진단은 도구가 관찰한 결과다. 코드 분석에서 후보의 검증 상태를 확인하고 필요하면 사람 판정과 사유를 남긴다. **모듈별 검토 장부**에서 모델이 조사한 파일·줄과 한도 또는 비밀값 선별로 제외된 범위를 확인한다.
+3. **종합 > 주요 분석 결과**의 **기존 테스트**를 눌러 실제 테스트 실행 결과를 연다. 테스트를 소스에서 읽은 흔적은 문서·코드 근거에, 테스트 명령의 결과는 **기존 테스트 실행 결과**에 표시된다. 통과, 일부 통과, 명령 실패, 결과 미확인과 실행할 테스트가 없는 경우를 구분한다. Go에서 실행 기록과 고정한 소스로 확인한 테스트 실패는 이름과 **테스트 선언 위치**가 나온다. 선언 위치에서 실패한 테스트의 단언을 읽고 코드 근거와 함께 원인을 확인한다. 명령은 실패했으나 개별 테스트를 확인할 수 없으면 **개별 테스트 미식별**과 종료 코드를 확인한다.
 
-실행이 끝나면 게시된 보고서가 실행 화면에 열린다. 표지에서 프로젝트명, 등록한 Git URL 또는 로컬·NFS 경로, 분석 상태와 시각을 확인한다. 종합의 결과 표에서 영역별 상태와 수치를 읽고 영역명을 눌러 상세로 이동한다. 넓은 화면의 왼쪽과 좁은 화면의 위쪽에 영역 탐색이 있다. [보고서의 구조와 판정 규칙](REPORT.md#분석-종류별-절)
+**보고서 검색**으로 파일명, 문서 용어, 기호와 규칙 ID를 찾는다. 기록이 길면 **전체 목록**을 펼친다. 이전에 게시된 보고서의 배치는 작성 시점에 따라 다를 수 있다. [보고서의 영역과 판정 규칙](REPORT.md#분석-종류별-절)
 
-- **더 나은 결과를 얻으려면.** 보고서 위에, 분석 공백 중 사용자가 채울 수 있는 것을 짧게 적는다. 없는 도구는 설치 방법(도구 화면과 같은 문구), 모델이 없으면 키 설정, 호출 상한 때문에 조사에서 빠진 소스가 있으면 현재 호출 수와 남은 조사 범위, 호출 상한 설정을 표시한다, Git 저장소의 빌드 스크립트가 꺼져 빠진 분석이 있으면 "켜고 다시 시도" 버튼이다. 버튼은 프로젝트 관리자에게만 보인다. 도구를 설치한 뒤에는 `codeye up`을 다시 하고 "다시 시도"를 누른다.
-- **종합.** 상태는 글자와 도형으로 읽는다. 복잡도 기준을 넘은 함수와 중복 쌍을 별도 행에 표시한다. **문서 대조와 판단 근거**에서 원문과 판단 이유를, **분석 상태와 통계**에서 전체 집계를 펼친다.
-- **보고서 검색.** 탐색 아래에서 "보고서 검색"을 열어 용어, 코드 기호, 규칙 ID, 파일명으로 현재 리비전의 문서 대조와 발견을 찾는다. 결과를 선택하면 해당 절과 접혀 있던 목록을 열어 정확한 행에 초점을 둔다. 입력 창에서 Enter를 누르면 첫 결과로 이동하며 Esc로 검색을 닫을 수 있다. 코드 미포함 보고서를 웹에서 열면 위치와 규칙처럼 공개된 항목을 검색할 수 있다.
-- **용어 풀이.** 웹이나 HTML 보고서의 종합에서 `Promise`, `JSON 파싱`, HTTP 상태 코드나 줄 범위가 나오면 "용어 풀이"를 펼쳐 그 뜻을 읽을 수 있다. 판단할 근거가 부족한 경우에는 모델 검토를 하지 못한 사유 등 확인된 기록을 함께 표시한다.
-- **이전 실행과 비교.** 종합 아래에 화면에서만 보인다([이전 실행과 비교](#이전-실행과-비교)). 내보낸 파일에는 없다.
-- **환경 분석.** 모듈, 모듈이 선언한 도구 요구(예: `go 1.22`), 노드에서 관측한 도구 버전, 요구별 판정(충족·불일치·판단 불가)이다.
-- **문서 분석.** 찾은 문서와 읽었는지 여부(예산 초과·제외 포함), 모듈별로 적용되는 문서, 같은 범위에 겹치는 안내를 보여 준다. 한 저장소 안에서 별도 문서 사이트가 다른 npm 패키지의 실제 사용 예제를 제공하면 그 예제의 원문과 해당 패키지에서 읽은 구현을 나란히 확인할 수 있다.
-- **절 순서.** 환경 분석, 문서 분석, 정적 분석, 구조·중복 지표, 비밀정보, 코드 분석, 분석 공백 순이다. 긴 목록은 묶어 앞의 몇 개만 보이고, 각 절의 "전체 목록"을 펼치면 모든 행이 나온다. 시험 입력·예제·생성 파일 같은 부차 경로(`fixtures`, `testdata`, `examples`, `vendor` 등)의 항목은 주요 경로 뒤에 짧게 보인다.
-- **정적 분석.** 언어마다 분석기 표(작업·성공 수, 진단 수, 성공하지 않은 작업)와 규칙 표(규칙마다 진단 수, 심각도, 메시지 한 줄, 위치 앞 5곳과 "외 N곳")다. 실행하지 않은 도구는 "실행하지 않음"으로 나오고 0건이 아니다.
-- **구조·중복 지표.** 복잡도·중복 같은 측정값과 임계 초과 위치다. 결함이 아니다.
-- **비밀정보.** 비밀값으로 보이는 값을 탐지한 위치와 규칙이다. 값 자체는 어디에도 저장하지 않는다. 모델 입력에서 그 값을 걸렀는지도 나온다.
-- **코드 분석(모델 검토).** 모델 역할별 결과, 호출 수, 모델이 본 파일 수, 모델 검토 발견이다. 예제·시험 입력·테스트에서만 근거를 찾은 발견은 "예제·시험 입력 등에서 발견한 항목"에서 위치와 검토 상태를 확인한다. 파일이 많아 모듈 단위로 나눠 검토한 실행에는 **모듈별 검토 장부**가 있다. 모듈마다 검토 대상 코드·테스트 파일 중 모델에 보낸 수, 호출 상한(`agent.model.review_max_calls`) 때문에 보내지 못한 수, 비밀값 탐지로 뺀 수 등을 보여 준다. 모델은 도구 진단이 있는 파일, 필수 분석이 실패한 모듈, 진입점, 그 밖의 소스, 테스트 순으로 주요 경로 파일을 먼저 보고 부차 경로 파일은 마지막에 본다([검토 우선순위](REVIEW.md#검토-우선순위)). 모델에 보낸 범위는 검증된 범위가 아니다. 보내지 못한 파일이 많으면 상한을 올리거나 범위를 좁혀 다시 실행한다. 종합의 코드 분석 줄에도 보낸 파일과 보내지 않은 파일 수가 나온다.
-- **모델 해석.** 환경·문서·코드 분석 절에서 "모델 해석"이라고 표시된 상자는 모델이 쓴 문장이다. 근거 위치가 함께 나오며 판정이나 수치의 근거가 아니다. 모델 검토를 하지 않았으면 그 이유가 나온다.
-- **분석 공백.** 하지 못했거나 일부만 한 분석과 그 이유를 모은 목록이다. 여기 적힌 범위는 "문제 없음"이 아니다.
-- **발견.** 코드 분석에서 항목·위치·판정·심각도를 표에서 확인한다. 행을 선택하면 넓은 화면에서는 옆에 근거가 열리고 좁은 화면에서는 상세로 이동한다. **결과 목록**으로 돌아갈 수 있다. 저장된 짧은 발췌와 인용 원문을 바꿀 수 있다. 좁은 화면에서는 **줄바꿈**이 기본이며 끄면 가로로 스크롤할 수 있다. **근거와 판단 과정**을 펼치면 발생 조건, 주장과 근거를 확인할 수 있다.
-- **이전 보고서.** 절이 생기기 전에 게시된 보고서는 요약, 분석 범위와 한계, 영역별 발견 사항의 이전 배치로 보인다.
-- **HTML 보고서의 긴 발췌.** 발췌 영역 안에서 좌우로 움직여 긴 줄의 끝까지 읽을 수 있다. 키보드에서는 발췌에 초점을 맞춘 뒤 좌우 방향키를 쓴다.
-- **사람 판정.** 발견에 "확인함", "위험 수용", "오탐" 같은 판정과 사유를 기록한다. 기록은 감사 이력으로 남고 수정·삭제되지 않는다. 다음 실행의 비교에 반영된다.
-- **내보내기.** JSON·Markdown·HTML이다. "코드 포함"을 고르지 않으면 코드 발췌를 빼고 내보낸다. Markdown과 HTML은 화면과 같은 요약 보기이고, 모든 행이 필요하면 "Markdown 전체"·"HTML 전체"(API `detail=full`)를 쓴다. JSON은 언제나 전체다([내보내기 상세도](REPORT.md#내보내기-상세도)).
+JSON·Markdown·HTML로 내보낼 수 있다. 기본은 코드 미포함이며, 확인된 Go 테스트 실패는 경로와 줄을 유지하고 테스트 이름을 생략한다. Markdown·HTML은 기본 요약이며 모든 행은 **Markdown 전체**·**HTML 전체**에서 확인한다. JSON에는 전체 행이 담긴다. [내보내기 상세도](REPORT.md#내보내기-상세도)
 
 ## 예약 실행
 
-프로젝트 화면의 "예약 실행"에서 정해진 시각마다 같은 분석 요청을 대기열에 넣는다. 예약 등록과 삭제는 프로젝트 관리자만 한다.
+프로젝트 관리자가 **예약 실행**에서 cron 식과 `Asia/Seoul` 같은 IANA 시간대를 입력한다. 평일 정오는 `0 12 * * 1-5`이며 `@daily`·`@weekly`도 쓸 수 있다. 서비스가 실행 중일 때 예약을 평가한다.
 
-- **cron 식**은 5필드(분 시 일 월 요일)다. 예: `0 12 * * 1-5`(평일 12:00), `@daily`, `@weekly`. 초 필드와 `L`·`W`·`#`·`?`는 받지 않는다.
-- **시간대**는 IANA 이름(`Asia/Seoul`, `UTC`)만 받는다. `Local`은 거부한다.
-- **이전 실행이 끝나지 않았을 때**: 기본은 최신 1건만 대기시키고 더 이전 대기분은 최신 예약으로 대체한다. "이번 예약 건너뛰기"나 "모두 대기열에 넣기(최대 10건)"를 고를 수 있다.
-- **CODEYE가 꺼져 있는 동안 지난 예약**: 기본은 멈춘 사이 지난 예약 중 최신 1건만 실행한다. 멈춘 시간만큼 몰아서 실행하지 않는다. "2분보다 늦으면 건너뛰기"를 고를 수 있다. 실행하지 않은 구간은 화면에 "CODEYE가 꺼져 있던 사이 …부터의 예약은 실행하지 않았습니다"로 나온다.
-- 예약 실행은 등록한 관리자의 권한으로 요청되고, 실행할 때마다 권한을 다시 확인한다. 입력은 실행이 시작되는 시점에 고정한다.
-- 서머타임이 있는 시간대에서 특정 시각(`30 2 * * *`)의 예약은 하루 한 번만 실행된다. 매시·15분 같은 간격 예약은 경과 시간 기준으로 돌고, 시계가 뒤로 가는 날의 반복 시각에도 실행한다.
-- 예약을 삭제해도 이미 대기열에 넣은 실행은 취소되지 않는다. 대기 중이던 예약 회차만 취소된다.
-- 예약은 `codeye start`로 띄운 controller가 실행 중일 때만 평가된다. 정지해 둔 동안의 예약은 위 규칙으로 처리한다.
+- 앞선 실행이 끝나지 않았으면 기본으로 최신 1건을 대기시킨다. 건너뛰거나 최대 10건을 대기시킬 수도 있다.
+- 정지 중에 지난 예약은 기본으로 최신 1건만 실행한다. **2분보다 늦으면 건너뛰기**도 선택할 수 있다.
+- 예약을 만든 관리자의 권한을 실행마다 확인하고 분석 시작 시 입력을 고정한다. 예약을 삭제해도 이미 대기열에 넣은 실행은 유지된다. [cron, 시간대와 일광 절약 시간 규칙](EXECUTION.md#예약)
 
 ## 이전 실행과 비교
 
-보고서 화면은 같은 프로젝트의 이전 실행과 비교한다. 기준은 같은 소스(Git 저장소와 브랜치, 또는 source root와 경로), 같은 프로필과 범위의 가장 최근 완료·부분 완료 보고서다. 비교를 불러오지 못해도 보고서는 그대로 보인다.
+보고서 화면의 **이전 실행과 비교**는 소스·프로필·범위가 같은 가장 최근 완료·부분 완료 보고서를 기준으로 한다.
 
 | 상태 | 뜻 |
 |---|---|
-| `new` | 이번에만 있다 |
-| `persisting` | 양쪽에 있고 개수·심각도·검증 상태·영역이 같다. 줄 위치만 바뀐 것도 여기에 든다 |
-| `changed` | 양쪽에 있고 개수·심각도·검증 상태·영역 중 하나가 다르다 |
-| `resolved_observed` | 기준에만 있고, 이번 실행이 같은 소스·범위에서 같은 도구를 성공적으로 실행해 그 파일을 실제로 검사했다. 도구 버전과 규칙이 같고, 소스 안 억제 주석 때문에 사라진 것이 아니다 |
-| `absent_unverified` | 기준에만 있으나 위 조건을 확인하지 못했다. 사유가 함께 나온다 |
+| `new` | 이번 실행에서 처음 나타남 |
+| `persisting` | 두 실행에서 같은 개수·심각도·검증 상태·영역으로 관찰됨 |
+| `changed` | 두 실행에 있으며 개수·심각도·검증 상태·영역 중 하나 이상이 달라짐 |
+| `resolved_observed` | 같은 버전·규칙의 도구가 같은 범위에서 해당 파일을 실제로 재검사했고 이전 진단이 사라진 것으로 관찰됨 |
+| `absent_unverified` | 이번 실행에 나타나지 않았지만 검사 실패·범위 변경 등으로 해결 여부를 확인할 수 없음 |
 
-- **사라진 발견을 해결로 세지 않는다.** 검사가 빠졌거나 실패했거나 범위가 줄었거나 규칙이 바뀌었거나 억제 주석이 생겼으면 `absent_unverified`다. 모델이 후보를 다시 내지 않은 것은 관찰이 아니므로 모델 후보는 `resolved_observed`가 되지 않는다.
-- 같은 식별의 발견이 한쪽에 여럿이면 하나씩 짝짓지 않고 묶음 전체의 상태를 `ambiguous`로 표시한다. 경로만 바뀐 항목은 이동 후보로 보여 줄 뿐 자동으로 합치지 않는다.
-- **사람 판정의 적용.** 판정은 발견의 식별(fingerprint)마다 최신 기록 하나가 적용된다. 식별이 약하거나 모호하면 자동 적용하지 않고 사람이 그 발견에서 다시 판정해야 한다. 만료 시각이 지났거나 경로 범위 밖이면 `open`으로 돌아간다.
-- 위험 수용·오탐·억제로 판정한 발견은 조치 집계에서 빠지고 "숨김 판정"으로 따로 센다. 전체 발견 수와 원시 진단, 비교에는 그대로 남는다.
-- 과거 리비전을 열면 그 리비전을 게시할 때의 판정이 보이고, 지금의 판정은 따로 표시한다.
-
-비교와 판정의 계약은 [보고서](REPORT.md)에 있다.
+도구나 규칙이 달라지거나 억제 주석이 생긴 경우, 모델이 같은 후보를 다시 내지 않은 경우는 `absent_unverified`가 될 수 있다. 같은 식별자가 여러 개면 `ambiguous`로 표시하고 경로만 바뀐 항목은 이동 후보로 보여 준다. 위험 수용·오탐·억제는 조치 집계에서 빠져도 전체 발견과 비교에 남는다. 판정 사유는 감사 이력에 남고 과거 보고서에서는 게시 당시의 판정을 볼 수 있다. [비교와 판정](REPORT.md#run-비교)
 
 ## 모델 설정
 
-모델 검토에는 서버에 설치된 OpenCode와 사용할 모델이 필요하다. 인증을 요구하는 공급자에는 해당 모델의 API 키를 준비한다. 인증이 필요 없는 사내 endpoint도 연결할 수 있다. 모델 설정 전에도 정적 분석을 할 수 있다.
+모델 검토에는 서버에 설치된 OpenCode와 사용할 모델이 필요하다. 설정 전에도 정적 분석은 실행되며 보고서에 모델 검토를 수행하지 못한 이유가 나온다. 연결한 모델은 **소스를 모델에 보냄**이 켜진 프로젝트에 적용되고, 비밀값으로 선별된 파일은 제외된다.
 
 ### 관리자 화면에서 연결하기
 
-1. 웹에서 **관리 > OpenCode 연결**을 연다. **도구** 화면의 **OpenCode 연결**에서도 갈 수 있다.
-2. 서버에서 실행할 OpenCode의 경로를 입력한다. 기존 `opencode.json` 또는 `opencode.jsonc`를 쓸 때는 그 경로를 지정한다. 절대 경로나 `~/`로 시작하는 경로를 쓸 수 있다. `~/`는 CODEYE 서비스 Linux 계정의 홈이다.
-3. 필요한 경우에만 인증 파일의 경로와 `공급자/모델` 이름을 준다. API 키 방식의 OpenCode `auth.json` 또는 CODEYE 모델 키 파일을 사용할 수 있다. OpenCode에서 OAuth로만 로그인했다면 공급자가 지원하는 API 인증정보를 별도로 준비한다. 비운 항목에는 설치의 기본 설정을 적용한다.
-4. **설정 저장**을 누른 뒤 **저장한 설정으로 연결 확인**을 누른다. 공급자에 실제 요청 한 번을 보낸다. 결과에 표시된 경로나 모델 인증 상태를 확인하고 필요하면 고친다.
+1. **관리 > OpenCode 연결**을 연다. **도구** 화면에서도 같은 설정으로 이동할 수 있다.
+2. 서비스 머신의 OpenCode 실행 파일 경로를 입력한다. 이미 쓰는 `opencode.json` 또는 `opencode.jsonc`가 있다면 지정한다. `~/`는 서비스 Linux 계정의 홈이다. 비운 항목에는 설치의 기본 설정을 적용한다.
+3. 필요하면 `공급자/모델` 이름과 인증 파일 경로를 지정한다. OpenCode `auth.json`의 API 키나 CODEYE 모델 키 파일을 쓸 수 있다. OpenCode에서 OAuth로 로그인한 경우 공급자가 지원하는 API 인증정보를 따로 준비한다. 인증을 요구하지 않는 사내 모델도 연결할 수 있다.
+4. **설정 저장**을 누른 뒤 **저장한 설정으로 연결 확인**을 누른다. 모델에 합성 요청 한 번을 보내며 공급자에 따라 비용이 들 수 있다. 인증이나 연결이 실패하면 화면에 나온 원인을 고친다.
 
-`codeye up` 또는 `codeye start`로 운영하는 설치는 새 분석이 시작될 때 저장한 값을 읽는다. 별도로 실행한 서버와 노드의 모델은 운영자가 각 실행 설정에서 관리한다.
-
-인터넷 없는 머신에서는 사내 endpoint와 인증 경로를 설정하고 [오프라인 모드](OPERATIONS.md#오프라인-모드)의 조건을 따른다.
-
-<details>
-<summary>사내 OpenAI 호환 서버용 opencode.json 예시</summary>
-
-기존 설정 파일이 있으면 그 파일을 지정한다. 새로 만들 때는 예시의 주소와 `review-model`을 실제 서버 주소와 모델 ID로 바꾼다. 인증이 필요하면 서비스 계정의 인증 파일에서 같은 공급자 이름(`internal`)을 사용한다.
-
-```json
-{
-  "model": "internal/review-model",
-  "provider": {
-    "internal": {
-      "npm": "@ai-sdk/openai-compatible",
-      "options": {"baseURL": "https://llm.example.test/v1"},
-      "models": {"review-model": {"name": "Review model"}}
-    }
-  }
-}
-```
-
-</details>
+`codeye up` 또는 `codeye start`로 운영하는 설치는 다음 분석부터 저장한 설정을 적용한다. 별도 노드는 운영자가 각 노드의 모델을 설정한다. 사내 서버를 연결하는 방법은 [사내 모델 endpoint](OPERATIONS.md#사내-모델-endpoint)에 있다.
 
 ### 터미널에서 연결하기
 
-OpenCode의 기본 탐색 경로는 `~/.opencode/bin/opencode`와 PATH다. 서비스 계정의 OpenCode `auth.json`에 API 키가 있으면 사용할 수 있다. 터미널에서 OpenAI 키를 전달하는 예다.
-
-```bash
-export OPENAI_API_KEY=sk-...      # 이미 ~/.bashrc에 있으면 그대로 둔다
-codeye up
-```
-
-- `codeye up`은 `OPENAI_API_KEY`(또는 `ANTHROPIC_API_KEY`, `OPENCODE_API_KEY`)를 `<state_dir>/secrets/model.json`(본인만 읽을 수 있는 파일)에 저장하고, 선택한 모델로 한 번 시험 호출한 뒤 결과를 보여 준다. 키를 바꾼 뒤 다시 `codeye up`을 하면 새 키로 다시 시험한다.
-- 키는 이 파일에만 남는다. 로그·보고서·화면·프로세스 인자에는 나오지 않는다. 키를 지우려면 그 파일을 지운다.
-- 모델을 바꾸려면 설정에 `"agent": {"model": {"name": "openai/gpt-6.1-sol"}}`처럼 이름을 적는다.
-- 시험 호출이 실패해도 분석은 실행된다. 보고서의 코드 분석 절에 모델 검토를 하지 못한 이유(예: "모델 공급자가 API 키를 거부했다")가 나온다. 언제든 `codeye model probe`로 다시 확인한다. 실제 추론을 한 번 요청하므로 비용이 조금 든다.
-- 모델이 설정되면 "소스를 모델에 보냄"이 켜진 프로젝트(기본 켬, 로컬 폴더와 Git 저장소 모두)의 코드를 모델에 보낸다. 빼려면 등록할 때 고급에서 끈다. 비밀값으로 선별된 파일은 보내지 않는다.
-- OpenAI 호환 서버(사내 게이트웨이, 로컬 추론 서버)를 쓰려면 `model.json`에 `"base_url": "https://…/v1"`을 더한다. chat completions만 지원하는 서버면 `"openai_compatible": true`도 더한다([검토](REVIEW.md#모델-설정)).
+`codeye up`은 `~/.opencode/bin/opencode`와 PATH에서 OpenCode를 찾는다. 온라인 설치에서 `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` 또는 `OPENCODE_API_KEY`를 환경에 설정하고 `codeye up`을 실행하면 `<state_dir>/secrets/model.json`에 키를 저장한다(권한 `0600`). 이전에 확인한 모델 설정과 달라지면 연결을 한 번 확인한다. `codeye model probe`로 다시 확인할 수 있다. [인증 파일과 OpenAI 호환 서버](REVIEW.md#모델-설정)
 
 ## 모델 검토 설정
 
-모델 설정이 없으면 문서·코드의 모델 검토 단계는 실행하지 않는다. 보고서에는 "모델 검토 미수행"으로 나온다. 다른 모델이나 인터넷 서비스로 자동 전환하지 않는다.
-
-`agent.model`의 모든 항목은 선택이다. 위 [모델 설정](#모델-설정)만으로 충분하다.
-
-```json
-"agent": {
-  "model": {"name": "openai/gpt-6.2-sol", "opencode": "/home/user/.opencode/bin/opencode",
-            "config_file": "/home/user/.config/opencode/opencode.jsonc",
-            "credential_file": "/home/user/.config/codeye/model.json", "timeout_seconds": 180,
-            "review_max_calls": 99}
-}
-```
-
-- `opencode`를 비우면 `~/.opencode/bin/opencode`, 없으면 PATH의 `opencode`를 쓴다. `config_file`은 기존 OpenCode JSON/JSONC 설정을 지정할 때 쓴다. `name`은 모델을 덮어쓸 때, `credential_file`은 기존 인증 파일을 다른 곳에 둘 때 적는다. `timeout_seconds`는 모델 호출 한 번의 제한시간이다(기본 180초).
-- `relay_file`은 승인된 로컬 relay를 쓸 때만 넣는다. 이 저장소의 `scripts/model_budget_relay.py`는 예산 상한을 강제하는 QA 전용 relay이며 제품 구성요소가 아니다. 사용법은 그 파일의 머리말과 `--help`에 있다.
-- `review_max_calls`는 분석 시도 하나가 쓸 모델 호출 수의 상한이다(15~2,013회, 기본 99). 일반 검토에는 최대 207회가 적용되고 확장 코드 검토에서 운영자가 지정한 더 높은 상한을 사용한다. 실제 호출과 요청·수락 범위는 보고서의 장부에서 확인한다. [모듈 단위 검토와 호출 한도](REVIEW.md#모듈-단위-검토-분할)
-- 모델 연결은 `codeye model probe`(서비스 설정의 모델) 또는 `codeye model probe --executable PATH --model PROVIDER/MODEL [--credential-file PATH | --relay-file PATH]`로 확인한다. 이 명령은 실제 추론을 요청하므로 비용이 들 수 있다. `codeye doctor`는 모델을 호출하지 않는다.
+실행 파일·설정·인증 파일·모델과 호출당 제한시간은 `agent.model`에서 지정할 수 있다. `relay_file`은 운영자가 승인한 relay를 쓸 때의 설정이다. `review_max_calls`는 분석 시도당 모델 호출 상한이다(15~2,013회, 기본 99회). 일반 검토에는 최대 207회가 적용된다. 더 높은 상한을 사용하려면 실행할 때 **확장 코드 검토**를 선택한다. 모델을 호출하지 않고 설정을 점검하려면 `codeye doctor`를 사용한다. [서비스 설정](OPERATIONS.md#서비스-설정-파일) · [모듈 단위 검토와 호출 한도](REVIEW.md#모듈-단위-검토-분할)
 
 ## 저장 공간
 
@@ -299,53 +197,24 @@ Linux의 systemd 사용자 서비스에서 실행한다. `codeye service install
 
 연결된 머신에서 배포 파일과 검증 파일을 받아 함께 옮긴다. 묶음 안 `INSTALL.md`의 검증 절차를 마친 뒤 `./codeye up --offline /절대/프로젝트/경로`를 실행한다. 한 번 지정한 오프라인 설정은 저장된다. 필요한 PostgreSQL, 분석 도구, 모델 실행기는 대상과 같은 OS/arch용으로 따로 준비한다. [폐쇄망 배포팩](OPERATIONS.md#폐쇄망-배포팩)
 
-## 업그레이드 (설계 절차, 시험 안 함)
+<a id="업그레이드-설계-절차-시험-안-함"></a>
 
-이전 버전에서 올리는 절차 전체는 시험하지 못했다. 각 명령은 개별로 실행해 보았다.
+## 업그레이드
 
-```sh
-codeye stop
-codeye backup
-# 새 codeye 바이너리와 web/dist로 교체
-codeye up
-```
-
-관리형 PostgreSQL이면 `codeye up`(과 `start`)이 schema를 맞춘다. 데이터가 있으면 먼저 `pg_dump` 사본(`<백업 디렉터리>/codeye-pre-migrate-<UTC>/database.dump`, 빈 DB에 `pg_restore`로 되돌린다)을 쓴다. `database.mode: external`이면 migration은 `codeye migrate`만 하고, start는 schema가 다르면 시작하지 않는다.
+v0.1.0 설치의 계정, 프로젝트와 보고서를 이어서 쓰려면 기존 설치를 백업한 뒤 같은 설정과 상태 디렉터리로 v0.1.1을 시작한다. 관리형·외부 PostgreSQL별 이전 절차와 서비스 재시작 방법은 [배포판 업그레이드](OPERATIONS.md#배포판-업그레이드)에 있다.
 
 ## 문제 해결
 
-| 증상(출력) | 원인과 조치 |
-|---|---|
-| `PostgreSQL binaries not found (searched: …)` | PostgreSQL을 설치한다(Ubuntu: `sudo apt install postgresql`). 다른 위치면 `codeye up --postgres-bin-dir DIR` 또는 `database.postgres_bin_dir`. 이미 있는 서버를 쓰려면 `database.mode: external` |
-| `database.postgres_bin_dir …: missing pg_restore` 같은 오류 | 적은 디렉터리에 필요한 프로그램이 없다. 다섯 프로그램이 모두 있는 `bin` 디렉터리를 준다. 적은 경로가 틀리면 다른 곳을 찾지 않는다 |
-| `the managed data directory … was created by PostgreSQL 16, found 17 binaries …` | cluster를 만든 주 버전의 프로그램을 `postgres_bin_dir`로 준다. 버전을 올리려면 그 버전으로 백업하고 새 `state_dir`에 복원한다 |
-| `PostgreSQL did not start (…); see …/logs/postgres.log` | 그 로그를 본다 |
-| `web UI not built - run …` | 실행 파일 옆에 `web/dist`가 없다. 빌드하거나 `web_dir`를 적는다. API는 떠 있다 |
-| `note: ignoring PGHOST, … from the environment` | 관리형 모드는 셸의 `PG*`·`CODEYE_DATABASE_URL`을 쓰지 않는다. 정상 |
-| `CODEYE_DATABASE_URL is not set (database.mode external)` | 셸에 DB URL이 없다. [설정 파일](#설정-파일) |
-| `database unavailable: invalid input`, status의 `database=false` | external: URL 형식이 틀렸거나 환경에 `PGPASSWORD` 같은 `PG*` 변수가 있다. 그 변수를 지운다. managed: PostgreSQL이 멈춰 있다. `codeye up` |
-| `database schema is outdated (applied N, this binary expects M)…` | external: 백업한 뒤 `codeye migrate` |
-| `database schema is newer than this codeye binary …` | 더 새 바이너리로 만든 DB다. 그 바이너리를 쓴다 |
-| `config is not valid: …` | 설정 오류. 메시지가 필드를 알려 준다(예: `agent.toolchain_path entries must be absolute, clean paths`) |
-| `CODEYE is already running (controller …)` | 이미 실행 중이다. 종료 코드 0. `codeye up`은 이때 새 로그인 링크를 준다 |
-| `127.0.0.1:7331 is in use by another program; using 127.0.0.1:7332` | 다른 프로그램이 기본 포트를 쓴다. 다음 빈 포트를 썼고 `stop`·`status`·`open`이 그 포트를 안다 |
-| `the listen address … is already in use by a process codeye start did not record` | 설정에 적은 `listen` 포트를 다른 프로그램이 쓴다. `listen`을 바꾸거나 지우거나 그 프로그램을 멈춘다 |
-| `the agent is still finishing its work and takes no new work; …` | 설정이 바뀌어 에이전트를 다시 띄우려 했지만 실행 중인 분석이 drain 시간 안에 끝나지 않았다. 에이전트는 그 분석을 끝내고 종료한다. `codeye status`로 확인한 뒤 같은 명령을 다시 한다 |
-| `… contains or is inside the CODEYE data directory …` | 상태·백업 디렉터리를 포함하는 폴더는 분석하지 않는다. 프로젝트 폴더를 준다 |
-| `an agent that codeye start did not record holds …/agent/agent.lock …` | 수동으로 띄운 `codeye agent`가 같은 상태 디렉터리를 쓴다. 그 프로세스를 직접 멈춘다 |
-| `removed stale controller record (pid … pid_reused)` | 이전 프로세스가 비정상 종료됐다. 기록만 지웠고 신호는 보내지 않았다. 정상 |
-| `status`의 `issue: stale_record`, 종료 코드 1 | 위와 같다. `codeye start`가 정리한다 |
-| `the agent did not enroll and report a heartbeat in time` | `state_dir/logs/agent.log` 확인. 도구 경로·source root 경로가 맞는지 본다 |
-| 보고서 환경 절의 의존성 표에 "의존성 저장소(registry·proxy)에 연결하지 못했다"(`registry_unreachable`) | 인터넷이나 proxy에 닿지 않는다. 네트워크를 확인하거나 `agent.dependencies.go_proxy`(Go)·`agent.dependencies.npm_registry`(JS/TS)에 쓸 수 있는 주소를 적는다. 분석은 받은 것 없이 계속됐다 |
-| 의존성 표에 `download_limit_exceeded`·`dependency_budget_exhausted` | 받을 의존성이 크거나 느리다. `agent.dependencies.max_download_bytes`·`timeout_seconds`·`total_timeout_seconds`를 늘린다 |
-| 의존성 표에 `private_module_not_fetched` | 비공개 모듈은 공개 proxy에서 받지 않는다. 그 저장소에서 한 번 `go mod download`를 해 내 Go 모듈 캐시에 두면 다음 분석이 쓴다 |
-| 분석이 시작되지 않고 저장 공간 상한 문구가 나온다 | [저장 공간](#저장-공간). `codeye status`의 `exceeded=true` 영역을 정리하거나 상한을 늘린다 |
-| stop의 `outcome: recovery_required` | [정지](#정지) |
-| 실행 화면의 "정리를 확인해야 다시 실행할 수 있습니다"(run `recovery_required`) | 이 실행을 맡은 노드가 사라졌거나 하위 프로세스가 끝났는지 확인하지 못했다. `codeye status`와 작업 관리자에서 그 실행의 프로세스(`codeye worker`와 그 자식)가 없는지 보고, 확인 상자를 체크한 뒤 "정리 확인 후 다시 실행"을 누른다. CLI는 `codeye run recover --id RUN_ID --confirm-cleanup`이다(설정 파일의 DB를 쓴다). 확인은 감사 기록에 남는다 |
-| `the target database is not empty; restore only into a new, empty database` | 복원 대상 DB가 비어 있지 않다. 새 DB를 만든다 |
-| `the target state_dir already has admin.json; restore needs a fresh state_dir` | 새 `state_dir`를 쓴다 |
-| `backup verification failed: …` | 세트가 손상됐거나 완성되지 않았다(manifest 없음). 다른 세트를 쓴다 |
-| 로그인 링크가 만료됐거나 이미 썼다 | `codeye open` |
-| `codeye start/stop/status manage processes on Linux only …` | Windows·macOS에서는 `codeye up`으로 서비스를 띄우지 못한다(`codeye serve`·`agent`는 따로 실행할 수 있다) |
+`codeye status --format json`으로 프로세스와 DB 상태를 확인하고 `codeye doctor --config PATH`로 설치를 점검한다. 자세한 로그는 `state_dir/logs/`의 `controller.log`, `agent.log`, `postgres.log`에 있다. [점검 항목](OPERATIONS.md#codeye-doctor) · [장애 대응](OPERATIONS.md#장애-대응-runbook)
 
-점검 순서: `codeye status --format json` → `codeye doctor --config PATH` → `state_dir/logs/controller.log`, `agent.log`, `postgres.log`. 로그와 `status`·`stop` 출력에는 DB 비밀번호와 토큰이 나오지 않는다(`up`·`open`이 출력하는 로그인 링크에는 일회용 토큰이 있다). 문의할 때 설정 파일과 로그를 그대로 보내도 연결 정보는 들어 있지 않다. 다만 경로와 프로젝트 이름은 들어 있다. 관리형 DB 비밀번호는 `state_dir/postgres/password`에만 있으니 상태 디렉터리를 통째로 보내지 않는다.
+| 증상 | 확인할 것 |
+|---|---|
+| PostgreSQL 프로그램을 찾지 못함 | 설정한 `database.postgres_bin_dir`에 `initdb`, `pg_ctl`, `postgres`, `pg_dump`, `pg_restore`가 모두 있는지 확인한다. 기존 관리형 DB에는 해당 DB를 만든 PostgreSQL 주 버전이 필요하다. [관리형 PostgreSQL](OPERATIONS.md#관리형-postgresql) |
+| 외부 DB 연결 또는 schema 오류 | `CODEYE_DATABASE_URL`과 연결에 영향을 주는 `PG*` 변수를 확인한다. DB가 이 실행 파일보다 새 schema라면 그 schema에 맞는 배포판을 사용한다. [외부 PostgreSQL](OPERATIONS.md#외부-postgresql) |
+| 웹 화면 없음(`web UI not built`) | 배포된 실행 파일과 함께 제공된 `web/dist`가 있는지 확인한다. 다른 위치를 쓴다면 `web_dir`를 설정한다. |
+| 기본 포트 또는 지정한 포트 사용 중 | 기본 포트가 사용 중이면 `up`이 선택한 주소를 터미널에서 확인한다. 직접 지정한 `listen`의 포트가 사용 중이면 설정을 바꾸거나 그 프로그램을 중지한다. [받는 주소](OPERATIONS.md#받는-주소) |
+| 로그인 링크가 만료됐거나 이미 사용됨 | `codeye open`으로 새 링크를 받는다. |
+| 소스 확보 실패 | 비공개 저장소는 플랫폼 GitHub 계정의 읽기 권한을, 폴더는 서비스 계정의 접근 권한을 확인한다. 상태·백업 디렉터리 안이거나 이를 포함하는 경로는 거부된다. |
+| 의존성을 준비하지 못함 | 환경 분석에서 대상 모듈과 `registry_unreachable`, `dependency_budget_exhausted`, `private_module_not_fetched` 등 사유를 확인한다. [의존성 설정](ARCHITECTURE.md#의존성-준비) |
+| 작업 대기 또는 정리 확인 필요 | 저장 공간 상한, 노드 상태와 실행 화면의 대기 사유를 확인한다. `recovery_required`라면 해당 노드의 워커와 자식 프로세스 정리를 확인한 뒤 **정리 확인 후 다시 실행**을 쓴다. [장애 대응](OPERATIONS.md#장애-대응-runbook) |
+| 새 설치로 복원 실패 | 빈 DB와 새 상태 디렉터리를 지정하고 백업의 manifest와 검증 결과를 확인한다. [백업과 복원](OPERATIONS.md#백업과-복원) |

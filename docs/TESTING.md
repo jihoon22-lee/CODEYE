@@ -485,7 +485,7 @@ TC-104는 구문 검사와 관리 JS가 중복 진단을 내어 목록에서 관
 | TC-173 | `codeye stop` 뒤 `codeye up`, 정지 상태의 `codeye backup`(설정에 `backup_dir` 없음), 새 `state_dir`로의 `codeye restore` | stop의 `database`는 `stopped`이고 그 cluster의 PostgreSQL 프로세스가 없다. 다시 up하면 초기화·사용자 생성 없이 같은 프로젝트가 보인다. 백업은 `<state_dir>-backups` 아래에 세트를 만들고 띄운 PostgreSQL을 다시 멈춘다. 비밀번호는 `postgres/password` 밖의 상태 파일에 없다. 복원은 새 상태 디렉터리에 cluster를 만들고 복원하며 그 뒤 up이 새 노드로 시작한다(복원은 수동 실행으로 확인, smoke에는 없다). | NFR-003,006 |
 | TC-174 | PostgreSQL 프로그램 디렉터리: 16·17·13 설치, 프로그램이 빠진 디렉터리, 명시한 틀린 경로, 아무것도 없음, 주 버전 16 데이터 디렉터리와 17 프로그램, `PG_VERSION` 없는 비어 있지 않은 디렉터리 | 명시가 없으면 가장 높은 주 버전(14 이상), 데이터 디렉터리가 있으면 그 버전을 고른다. 플래그가 설정보다 먼저다. 명시한 경로가 조건을 채우지 않으면 다른 곳을 찾지 않고 그 경로와 이유를 말한다. 없으면 설치 방법·`postgres_bin_dir`·`external`을 알리는 오류다. 다른 주 버전 데이터 디렉터리와 정체 모를 디렉터리는 거부한다. | REQ-004; NFR-006 |
 | TC-175 | `{"schema_version":"0.1"}`만 있는 설정, `up`의 설정 편집(필드 순서·기본값·잘못된 결과), 기본 포트 7331을 다른 프로그램이 쓰는 상태, 설정에 적은 포트를 다른 프로그램이 쓰는 상태 | 기본값은 관리형 DB, `$XDG_STATE_HOME/codeye`(없으면 `~/.local/state/codeye`), root 없음이다. 편집은 다른 필드와 순서를 보존하고 기본값을 쓰지 않으며, 검증을 통과하지 못하면 파일을 바꾸지 않는다. 기본 포트가 쓰이면 7332 이후 빈 포트로 띄우고 `stop`·`status`·`open`이 그 주소를 쓴다. 적은 포트가 쓰이면 시작하지 않는다(포트 이동은 수동 실행으로 확인). | REQ-001; NFR-006 |
-| TC-240 | `offline_pack.py build`를 두 번, `verify`에 바뀐·빠진·더해진 파일, ELF 프로그램 헤더(interpreter·dynamic·없음) | 같은 commit에서 묶음 바이트가 같다(이 머신 sha256 일치). 묶음은 정적 실행 파일·`web/dist`·문서·설정 예시·INSTALL.md·MANIFEST.json·SHA256SUMS이고 `sha256sum -c`가 통과한다. verify는 세 변경을 모두 보고한다. 동적 실행 파일은 묶지 않는다(`scripts/test_offline_pack.py`, 수동 build) | REQ-030; NFR-007 |
+| TC-240 | `offline_pack.py build`를 두 번, `verify`에 바뀐·빠진·더해진 파일, ELF 프로그램 헤더(interpreter·dynamic·없음), `INSTALL.md`의 안내서·변경 이력 링크 | 같은 commit에서 묶음 바이트가 같다(이 머신 sha256 일치). 묶음은 정적 실행 파일·`web/dist`·문서·`CHANGELOG.md`·설정 예시·`INSTALL.md`·`THIRD_PARTY_NOTICES/`·`MANIFEST.json`·`SHA256SUMS`를 담는다. 설치 문서의 링크는 묶음 안에서 열리고 `sha256sum -c`가 통과한다. verify는 세 변경을 모두 보고한다. 동적 실행 파일은 묶지 않는다(`scripts/test_offline_pack.py`, 수동 build) | REQ-030; NFR-007 |
 | TC-241 | 웹 산출물의 외부 글꼴·CDN script·CSS `@import`·`url()`·`fetch`·원격 source map, 식별자·문구 주소, 빌드된 `web/dist` | 외부 load마다 실패하고 식별자·문구 주소는 통과한다. 빌드된 화면은 통과한다(CI 웹 작업의 `check-web`, `scripts/test_offline_pack.py`) | REQ-030 |
 | TC-242 | `offline: true`·`up --offline`: git_hosts 없음, Go proxy 없음·캐시 있음·없음·`off`·사내 proxy, npm·pip·cargo 미러 없음, `base_url` 없는 키 파일, 환경변수 키, 키 없는 모델, relay | 설정에 저장되고 에이전트가 `--offline`을 받는다. git_hosts는 빈 목록이다. Go는 운영자 캐시만 읽거나 사내 proxy만 쓰고 그 밖은 `offline_no_registry_configured`, GOSUMDB는 `off`다. 다른 생태계는 받지 않는다. 모델은 `base_url`이나 relay만 쓰고 환경변수 키는 키 파일을 바꾸지 않는다(`TestOfflineConfiguration`, `TestEditFileSetsOffline`, `TestOfflineModelNeedsAnEndpoint`, `TestInstanceAgentArgvOffline`, `TestInstanceOfflineExampleParses`, `TestSetupInstanceModelOfflineKeepsKeyFile`, `TestOfflineGo*`, `TestOfflineJSAndPythonAndRustNeedARegistry`, `TestOfflineNeedsAConfiguredEndpoint`, `TestManagedOpenCodePinsTheNpmRegistry`). GitHub.com은 오프라인에서 요청하지 않으며 설정한 사내 GHES는 인증정보와 사내 CA로 연결한다(`TestOfflinePullRequestHost`, `TestPullRequestRunsOverHTTP`, `TestOfflineGHESPullRequestUsesConfiguredPlatform`) | REQ-030; NFR-006 |
 | TC-243 | `ca_bundle`: 상대 경로, 인증서 없는 파일, 사설 CA HTTPS 미러에 go·git·npm·pnpm·yarn·pip·uv·OpenCode를 CA 변수 있이·없이 | 설정·에이전트가 잘못된 파일을 거부한다. 다섯 변수가 같은 파일을 가리킨다. 변수가 있으면 성공하고 없으면 인증서 검증 오류다. OpenCode는 `NODE_EXTRA_CA_CERTS`만, `SSL_CERT_FILE`만으로도 성공한다. git은 CA 변수와 GitHub header를 함께 환경으로 받고 token은 argv에 없다(`TestCheckCABundle`, `TestCAEnvNamesOneBundleForEveryTool`, `TestGitCommandsTrustTheConfiguredCABundle`, `TestGitGetsTheCABundleAndTheTokenTogether`, `scripts/offline_smoke.py`). cargo는 실행하지 않았다 | REQ-030; NFR-006 |
@@ -676,6 +676,14 @@ python3 scripts/offline_smoke.py --pack .codeye/pack/codeye-VERSION-linux-amd64.
 | Web / tests and build | `npm ci`, `npm test`, `npm run build`, 빌드한 화면의 외부 주소 검사(`offline_pack.py check-web web/dist`) |
 
 CI 러너에는 go vet 말고 분석 도구가 없어 실도구 시험은 skip되고 재생 시험만 돈다. Windows CI의 단위 시험은 Windows 11의 NativeExecutor·DB·전체 플랫폼 수용 시험을 대신하지 않는다.
+
+### 공개 배포판 설치와 업그레이드
+
+TC-170~173의 첫 실행·재시작과 TC-240·245의 배포팩 검증은 실제 릴리스 파일에서도 확인한다.
+
+1. 공개 릴리스에서 각 CPU용 압축 파일과 같은 이름의 `.sha256`을 새 디렉터리에 내려받는다. `sha256sum -c <파일>.sha256`으로 전송을 확인하고 `python3 scripts/offline_pack.py verify <파일>.tar.gz`로 내부 목록과 파일 해시를 검증한다.
+2. 해당 CPU에서 압축을 풀고 `./codeye version --json`의 버전·커밋을 릴리스 태그와 대조한다. 새 환경에서 `./codeye up`으로 시작해 브라우저 접속, 프로젝트 분석, 게시된 보고서 조회를 확인한다. 에뮬레이터에서 확인한 범위와 실제 호스트에서 확인한 범위를 구분해 기록한다.
+3. 이전 공개 배포판으로 프로젝트와 보고서를 만든 뒤 [배포판 업그레이드](OPERATIONS.md#배포판-업그레이드)를 따른다. 기존 보고서의 같은 리비전을 같은 옵션으로 JSON 내보냈을 때 바이트가 같은지 비교하고, 같은 프로젝트에서 새 분석과 HTML 내보내기가 되는지 확인한다.
 
 ## 보조 검증과 제품 시험의 차이
 

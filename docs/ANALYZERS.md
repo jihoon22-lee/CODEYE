@@ -1,6 +1,6 @@
 # 정적 분석기
 
-이 문서는 CODEYE가 정적 분석 도구를 실행하고 그 결과를 관찰로 바꾸는 계약이다. 공통 어댑터 규칙, 언어 팩이 함께 쓰는 분석기 팩 계약, 팩별 규칙을 차례로 다룬다. 프로세스 실행기와 작업 사본은 [실행](EXECUTION.md), 보고서 모델과 run 비교는 [보고서](REPORT.md), 모델 검토 역할은 [검토](REVIEW.md), 신뢰 경계는 [보안](SECURITY.md), 노드 설정 절차는 [사용 안내서](GUIDE.md)와 [운영](OPERATIONS.md)을 따른다.
+정적 분석 도구가 실행되는 조건과 결과를 관찰로 바꾸는 규칙을 다룬다. [분석기 목록](#분석기-목록)에서 도구·규칙 팩을, [도구 설정](#도구-설정)에서 플래그를 찾을 수 있다. [Go 내부 패키지 의존 관계](#go-내부-패키지-의존-관계)와 [구조·중복 지표 및 비밀값](#구조중복-지표와-비밀값-팩)은 보고서의 해당 절로 연결된다. 노드 설정은 [운영](OPERATIONS.md), 테스트 실행은 [실행](EXECUTION.md#기존-테스트-실행), 관찰 표시와 비교는 [보고서](REPORT.md)를 따른다.
 
 구현 위치는 `internal/worker/analysis/` 아래다. 공통 산출물은 [`analyzer_observations` schema](../schemas/analyzer-observations.schema.json), 도구별 실행 서술은 [`analyzer.schema.json`](../schemas/analyzer.schema.json)을 따르는 `examples/analyzer-*.yaml`, 실제 실행으로 얻은 envelope 예시는 `examples/observations-*.json`이다.
 
@@ -325,16 +325,12 @@ deep-review capability는 시작 probe에 성공한 기준 분석기가 하나 �
 
 ### 저장소 코드 실행 허가
 
-정적 분석도 저장소가 정한 코드를 실행할 수 있다(JS 설정 파일, build script, compiler plugin, proc macro, configure 단계). 이런 작업은 노드 운영자가 명시적으로 허가한 소스에서만 실행한다(결정 A23, [결정](DECISIONS.md)).
-
-- **허가**: `codeye agent --repo-code-source-root ID`(반복 가능, 운영자가 따로 띄운 노드의 플래그). ID는 같은 agent의 `--source-root` 매핑이 있어야 하며 없으면 옵션 오류다. agent는 그 local source root의 job에만 `allow_repository_code=true`를 보낸다. Git 소스는 허가를 받지 않는다. `--project-analysis-policy` 노드(`codeye up`의 에이전트)는 root 허가 대신 job의 프로젝트 분석 선택 `run_build_scripts`를 로컬·Git 모두에 쓴다(로컬 폴더 기본 켬, Git 저장소 기본 끔). 관리자가 아닌 사람이 시작한 run은 job의 `offered`가 꺼 둔 것을 하지 않는다. 워커는 `analysis.Job.AllowRepositoryCode`로 받는다. 스냅샷·저장소 설정·run 요청은 이 값을 올릴 수 없다.
+정적 분석도 build script·proc macro처럼 저장소가 정한 코드를 실행할 수 있다. 노드 에이전트가 [실행 권한](EXECUTION.md#신뢰와-실행-권한)을 적용하고 워커에 결과를 `analysis.Job.AllowRepositoryCode`로 보낸다. 운영자가 `--repo-code-source-root ID`를 쓸 때는 같은 에이전트에 해당 `--source-root` 매핑이 있어야 한다. [결정 A23](DECISIONS.md)
 - **선언**: `pack.Task.RepositoryCode`. `Plan`이 manifest와 scope만으로 정하므로 대역도 같은 선언을 계획한다. 한 도구가 두 방식을 함께 계획할 수 있다. `Run`은 `Plan`이 선언한 것보다 더 실행하지 않는다. false로 선언한 작업이 실행 중 저장소 코드 경로로 넘어가는 대체 경로는 금지다.
-- **집행**: `Composite.Run`이 dispatch 전에 한 번 검사한다. 선언은 소유 분석기의 계획에서 다시 얻는다. 허가가 없으면 분석기를 호출하지 않고 `unsupported`(`repository_code_not_allowed`)로 끝내며 not-run envelope를 쓴다. 허가가 있어 프로세스를 실행한 작업에는 `repository_code_executed` 제약을 남긴다.
-- **우선순위**: 허가 검사가 도구 검사보다 먼저다. 허가가 없으면 도구가 없어도 사유는 `repository_code_not_allowed`이고 도구 사유는 제약으로 남는다.
+- **집행**: `Composite.Run`이 분석기의 계획에서 선언을 읽고 도구 상태보다 먼저 허가를 검사한다. 허가가 없으면 실행 없이 `unsupported`와 not-run envelope를 기록한다. 사유는 `repository_code_not_allowed` 또는 `repository_code_not_offered`이며 도구 상태는 제약으로 남긴다. 허가가 있어 프로세스를 실행하면 `repository_code_executed`를 기록한다.
 - **필수 여부와 무관**: 허가가 없는 기준 분석기 작업은 필수 작업 미완료이며 보고서는 `partial`이다.
-- 이 허가는 프로젝트 단위·revision 기반 권한 저장소를 대신하는 노드 운영자 설정이다. 프로젝트 권한 저장소는 구현하지 않았다([보안](SECURITY.md)).
 
-현재 저장소 코드를 실행하는 작업은 Rust의 cargo check와 clippy뿐이다. 다른 팩은 모두 `RepositoryCode=false`이며 근거는 팩별 절에 있다. 저장소 ESLint 설정을 따르는 실행, compile DB 생성(configure·cmake·bear)처럼 허가가 필요한 실행은 구현하지 않았다.
+현재 분석기 팩 중 Rust의 cargo check와 clippy에 이 권한을 적용한다. 기존 테스트 실행은 별도 작업이며 같은 허가를 받는다. 저장소 ESLint 설정 실행과 compile DB 생성(configure·cmake·bear)은 후속 작업이다. [기존 테스트 실행](EXECUTION.md#기존-테스트-실행)
 
 ### 범위에 없는 생태계와 팩 공백
 
@@ -558,13 +554,13 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 
 ## Go 팩
 
-go vet(기준), Staticcheck(추가 깊이), gofmt(형식 비교)를 제공한다. 세 작업 모두 저장소 코드를 실행하지 않는다.
+go vet은 기준 정적 분석기, Staticcheck는 심화 분석기, gofmt는 파일 형식 검사기다. 기존 Go 테스트 실행은 `with-tests`에서 별도로 수행한다. [기존 테스트 실행](EXECUTION.md#기존-테스트-실행)
 
-- 두 도구는 패키지를 읽어 type-check하고 분석할 뿐 패키지 코드를 실행하지 않는다. 테스트 파일도 type-check만 한다. `-vettool`·`-toolexec`·`-exec`, `go generate`, test 실행은 쓰지 않는다.
+- go vet과 Staticcheck는 테스트 파일을 포함한 패키지를 읽고 타입 검사한다. `-vettool`·`-toolexec`·`-exec`와 `go generate`는 사용하지 않는다.
 - `CGO_ENABLED=0`이므로 cgo 파일을 빌드하지 않고 C 컴파일러·`#cgo`·pkg-config를 호출하지 않는다.
 - go.mod의 `go` 줄은 언어 판이다. 일부 analyzer의 대상이 바뀌지만 프로그램 의미의 일부로 본다.
 
-모델 검토에서 선택한 Go HTTP 경로는 검증을 지나 실제로 읽거나 쓰는 구문까지 추가 발췌할 수 있다. 처리기에서 연결한 구현을 기준으로 같은 패키지 함수나 같은 수신자의 직접 반환 호출을 최대 두 번 따라간다. 래퍼가 인자로 받은 콜백을 직접 호출하는 경우 그 본문의 구문도 읽는다. 구문으로 확인한 `database/sql`·pgx의 SQL 호출과 구조체 필드 읽기·쓰기를 대상으로 하며, 발췌마다 스냅샷의 실제 줄과 기존 한도를 지킨다. 요청에는 연결에 필요한 근거도 함께 들어간 경우에만 결과 위치를 표시한다. 이 결과는 정적 소스 조건을 나타낸다. 실제 실행, 트랜잭션 커밋 또는 배포 권한은 별도 근거가 있어야 확인할 수 있다. [모델 검토](REVIEW.md#go-http-사용자-동작)
+go vet은 패키지 목록을 바탕으로 [Go 내부 패키지 의존 관계](#go-내부-패키지-의존-관계)를 함께 남긴다. 문서에 나온 HTTP 처리 경로와 호출·테스트의 연결은 [모델 검토](REVIEW.md#go-http-사용자-동작)에서 다룬다.
 
 ### 모듈과 계획
 
@@ -1075,7 +1071,7 @@ tsc와 type-aware 작업은 실행 전에 tsconfig 체인 전체(루트, 로컬 
 
 ## Rust 팩
 
-cargo check(기준)와 clippy(추가 깊이)다. 두 작업은 build script(`build.rs`), proc macro, 저장소 Cargo 설정을 컴파일·실행하므로 `RepositoryCode=true`이고 `--repo-code-source-root` 허가가 있는 소스에서만 실행한다. 허가가 없는 소스에서 Rust 기준 분석은 `unsupported`(`repository_code_not_allowed`)이고 보고서는 `partial`(`required_task_not_succeeded`)이다.
+cargo check(기준)와 clippy(추가 깊이)는 build script(`build.rs`), proc macro, 저장소 Cargo 설정을 사용할 수 있어 `RepositoryCode=true`다. [저장소 코드 실행 허가](#저장소-코드-실행-허가)를 적용한다. 기준 분석이 허가 문제로 `unsupported`이면 보고서는 `partial`(`required_task_not_succeeded`)이다.
 
 ### 도구와 rustup proxy 거부
 
