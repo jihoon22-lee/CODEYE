@@ -17,19 +17,19 @@ Ubuntu에서는 `sudo apt install postgresql`로 PostgreSQL을 설치할 수 있
 
 CPU에 맞는 배포 파일과 SHA-256 검증 파일을 같은 폴더에 받는다. 압축을 이미 풀었다면 그 안의 `INSTALL.md`를 연다.
 
-| Linux CPU | CODEYE v0.1.2 | 검증 파일 |
+| Linux CPU | CODEYE v0.1.3 | 검증 파일 |
 |---|---|---|
-| x86-64 (`amd64`) | [다운로드](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.2/codeye-v0.1.2-linux-amd64.tar.gz) | [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.2/codeye-v0.1.2-linux-amd64.tar.gz.sha256) |
-| ARM64 (`arm64`) | [다운로드](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.2/codeye-v0.1.2-linux-arm64.tar.gz) | [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.2/codeye-v0.1.2-linux-arm64.tar.gz.sha256) |
+| x86-64 (`amd64`) | [다운로드](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.3/codeye-v0.1.3-linux-amd64.tar.gz) | [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.3/codeye-v0.1.3-linux-amd64.tar.gz.sha256) |
+| ARM64 (`arm64`) | [다운로드](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.3/codeye-v0.1.3-linux-arm64.tar.gz) | [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.3/codeye-v0.1.3-linux-arm64.tar.gz.sha256) |
 
 **이전 배포판을 사용 중이라면** 기존 설정과 상태 디렉터리에서 계속 실행한다. 백업, 배포 파일 교체와 DB 처리 순서는 [배포판 업그레이드](OPERATIONS.md#배포판-업그레이드)를 따른다.
 
 처음 설치하는 x86-64 머신에서는 내려받은 폴더에서 다음과 같이 실행한다. ARM64는 명령의 `amd64`를 `arm64`로 바꾼다.
 
 ```sh
-sha256sum -c codeye-v0.1.2-linux-amd64.tar.gz.sha256 &&
-  tar --keep-old-files -xzf codeye-v0.1.2-linux-amd64.tar.gz &&
-  cd codeye-v0.1.2-linux-amd64 &&
+sha256sum -c codeye-v0.1.3-linux-amd64.tar.gz.sha256 &&
+  tar --keep-old-files -xzf codeye-v0.1.3-linux-amd64.tar.gz &&
+  cd codeye-v0.1.3-linux-amd64 &&
   sha256sum -c SHA256SUMS &&
   ./codeye up
 ```
@@ -152,7 +152,7 @@ codeye tools
 
 입력란을 비우고 저장하면 그 아래 표시한 자동 탐색 경로로 돌아간다. `agent.auto_detect`가 `false`이면 수동 지정만 해제된다. 별도 머신에서 띄운 노드는 그 머신의 에이전트 설정을 따른다.
 
-v0.1.2 배포판에서는 설정 파일에 실행 파일의 절대 경로를 적는다. 기본 파일은 `~/.config/codeye/config.json`이다. 기존 설정의 해당 항목을 바꾸고 서비스 머신에서 `./codeye up --no-open --no-probe`를 다시 실행한다.
+설정 파일로 관리하려면 실행 파일의 절대 경로를 적는다. v0.1.2에서도 이 방법을 쓸 수 있다. 기본 파일은 `~/.config/codeye/config.json`이다. 기존 설정의 해당 항목을 바꾸고 서비스 머신에서 `./codeye up --no-open --no-probe`를 다시 실행한다.
 
 ```json
 {
@@ -254,7 +254,7 @@ Linux의 systemd 사용자 서비스에서 실행한다. `codeye service install
 
 ## 업그레이드
 
-v0.1.1에서 쓰던 계정, 프로젝트와 보고서를 이어서 쓰려면 기존 설치를 백업한 뒤 같은 설정과 상태 디렉터리로 v0.1.2을 시작한다. 관리형·외부 PostgreSQL별 이전 절차와 서비스 재시작 방법은 [배포판 업그레이드](OPERATIONS.md#배포판-업그레이드)에 있다.
+이전 버전에서 쓰던 계정, 프로젝트와 보고서를 이어서 쓰려면 기존 설치를 백업한 뒤 같은 설정과 상태 디렉터리로 v0.1.3을 시작한다. 관리형·외부 PostgreSQL별 이전 절차와 서비스 재시작 방법은 [배포판 업그레이드](OPERATIONS.md#배포판-업그레이드)에 있다.
 
 ## 문제 해결
 

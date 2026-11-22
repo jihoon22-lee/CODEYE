@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CODEYE Core API
-  version: 0.1.2
+  version: 0.1.3
   description: >-
     CODEYE 웹 서비스의 HTTP API다. 기본 경로는 /api/v1이며 서버가 제공하는 operation은
     x-codeye-status가 implemented다. 요청 조건과 응답의 의미는 docs/API.md에서 설명한다.
