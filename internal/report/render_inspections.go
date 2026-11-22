@@ -29,7 +29,7 @@ func checkIdentity(tool StaticTool) string {
 	if tool.Analyzer == nil {
 		if analyzer, ok := map[string]string{"go-vet": "go.vet", "staticcheck": "go.staticcheck", "gofmt": "go.gofmt",
 			"tsc": "javascript.tsc", "mypy": "python.mypy", "pyright": "python.pyright", "bandit": "python.bandit",
-			"cargo-check": "rust.cargocheck", "lizard": "any.lizard", "jscpd": "any.jscpd"}[id]; ok {
+			"cargo-check": "rust.cargocheck", "dependency-cruiser": "javascript.dependency_cruiser", "import-linter": "python.import_linter", "pmd": "java.pmd", "spotbugs": "java.spotbugs", "lizard": "any.lizard", "jscpd": "any.jscpd"}[id]; ok {
 			return analyzer
 		}
 	}

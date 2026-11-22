@@ -256,6 +256,7 @@ type docInput struct {
 	DirectivePath    string           `json:"directive_path,omitempty"`
 	IncompleteList   bool             `json:"incomplete_list,omitempty"`
 	PackageReference *docPackageInput `json:"package_reference,omitempty"`
+	JavaAPI          string           `json:"public_api,omitempty"`
 }
 
 type docPackageInput struct {
@@ -366,12 +367,15 @@ func (s *roleStage) documents() analysis.TaskResult {
 		for i, e := range list {
 			d := byPath[e.DocumentPath()]
 			class := d.Class
-			if e.DirectivePath != "" {
+			if e.IsRustAPIDocument() {
+				class = "rustdoc"
+			} else if e.DirectivePath != "" {
 				class = "python_docstring"
 			}
 			x.Documents = append(x.Documents, docInput{EvidenceID: fmt.Sprintf("D%d", i+1), Path: e.Path, AppliesTo: d.AppliesTo, Class: class,
 				StartLine: e.Start, EndLine: e.End, Text: e.Text, DirectivePath: e.DirectivePath,
-				IncompleteList: incompleteDocumentList(e, list, evidence.lists[e.Path]), PackageReference: packageInput(e.PackageReference)})
+				IncompleteList: incompleteDocumentList(e, list, evidence.lists[e.Path]), PackageReference: packageInput(e.PackageReference),
+				JavaAPI: evidence.javaAPIs[e.ID]})
 		}
 		return x
 	}
@@ -723,7 +727,10 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		// An exact docstring window is documentation even if selected by a
 		// source scan as well. Separate implementation windows remain eligible.
 		docCatalog := catalogOf(docEv)
-		code = slices.DeleteFunc(code, func(x record.Excerpt) bool { return docCatalog[x.ID].DirectivePath != "" })
+		code = slices.DeleteFunc(code, func(x record.Excerpt) bool {
+			e := docCatalog[x.ID]
+			return e.DirectivePath != "" || e.IsJavaAPIDocument()
+		})
 		if len(code) == 0 {
 			return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
 		}
@@ -816,6 +823,10 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	}
 	s.setEvidence(append(append([]record.Excerpt{}, sent...), docEv...))
 	catalog := catalogOf(s.rec.Evidence)
+	javaBindings, err := s.javaAPIBindings(docEv)
+	if err != nil {
+		return s.inputFailure(err)
+	}
 	source := catalogOf(sent)
 	var candidates []record.Candidate
 	var strengths []record.Strength
@@ -861,7 +872,8 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		for _, x := range out.ContractComparisons {
 			if record.ForeignInsightProse(x.Reason) {
 				errs = addLim(errs, record.InsightLanguageError)
-			} else if s.slice != nil || seen[x.ContractIndex] || !x.Valid(catalog) || !x.MatchesContract(in.Documents.Contracts) || !s.existingDir(x.AppliesTo) {
+			} else if s.slice != nil || seen[x.ContractIndex] || !x.Valid(catalog) || !x.MatchesContract(in.Documents.Contracts) ||
+				!s.existingDir(x.AppliesTo) || !javaAPIComparisonValid(x, javaBindings, catalog) {
 				errs = addLim(errs, "contract_comparison_invalid")
 			}
 			seen[x.ContractIndex] = true

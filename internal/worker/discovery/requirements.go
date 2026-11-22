@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/javaproject"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
@@ -80,6 +81,12 @@ func parseManifest(p string, b []byte) (reqs []declared, ok bool, err error) {
 		reqs, err = parseRustToolchain(b, path.Base(p) == "rust-toolchain.toml")
 	case "CMakeLists.txt":
 		reqs, err = parseCMake(b)
+	case "pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts":
+		declarations, parseErr := javaproject.Parse(path.Base(p), b)
+		err = parseErr
+		for _, req := range declarations {
+			reqs = append(reqs, declared{Kind: req.Kind, Constraint: req.Value, Start: req.Line, End: req.Line})
+		}
 	default:
 		return nil, false, nil
 	}

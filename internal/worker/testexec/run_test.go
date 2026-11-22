@@ -40,6 +40,7 @@ func TestSelected(t *testing.T) {
 		"outside/outside_test.go": "package outside\nimport \"testing\"\nfunc TestOutside(t *testing.T) { t.Fatal(\"outside the scope\") }\n",
 	}, scope)
 	job := fx.Job
+	job.RunID, job.AttemptID = domain.NewID(), domain.NewID()
 	job.Profile = "with-tests"
 	p, err := plans(job)
 	if err != nil || len(p) != 1 || p[0].spec.Key != goKey || p[0].spec.Stage != domain.StageTest {
@@ -78,17 +79,18 @@ func TestNativeNpmSuites(t *testing.T) {
 	parentNetwork, _ := os.Readlink("/proc/self/ns/net")
 	networkJSON, _ := json.Marshal(parentNetwork)
 	fx := packtest.NewFixture(t, "", map[string]string{
-		"package.json": `{"name":"test-fixture","scripts":{"test:unit":"node unit.cjs","test:module":"node module.cjs","test:e2e":"node e2e.cjs"}}`,
-		"unit.cjs":     `require('node:assert/strict').equal(1, 2)`,
-		"module.cjs":   `require('node:assert/strict').equal(require('./value.cjs'), 2)`,
+		"package.json": `{"name":"test-fixture","scripts":{"test:unit":"node --test --test-reporter=tap unit.cjs","test:module":"node --test --test-reporter=tap module.cjs","test:e2e":"node --test --test-reporter=tap e2e.cjs"}}`,
+		"unit.cjs":     `require('node:test').test('wrong value', () => require('node:assert/strict').equal(1, 2))`,
+		"module.cjs":   `require('node:test').test('module value', () => require('node:assert/strict').equal(require('./value.cjs'), 2))`,
 		"value.cjs":    `module.exports=2`,
 		"e2e.cjs": `
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const http = require('node:http');
+require('node:test').test('private loopback', async () => {
 assert.notEqual(fs.readlinkSync('/proc/self/ns/net'), ` + string(networkJSON) + `);
 const server = http.createServer((req, res) => res.end('ok'));
-server.listen(0, '127.0.0.1', async () => {
+await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   try {
     const response = await fetch('http://127.0.0.1:' + server.address().port);
     assert.equal(await response.text(), 'ok');
@@ -97,6 +99,7 @@ server.listen(0, '127.0.0.1', async () => {
 });`,
 	}, domain.Scope{})
 	job := fx.Job
+	job.RunID, job.AttemptID = domain.NewID(), domain.NewID()
 	job.AllowRepositoryCode = true
 	p, err := plans(job)
 	if err != nil || len(p) != 3 {
@@ -164,6 +167,7 @@ func TestNativePythonAndRustSuites(t *testing.T) {
 			}
 			fx := packtest.NewFixture(t, "", tc.files, domain.Scope{})
 			job := fx.Job
+			job.RunID, job.AttemptID = domain.NewID(), domain.NewID()
 			job.AllowRepositoryCode = true
 			got := New(nil, cfg).Run(context.Background(), job, analysis.TaskSpec{Key: tc.key}, &executor.Executor{})
 			if got.Status == domain.TaskUnsupported && got.Reason == isolationUnavailable {
@@ -287,9 +291,9 @@ func TestMissingTestsAndZeroRunResults(t *testing.T) {
 	if result.Reason != "test_entries_unavailable" || len(result.Executions) != 0 {
 		t.Fatalf("missing tests %+v", result)
 	}
-	if testsPassed("go", executor.Result{Stdout: executor.Stream{Data: []byte(`{"Action":"pass","Package":"example.test"}`)}}) ||
-		testsPassed("python", executor.Result{Stderr: executor.Stream{Data: []byte("Ran 2 tests in 0.0s\n\nOK (skipped=2)\n")}}) ||
-		testsPassed("rust", executor.Result{Stdout: executor.Stream{Data: []byte("test result: ok. 0 passed; 0 failed; 2 ignored\n")}}) {
+	if goResults([]byte(`{"Action":"pass","Package":"example.test"}`)).counts.Passed != 0 ||
+		unittestResults([]byte("Ran 2 tests in 0.0s\n\nOK (skipped=2)\n")).counts.Passed != 0 ||
+		cargoResults([]byte("test result: ok. 0 passed; 0 failed; 2 ignored; 0 filtered out\n")).counts.Passed != 0 {
 		t.Fatal("zero passed tests treated as success")
 	}
 }

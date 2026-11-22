@@ -1,17 +1,11 @@
-// Package cpp is the C/C++ analyzer pack (docs/ANALYZERS.md): the baseline
-// cppcheck adapter and the extra-depth clang-tidy adapter, which also
-// carries the Clang Static Analyzer (its clang-analyzer-* checks; clang
-// --analyze is the same engine and is never run). Both tools run natively
-// through the executor runner in the attempt workspace copy, offline, with an
-// explicit environment and argv, and record their results in the generic
-// observations envelope (obsdoc).
+// Package cpp provides C/C++ analysis (docs/ANALYZERS.md). Cppcheck is
+// the baseline. clang-tidy carries Clang Static Analyzer, and an optional
+// GCC pass adds C file-descriptor diagnostics. The executor uses explicit
+// argv and environment and records normalized observations.
 //
-// A compile_commands.json in the snapshot is data: its entries are mapped
-// from the original build machine onto the attempt workspace and filtered
-// through a flag allowlist into a CODEYE-written database in task scratch
-// (compiledb.go). No entry's compiler is ever executed, no configure step or
-// build system runs, and no repository configuration can load code into the
-// tools, so neither analyzer's tasks execute repository code.
+// The snapshot's compilation database is input data. CODEYE maps paths
+// into the attempt workspace and allowlists flags. The configured analysis
+// tools never invoke its selected compiler, plugins or build scripts.
 package cpp
 
 import (

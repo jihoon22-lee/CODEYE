@@ -154,6 +154,8 @@ func (ag *Agent) startWorker(ctx context.Context, id string) (*workerProc, error
 	hello.AdvertiseWithoutBaseline = ag.cfg.AdvertiseWithoutBaseline
 	hello.Offline, hello.CABundle = ag.cfg.Offline, ag.cfg.CABundle
 	hello.TestPackageManagers = packageManagers(map[string]string{"npm": ag.cfg.PackageManagers["npm"], "python": ag.cfg.PackageManagers["python"]})
+	hello.Tests = ag.cfg.Tests
+	hello.JavaClasspathCatalog = ag.cfg.JavaClasspathCatalog
 	hello.Dependencies = ag.dependencies()
 	if err := w.conn.Send(hello); err != nil {
 		ag.killWorker(w)

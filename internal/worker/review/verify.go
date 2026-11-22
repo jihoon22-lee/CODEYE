@@ -19,12 +19,47 @@ import (
 // IDs among its evidence is accepted without them when the remaining evidence
 // meets the verdict's rule (evidence_id_dropped on the call). A later call
 // that fails keeps the verdicts already accepted (verification_call_failed).
-const verifyContract = `For this role use exactly {"verifications":[{"candidate_id":"<id of input.candidates>","verdict":"supported|refuted|inconclusive","category":"correctness|error_handling|concurrency|resource_lifecycle|data_integrity|api_contract|security|maintainability|performance|test_gap","severity":"high|medium|low|info","severity_reason":"...","impact":"...","valid_conditions":["..."],"invalid_conditions":["..."],"supporting_evidence_ids":["ev_..."],"counterevidence_ids":["ev_..."],"unresolved_assumptions":["..."],"next_verification":["..."]}]}, ignoring any wider output examples. Return exactly one entry per candidate in input. Before deciding, read the caller and test excerpts (origin caller/test) for guards, deferred cleanup or ownership transfer that would invalidate the candidate, and keep each documents contract to its applies_to path. supported needs a code or test evidence ID and at least one valid condition; refuted needs counterevidence IDs and invalid conditions; otherwise use inconclusive with unresolved assumptions. Nothing was executed: never claim reproduction, test results or runtime output. Cite only evidence IDs given in scope; do not add paths, line numbers or other fields. Give 1-3 next_verification items that are reading or review steps, not commands.`
+const verifyContract = `For this role use exactly {"verifications":[{"candidate_id":"<id of input.candidates>","verdict":"supported|refuted|inconclusive","category":"correctness|error_handling|concurrency|resource_lifecycle|data_integrity|api_contract|security|maintainability|performance|test_gap","severity":"high|medium|low|info","severity_reason":"...","impact":"...","valid_conditions":["..."],"invalid_conditions":["..."],"supporting_evidence_ids":["ev_..."],"counterevidence_ids":["ev_..."],"unresolved_assumptions":["..."],"next_verification":["..."]}]}. Return one verdict per input candidate. Check callers, ownership, error paths, tests and each contract's scope. Cite only scope.excerpts IDs. Supported needs supporting code/test; refuted needs counterevidence; otherwise use inconclusive. Use observed_test_cases only for the cited assertion. Never claim reproduction. Give 1-3 next_verification items that are reading or review steps, not commands.`
 
 const verifyRepairRules = "\nFormat repair: your previous output for the candidates listed in input.repair was rejected with the listed platform error codes. Return a verifications entry only for those candidates, citing only IDs from scope.excerpts; accepted_evidence_ids lists every valid ID."
 
+type observedTestCase struct {
+	EvidenceID string `json:"evidence_id"`
+	Line       int    `json:"line"`
+	Status     string `json:"status"`
+}
+
+// An executed case is relevant only when its verified source line is inside
+// a test excerpt presented to this verifier. No runner-controlled name or
+// stream content is sent to the model.
+func observedTests(excerpts []record.Excerpt, facts []analysis.ObservedTest) []observedTestCase {
+	if len(facts) == 0 {
+		return nil
+	}
+	var out []observedTestCase
+	for _, e := range excerpts {
+		if e.Kind != "test" {
+			continue
+		}
+		for _, fact := range facts {
+			if fact.Path != e.Path || fact.Line < e.Start || fact.Line > e.End {
+				continue
+			}
+			m := observedTestCase{e.ID, fact.Line, fact.Status}
+			if !slices.Contains(out, m) {
+				out = append(out, m)
+			}
+			if len(out) == 16 {
+				return out
+			}
+		}
+	}
+	return out
+}
+
 type verifyInput struct {
-	Scope struct {
+	ObservedTests []observedTestCase `json:"observed_test_cases,omitempty"`
+	Scope         struct {
 		Snapshot    string           `json:"snapshot_manifest_digest"`
 		Excerpts    []record.Excerpt `json:"excerpts"`
 		Limitations []string         `json:"limitations"`
@@ -151,6 +186,22 @@ func (s *roleStage) verify() analysis.TaskResult {
 		s.setEvidence(context)
 		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
 	}
+	anchors := slices.DeleteFunc(slices.Clone(withText), func(x record.Excerpt) bool { return !cited[x.ID] })
+	budget := maxExpansionBytes
+	for _, x := range extra {
+		budget -= record.JSONLen(x.Text)
+	}
+	linked, err := s.sourceCallContext(".", anchors, append(slices.Clone(anchors), extra...), maxExpansion-len(extra), budget)
+	if err != nil {
+		s.setEvidence(context)
+		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+	}
+	if len(linked) != 0 {
+		extra = append(extra, linked...)
+		lims = slices.DeleteFunc(lims, func(lim string) bool {
+			return lim == limExpansionGoOnly || lim == limDirectCalls || lim == limNoSymbol || lim == limNoCallers
+		})
+	}
 	s.rec.Limitations = addLim(s.rec.Limitations, lims...)
 	if len(extra) > 0 {
 		upstreamEvidence := catalogOf(withText)
@@ -168,7 +219,11 @@ func (s *roleStage) verify() analysis.TaskResult {
 	// sent candidate keeps all excerpts it cites.
 	in := verifyInput{Observations: s.rec.Observations}
 	in.Scope.Snapshot = s.j.Snapshot.Digest
-	instructions := s.instructions(verifyContract)
+	contract := verifyContract
+	if len(s.j.TestEvidence) > 0 {
+		contract += " Use an observed test to assess its cited assertion. State the code inference only; CODEYE reports the recorded outcome separately."
+	}
+	instructions := s.instructions(contract)
 	var sent []record.Excerpt
 	verified := 0
 	fitted := false
@@ -212,6 +267,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 			build := func(list []record.Excerpt) ([]byte, error) {
 				y := x
 				y.Scope.Excerpts, y.Scope.Limitations = list, s.rec.Limitations
+				y.ObservedTests = observedTests(list, s.j.TestEvidence)
 				if variant.omitHashes {
 					y.Scope.Limitations = addLim(y.Scope.Limitations, limVerifyHashesOmitted)
 				}
@@ -244,6 +300,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 		return *s.fail(result(domain.TaskFailed, reasonInputTooLarge))
 	}
 	in.Scope.Excerpts, in.Scope.Limitations = sent, s.rec.Limitations
+	in.ObservedTests = observedTests(sent, s.j.TestEvidence)
 	// The record keeps every candidate (its lineage) with the excerpts they
 	// cite, plus what was sent.
 	recorded := append([]record.Excerpt{}, sent...)

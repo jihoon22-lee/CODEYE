@@ -59,7 +59,7 @@ SQLite·PostgreSQL 이중 저장 계층, Redis, Kafka, Kubernetes, 벡터 DB를 
 | 탐색 | 모듈·환경·문서 사실 | [worker/discovery](../internal/worker/discovery) |
 | 분석기 어댑터 | probe, plan, 실행, parse, 정규화 | [worker/analysis](../internal/worker/analysis) |
 | 검토 엔진 | 문맥·지침 팩·탐색·반증 | [worker/review](../internal/worker/review), [worker/opencode](../internal/worker/opencode) |
-| 기존 테스트 | 테스트 진입점·실행·Go 실패 위치 | [worker/testexec](../internal/worker/testexec) |
+| 기존 테스트 | 테스트 진입점·실행·구조화 케이스·소스 위치 | [worker/testexec](../internal/worker/testexec) |
 | 진행 단계 | 저장 기록에서 단계 상태 계산 | [progress](../internal/progress) |
 | 발견 비교·사람 판정 | fingerprint, run 비교, 판정 | [history](../internal/history) |
 | 보고서 | 구조화 결과에서 웹·Markdown·HTML·JSON | [reportsvc](../internal/reportsvc), [report](../internal/report), [web/src](../web/src) |
@@ -80,7 +80,7 @@ SQLite·PostgreSQL 이중 저장 계층, Redis, Kafka, Kubernetes, 벡터 DB를 
 
 ## 데이터 흐름
 
-인증 → 프로젝트 revision 동결 → run 영속화 → 호환 노드 배정·lease → 소스 확보와 snapshot 확정 → task 계획 → 탐색·분석·검토 → 선택한 기존 테스트 → 보고서 게시.
+인증 → 프로젝트 revision 동결 → run 영속화 → 호환 노드 배정·lease → 소스 확보와 snapshot 확정 → task 계획 → 탐색·정적 분석·코드 조사 → 선택한 기존 테스트 → 관련 근거 검증 → 보고서 게시.
 
 - artifact는 업로드 후 hash·크기 검증을 거쳐 finalize된다. 보고서는 참조하는 artifact가 준비된 뒤 게시한다([보고서](REPORT.md)).
 - PR 댓글 전송은 보고서 게시 후 별도 큐에서 처리한다. 전송 실패는 댓글 상태에 기록하고 게시된 보고서를 유지한다. [결과 댓글](GITHUB.md#결과-댓글)
@@ -99,12 +99,12 @@ SQLite·PostgreSQL 이중 저장 계층, Redis, Kafka, Kubernetes, 벡터 DB를 
 | prepare | 실행 사본·런타임·도구 manifest, 모듈별 의존성 기록 | 의존성 준비 실패는 그 task만 끝내고 분석 계속 | Go·Rust·JS/TS·Python 의존성 받기 구현, C/C++ 의존성과 빌드는 설계 계약(미구현) |
 | analyze | 도구 observation, 맥락 중심 가설 | task별 제한시간과 부분 실패 | 구현 |
 | verify | 지지·기각·보류와 반대 근거 | 예산 종료 시 미검증 유지 | 구현 |
-| test | 기존 테스트 실행 기록, 확인된 Go 실패 선언 위치 | 미실행·실패·시간 초과 사유를 기록 | `with-tests`에서 구현, Linux 전용 loopback 필요 |
+| test | 기존 테스트 실행 기록, 케이스별 결과와 확인된 소스 위치 | 미실행·실패·시간 초과 사유를 기록 | `with-tests`에서 구현, Linux 전용 loopback 필요 |
 | finalize | 결과 manifest, 산출물 확정, 프로세스 정리 확인 | 정리 미확인은 `recovery_required` | 구현 |
 | synthesize | 발견 집계와 범위·한계 | 검증한 근거를 사용 | 구현 |
 | report | 구조화 보고서와 JSON·Markdown·HTML 내보내기 | 산출물을 확인하지 못하면 상태와 사유를 기록 | 구현 |
 
-`deep-review`는 계획을 확정한 뒤 탐색(`env.discover`, `docs.discover`), 선택한 의존성 준비(`deps.*`), 분석기 팩, 모델 검토 순으로 작업을 실행한다. `with-tests`는 마지막 모델 검토 작업 뒤에 기존 테스트 작업(`test.*`)을 추가한다. 테스트에서 사용할 의존성은 분석기가 없어도 준비할 수 있다. [의존성 준비](#의존성-준비) · [분석기](ANALYZERS.md) · [검토](REVIEW.md) · [기존 테스트 실행](EXECUTION.md#기존-테스트-실행)
+`deep-review`는 계획을 확정한 뒤 탐색(`env.discover`, `docs.discover`), 선택한 의존성 준비(`deps.*`), 분석기 팩, 모델 검토 순으로 작업을 실행한다. `with-tests`는 기존 테스트 작업(`test.*`)을 추가한다. 모델 검토를 켜면 첫 후보 검증 직전에 테스트를 수행한다. 워커가 접수한 케이스 중 검토 입력의 테스트 줄과 연결된 상태를 후보 검증에서 참조할 수 있다. 테스트에서 사용할 의존성은 분석기가 없어도 준비할 수 있다. [의존성 준비](#의존성-준비) · [분석기](ANALYZERS.md) · [검토](REVIEW.md) · [기존 테스트 실행](EXECUTION.md#기존-테스트-실행)
 
 ### task 계획 계약
 
@@ -414,6 +414,12 @@ Go 모듈·Rust crate·JS/TS 패키지·Python wheel 의존성 받기와 `with-t
 - 에이전트 지침 문서는 분석 자료로 분류할 뿐 권한·도구 설정·계획을 바꾸지 않는다.
 - 문서가 없는 것은 정상이다. 읽지 못한 범위만 표시한다.
 
+### 코드에서 출발하는 문서 검색
+
+`docs.discover`는 확인 가능한 공개 CLI 선언에서 옵션 이름을 추출해 그 모듈에 적용되는 안내 문서의 전체 본문에서 검색한다. 해당 범위의 README와 설계·기타 문서 중 한 파일이라도 제외·읽기 실패·읽기 예산 초과 상태이면 그 범위에서 찾지 못했다는 항목을 만들지 않는다. 후보 목록이 잘렸거나 완독한 문서가 없거나 문서가 24개를 넘는 경우도 생략한다. 검색에 사용한 문서의 경로와 줄 수, 선언의 스냅샷 경로·줄을 기록한다. 검색은 대소문자, 하이픈과 밑줄 차이, 옵션 앞의 대시 유무를 허용한다.
+
+지원하는 출발점은 `main`의 Go flag/pflag 등록과 파싱, Java picocli의 명시 `@Option`, Python argparse와 JS/TS Commander의 파서 생성·등록·파싱, Rust clap의 명시 `#[arg]` 옵션·환경 변수와 파싱, C/C++ `main`이 직접 넘긴 `getopt_long` 옵션 테이블이다. 모호한 이름 바인딩, 생성 소스, 시험·예제 경로와 구문 한계에 걸린 입력은 건너뛴다. 코드에는 최대 192개 파일·4 MiB와 파일당 128 KiB 한도를 두고 결과는 최대 12개다. 확인한 단순 리터럴 기본값만 표시한다. 지침이나 모델 호출 없이 얻는 검색 결과이며 안내 문서의 의미나 실제 CLI 실행 결과는 판단하지 않는다.
+
 ### 안내 문서 겹침
 
 같은 경로에 적용되는 문서가 여럿이면 문서의 적용 디렉터리마다 `overlapping_guidance`로 묶는다. 의미 충돌 판정은 문서 검토 역할의 몫이다. 모델을 실행하지 않으면 `not_assessed_without_model`로 남고 `semantic_conflicts_not_assessed` limitation이 붙는다.
@@ -484,7 +490,7 @@ Go 모듈·Rust crate·JS/TS 패키지·Python wheel 의존성 받기와 `with-t
 
 ### 표시 단계와 task 단계
 
-- 화면은 `source`, `environment`, `documents`, (`build`, `test`), `static_analysis`, `code_review`, `report` 순서로 표시한다. `build`·`test`는 해당 task가 계획될 때만 표시한다. `with-tests`의 테스트는 실제 실행 순서에서 모델 검토 뒤에 온다.
+- 화면은 `source`, `environment`, `documents`, (`build`, `test`), `static_analysis`, `code_review`, `report` 순서로 표시한다. `build`·`test`는 해당 task가 계획될 때만 표시한다. 실제 테스트 실행 순서와 후보 검증의 관계는 [기존 테스트 실행](EXECUTION.md#기존-테스트-실행)을 따른다.
 - `source`와 `report`는 서버 기록에서 계산한다. 나머지는 task의 단계 키(`tasks.stage`)에서 계산한다.
 - task 단계 enum: `environment`, `documents`, `static_analysis`, `code_review`, `build`, `test`.
 - 워커는 계획 때 `TaskSpec.Stage`를 채우고 `task_created`의 선택 필드 `stage`로 보낸다. 서버는 enum을 검증해 저장한다.

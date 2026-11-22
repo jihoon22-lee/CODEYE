@@ -238,7 +238,7 @@ func l0(l Locale) string { return l.Label("none") }
 // newSummaryView is the summary layout's section model.
 func newSummaryView(r Report, digest string, l Locale) secView {
 	full := newSecView(r, digest, l)
-	v := secView{view: full.view, Summary: true}
+	v := secView{view: full.view, testEvidence: full.testEvidence, Summary: true}
 	byID := map[string]secBlock{}
 	for _, s := range full.Sections {
 		byID[s.ID] = s

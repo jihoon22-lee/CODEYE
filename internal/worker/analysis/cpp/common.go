@@ -36,7 +36,7 @@ const (
 // Config selects an operator-installed tool. Nothing is searched in PATH
 // and nothing is downloaded.
 type Config struct {
-	// Executable is the absolute tool binary (--cppcheck, --clang-tidy).
+	// Executable is the absolute tool binary.
 	Executable  string
 	Timeout     time.Duration
 	StdoutLimit int64
@@ -80,8 +80,8 @@ func newTool(name string, cfg Config) (tool, error) {
 }
 
 // env is the complete explicit environment of every execution: PATH is the
-// directory of the resolved tool only (neither tool runs a subprocess, and
-// no PATH entry of the agent leaks in), LANG fixes message text. HOME and
+// directory of the resolved tool only; GCC finds its installed C frontend.
+// No PATH entry of the agent leaks in, and LANG fixes message text. HOME and
 // TMP are the executor's per-run directories. No CPATH, C_INCLUDE_PATH,
 // CCC_OVERRIDE_OPTIONS or other compiler variable reaches the tools.
 func (t tool) env() map[string]string {

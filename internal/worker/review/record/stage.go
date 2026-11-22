@@ -206,7 +206,7 @@ func (r Record) Accepted() bool { return r.Outcome == OutcomeAccepted }
 
 var (
 	candidateIDRule = regexp.MustCompile(`^(investigate|interpret)_[1-4]$`)
-	moduleRef       = regexp.MustCompile(`^(cpp|go|javascript|python|rust):(\.|[^:\x00-\x1f]+)$`)
+	moduleRef       = regexp.MustCompile(`^(cpp|go|java|javascript|python|rust):(\.|[^:\x00-\x1f]+)$`)
 	requirementID   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}@[^@\x00-\x1f]+$`)
 	observationID   = regexp.MustCompile(`^obs_[0-9a-f]{20}$`)
 	taskKey         = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,63}$`)
@@ -515,6 +515,8 @@ func checkExcerpt(e Excerpt, snapshot string, lookup func(string) (string, bool)
 		return invalid("evidence origin")
 	case (e.Kind == "document" || e.Kind == "manifest") && e.Origin != "":
 		return invalid("evidence origin")
+	case e.Kind == "document" && SourceEcosystem(e.Path) == "java" && !e.IsJavaAPIDocument():
+		return invalid("Java document evidence path")
 	case e.ID != ExcerptID(snapshot, e.Path, e.SHA256, e.Start, e.End):
 		return invalid("evidence id is not bound to its location")
 	}

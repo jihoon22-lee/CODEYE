@@ -180,6 +180,7 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 | `agent.name` | `local` | 100자 이하 |
 | `agent.max_workers` | min(4, 논리 CPU 수/2), 최소 1 | 1~16. 에이전트는 `--autoscale --max-workers N`으로 시작하고, `up`·`start`가 `default` 풀의 최대 워커 수를 같은 값으로 둔다 |
 | `agent.toolchain_path` | `/usr/bin:/bin`(Linux) | 절대 경로 목록 |
+| `agent.java_classpath_catalog` | 비어 있음 | SpotBugs가 사용할 로컬 JAR 카탈로그의 절대 경로. [형식과 사용법](ANALYZERS.md#java-로컬-클래스패스) |
 | `agent.go`, `agent.go_mod_cache` | 빈 값 | 절대 경로. 비우면 [탐색](ANALYZERS.md#도구-찾기)이 찾은 go와 그 모듈 캐시를 쓴다 |
 | `agent.tools` | 빈 값 | 이 빌드의 분석기·toolchain 플래그 이름(`staticcheck`, `node`, `ruff` 등)을 키로, 실행 파일의 절대 경로를 값으로. 모르는 이름은 거부한다. 적지 않은 도구는 탐색이 찾은 것을 쓰고, 적은 값은 항상 우선한다 |
 | `agent.python_both_type_checkers` | false | mypy·pyright를 모두 실행. 탐색은 둘 다 찾으면 켠다 |

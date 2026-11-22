@@ -145,6 +145,11 @@ Go 형식 비교는 TC-07·TC-08·TC-101의 판정과 범위를 따른다. `Test
 
 | TC | 조건 | 기대 결과 | 요구 |
 |---|---|---|---|
+| TC-277 | Maven·Gradle 모듈, JDK 선언, PMD 소스 규칙, 같은 스냅샷에서 컴파일한 SpotBugs 클래스 | 선택 모듈의 파일·줄과 도구 관찰이 연결된다. 일치하는 외부 JAR만 클래스패스에 쓰며 누락·다른 버전·해시 불일치·컴파일 실패는 해당 행에 남긴다. | REQ-003,006,007,008,014 |
+| TC-278 | 여섯 언어의 공개 기능이 다른 파일을 호출함. 별칭·같은 이름·빌드 조건·범위 밖 정의 대조 | 조사 및 후보 검증 입력에 확인한 호출과 구현이 들어간다. 모호한 대상에 확정 호출 관계를 붙이지 않는다. | REQ-009,010,011,027 |
+| TC-279 | 기존 테스트가 모두 통과, 일부 실패, 모두 건너뜀, 실행 준비 실패 또는 결과 파일 없음 | Linux 작업 사본에서 확인한 케이스만 집계한다. 전체 수와 표본 길이를 구분한다. 코드 미포함 JSON·HTML에서는 케이스 이름을 생략한다. | REQ-011,012,013,014 |
+| TC-280 | 실행한 테스트의 줄이 후보의 인용 범위 안·밖에 있거나, 실행 산출물의 SHA가 달라짐 | 접수한 실행의 해당 범위만 검증 역할 및 보고서에 연결한다. 다른 테스트의 결과나 변경된 산출물로 결함을 재현했다고 판정하지 않는다. | REQ-009,010,011,013,027 |
+| TC-281 | Go 반환 오류, Rust 문서 링크, C 파일 디스크립터 경로, Python·JS/TS 모듈 의존 규칙의 정상·위반 사례 | 추가 검사 도구의 실제 결과에서 스냅샷 위치를 찾는다. 읽지 않은 모듈이나 설정 때문에 수행하지 못한 검사는 완료로 집계하지 않는다. | REQ-006,007,008,012 |
 | TC-06 | C++ compile DB가 원본 절대 경로를 포함 | workspace 매핑·include 권한 확인, 분석 TU 범위 표시 | REQ-006,007,008 |
 | TC-07 | 도구가 findings용 nonzero exit를 반환 | tool crash와 구분하고 정상 observations 생성 | REQ-006,007,008 |
 | TC-08 | 출력 손상·일부 파싱·timeout | raw 보존, 실패 범위 표시, 0건 통과 금지 | REQ-006,007,008 |
@@ -273,6 +278,8 @@ TC-270은 README 링크와 번역·기여 문서가 있는 제품, 여러 모듈
 
 TC-270의 긴 문서 시험은 첫 발췌와 뒤쪽 API 절 사이의 본문, 전체가 기존 예산에 들어가는 170줄짜리 안내, 여러 긴 안내의 발췌 순서, 개수나 바이트 상한 초과, 운영 절과 다른 문서가 발췌 자리를 모두 쓰는 경우를 다룬다. 기존 발췌를 유지하고 남은 자리에 추가한 본문의 원래 줄과 근거 ID가 요청과 보고서에서 일치하는지 확인한다. 실제 요청에서 본문이 빠졌으면 `document_excerpt_only`를 기록한다(`TestDocumentContinuationReachesReport`, `TestDocumentCoverage`로 시작하는 시험).
 
+TC-270의 JS/TS 옵션 시험은 긴 README 뒤쪽에 명시한 API와 기본값을 구현의 분기 및 동일 입력의 기본·반대 조건 단언에 연결한다. 다른 import, 모호한 이름, 변경 가능한 옵션, 결과를 확인하지 않는 콜백과 Promise에서는 구조적으로 연결된 단언을 보내지 않는다. 두 조건을 포함한 요청과 계약 대조는 `TestOverviewPrioritizesDocumentedJavaScriptDefaultAndOverride`에서 확인한다.
+
 TC-270의 기본 읽기 한도 시험은 64 KiB를 넘는 대표 README와 연결된 짧은 안내를 탐색하고, 두 문서의 발췌를 기존 요청 상한 안에서 검토에 보낸다. 64 KiB를 넘는 설계 문서 하나를 경로로 지정해도 필요한 발췌를 보내며 무관한 문서는 빠진다. 문서당 512 KiB와 합계 4 MiB는 로컬 읽기 상한이다. 512 KiB를 넘은 문서는 `document_too_large`로 남으며 별도 지정한 예산은 계속 적용한다(`TestReviewUsesLongPrimaryReadmeUnderDefaultBudget`, `TestReviewUsesExplicitLongEngineeringDocument`, `TestDocumentsBudget`).
 
 TC-270은 여러 모듈의 부가 목록으로 요청 한도가 부족한 프로젝트에서도 대표 README, 긴 제품 요구사항의 뒤쪽 사용자 흐름과 별도 안내의 원문을 함께 보내는지 확인한다. 지역 안내의 적용 디렉터리와 발췌 줄을 보존하고, 상한을 넘는 파일의 사유와 발췌·부가 목록의 제한을 기록한다. 문서 탐색 예산과 원래 모듈 연결은 유지한다(`TestDocumentRequestPreservesDistinctProductEvidenceUnderMetadataPressure`). 예제와 합성 입력이 많을 때는 대표 README에서 링크한 예제와 남은 제품 본문을 미연결 합성 입력보다 먼저 보낸다. 부차 경로만 범위에 든 경우에도 실제 안내를 보낸다(`TestDocumentSelectionFavorsProductTextOverUnlinkedFixtures`).
@@ -297,6 +304,10 @@ TC-267의 `TestNavigationReachesNestedTestAssertions`는 한 디렉터리에 읽
 
 TC-97의 Python API 문서 시험은 Markdown 지시문이 참조하는 모듈과 공개 메서드, 루트와 `src/` 경로 중복, 코드 블록 속 예제, 비리터럴 표현, 범위 밖 또는 비밀값이 있는 소스를 다룬다. 문서의 예제 원문과 적용 범위를 유지하고 구현 본문·pytest의 동일 입력 기대값을 별도 근거로 보낸다. 인용한 docstring과 겹치는 코드만으로는 구현 대조 판정을 수락하지 않는다. 결과와 근거 출처는 코드 포함·미포함 보고서에서 검증한다.
 
+TC-97의 공개 CLI 문서 검색은 Go, Java, Python, JS/TS, Rust, C/C++의 명시 등록과 정상 안내를 점검한다. 긴 문서 끝에 이름이 있거나 적용 문서가 읽기 한도를 넘거나 소스의 파서와 등록이 모호하면 검색 결과를 내지 않는다. 실제 `docs.discover`가 반환한 선언 위치와 문서 목록을 보고서에서 확인하고 코드 미포함 내보내기는 이름·기본값을 생략한다. REQ-004,005,012,013에 연결한다(`TestDiscoveryFindsExplicitCLIOptionsAndCheckedDefaults`, `TestDiscoveryNeverClaimsIncompleteOrAmbiguousDocumentationGap`, `TestDiscoverySkipsPrivateAndConditionalCLIOptions`, `TestDocumentationGapPublishes`).
+
+TC-268의 Java 문서 대조는 Javadoc을 가진 공개 메서드에서 같은 클래스의 호출을 읽고 오버로드를 구분한다. 전체 조사와 후속 요청에서 맞는 호출·구현 줄을 받으며 보조 메서드만 인용하면 확정 판정을 수락하지 않는다. 상속·수신자·가변 인자로 구현을 확정할 수 없는 예를 함께 검사한다. REQ-005,010,011,027에 연결한다(`TestJavaLocalCallResolutionRespectsReceiverAndOverloads`, `TestJavaDocumentContractReachesSameClassImplementation`).
+
 TC-97의 패키지 안내 시험은 별도 문서 사이트의 npm 호출 예제와 실행 코드를 대조한다. 발췌 경계에서 나뉜 짧은 코드 블록은 가져오기와 호출이 함께 들어간 원문 줄을 보낸다. 호출 이름 없는 계약, 별도 범위의 질문, 잘못된 blob 해시, 다른 로컬 패키지와의 모호성, 생성 파일과 범위 밖 또는 보류된 소스로 만든 참조는 거부한다. 코드 포함·미포함 보고서에는 동일한 문서 및 구현 위치가 남고, 코드 미포함 JSON에서 패키지와 호출 이름을 생략한다. REQ-005,010,011,012,027과 연결한다.
 
 TC-97의 범위 복구 시험은 이름 있는 호출의 예제와 같은 페이지에 바로 이어진 설명을 함께 인용하는 계약과 질문을 수락한다. 다른 페이지의 범위를 넓히거나 호출 이름 없이 패키지 범위를 쓰면 해당 항목과 실제 인용, 유효한 경로를 기존 한 번의 복구 요청에 담는다. 복구 뒤에도 근거가 부족한 범위만 제외하되 유효한 계약·질문이 남을 때 누락을 문서 분석 공백으로 표시한다. 유효한 항목이 없거나 다른 검증이 실패하면 전체 응답을 거부한다.
@@ -320,7 +331,7 @@ TC-267의 위치 시험은 같은 이름이 앞선 조사에 들어간 설정 �
 | TC-164 | 기록 0.3과 범위 산출물 0.1: slice 없는 0.3, slice 있는 0.2, 범위 밖 key, 모듈 9개, interpret 단계·후보, 0.2 기록의 slice upstream, 두 곳에 있는 파일, 정렬되지 않은 `offered`, `offered`와 다른 `covered_by_overview`, 모듈 수 불일치, 목록 밖 선별 상태, 제한 코드 없는 `not_screened` 산출물, 상한 208 | Go decoder와 JSON schema·`validate_bundle.py`가 모두 거부한다. 0.2 기록의 바이트는 그대로다. 예시는 coverage fixture로 다시 만든 바이트와 같다. | REQ-011,027 |
 | TC-165 | 상한 15·99·207과 한 번에 수락되는 응답, 형식 복구를 요구하는 응답 | 계획 키는 상한과 무관하다. 같은 slot의 조사와 확인에 쓸 두 호출이 남으면 시작하고 조사 복구는 확인에 쓸 한 호출을 남긴다. 거절된 slot과 짝 verify는 호출·기록 없이 `budget_exhausted`다. 형식 복구에 상한을 다 쓰면 아직 수락하지 못한 범위를 성공으로 세지 않는다(`TestSliceAdmissionKeepsTheCeiling`). | REQ-012,018,027; NFR-007,008 |
 | TC-166 | 비밀값 작업 없음·미실행·실패·완료(보고된 파일이 slice에 있음), 판단 순서 | 선별 작업이 없거나 미실행이면 `review.scope`와 slice가 실행되고 범위 산출물은 `not_screened`, 범위와 slice 기록은 `model_input_not_secret_screened`를 싣는다. 선별 결과를 쓸 수 없으면(실패·부분 결과) 미선별과 같이 실행되고 `not_screened`이며, 읽을 수 있는 결과가 보고한 파일은 계속 `withheld`다. 보고된 파일은 범위 산출물에서 `withheld`이고 어떤 요청에도 없다. 파일이 남지 않은 slice는 상한이 다해도 `no_review_scope`다. 승인 없음 → 범위 산출물 없음(`dependency_failed`) 순서이고, 미선별과 쓸 수 없는 선별은 관문이 아니다. | REQ-009; NFR-008 |
-| TC-167 | coverage fixture, 다섯 언어 최악 사례, 상한 207 | 수락된 overview에 들어간 줄을 slice에서 반복하지 않고 같은 파일의 나머지 줄을 보낸다. 공통 검토 지침과 범위 산출물의 digest로 slice 기록을 묶으며, 위치 선택 지침은 후보가 있는 overview에만 붙는다. 모든 요청은 40,000바이트 이하이고 적용 언어의 지침을 싣는다(`TestSlicesContinueWithoutRepeatingOverviewLines`, `TestSliceRequestSizeWorstCaseAllLanguages`). | REQ-009,027 |
+| TC-167 | coverage fixture, 여섯 언어 최악 사례, 상한 207 | 수락된 overview에 들어간 줄을 slice에서 반복하지 않고 같은 파일의 나머지 줄을 보낸다. 공통 검토 지침과 범위 산출물의 digest로 slice 기록을 묶으며, 위치 선택 지침은 후보가 있는 overview에만 붙는다. 모든 요청은 40,000바이트 이하이고 적용 언어의 지침을 싣는다(`TestSlicesContinueWithoutRepeatingOverviewLines`, `TestSliceRequestSizeWorstCaseAllLanguages`). | REQ-009,027 |
 | TC-168 | 진행 단계, 실제 worker(상한 15, slice 요청 중 취소), 노드 프로토콜과 PostgreSQL | `no_review_scope`는 단계를 낮추지 않고 `budget_exhausted`는 `code_review`를 `partial`로 남긴다(이전 worker가 남긴 `secret_screen_failed`도 같다). 실제 worker는 15회 이하로 끝나고 보고서가 만들어지며 AI 검토는 수행이다. 취소는 정리를 확인하고 이후 slice 요청이 없다. 서버는 slice key와 queued·running에서의 `budget_exhausted`를 받고, 계획 revision은 1이며, slice 실행 중 취소로 run이 `cancelled`가 된다. | REQ-012,018; NFR-006 |
 | TC-169 | 호출 상한 15의 coverage fixture, 구버전 장부, 잘못된 장부·slice 기록, 미선별과 계획 한도 | `examples/report-slices.json`에서 39개 파일의 조사 입력을 요청하지만 호출 14회 뒤 일부 줄이 남는다. 파일별 요청·수락 줄 수와 남은 줄·이유, 모듈과 후보 검증 상태를 대조한다. 구버전은 원래 집계 의미로 읽고, 검증기는 잘못된 참조와 줄 합계를 거부한다. 조회·코드 제외 내보내기에서도 범위를 유지한다(`TestReportSlicesExample`, `TestReportSlicesUnscreened`, `TestReportSlicesNotPlanned`, `TestLedgerValidation`). | REQ-012,013,027 |
 
@@ -599,6 +610,9 @@ go test ./...
 | `CODEYE_TEST_RUFF`, `CODEYE_TEST_MYPY`, `CODEYE_TEST_PYRIGHT`, `CODEYE_TEST_BANDIT` | Python 팩 |
 | `CODEYE_TEST_NODE`, `CODEYE_TEST_ESLINT`, `CODEYE_TEST_TSC` | 공유 node toolchain probe, JS/TS 팩, pyright·jscpd |
 | `CODEYE_TEST_CARGO`, `CODEYE_TEST_CLIPPY`, `CODEYE_TEST_TOOLPATH` | Rust 팩(`CODEYE_TEST_TOOLPATH`에 링커 `cc`) |
+| `CODEYE_TEST_JAVA`, `CODEYE_TEST_PMD`, `CODEYE_TEST_SPOTBUGS` | 설치한 Java 실행 파일과 분석기 JAR의 절대 경로(TC-277) |
+| `CODEYE_TEST_JAVA_EXTERNAL_JAR` | 실제 Commons Lang 3.17.0 JAR로 Maven·Gradle 정적 클래스패스 연동 시험(TC-277) |
+| `CODEYE_TEST_JAVA_CLASSPATH_CATALOG`, `CODEYE_TEST_COMMONS_TEXT`, `CODEYE_TEST_COMMONS_CSV` | 운영 노드 분석 경로의 공개 프로젝트 시험(TC-277). 카탈로그와 선택한 Apache Commons 1.13.0 체크아웃의 절대 경로를 지정한다. 카탈로그의 로컬 미러에 두 프로젝트가 선언한 컴파일 의존성을 준비한다. |
 | `CODEYE_TEST_LIZARD`, `CODEYE_TEST_JSCPD`, `CODEYE_TEST_GITLEAKS` | 구조·중복·비밀값 팩 |
 | `CODEYE_TEST_PG_BIN` | 백업·복원 시험의 `pg_dump` 위치(없으면 PATH) |
 | `CODEYE_TEST_DEPS_NETWORK=1` | 공개 Go proxy와 PyPI에서 실제로 받는 의존성 시험(TC-199, TC-218). 네트워크가 필요하다 |

@@ -28,6 +28,7 @@ const (
 	// kindGH is the GitHub CLI: the service asks it for the signed-in
 	// account's token (docs/GITHUB.md). It is no analyzer and no agent flag.
 	kindGH
+	kindJavaJar
 )
 
 // spec describes how one tool is found.
@@ -56,25 +57,32 @@ func npmHint(tool, pkgs string) string {
 
 // specs has one entry per name of Names.
 var specs = map[string]spec{
-	"go":          {kindExec, "go", "", "install Go from https://go.dev/dl or set `agent.go`"},
-	"git":         {kindGit, "git", "", "install git (Ubuntu: `sudo apt install git`) or set `agent.git`"},
-	"node":        {kindExec, "node", "", "install Node.js from https://nodejs.org or set `agent.tools.node`"},
-	"gh":          {kindGH, "gh", "", "install the GitHub CLI (https://cli.github.com) and run `gh auth login`; or set GH_TOKEN for `codeye up`"},
-	"opencode":    {kindOpenCode, "opencode", "", "install OpenCode (`curl -fsSL https://opencode.ai/install | bash`) or set `agent.model.opencode`"},
-	"staticcheck": {kindExec, "staticcheck", "", "`go install honnef.co/go/tools/cmd/staticcheck@latest` or set `agent.tools.staticcheck`"},
-	"gitleaks":    {kindExec, "gitleaks", "", "download a release from https://github.com/gitleaks/gitleaks/releases into ~/" + ToolPrefixRel + "/bin or set `agent.tools.gitleaks`"},
-	"ruff":        {kindExec, "ruff", "", uvHint("ruff")},
-	"mypy":        {kindExec, "mypy", "", uvHint("mypy")},
-	"bandit":      {kindExec, "bandit", "", uvHint("bandit")},
-	"lizard":      {kindExec, "lizard", "", uvHint("lizard")},
-	"cppcheck":    {kindExec, "cppcheck", "", "`micromamba install -p ~/" + ToolPrefixRel + "/cpp cppcheck` (or `sudo apt install cppcheck`) or set `agent.tools.cppcheck`"},
-	"clang-tidy":  {kindExec, "clang-tidy", "", "`micromamba install -p ~/" + ToolPrefixRel + "/cpp clang-tools` (or `sudo apt install clang-tidy`) or set `agent.tools.clang-tidy`"},
-	"pyright":     {kindJS, "pyright", "pyright/index.js", npmHint("pyright", "pyright")},
-	"eslint":      {kindJS, "eslint", "eslint/bin/eslint.js", npmHint("eslint", "eslint @eslint/js typescript-eslint")},
-	"tsc":         {kindJS, "tsc", "typescript/bin/tsc", npmHint("tsc", "typescript")},
-	"jscpd":       {kindJS, "jscpd", "jscpd/run-jscpd.js", npmHint("jscpd", "jscpd")},
-	"cargo":       {kindCargo, "cargo", "", "install Rust with rustup (https://rustup.rs) or set `agent.tools.cargo` to a toolchain's own bin/cargo (not the rustup proxy)"},
-	"clippy":      {kindClippy, "cargo-clippy", "", "`rustup component add clippy` or set `agent.tools.clippy`"},
+	"go":                 {kindExec, "go", "", "install Go from https://go.dev/dl or set `agent.go`"},
+	"git":                {kindGit, "git", "", "install git (Ubuntu: `sudo apt install git`) or set `agent.git`"},
+	"node":               {kindExec, "node", "", "install Node.js from https://nodejs.org or set `agent.tools.node`"},
+	"gh":                 {kindGH, "gh", "", "install the GitHub CLI (https://cli.github.com) and run `gh auth login`; or set GH_TOKEN for `codeye up`"},
+	"opencode":           {kindOpenCode, "opencode", "", "install OpenCode (`curl -fsSL https://opencode.ai/install | bash`) or set `agent.model.opencode`"},
+	"errcheck":           {kindExec, "errcheck", "", "install github.com/kisielk/errcheck for this host or set agent.tools.errcheck"},
+	"staticcheck":        {kindExec, "staticcheck", "", "`go install honnef.co/go/tools/cmd/staticcheck@latest` or set `agent.tools.staticcheck`"},
+	"gitleaks":           {kindExec, "gitleaks", "", "download a release from https://github.com/gitleaks/gitleaks/releases into ~/" + ToolPrefixRel + "/bin or set `agent.tools.gitleaks`"},
+	"ruff":               {kindExec, "ruff", "", uvHint("ruff")},
+	"mypy":               {kindExec, "mypy", "", uvHint("mypy")},
+	"bandit":             {kindExec, "bandit", "", uvHint("bandit")},
+	"lizard":             {kindExec, "lizard", "", uvHint("lizard")},
+	"import-linter":      {kindExec, "lint-imports", "", "install Import Linter in an operator Python environment and set agent.tools.import-linter to bin/lint-imports"},
+	"dependency-cruiser": {kindJS, "depcruise", "dependency-cruiser/bin/dependency-cruiser.mjs", npmHint("dependency-cruiser", "dependency-cruiser typescript")},
+	"cppcheck":           {kindExec, "cppcheck", "", "`micromamba install -p ~/" + ToolPrefixRel + "/cpp cppcheck` (or `sudo apt install cppcheck`) or set `agent.tools.cppcheck`"},
+	"gcc":                {kindExec, "gcc", "", "install GCC 13 or newer with its C frontend, or set `agent.tools.gcc`"},
+	"clang-tidy":         {kindExec, "clang-tidy", "", "`micromamba install -p ~/" + ToolPrefixRel + "/cpp clang-tools` (or `sudo apt install clang-tidy`) or set `agent.tools.clang-tidy`"},
+	"pyright":            {kindJS, "pyright", "pyright/index.js", npmHint("pyright", "pyright")},
+	"eslint":             {kindJS, "eslint", "eslint/bin/eslint.js", npmHint("eslint", "eslint @eslint/js typescript-eslint")},
+	"tsc":                {kindJS, "tsc", "typescript/bin/tsc", npmHint("tsc", "typescript")},
+	"jscpd":              {kindJS, "jscpd", "jscpd/run-jscpd.js", npmHint("jscpd", "jscpd")},
+	"java":               {kindExec, "java", "", "install OpenJDK and set agent.tools.java to its bin/java"},
+	"pmd":                {kindJavaJar, "pmd", "pmd-cli-*.jar", "extract the PMD 7 distribution and set agent.tools.pmd to lib/pmd-cli-*.jar"},
+	"spotbugs":           {kindJavaJar, "spotbugs", "spotbugs.jar", "extract SpotBugs and set agent.tools.spotbugs to lib/spotbugs.jar"},
+	"cargo":              {kindCargo, "cargo", "", "install Rust with rustup (https://rustup.rs) or set `agent.tools.cargo` to a toolchain's own bin/cargo (not the rustup proxy)"},
+	"clippy":             {kindClippy, "cargo-clippy", "", "`rustup component add clippy` or set `agent.tools.clippy`"},
 }
 
 // candidate is one path to validate and the place it came from.
@@ -105,10 +113,30 @@ func (d *detector) candidates(name string, sp spec) []candidate {
 				}
 			}
 		}
+		if name == "java" {
+			if javaHome := d.env.getenv("JAVA_HOME"); filepath.IsAbs(javaHome) {
+				if p := filepath.Join(javaHome, "bin", exeNames("java")[0]); isExecutable(p) {
+					add(p, "JAVA_HOME")
+				}
+			}
+		}
 		if name == "go" {
 			if goroot := d.env.getenv("GOROOT"); goroot != "" && filepath.IsAbs(goroot) {
 				if p := filepath.Join(goroot, "bin", exeNames("go")[0]); isExecutable(p) {
 					add(p, "GOROOT")
+				}
+			}
+		}
+	case kindJavaJar:
+		for _, dir := range d.env.execDirs() {
+			for _, launcher := range exeNames(sp.bin) {
+				if resolved, err := filepath.EvalSymlinks(filepath.Join(dir.path, launcher)); err == nil && isExecutable(resolved) {
+					jars, _ := filepath.Glob(filepath.Join(filepath.Dir(filepath.Dir(resolved)), "lib", sp.entry))
+					for _, jar := range jars {
+						if isRegular(jar) {
+							add(jar, dir.label)
+						}
+					}
 				}
 			}
 		}

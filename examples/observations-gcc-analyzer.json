@@ -1,0 +1,382 @@
+{
+  "adapter": {
+    "id": "gcc-analyzer",
+    "version": "1"
+  },
+  "analyzer": {
+    "ecosystem": "cpp",
+    "id": "cpp.gcc_analyzer",
+    "required": false
+  },
+  "coverage": {
+    "files_in_scope": 2,
+    "files_skipped": 0,
+    "files_unlisted": 0,
+    "processed_paths": [
+      "src/clean.c",
+      "src/descriptor.c"
+    ],
+    "unit": "translation_unit",
+    "units": {
+      "analyzed_clean": 1,
+      "analyzed_with_findings": 1
+    }
+  },
+  "executions": [
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "x86_64-linux-gnu-gcc-13",
+          "--version"
+        ],
+        "dir": "[REDACTED]",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "gcc-analyzer.version",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 259,
+        "incomplete": false,
+        "sha256": "36bb7197a6e6739783d8416db9d9322f7153cc4d75eac222b591e312f2244316",
+        "total_bytes": 259,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "x86_64-linux-gnu-gcc-13",
+          "-std=gnu11",
+          "-fanalyzer",
+          "-Wanalyzer-too-complex",
+          "-fdiagnostics-format=json",
+          "-fdiagnostics-column-unit=byte",
+          "-fdiagnostics-color=never",
+          "-fdiagnostics-show-option",
+          "-S",
+          "-o",
+          "[REDACTED]",
+          "[REDACTED]/src/clean.c"
+        ],
+        "dir": "[REDACTED]",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "gcc-analyzer.check.1",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 3,
+        "incomplete": false,
+        "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+        "total_bytes": 3,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "x86_64-linux-gnu-gcc-13",
+          "-std=gnu11",
+          "-fanalyzer",
+          "-Wanalyzer-too-complex",
+          "-fdiagnostics-format=json",
+          "-fdiagnostics-column-unit=byte",
+          "-fdiagnostics-color=never",
+          "-fdiagnostics-show-option",
+          "-S",
+          "-o",
+          "[REDACTED]",
+          "[REDACTED]/src/descriptor.c"
+        ],
+        "dir": "[REDACTED]",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "gcc-analyzer.check.2",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 1072,
+        "incomplete": false,
+        "sha256": "c4cf7f722d9317bf4ca5a51bbd522dc07539ec86534481332036332597cb8d42",
+        "total_bytes": 1616,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      }
+    }
+  ],
+  "kind": "analyzer_observations",
+  "limitations": [
+    "code_loading_flags_dropped",
+    "compile_flags_dropped",
+    "compiler_wrappers_stripped",
+    "response_files_dropped"
+  ],
+  "module": {
+    "dir": ".",
+    "name": ""
+  },
+  "observations": [
+    {
+      "category": "resource_lifecycle",
+      "id": "obs_7de02fa972ba09472e31",
+      "location": {
+        "blob_sha256": "031afa6cc0958bf8bc5331e999eca0d76d9e24beb88a3ac1b76f36a43ad3f9bd",
+        "column_unit": "byte",
+        "end_col": 17,
+        "end_line": 8,
+        "path": "src/descriptor.c",
+        "start_col": 17,
+        "start_line": 8
+      },
+      "location_state": "resolved",
+      "path": "src/descriptor.c",
+      "raw_message": "‘read’ on closed file descriptor ‘fd’",
+      "raw_ref": {
+        "byte_end": 1070,
+        "byte_start": 1,
+        "execution": "gcc-analyzer.check.2",
+        "json_pointer": "/0",
+        "record_index": 0,
+        "stream": "stderr",
+        "stream_sha256": "c4cf7f722d9317bf4ca5a51bbd522dc07539ec86534481332036332597cb8d42"
+      },
+      "raw_severity": "warning",
+      "related": [
+        {
+          "kind": "tool_note",
+          "location": {
+            "blob_sha256": "031afa6cc0958bf8bc5331e999eca0d76d9e24beb88a3ac1b76f36a43ad3f9bd",
+            "column_unit": "byte",
+            "end_col": 14,
+            "end_line": 5,
+            "path": "src/descriptor.c",
+            "start_col": 14,
+            "start_line": 5
+          },
+          "location_state": "resolved",
+          "path": "src/descriptor.c",
+          "raw_message": "opened here",
+          "raw_span": {
+            "byte_end": 394,
+            "byte_start": 289
+          }
+        },
+        {
+          "kind": "condition_assumption",
+          "location": {
+            "blob_sha256": "031afa6cc0958bf8bc5331e999eca0d76d9e24beb88a3ac1b76f36a43ad3f9bd",
+            "column_unit": "byte",
+            "end_col": 8,
+            "end_line": 6,
+            "path": "src/descriptor.c",
+            "start_col": 8,
+            "start_line": 6
+          },
+          "location_state": "resolved",
+          "path": "src/descriptor.c",
+          "raw_message": "assuming ‘fd’ is a valid file descriptor (>= 0)",
+          "raw_span": {
+            "byte_end": 544,
+            "byte_start": 395
+          }
+        },
+        {
+          "kind": "assumed_branch",
+          "location": {
+            "blob_sha256": "031afa6cc0958bf8bc5331e999eca0d76d9e24beb88a3ac1b76f36a43ad3f9bd",
+            "column_unit": "byte",
+            "end_col": 8,
+            "end_line": 6,
+            "path": "src/descriptor.c",
+            "start_col": 8,
+            "start_line": 6
+          },
+          "location_state": "resolved",
+          "path": "src/descriptor.c",
+          "raw_message": "following ‘false’ branch (when ‘fd >= 0’)...",
+          "raw_span": {
+            "byte_end": 695,
+            "byte_start": 545
+          }
+        },
+        {
+          "kind": "tool_note",
+          "location": {
+            "blob_sha256": "031afa6cc0958bf8bc5331e999eca0d76d9e24beb88a3ac1b76f36a43ad3f9bd",
+            "column_unit": "byte",
+            "end_col": 5,
+            "end_line": 7,
+            "path": "src/descriptor.c",
+            "start_col": 5,
+            "start_line": 7
+          },
+          "location_state": "resolved",
+          "path": "src/descriptor.c",
+          "raw_message": "...to here",
+          "raw_span": {
+            "byte_end": 799,
+            "byte_start": 696
+          }
+        },
+        {
+          "kind": "tool_note",
+          "location": {
+            "blob_sha256": "031afa6cc0958bf8bc5331e999eca0d76d9e24beb88a3ac1b76f36a43ad3f9bd",
+            "column_unit": "byte",
+            "end_col": 5,
+            "end_line": 7,
+            "path": "src/descriptor.c",
+            "start_col": 5,
+            "start_line": 7
+          },
+          "location_state": "resolved",
+          "path": "src/descriptor.c",
+          "raw_message": "closed here",
+          "raw_span": {
+            "byte_end": 904,
+            "byte_start": 800
+          }
+        },
+        {
+          "kind": "tool_note",
+          "location": {
+            "blob_sha256": "031afa6cc0958bf8bc5331e999eca0d76d9e24beb88a3ac1b76f36a43ad3f9bd",
+            "column_unit": "byte",
+            "end_col": 17,
+            "end_line": 8,
+            "path": "src/descriptor.c",
+            "start_col": 17,
+            "start_line": 8
+          },
+          "location_state": "resolved",
+          "path": "src/descriptor.c",
+          "raw_message": "‘read’ on closed file descriptor ‘fd’; ‘close’ was at (5)",
+          "raw_span": {
+            "byte_end": 1068,
+            "byte_start": 905
+          }
+        }
+      ],
+      "rule_id": "analyzer-fd-use-after-close",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "src/descriptor.c"
+    }
+  ],
+  "outcome": {
+    "exit_class": "success_with_findings",
+    "partial_parse": false,
+    "reason": null,
+    "task_status": "succeeded"
+  },
+  "parse": {
+    "observations": 1,
+    "ok": true,
+    "records": 1,
+    "shape_errors": 0,
+    "tool_errors": 0,
+    "unparsed_bytes": 0,
+    "unresolved_observations": 0
+  },
+  "parser": {
+    "id": "gcc-diagnostics-json",
+    "version": "1"
+  },
+  "patterns": [
+    "."
+  ],
+  "rule_pack": {
+    "config_files": [
+      {
+        "path": "compile_commands.json",
+        "sha256": "0c710e3e3629556593a80bec8f2c285733ef911a0de858c2b0710c6a3ccb79bd"
+      }
+    ],
+    "id": "codeye-c-gcc-file-descriptors",
+    "repository_config": "honored",
+    "selection": [
+      "-Wanalyzer-fd-access-mode-mismatch",
+      "-Wanalyzer-fd-double-close",
+      "-Wanalyzer-fd-leak",
+      "-Wanalyzer-fd-phase-mismatch",
+      "-Wanalyzer-fd-type-mismatch",
+      "-Wanalyzer-fd-use-after-close",
+      "-Wanalyzer-fd-use-without-check"
+    ],
+    "source_suppressions": "honored",
+    "unreported_suppression_rules": [],
+    "version": "1"
+  },
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "b5c9fd130f67481fb7983e51d8b28a844e6adc673d9c612d081f80a38f536c73",
+  "target": {
+    "platform": "linux/amd64",
+    "properties": {
+      "compile_db_entries": "2",
+      "compile_db_units": "2",
+      "compile_dbs": "1",
+      "drivers": "gcc",
+      "flags_dropped": "code_loading:1,not_allowlisted:1,response_file:1",
+      "language": "C",
+      "mode": "compile_db",
+      "source_snippets": "removed",
+      "std": "gnu11"
+    }
+  },
+  "task_key": "gcc-analyzer",
+  "tool": {
+    "name": "gcc",
+    "version": "13.4.0",
+    "version_tested": true
+  },
+  "tool_errors": [],
+  "workspace_drift": []
+}

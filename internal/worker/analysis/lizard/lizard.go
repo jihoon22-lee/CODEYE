@@ -63,7 +63,7 @@ var Selection = []string{"--xml", "--no-gitignore", "cyclomatic_complexity>=16"}
 var Extensions = map[string]bool{
 	".c": true, ".cc": true, ".cpp": true, ".cxx": true, ".h": true, ".hh": true, ".hpp": true,
 	".py": true, ".js": true, ".mjs": true, ".cjs": true, ".jsx": true, ".ts": true, ".tsx": true,
-	".go": true, ".rs": true,
+	".go": true, ".rs": true, ".java": true,
 }
 
 // Execution names inside the task, in run order.

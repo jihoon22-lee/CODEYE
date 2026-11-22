@@ -2,13 +2,17 @@ package discovery
 
 import (
 	"bytes"
+	"context"
+	"os"
 	"slices"
 	"sort"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/docpath"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/javaproject"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -53,12 +57,61 @@ func EligibleDocuments(m source.Manifest, scope domain.Scope) []string {
 	}
 	var out []string
 	for _, e := range m.Entries {
-		if e.Kind == "file" && e.ExcludedReason == "" && e.SHA256 != "" && e.Size != nil && envdoc.IsGuidance(Classify(e.Path)) && pathInScope(e.Path, s) {
+		class := Classify(e.Path)
+		if e.Kind == "file" && e.ExcludedReason == "" && e.SHA256 != "" && e.Size != nil &&
+			envdoc.IsGuidance(class) && class != envdoc.ClassJavaAPI && pathInScope(e.Path, s) {
 			out = append(out, e.Path)
 		}
 	}
 	sort.Strings(out)
 	return out
+}
+
+// HasJavaAPIDocuments is used only when no ordinary guidance path already
+// requires the documents role. It stops at the first verified public comment
+// and shares the inventory's per-file and total read limits.
+func HasJavaAPIDocuments(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, pr *domain.PullRequestJob) (bool, error) {
+	normal, ok := normalScope(scope)
+	if !ok {
+		return false, nil
+	}
+	var candidates []source.Entry
+	for _, e := range snapshot.Manifest.Entries {
+		if docpath.JavaAPIPath(e.Path) && e.Kind == "file" && e.ExcludedReason == "" && e.SHA256 != "" && e.Size != nil &&
+			e.Encoding == "utf-8" && *e.Size <= DefaultBudget.PerDocumentBytes && pathInScope(e.Path, normal) &&
+			(pr == nil || slices.Contains(pr.Changed, e.Path)) {
+			candidates = append(candidates, e)
+		}
+	}
+	if len(candidates) == 0 {
+		return false, nil
+	}
+	root, err := os.OpenRoot(snapshot.SnapshotDir)
+	if err != nil {
+		return false, err
+	}
+	defer root.Close()
+	read := verifiedReader(root)
+	slices.SortFunc(candidates, func(a, b source.Entry) int { return strings.Compare(a.Path, b.Path) })
+	remaining := DefaultBudget.TotalBytes
+	for _, e := range candidates[:min(len(candidates), DefaultBudget.MaxDocuments)] {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		if *e.Size > remaining {
+			continue
+		}
+		remaining -= *e.Size
+		body, err := read(e)
+		if err != nil {
+			return false, err
+		}
+		if utf8.Valid(body) && bytes.IndexByte(body, 0) < 0 && !record.Sensitive(body) && !record.GeneratedHeader(body) &&
+			len(javaproject.APIDocuments(e.Path, string(body))) > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // readFunc returns the verified bytes of an included file entry; any error is
@@ -153,6 +206,8 @@ func Inventory(m source.Manifest, scope envdoc.Scope, modules []envdoc.Module, b
 				set(envdoc.DocUnreadable, envdoc.ReasonNUL)
 			case record.Sensitive(b):
 				set(envdoc.DocExcluded, envdoc.ReasonCredentialLike)
+			case d.Class == envdoc.ClassJavaAPI && (record.GeneratedHeader(b) || len(javaproject.APIDocuments(e.Path, string(b))) == 0):
+				set(envdoc.DocExcluded, envdoc.ReasonNoJavaAPI)
 			default:
 				set(envdoc.DocSelected, "")
 				n := 0
@@ -179,7 +234,7 @@ func Inventory(m source.Manifest, scope envdoc.Scope, modules []envdoc.Module, b
 func attach(ds *envdoc.Documents, modules []envdoc.Module) {
 	var guidance []envdoc.Doc
 	for _, d := range ds.Items {
-		if envdoc.IsGuidance(d.Class) {
+		if envdoc.IsGuidanceDocument(d) {
 			guidance = append(guidance, d)
 		}
 	}

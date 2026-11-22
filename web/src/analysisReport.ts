@@ -35,7 +35,10 @@ export type Finding = {
 };
 export type Task = { key: string; status: string; reason: string | null; required?: boolean };
 export type GoTestFailure = { name?: string; path: string; line: number };
+export type CaseResults = { runner: string; passed: number; failed: number; skipped: number;
+  cases: { name: string; status: string; path?: string; line?: number }[] };
 type TestResult = Task & {
+  cases?: CaseResults;
   attempted: boolean; directory: string | null; exit: number | null; result: 'passed' | 'failed' | 'unverified';
   failures: GoTestFailure[];
 };
@@ -129,6 +132,30 @@ function count(v: unknown): number {
 }
 function array<T>(v: unknown, fn: (value: unknown) => T): T[] {
   return Array.isArray(v) ? v.map(fn) : invalid();
+}
+
+function parseCaseResults(raw: unknown, includesCode: boolean): CaseResults {
+  const entry = object(raw);
+  const runner = str(entry.runner);
+  const totals = object(entry.counts);
+  const passed = count(totals.passed), failed = count(totals.failed), skipped = count(totals.skipped);
+  const total = passed + failed + skipped;
+  if (!['go','unittest','pytest','jest','vitest','node-test','playwright','cargo','nextest','ctest','maven','gradle'].includes(runner) ||
+      total === 0 || total > 1_000_000 || !includesCode && entry.cases !== undefined) invalid();
+  const remaining = new Map([['passed', passed], ['failed', failed], ['skipped', skipped]]);
+  const cases = array(entry.cases ?? [], v => {
+    const item = object(v);
+    const name = str(item.name), status = str(item.status);
+    const path = item.path === undefined ? undefined : str(item.path);
+    const line = item.line === undefined ? undefined : count(item.line);
+    const available = remaining.get(status) ?? 0;
+    if (!name.trim() || name.trim() !== name || /\p{Cc}/u.test(name) || new TextEncoder().encode(name).length > 512 ||
+        available < 1 || (path === undefined) !== (line === undefined) || path !== undefined && (!snapshotPath(path) || !line)) invalid();
+    remaining.set(status, available - 1);
+    return { name, status, path, line };
+  });
+  if (cases.length > 128) invalid();
+  return { runner, passed, failed, skipped, cases };
 }
 
 // Accept the same HTTPS owner/repository form as the registered Git source.
@@ -302,7 +329,7 @@ export function parseAnalysisReport(
   })();
   for (const observation of observations) {
     if (observation.related.length > 64 || observation.related.length > 0 &&
-      (!['cpp.cppcheck', 'cpp.clang_tidy'].includes(observation.tool ?? '') ||
+      (!['cpp.cppcheck', 'cpp.clang_tidy', 'cpp.gcc_analyzer'].includes(observation.tool ?? '') ||
         observation.related.some(note => !includesCode && (note.message !== null || note.excerpt !== null)))) invalid();
     const metric: Observation['metric'] = observation.metric;
     if (!metric) continue;
@@ -325,11 +352,21 @@ export function parseAnalysisReport(
     return { key: str(task.key), status: str(task.status), reason: nullable(task.reason), required: task.required_for_verdict === true };
   });
   const executions = new Map<string, Record<string, unknown>>();
+  const caseResults = new Map<string, CaseResults>();
   const failedTests = new Map<string, GoTestFailure[]>();
   for (const execution of array(r.executions ?? [], object)) {
+    if (execution.test_cases !== undefined) {
+      const key = str(execution.task_key);
+      if (input.profile !== 'with-tests' || !builder18 || Number(builderVersion) < 19 || !key.startsWith('test.') ||
+          execution.name !== 'test.run' || execution.cleanup !== 'confirmed' || execution.status !== 'exited' ||
+          execution.stdout_truncated !== false || execution.stderr_truncated !== false ||
+          typeof execution.exit_code !== 'number' || !Number.isSafeInteger(execution.exit_code) || execution.exit_code < 0 ||
+          !tasks.some(task => task.key === key) || executions.has(key)) invalid();
+      caseResults.set(key, parseCaseResults(execution.test_cases, includesCode));
+    }
     if (execution.name === 'test.run') {
       const key = str(execution.task_key);
-      if (failedTests.has(key) || executions.has(key) && execution.go_test_failures !== undefined) invalid();
+      if (failedTests.has(key) || executions.has(key) && (caseResults.has(key) || execution.go_test_failures !== undefined)) invalid();
       executions.set(key, execution);
     }
     if (execution.go_test_failures === undefined) continue;
@@ -362,11 +399,11 @@ export function parseAnalysisReport(
         const exit = typeof e?.exit_code === 'number' && Number.isSafeInteger(e.exit_code) ? e.exit_code : null;
         const confirmed = e?.status === 'exited' && e.cleanup === 'confirmed' && exit !== null && exit >= 0;
         const result = confirmed && task.status === 'succeeded' && exit === 0 ? 'passed' :
-          confirmed && task.status === 'failed' && exit !== 0 && task.reason !== 'no_tests_executed' ? 'failed' : 'unverified';
+          confirmed && task.status === 'failed' && (exit !== 0 || (caseResults.get(task.key)?.failed ?? 0) > 0) && task.reason !== 'no_tests_executed' ? 'failed' : 'unverified';
         const cwd = typeof e?.cwd === 'string' ? e.cwd : '';
         const directory = cwd === '.' || cwd && cwd !== '[REDACTED]' && !/[:\\\u0000-\u001f\u007f]/.test(cwd) &&
           cwd.split('/').every(segment => segment && segment !== '.' && segment !== '..') ? cwd : null;
-        return { ...task, attempted: e !== undefined, directory, exit, result, failures: failedTests.get(task.key) ?? [] };
+        return { ...task, attempted: e !== undefined, directory, exit, result, failures: failedTests.get(task.key) ?? [], cases: caseResults.get(task.key) };
       }),
     };
   })() : undefined;

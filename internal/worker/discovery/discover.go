@@ -33,12 +33,15 @@ var (
 	errIntegrity = errors.New("snapshot_integrity_failed")
 )
 
-func (in Input) document(kind string) (envdoc.Document, error) {
+func (in Input) document(kind string, read readFunc) (envdoc.Document, error) {
 	scope, ok := normalScope(in.Scope)
 	if !ok {
 		return envdoc.Document{}, errScope
 	}
-	modules, lims := DetectModules(in.Manifest, scope)
+	modules, lims, err := detectModules(in.Manifest, scope, read)
+	if err != nil {
+		return envdoc.Document{}, errIntegrity
+	}
 	return envdoc.Document{SchemaVersion: envdoc.SchemaVersion, Kind: kind, Snapshot: in.Digest, RunID: in.RunID, AttemptID: in.AttemptID,
 		Scope: scope, Modules: modules, Limitations: lims}, nil
 }
@@ -59,7 +62,7 @@ func uniqueSorted(list []string) []string {
 // Environment builds the environment document. observe is called once with
 // the tools the in-scope modules need; its observations are this node's only.
 func Environment(in Input, read readFunc, observe func(tools []string) Observed) (envdoc.Document, Observed, error) {
-	doc, err := in.document(envdoc.KindEnvironment)
+	doc, err := in.document(envdoc.KindEnvironment, read)
 	if err != nil {
 		return envdoc.Document{}, Observed{}, err
 	}
@@ -241,13 +244,26 @@ func Documents(in Input, budget Budget, read readFunc) (envdoc.Document, error) 
 	if !budget.valid() {
 		return envdoc.Document{}, errors.New("invalid document budget")
 	}
-	doc, err := in.document(envdoc.KindDocuments)
+	doc, err := in.document(envdoc.KindDocuments, read)
 	if err != nil {
 		return envdoc.Document{}, err
 	}
-	ds, lims, err := Inventory(in.Manifest, doc.Scope, doc.Modules, budget, read)
+	documents := map[string][]byte{}
+	ds, lims, err := Inventory(in.Manifest, doc.Scope, doc.Modules, budget, func(e source.Entry) ([]byte, error) {
+		b, err := read(e)
+		if err == nil && e.Encoding == "utf-8" {
+			documents[e.Path] = b
+		}
+		return b, err
+	})
 	if err != nil {
 		return envdoc.Document{}, errIntegrity
+	}
+	if !slices.Contains(lims, LimDocumentLimit) {
+		ds.DocumentationGaps, err = documentationGaps(in.Manifest, doc.Scope, doc.Modules, ds, documents, read)
+		if err != nil {
+			return envdoc.Document{}, errIntegrity
+		}
 	}
 	doc.Documents = &ds
 	doc.Limitations = uniqueSorted(append(doc.Limitations, lims...))

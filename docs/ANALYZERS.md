@@ -22,17 +22,24 @@
 | `go.vet` | `go-vet`, `go-vet.mNN` | 예 | `--go` | 아니오 | `codeye-go-vet-default` v1(합성) | `none` / `none` |
 | `go.staticcheck` | `staticcheck`, `staticcheck.mNN` | 아니오 | `--staticcheck` (+`--go`) | 아니오 | `codeye-go-staticcheck` v2 | `overridden` / `reported` |
 | `go.gofmt` | `gofmt` | 아니오 | `--go` 도구 체인에 함께 설치된 `gofmt` | 아니오 | `codeye-go-format` v1 | `none` / `none` |
+| `go.errcheck` | `errcheck`, `errcheck.mNN` | 아니오 | `--errcheck` (+`--go`) | 아니오 | `codeye-go-errcheck` v1 | `none` / `none` |
 | `cpp.cppcheck` | `cppcheck` | 예 | `--cppcheck` | 아니오 | `codeye-cpp-cppcheck` v2 | compile DB 모드 `honored`, 축소 모드 `none` / `disabled` |
 | `cpp.clang_tidy` | `clang-tidy` | 아니오 | `--clang-tidy` | 아니오 | `codeye-cpp-clang-tidy` v1 | `honored` / `honored` |
+| `cpp.gcc_analyzer` | `gcc-analyzer` | 아니오 | `--gcc` | 아니오 | `codeye-c-gcc-file-descriptors` v1 | `honored` / `honored` |
 | `python.ruff` | `ruff`, `ruff.mNN` | 예 | `--ruff` | 아니오 | `codeye-python-ruff` v1 | `overridden` / `reported` |
 | `python.mypy` | `mypy`, `mypy.mNN` | 아니오 | `--mypy` | 아니오 | `codeye-python-mypy` v1 | `overridden` / `honored` |
 | `python.pyright` | `pyright`, `pyright.mNN` | 아니오 | `--pyright` + `--node` | 아니오 | `codeye-python-pyright` v1 | `overridden` / `honored` |
+| `python.import_linter` | `import-linter` | 아니오 | `--import-linter` | 아니오 | `codeye-import-linter` v1 | `honored` / `none` |
 | `python.bandit` | `bandit`, `bandit.mNN` | 아니오 | `--bandit` | 아니오 | `codeye-python-bandit` v1 | `overridden` / `reported` |
 | `javascript.eslint` | `eslint`, `eslint.mNN` | 예 | `--eslint` + `--node` | 아니오 | `codeye-js-eslint` v2 | `overridden` / `disabled` |
 | `javascript.tsc` | `tsc`, `tsc.mNN` | 아니오 | `--tsc` + `--node` | 아니오 | `codeye-ts-tsc` v1 | `honored` / `honored` |
+| `javascript.dependency_cruiser` | `dependency-cruiser` | 아니오 | `--dependency-cruiser` + `--node` | 아니오 | `codeye-dependency-cruiser` v1 | JSON 규칙 `honored` / `none` |
 | `javascript.eslint_typed` | `eslint-typed`, `eslint-typed.mNN` | 아니오 | `--eslint` + `--node` | 아니오 | `codeye-ts-eslint-typed` v1 또는 `codeye-js-eslint-rejection-types` v1 | TS `honored`, JS `overridden` / `disabled` |
 | `rust.cargocheck` | `cargo-check`, `cargo-check.mNN` | 예 | `--cargo` | **예** | `codeye-rust-cargo-check` v1 | `honored` / `honored` |
 | `rust.clippy` | `clippy`, `clippy.mNN` | 아니오 | `--clippy` (+`--cargo`) | **예** | `codeye-rust-clippy` v1 | `honored` / `honored` |
+| `rust.rustdoc` | `cargo-doc`, `cargo-doc.mNN` | 아니오 | `--cargo`, 같은 도구 체인의 rustdoc | **예** | `codeye-rust-doc` v1 | `honored` / `honored` |
+| `java.pmd` | `pmd`, `pmd.mNN` | 예 | `--pmd` + `--java` | 아니오 | `codeye-java-pmd` v1 | `overridden` / `honored` |
+| `java.spotbugs` | `spotbugs`, `spotbugs.mNN` | 아니오 | `--spotbugs` + `--java`(같은 JDK의 javac) | 아니오 | `codeye-java-spotbugs` v1 | `overridden` / `honored` |
 | `any.lizard` | `lizard` | 아니오 | `--lizard` | 아니오 | `codeye-structure-lizard` v2 | `overridden` / `honored` |
 | `any.jscpd` | `jscpd` | 아니오 | `--jscpd` + `--node` | 아니오 | `codeye-duplication-jscpd` v2 | `overridden` / `honored` |
 | `any.gitleaks` | `gitleaks` | 아니오 | `--gitleaks` | 아니오 | `codeye-secrets-gitleaks` v1 | `honored` / `disabled` |
@@ -51,7 +58,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | `--go-mod-cache DIR` | 운영자가 준비한 오프라인 모듈 캐시(읽기 전용 보호 경로). 없으면 빈 scratch 캐시 | go vet, Staticcheck |
 | `--node /abs/node` | 공유 node toolchain | pyright, ESLint, tsc, jscpd, env.discover |
 | `--staticcheck /abs/staticcheck` | 실행 파일 | Staticcheck |
-| `--cppcheck /abs/cppcheck`, `--clang-tidy /abs/clang-tidy` | 실행 파일(symlink는 해석한 실제 일반 파일을 검사) | cppcheck, clang-tidy |
+| `--cppcheck /abs/cppcheck`, `--clang-tidy /abs/clang-tidy`, `--gcc /abs/gcc` | 실행 파일(symlink는 해석한 실제 일반 파일을 검사) | cppcheck, clang-tidy, GCC C 파일 디스크립터 검사 |
 | `--ruff /abs/ruff` | 단일 바이너리 | ruff |
 | `--mypy /abs/mypy`, `--bandit /abs/bandit` | 운영자 venv의 스크립트. 첫 줄은 절대 경로 `#!` interpreter여야 하고 `#!/usr/bin/env`는 거부 | mypy, bandit |
 | `--pyright /abs/node_modules/pyright/index.js` | JS 진입 스크립트 | pyright |
@@ -60,6 +67,9 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | `--eslint /abs/node_modules/eslint/bin/eslint.js` | JS 진입 스크립트. 같은 도구 `node_modules`에 `@eslint/js`·`typescript-eslint`가 있어야 함 | ESLint 기준·type-aware |
 | `--tsc /abs/node_modules/typescript/bin/tsc` | JS 진입 스크립트 | tsc |
 | `--cargo /abs/<toolchain>/bin/cargo` | toolchain의 실제 cargo(rustup proxy 거부) | cargo check, `deps.rust` |
+| `--java /abs/jdk/bin/java` | 운영자가 설치한 JDK의 Java 실행 파일 | Java 환경 관측, PMD, SpotBugs |
+| `--pmd /abs/pmd/lib/pmd-cli-*.jar` | PMD 공식 배포의 CLI JAR. 같은 배포판의 lib와 conf를 함께 둔다 | PMD |
+| `--spotbugs /abs/spotbugs/lib/spotbugs.jar` | SpotBugs 공식 배포의 JAR. 같은 lib 디렉터리의 의존 JAR도 함께 둔다 | SpotBugs |
 | `--clippy /abs/<toolchain>/bin/cargo-clippy` | cargo와 같은 디렉터리의 `cargo-clippy` | clippy |
 | `--lizard /abs/lizard` | 설치된 실행 파일 | lizard |
 | `--jscpd /abs/node_modules/jscpd/run-jscpd.js` | JS 진입 스크립트(`node_modules/.bin` shim 거부) | jscpd |
@@ -87,7 +97,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 
 `codeye up`·`start`는 도구 경로를 손으로 적지 않아도 된다. 시작할 때마다 `internal/toolfind`가 이 머신의 도구를 찾고, 위 플래그가 될 값을 정한다. `codeye tools`가 같은 탐색을 하고 표로 보여 준다([운영](OPERATIONS.md#codeye-tools)). 서버·노드 에이전트를 직접 띄울 때는 탐색이 없고 위 플래그만 쓴다.
 
-**찾는 대상.** go, git, node, OpenCode와 이 빌드의 분석기 도구 전부다(staticcheck, gitleaks, ruff, mypy, pyright, bandit, lizard, cppcheck, clang-tidy, eslint, tsc, jscpd, cargo, clippy), 그리고 의존성을 받는 패키지 관리자 npm, pnpm, yarn, uv, python이다. 결과의 `name`은 에이전트 플래그 이름이며 `agent.tools.<name>`과 같다. go는 `agent.go`, git은 `agent.git`, OpenCode는 `agent.model.opencode`다.
+**찾는 대상.** go, git, node, java, OpenCode와 이 빌드의 분석기 도구 전부다(staticcheck, gitleaks, ruff, mypy, pyright, bandit, lizard, cppcheck, clang-tidy, gcc, eslint, tsc, jscpd, cargo, clippy, pmd, spotbugs, import-linter, dependency-cruiser), 그리고 의존성을 받는 패키지 관리자 npm, pnpm, yarn, uv, python이다. 결과의 `name`은 에이전트 플래그 이름이며 `agent.tools.<name>`과 같다. go는 `agent.go`, git은 `agent.git`, OpenCode는 `agent.model.opencode`다.
 
 **찾는 위치.** 순서대로 사용자의 `PATH`, `~/.local/bin`, `~/go/bin`, `/usr/local/go/bin`과 시스템 디렉터리, `~/.opencode/bin`, CODEYE 도구 접두사 `~/.local/share/codeye-tools/{bin,cpp/bin,go/bin}`이다. 모양이 정해진 도구는 다음처럼 찾는다.
 
@@ -95,6 +105,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 |---|---|
 | pyright, eslint, tsc, jscpd | node가 읽을 진입 스크립트 파일(`pyright/index.js`, `eslint/bin/eslint.js`, `typescript/bin/tsc`, `jscpd/run-jscpd.js`)을 `node_modules` 디렉터리에서 찾는다. 디렉터리는 `~/.local/share/codeye-tools/node/node_modules`, `~/.local/share/codeye-tools/node_modules`, 찾은 node의 `<prefix>/lib/node_modules`, `~/.npm-global/lib/node_modules`, 시스템 `node_modules`다. `PATH`의 npm shim은 가리키는 진입 스크립트로 풀어서 쓴다. shim 자체는 쓰지 않는다. eslint는 같은 `node_modules`에 `@eslint/js`·`typescript-eslint`·`typescript`가 있어야 한다. |
 | npm, pnpm, yarn | 위 JS 도구와 같은 `node_modules` 디렉터리에서 `npm/bin/npm-cli.js`(node 설치에 함께 온다), `pnpm/bin/pnpm.cjs`, `yarn/bin/yarn.js`를 찾는다. corepack shim과 `.cmd`·셸 shim은 쓰지 않는다. 검증은 `<node> <script> --version`이다. |
+| Java, PMD, SpotBugs | Java는 설치 설정 또는 PATH·JAVA_HOME의 실행 파일을 확인한다. PMD와 SpotBugs는 설정한 JAR 또는 PATH의 배포 launcher에서 찾은 같은 설치의 JAR를 검사한다. |
 | cargo, clippy | `~/.rustup/settings.toml`의 `default_toolchain`, 이어서 나머지 toolchain의 `toolchains/<이름>/bin/cargo`. clippy는 선택한 cargo와 같은 디렉터리의 `cargo-clippy`만 쓴다. `~/.cargo/bin`의 rustup proxy는 [거부 규칙](#도구와-rustup-proxy-거부)대로 쓰지 않는다. |
 | mypy, bandit, lizard | 첫 줄이 절대 경로 interpreter인 스크립트여야 한다. `#!/usr/bin/env`인 후보는 다음 후보로 넘어간다. |
 | go | 실행 파일이 GOROOT의 `bin/go`여야 한다. |
@@ -128,6 +139,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | go vet, Staticcheck | 15분 | 32 MiB | 4 MiB |
 | gofmt | 작업 전체 2분 | 배치마다 32 KiB | 배치마다 64 KiB |
 | cppcheck, clang-tidy | 30분 | 32 MiB | 32 MiB(cppcheck XML이 stderr로 나옴) |
+| GCC | 단위당 45초, 작업 합계 5분 | 64 KiB | 2 MiB(JSON 진단) |
 | ruff, mypy, pyright, bandit | 15분 | 32 MiB | 4 MiB |
 | ESLint 기준·type-aware | 15분 | 64 MiB | 4 MiB |
 | tsc | 15분 | 32 MiB | 4 MiB |
@@ -145,6 +157,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | staticcheck | 2026.2.2 (0.8.2) | `2026.2` |
 | cppcheck | 2.22.0 | `2.22` |
 | clang-tidy | LLVM 23.1.5 | `23.1`(`23.1.5git` 같은 개발 빌드는 미인식) |
+| GCC | Linux GCC 13.4.0, 15.2.0 | `13.4`, `15.2` |
 | ruff | 0.16.3 | `0.16` |
 | mypy | 2.4.1 | `2.4` |
 | pyright | 1.1.414 | `1.1.414`만 |
@@ -154,6 +167,10 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | typescript(tsc) | 6.0.3 | `6.0` |
 | cargo, rustc | 1.99.1 | `1.99` |
 | clippy | 0.1.99 | `0.1.99` |
+| dependency-cruiser | 18.8.0 | `18.8` |
+| Import Linter | 2.17 | `2.17` |
+| PMD | 7.29.0 | `7.29` |
+| SpotBugs | 4.10.5 | `4.10` |
 | lizard | 1.26.1 | `1.26` |
 | jscpd | 5.4.3 | `5.4` |
 | gitleaks | 8.30.1 | `8.30` |
@@ -170,6 +187,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | gofmt | 테스트 바이너리의 `GOROOT/bin/gofmt` | `CODEYE_TEST_DUMP_GOFMT` | `-run TestReadOnlyGoFmtCoverage ./internal/worker/analysis/gofmtcheck/` |
 | Staticcheck | `CODEYE_TEST_STATICCHECK`, 선택 `CODEYE_TEST_GOMODCACHE` | `CODEYE_STATICCHECK_CAPTURE`, `CODEYE_STATICCHECK_DUMP`, `CODEYE_STATICCHECK_REPORT_DUMP` | `-run TestRealStaticcheck ./internal/worker/analysis/staticcheck/` |
 | C/C++ | `CODEYE_TEST_CPPCHECK`, `CODEYE_TEST_CLANG_TIDY` | `CODEYE_CPP_CAPTURE`, `CODEYE_CPP_DUMP`, `CODEYE_CPP_PRINT`(기대값 비교 대신 실제 결과 기록) | `-run TestRealFixtureCases ./internal/worker/analysis/cpp/`, 기대값 `fixtures/cpp/expected.json` |
+| GCC C | `CODEYE_TEST_GCC` | `CODEYE_GCC_EXAMPLE_OUTPUT`(관찰 예시 기록) | `-run TestRealGCCAnalyzerFileDescriptorFlow ./internal/worker/analysis/cpp/` |
 | Python | `CODEYE_TEST_RUFF`, `CODEYE_TEST_MYPY`, `CODEYE_TEST_BANDIT`, `CODEYE_TEST_PYRIGHT` + `CODEYE_TEST_NODE` | `CODEYE_PYTHON_CAPTURE`, `CODEYE_PYTHON_DUMP` | `-run TestReal ./internal/worker/analysis/python/`. bandit CSV는 CRLF이므로 `testdata/.gitattributes`가 줄바꿈 변환을 끈다 |
 | JS/TS | `CODEYE_TEST_NODE`, `CODEYE_TEST_ESLINT`, `CODEYE_TEST_TSC` | `CODEYE_JSTS_CAPTURE`, `CODEYE_JSTS_DUMP` | `-run 'TestRealESLint\|TestRealEngine' ./internal/worker/analysis/eslint/`, `-run TestRealTsc ./internal/worker/analysis/tsc/` |
 | Rust | `CODEYE_TEST_CARGO`, `CODEYE_TEST_CLIPPY`, 링커 시험은 `CODEYE_TEST_TOOLPATH`(`cc` 포함) | `CODEYE_RUST_CAPTURE`, `CODEYE_RUST_DUMP` | `./internal/worker/analysis/rustpack/` |
@@ -249,7 +267,7 @@ envelope의 `outcome.exit_class`는 다음 중 하나다.
 type Descriptor struct {
     ID           string   // "<ecosystem>.<tool>", 하이픈 없음: "go.vet", "cpp.clang_tidy"
     Name         string   // task key 소유 이름이자 scratch 디렉터리: "go-vet", "clang-tidy"
-    Ecosystem    string   // any | cpp | go | javascript | python | rust
+    Ecosystem    string   // any | cpp | go | java | javascript | python | rust
     Required     bool     // 기준 분석기 여부
     Tool         string   // 운영자 도구 이름 = 에이전트 플래그 이름
     VersionArgs  []string // 버전 출력 argv(실행 파일 다음)
@@ -334,7 +352,7 @@ deep-review capability는 시작 probe에 성공한 기준 분석기가 하나 �
 
 ### 범위에 없는 생태계와 팩 공백
 
-- **"범위에 있다"의 정의는 `pack.SourceFiles` 하나다.** 범위 안 포함 파일 중 소스 확장자를 센다. Go `.go`, Python `.py`·`.pyi`, JS/TS `.js`·`.jsx`·`.mjs`·`.cjs`·`.ts`·`.tsx`·`.mts`·`.cts`, Rust `.rs`, C/C++ `.c`·`.cc`·`.cpp`·`.cxx`·`.c++`·`.h`·`.hh`·`.hpp`·`.hxx`·`.h++`다. 숨김 디렉터리, `testdata`, `vendor`, `node_modules` 아래 파일은 세지 않는다. build 파일(Makefile, package.json, pyproject.toml)만으로는 생태계가 범위에 들어오지 않는다. 확장자가 없는 스크립트는 세지 않는다.
+- **"범위에 있다"의 정의는 `pack.SourceFiles` 하나다.** 범위 안 포함 파일 중 소스 확장자를 센다. Go `.go`, Python `.py`·`.pyi`, JS/TS `.js`·`.jsx`·`.mjs`·`.cjs`·`.ts`·`.tsx`·`.mts`·`.cts`, Rust `.rs`, Java `.java`, C/C++ `.c`·`.cc`·`.cpp`·`.cxx`·`.c++`·`.h`·`.hh`·`.hpp`·`.hxx`·`.h++`다. 숨김 디렉터리, `testdata`, `vendor`, `node_modules` 아래 파일은 세지 않는다. build 파일(Makefile, package.json, pyproject.toml)만으로는 생태계가 범위에 들어오지 않는다. 확장자가 없는 스크립트는 세지 않는다.
 - **범위에 모듈이 없는 생태계는 작업을 계획하지 않는다.** 다른 생태계의 분석기가 자리 작업을 만들어 실패를 만들지 않는다.
 - **분석할 수 없는 소스는 그 생태계의 팩이 보인다.** 소스가 있는데 모듈을 만들 수 없으면 그 팩이 보이는 자리 작업을 계획한다(go vet `go_module_missing`, Python `no_analyzable_python_files`, Rust `cargo_manifest_missing`, C/C++ `no_translation_units` 등). composite는 이를 강제하지 않으므로 팩이 지켜야 한다.
 - **범위의 생태계에 분석기가 하나도 없으면 공백 작업을 계획한다.** composite가 생태계마다 `pack-gap.<생태계>`를 만든다. 필수가 아니고 단계는 `static_analysis`다. 프로세스 없이 `unsupported`(`analyzer_pack_missing`)로 끝나고 not-run envelope(분석기 ID `<생태계>.none`, 도구 `none`, `files_in_scope`=소스 수)를 쓴다. 보고서는 `static_analysis_gap:<생태계>` 제약과 not-run 도구 행으로 `partial`이다. 공백 작업만 있으면 단계는 `skipped`다. 이 빌드에는 모든 언어 생태계에 팩이 있으므로 이 경로는 팩을 빼고 만든 카탈로그에서만 나타난다.
@@ -691,15 +709,15 @@ SA4000(동일 피연산자)은 go vet `bools`보다 넓어 유지한다.
 
 ## C/C++ 팩
 
-cppcheck(기준)와 clang-tidy(추가 깊이)다. Clang Static Analyzer(CSA)는 clang-tidy의 `clang-analyzer-*` 검사로만 실행하고 `clang --analyze`는 실행하지 않는다. 두 작업 모두 `RepositoryCode=false`다.
+cppcheck가 기준 분석기이고 clang-tidy와 GCC가 추가 검사를 수행한다. Clang Static Analyzer(CSA)는 clang-tidy의 `clang-analyzer-*`로 실행한다. 세 작업 모두 `RepositoryCode=false`다.
 
 - **기준이 cppcheck인 이유.** cppcheck는 compiler가 아니어서 모르는 헤더·매크로를 견디며 compile DB가 없어도 실행할 수 있는 유일한 C/C++ 도구다. 단일 실행 파일과 자체 library 설정으로 동작해 대상 system header와 맞출 필요가 없다. clang-tidy는 build flag가 필요한데 C/C++ 저장소는 대개 compile DB를 커밋하지 않는다. `--clang-tidy`만 있는 노드는 deep-review를 광고하지 않는다.
-- **계획.** 범위에 C/C++ 파일이 하나라도 있으면 분석기마다 작업 하나(`cppcheck`, `clang-tidy`)를 계획한다. 헤더만 있으면 그 작업은 `unsupported`(`no_translation_units`)다.
+- **계획.** 범위에 C/C++ 파일이 하나라도 있으면 분석기마다 작업 하나(`cppcheck`, `clang-tidy`)를 계획한다. 헤더만 있으면 그 작업은 `unsupported`(`no_translation_units`)다. GCC는 범위에 `.c` 번역 단위가 있을 때 계획한다.
 - **저장소 코드를 실행하지 않는 근거.** cppcheck는 소스를 읽어 분석할 뿐 compile·link·실행하지 않고 CODEYE가 다시 쓴 compile DB를 데이터로 읽는다. library 설정은 설치본의 것이다. `--inline-suppr`·`--suppressions-list`·`--addon`·`--rule-file`·`--cppcheck-build-dir`은 쓰지 않는다. clang-tidy는 frontend parse와 분석만 하며 plugin·`-load`·`-fplugin`·응답 파일·driver 설정은 허용 목록이 막고, 저장소 `.clang-tidy`는 `--config`가 대체하며, `--load`와 캐시는 쓰지 않는다. 두 도구는 자식 프로세스를 만들지 않고 파일을 쓰지 않는다.
 
 ### compile DB 매핑
 
-스냅샷의 `compile_commands.json`은 원래 build 머신의 데이터다. 어댑터는 이를 작업 사본에 맞게 다시 써 task scratch(`<scratch>/work/compile_commands.json`)에 두고 도구는 그것만 읽는다. 항목의 compiler는 실행하지 않으며 driver 이름은 언어 모드만 정한다.
+스냅샷의 `compile_commands.json`은 원래 build 머신의 데이터다. 어댑터는 이를 작업 사본에 맞게 다시 써 task scratch(`<scratch>/work/compile_commands.json`)에 두고 도구는 그것만 읽는다. 항목의 compiler는 실행하지 않으며 driver 이름은 언어 모드만 정한다. GCC는 별도 DB 파일 없이 같은 매핑에서 허용된 인자만 가져온다.
 
 - **원래 루트 추정.** 항목 파일 절대 경로의 접두어 중 스냅샷에 실제로 있는 파일에 가장 많이 맞는 것을 고른다. 동률이면 더 긴 접미어가 맞는 쪽이다. 추정한 루트는 다른 머신의 절대 경로이므로 기록하지 않는다. 추정하지 못하면 `compile_db_root_not_inferred`다.
 - **경로 변환.** `directory`·`file`·`-I`·`-isystem`·`-iquote`·`-idirafter`·`-include`·`-imacros`를 그 루트 아래 스냅샷 경로로 바꾼다. 상대 경로는 항목 `directory` 기준이다. 원래 build 디렉터리(예: `_build/gen`)도 같은 규칙으로 작업 사본 경로가 된다. 없으면 `include_dirs_not_in_snapshot`, 강제 include 파일이 없으면 `forced_include_files_not_in_snapshot`다. 루트 밖 include 경로(system 경로 포함)는 버린다(`include_paths_outside_snapshot`). 도구는 자기 system header를 쓴다. Windows 경로의 `command`는 CommandLineToArgvW 규칙으로 나눈다.
@@ -802,6 +820,15 @@ cppcheck는 `--project`가 준 전처리 설정만 확인한다(`preprocessor_co
 
 cppcheck CTU와 clang-tidy CSA는 한 실행 안의 단위만 본다. clang-tidy는 16단위씩 나누므로 단위 사이 분석은 하지 않는다.
 
+### GCC 파일 디스크립터 검사
+
+GCC 13 이상이 설치된 노드에서 `gcc --version`을 확인한다. 실기 시험은 Linux의 13.4.0과 15.2.0에서 한 C 번역 단위씩 실행했다. `.c` 파일이 compile DB에서 C++이나 헤더 언어로 지정되면 제외한다. compile DB가 없으면 `unsupported / compile_db_missing`이다.
+
+- 설정한 GCC에 정제한 컴파일 인자와 `-fanalyzer -Wanalyzer-too-complex -fdiagnostics-format=json -fdiagnostics-column-unit=byte -fdiagnostics-color=never -fdiagnostics-show-option -S -o /dev/null` 및 작업 사본 파일의 절대 경로를 준다. `-S`의 컴파일러 프런트엔드는 실행되며 어셈블리 출력은 버린다. 프로젝트의 빌드 스크립트·컴파일러 wrapper·플러그인·응답 파일은 사용하지 않는다. 컴파일러 환경변수는 전달하지 않는다.
+- 파일 디스크립터의 접근 모드·유형·상태 오류, 중복 닫기, 누수, 닫힌 디스크립터 사용, 확인하지 않은 디스크립터 사용 등 `-Wanalyzer-fd-*` 일곱 규칙만 게시한다. 다른 GCC 경고는 발견 수에서 제외한다. 닫은 디스크립터를 읽은 합성 예제는 GCC에서 보고하고, 같은 입력을 기본 검사로 실행한 clang-tidy 21.1.8과 cppcheck 2.22.0은 이 진단을 보고하지 않았다. [실측 관찰 예시](../examples/observations-gcc-analyzer.json)
+- 경고가 있어도 종료 코드 0이며 정상 예제는 게시할 경고가 없다. 실패한 단위, 복잡도 한도, 시간 초과, 잘리거나 파싱할 수 없는 진단은 실패 또는 미완료 범위로 남긴다. 종료 코드가 성공한 단위의 분석 내용이 남을 수 있어도 실패한 작업 전체는 처리 완료로 기록하지 않는다.
+- 저장 stderr는 작업 사본에 위치를 확인한 진단의 구조화된 원문만 사용한다. 기본 진단과 상태 전이의 위치는 스냅샷 해시·줄 및 저장된 JSON의 바이트 범위에 연결한다. 컴파일 DB digest와 소스 안 억제 상태를 함께 기록한다. [GCC 13 정적 분석 옵션](https://gcc.gnu.org/onlinedocs/gcc-13.4.0/gcc/Static-Analyzer-Options.html)
+
 ### C/C++ 규칙 문맥과 억제
 
 | | cppcheck `codeye-cpp-cppcheck` v1 | clang-tidy `codeye-cpp-clang-tidy` v1 |
@@ -862,6 +889,8 @@ cppcheck(자체 parser·value flow)와 clang-tidy(clang AST matcher·CSA 기호 
 ## Python 팩
 
 ruff(기준), mypy·pyright(타입 검사, 서로 대안), bandit(보안)이다. 결정은 A25([결정](DECISIONS.md))다. 모든 task는 `RepositoryCode=false`다. 어떤 도구도 프로젝트의 interpreter·venv·plugin·설정 프로그램을 실행하지 않는다.
+
+Sphinx·Markdown에서 Python docstring, 함수 구현과 테스트 단언을 잇는 스냅샷 탐색은 [모델 검토](REVIEW.md#문서-발췌documents)에서 수행한다. 이 탐색은 팩의 정적 도구 결과에 합산하지 않는다.
 
 - **기준이 ruff인 이유.** 단일 정적 바이너리라 Python interpreter도 node도 필요 없다. `--isolated`이면 설정 파일을 읽지 않고 import 대상도 실행하지 않는다. 선택 규칙(pyflakes·bugbear·오류 흐름)은 파일 단위라 의존성 설치 없이 결과가 안정적이다. ruff만 있는 노드도 deep-review를 광고한다.
 - **모듈.** `pyproject.toml`·`setup.cfg`·`.python-version`·`requirements*.txt`가 있는 디렉터리다. 모듈마다 도구별 task를 계획한다. 숨김 디렉터리·숨김 파일·`__pycache__`·`__pypackages__`·`node_modules`·`site-packages`·`testdata`·`vendor`·`venv`는 분석하지 않는다. 스냅샷은 `pyvenv.cfg`가 있는 가상환경과 symlink를 복사하지 않는다. Python 소스가 있지만 분석할 파일이 없으면 자리 task 하나가 `no_analyzable_python_files`로 not-run envelope를 남긴다. 노트북(`.ipynb`)은 분석하지 않는다. 하위 모듈 디렉터리 이름에 쉼표·glob 문자가 있으면 그 task는 `nested_module_name_unsupported`로 실행을 거부한다.
@@ -970,6 +999,12 @@ ruff S 규칙은 bandit 검사를 다시 구현한 것이라 고르지 않는다
 - 계획했지만 도구가 처리 목록에 넣지 않은 파일은 `files_unlisted`·`not_analyzed`와 `planned_files_not_processed`로 남는다. ruff 기본 제외(`build`, `dist` 등)에 걸린 계획 파일도 여기에 든다.
 - 열은 ruff code point, pyright 0부터의 UTF-16, mypy(`--no-native-parser`)·bandit UTF-8 바이트이며 모두 byte 열로 바꾼다. bandit `issue_severity`는 `raw_severity`로만 남는다.
 
+### Python import 계약
+
+[Import Linter](https://import-linter.readthedocs.io/en/stable/index.html)는 루트의 `.importlinter`, `setup.cfg`, `pyproject.toml` 순으로 실제 선언을 찾는다. 번들된 계약 종류(`forbidden`, `layers`, `independence`, `protected`, `private_modules`, `acyclic_siblings`)를 평가하고 사용자 정의 계약과 외부 패키지를 포함하는 계약은 사유를 남긴다. 루트 또는 `src/` 아래의 최상위 Python 패키지에서만 그래프를 만든다. 한 분석에서 두 배치를 섞거나 점을 포함한 하위 패키지를 루트로 사용하지 않는다.
+
+운영자가 설치한 Python 환경의 Import Linter가 스냅샷에서 확인한 소스만 복사한 임시 디렉터리를 읽는다. 사용자 설정을 프로그램으로 로드하지 않고 Python 격리 모드, 사용자 소스 실행 감시, 캐시 끄기를 적용한다. 계약 결과가 첫 import 연결과 줄 번호를 제공하면 그 위치를 기록한다. 연결을 확인할 수 없는 위반도 도구 관찰로 남는다. 선언이 없거나 파일·폴더만 골라 전체 그래프를 볼 수 없는 실행에는 미실행 사유가 표시된다. 실제 2.17로 정상·위반·사용자 정의 계약 제외를 확인했다. [분석기 계약](../examples/analyzer-import-linter.yaml) · [관찰 예시](../examples/observations-import-linter.json)
+
 ## JS/TS 팩
 
 ESLint 구문 규칙(기준), tsc, type-aware ESLint(추가 깊이)를 공유 `--node` toolchain으로 실행한다. 구현은 `internal/worker/analysis/{jsts,eslint,tsc}`, 결정은 A26([결정](DECISIONS.md))이다. 세 작업 모두 `RepositoryCode=false`다.
@@ -1069,9 +1104,17 @@ tsc와 type-aware 작업은 실행 전에 tsconfig 체인 전체(루트, 로컬 
 - 파일 상태: eslint는 `linted_clean`·`linted_with_findings`·`parse_error`·`outside_tsconfig_program`·`not_linted`·`unknown`, tsc는 `checked`·`not_verified`·`dependency_gap`·`outside_tsconfig_program`이다. tsc의 `files_in_scope`는 모듈의 JS/TS 파일 수이고 프로그램 루트가 아닌 파일은 건너뜀으로 센다.
 - 설정 오류(`tsconfig_invalid`), 패키지 extends 미해석(TS6053 → `tsconfig_extends_unresolved`), 입력 없음(TS18003 → `unsupported`/`no_input_files`)은 성공이 아니다.
 
+### JS/TS 모듈 의존 규칙
+
+[dependency-cruiser](https://github.com/sverweij/dependency-cruiser/blob/main/doc/cli.md)는 전체 소스 범위에서 모듈 의존과 순환을 확인한다. 루트에 `.dependency-cruiser.json`이 있으면 선언된 JSON 규칙을 읽는다. 파일이 없으면 관리되는 순환 규칙을 사용한다. JavaScript·TypeScript 형식의 실행 가능한 설정과 webpack·resolver 등 프로젝트 모듈을 불러오는 옵션은 지원하지 않는다. 독립된 Node 도구 설치에 TypeScript가 있으면 TS 모듈도 읽을 수 있다.
+
+Node 권한 모드가 사본 디렉터리와 운영자 도구 설치만 읽게 한다. 별도 프로젝트 구성이나 설치된 프로젝트 의존성을 사용하지 않고, 일반적인 소스 상대 import를 해석한다. 해석하지 못한 의존성과 도구가 다루지 않은 파일은 별도로 센다. JS/TS 입력 중 특정 파일·폴더만 고른 경우 전체 그래프에 대한 판정을 생략한다. 규칙 결과는 도구의 JSON으로 읽으며 선택 소스에서 유일한 import 위치를 확인할 때 근거로 연결한다. 실제 18.8.0으로 정상·순환·실행 가능한 설정 제외를 확인했다. [분석기 계약](../examples/analyzer-dependency-cruiser.yaml) · [관찰 예시](../examples/observations-dependency-cruiser.json)
+
 ## Rust 팩
 
 cargo check(기준)와 clippy(추가 깊이)는 build script(`build.rs`), proc macro, 저장소 Cargo 설정을 사용할 수 있어 `RepositoryCode=true`다. [저장소 코드 실행 허가](#저장소-코드-실행-허가)를 적용한다. 기준 분석이 허가 문제로 `unsupported`이면 보고서는 `partial`(`required_task_not_succeeded`)이다.
+
+README 예제를 rustdoc, 공개 함수 구현과 테스트 소스로 잇는 [모델 검토](REVIEW.md#문서-발췌documents)는 Cargo를 실행하지 않는다. 빌드 구성에서 rustdoc 참조를 검사하는 `cargo-doc`은 [문서 참조와 오류 반환 검사](#문서-참조와-오류-반환-검사)에서 다룬다.
 
 ### 도구와 rustup proxy 거부
 
@@ -1196,7 +1239,32 @@ clippy 작업은 allow-by-default인 여섯 lint를 `-W`로 켠다. 소스의 `#
 - 실행 뒤 모듈의 `.rs`·`Cargo.toml`·`Cargo.lock`·Cargo 설정·`clippy.toml`을 manifest와 다시 대조한다. build script가 소스를 고쳐 쓰면 `workspace_drift`로 실패한다.
 - 허가 아래의 build script·proc macro는 노드 계정이 읽을 수 있는 파일을 읽고 `cargo:warning` 등으로 출력할 수 있다. cargo JSON(`rendered` 포함)은 실행 stream으로 저장된다. 스냅샷 밖 위치의 진단은 위치 없는 관찰로 남지만 원시 stream까지 거르지는 않는다. build script는 분리된 자식을 만들 수 있으며 그 위험은 허가 범위 안에 있다. 신뢰 경계가 다른 저장소에는 허가를 주지 않거나 별도 계정·노드를 쓴다.
 
-C/C++ 진단의 관련 위치는 도구가 반환한 순서로 한 건의 상세에 표시한다. Cppcheck의 위치 설명과 clang-tidy의 메모를 보존하고, `clang-analyzer-*`가 명시한 가정과 분기 선택을 구분한다. 실제 실행에 대한 증거가 아니다. 각 위치에서 확인한 파일·줄 및 raw 스트림의 바이트 구간을 남긴다. 이전 산출물에 바이트 구간이 없더라도 알려진 위치를 표시한다. 미해결 위치는 소스 발췌를 만들지 않는다. 코드 미포함 내보내기에서는 관련 메모와 코드 발췌를 제외한다.
+C/C++ 진단의 관련 위치는 도구가 반환한 순서로 한 건의 상세에 표시한다. Cppcheck의 위치 설명, clang-tidy의 메모와 GCC 파일 디스크립터 경로를 보존하고, `clang-analyzer-*`가 명시한 가정과 분기 선택을 구분한다. 실제 실행에 대한 증거가 아니다. 각 위치에서 확인한 파일·줄 및 raw 스트림의 바이트 구간을 남긴다. 이전 산출물에 바이트 구간이 없더라도 알려진 위치를 표시한다. 미해결 위치는 소스 발췌를 만들지 않는다. 코드 미포함 내보내기에서는 관련 메모와 코드 발췌를 제외한다.
+
+## Java 팩
+
+[PMD](https://docs.pmd-code.org/pmd-doc-7.29.0/pmd_userdocs_cli_reference.html)는 기준 소스 검사고 [SpotBugs](https://spotbugs.readthedocs.io/en/stable/running.html)는 바이트코드를 읽는 추가 검사다. 웹 서비스는 설치 설정의 `agent.tools.java`·`pmd`·`spotbugs`로 도구를 받는다. 절대 경로를 사용하고 설치한 JDK의 `java --version`으로 버전을 확인한다. Linux의 OpenJDK 17.0.21.1과 21.0.13.1에서 PMD 7.29.0과 SpotBugs 4.10.5를 실행했다. [PMD 배포](https://github.com/pmd/pmd/releases/tag/pmd_releases/7.29.0) · [SpotBugs 배포](https://github.com/spotbugs/spotbugs/releases/tag/4.10.5)
+
+- Maven의 `pom.xml`과 정적으로 나열한 reactor 모듈, Gradle의 `build.gradle(.kts)`, `settings.gradle(.kts)`와 문자 그대로 적은 `include`를 읽는다. 선택 범위의 Java 파일은 가장 가까운 모듈에 배정한다. 환경 분석은 프로젝트의 빌드 종류와 빌드 루트, 읽은 컴파일러 release·source 및 Gradle toolchain 선언을 기록한다. Gradle 실행으로 결정되는 모듈, POM profile과 외부 상속·변수는 평가하지 않는다. 확인한 선언과 노드 관측 버전을 구분한다.
+- PMD는 선택한 파일의 읽기 목록과 CODEYE 지정 Best Practices·Error Prone·Multithreading 규칙을 사용한다. 소스의 억제 표기는 적용한다. 캐시와 대상 프로젝트의 규칙·classpath를 사용하지 않는다. 확인한 release가 있으면 Java 구문 버전으로 지정한다. 파싱·규칙 설정 오류가 남으면 작업을 실패로 기록한다.
+- SpotBugs는 같은 JDK의 `javac`로 attempt 작업 사본의 검증된 소스를 컴파일한다. 표준 `src/main/java`가 있으면 같은 모듈의 운영 소스를 컴파일 문맥으로 쓰고 결과의 근거는 사용자가 선택한 운영 소스에만 연결한다. 프로젝트 빌드·플러그인·annotation processor와 저장소의 기존 class/JAR는 사용하지 않는다. 클래스 산출물은 해당 작업의 임시 디렉터리에만 쓴다.
+- SpotBugs의 XML 분석 오류·누락 클래스와 실패 코드는 별도 상태다. 도구가 보고한 클래스와 스냅샷의 선택 소스가 유일하게 대응하는 위치만 근거가 된다. 도구 진단은 스냅샷과 원시 stdout의 바이트 구간에 연결한다. 두 도구 모두 위치를 확인한 파일 수와 더 읽지 못한 범위를 보고한다.
+- 모듈마다 선택한 스냅샷 파일 최대 4,096개를 처리한다. 파일당 2 MiB, 합계 64 MiB를 넘거나 UTF-8로 읽을 수 없는 소스는 제외 건수로 남긴다. 컴파일과 각 분석 명령은 각각 최대 2분이다.
+
+### Java 로컬 클래스패스
+
+운영자가 준비한 소스 외부의 JSON 파일을 `agent.java_classpath_catalog` 또는 별도 노드의 `--java-classpath-catalog`로 지정한다. `artifacts`의 각 항목에 정확한 `groupId:artifactId:version`과 소문자 SHA-256을 넣는다. 절대 `path`로 저장된 JAR를 지정하거나, `maven_repository` 아래 표준 Maven 경로와 일치하는 JAR를 쓴다. 예시의 Commons Lang 3.17.0은 `org/apache/commons/commons-lang3/3.17.0/commons-lang3-3.17.0.jar`에 둔다. 카탈로그가 없으면 JDK의 타입만 사용한다. [클래스패스 예시](../examples/java-classpath.json) · [Maven 아티팩트 좌표](https://maven.apache.org/repositories/artifacts.html)
+
+- Maven은 모듈 POM의 직접 `compile`·`provided` JAR 의존성을 읽는다. 같은 POM의 단일 속성 참조와 직접 버전 관리 항목을 인식한다. Gradle은 최상위 `dependencies` 블록에서 `implementation`·`api`·`compileOnly`·`compileOnlyApi`의 한 줄 리터럴만 읽는다. 부모 POM·BOM·전이 의존성·동적 버전·버전 카탈로그와 다른 모듈의 빌드 결과는 해석하지 않는다. [Gradle 의존성 선언](https://docs.gradle.org/current/userguide/declaring_dependencies_basics.html)
+- 정확한 좌표와 체크섬을 확인한 일반 JAR만 사용한다. ZIP과 클래스 항목의 형식을 확인한다. Maven 좌표 정보가 든 JAR는 선언과 일치하는 항목이 있어야 한다. 외부 경로를 가리키는 매니페스트 클래스패스와 중복 타입이 있는 조합은 거부한다. 확인한 사본만 작업별 임시 디렉터리에서 컴파일 클래스패스와 SpotBugs 보조 클래스패스로 넘긴다. 의존성을 다운로드하거나 Maven·Gradle을 실행하지 않는다. [SpotBugs 명령행 옵션](https://spotbugs.readthedocs.io/en/stable/running.html)
+- 보고서는 서로 다른 직접 선언 수, 카탈로그 지정 JAR·로컬 미러별로 검증된 JAR 수, 확인하지 못한 직접 의존성 수, 적용한 클래스패스의 다이제스트를 기록한다. 확인하지 못한 전이 범위는 한계로 남는다. 선택한 소스에 필요한 타입이 없으면 컴파일 실패 또는 SpotBugs의 누락 클래스 상태를 표시한다.
+
+[PMD 분석기 계약](../examples/analyzer-pmd.yaml) · [SpotBugs 분석기 계약](../examples/analyzer-spotbugs.yaml) · [PMD 진단 예시](../examples/observations-pmd.json) · [SpotBugs 진단 예시](../examples/observations-spotbugs.json)
+
+## 문서 참조와 오류 반환 검사
+
+- **Go errcheck.** go vet과 같은 패키지 패턴·모듈 캐시·오프라인 빌드 환경으로 호출자가 버린 오류의 위치를 찾는다. `go list`의 실제 선택 파일과 진단 줄을 고정 스냅샷에 연결한다. 코드에 명시적으로 처리한 오류나 활성 빌드에서 제외된 파일을 검사 완료로 보고하지 않는다.
+- **Rust rustdoc.** 저장소 코드 실행을 허용한 노드에서 `cargo doc --offline --locked --workspace --no-deps`로 현재 빌드 구성의 문서 참조를 확인한다. rustdoc 진단만 남긴다. 생성한 문서의 crate 진입 파일과 실제 진단 위치를 처리 범위에 기록한다. 나머지 하위 모듈의 문서화 여부는 이 결과로 확정할 수 없다.
 
 ## Go 내부 패키지 의존 관계
 
@@ -1215,7 +1283,7 @@ C/C++ 진단의 관련 위치는 도구가 반환한 순서로 한 건의 상세
 - 환경 공통값에 더해 lizard는 `PYTHONDONTWRITEBYTECODE=1`·`PYTHONNOUSERSITE=1`·`PYTHONIOENCODING=utf-8`, jscpd는 `JSCPD_NO_TIPS=1`·`JSCPD_CACHE_DIR`·`XDG_CACHE_HOME`(scratch)을 받는다. 네트워크를 쓰지 않는다. jscpd의 semantic 모드(모델 내려받기)는 켜지 않는다.
 - **계획.** 분석 하나당 작업 하나(`lizard`, `jscpd`, `gitleaks`, 모듈 `.`, 패턴은 범위 루트)다. lizard·jscpd는 범위에 지원 언어 소스(`pack.SourceFiles`)가 있고 그 도구가 받을 파일이 하나 이상이면 언어와 관계없이 계획한다.
 - **gitleaks 계획.** gitleaks는 모델 검토의 비밀값 선별이기도 하므로 언어 조건 대신 범위에 모델 입력이 될 수 있는 파일이 하나라도 있으면 계획한다(`envdoc.ModelInputPath`: 지원 언어 소스, 안내 문서(README·AGENTS·CONTRIBUTING 등 문서 분류), 모듈 manifest). 문서·설정만 있는 스냅샷의 문서도 내장 민감값 패턴 외에 gitleaks 선별을 받는다. gitleaks를 설정하지 않았으면 작업은 계획되고 `unsupported`(`tool_not_configured`)로 끝나 공백이 보인다. 이때 전체 검토 역할은 미선별 경로(`model_input_not_secret_screened`)를 그대로 따르고, 모듈 단위 slice는 보내지 않는다([검토](REVIEW.md#모듈-단위-검토-분할)).
-- **입력 파일.** lizard와 jscpd는 C/C++, Python, JS/TS, Go, Rust 소스만 받는다(lizard는 reader가 있는 확장자만). 숨김 디렉터리, `testdata`, `vendor`, `node_modules` 아래 파일은 `excluded_data_directory`로 센다. `third-party`·`third_party`·`thirdparty`라는 디렉터리 아래 외부 코드도 넘기지 않고 `excluded_third_party_directory`로 따로 센다(디렉터리 이름의 대소문자 무시). gitleaks는 범위의 모든 포함 파일(설정·문서·데이터 포함)을 본다.
+- **입력 파일.** lizard와 jscpd는 C/C++, Python, JS/TS, Go, Rust, Java 소스만 받는다(lizard는 reader가 있는 확장자만). 숨김 디렉터리, `testdata`, `vendor`, `node_modules` 아래 파일은 `excluded_data_directory`로 센다. `third-party`·`third_party`·`thirdparty`라는 디렉터리 아래 외부 코드도 넘기지 않고 `excluded_third_party_directory`로 따로 센다(디렉터리 이름의 대소문자 무시). gitleaks는 범위의 모든 포함 파일(설정·문서·데이터 포함)을 본다.
 - **링크.** 스냅샷은 symlink를 복사하지 않는다. 작업 사본에 링크나 특수 파일이 생기면 도구를 시작하지 않고 `failed`/`workspace_link_refused`다(lizard·jscpd는 넘길 파일과 조상, gitleaks는 검사 루트 아래 전체). gitleaks `--follow-symlinks`와 jscpd `followSymlinks`는 꺼져 있다.
 - **사본 밖 결과.** 선택된 스냅샷 파일이 아닌 경로의 결과는 버리고 경로·문구를 저장하지 않으며 작업은 `result_outside_snapshot`으로 실패한다. 도구 오류 문구는 고정이고 건수만 담는다. lizard와 jscpd는 목록에 없는 파일의 결과를 형태 오류로 본다.
 - **argv.** lizard·jscpd는 저장소 경로를 argv에 넣지 않고 scratch 목록·설정 파일로 넘긴다. gitleaks는 범위 루트를 `--` 뒤에 `.` 또는 `./<root>`로 넘긴다.

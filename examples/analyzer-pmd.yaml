@@ -1,0 +1,28 @@
+schema_version: '0.1'
+id: java.pmd
+languages: [java]
+planned_platforms: [linux, windows]
+availability: verified
+version_contract: pmd-7.29
+analysis_scope: [syntax, intraprocedural]
+executes_repository_code: false
+requires_build: false
+network_policy: none
+version_probe:
+  executable: '${java}'
+  argv: ["-Xmx512m", "-Dfile.encoding=UTF-8", "-Djava.awt.headless=true", "-cp", "${pmd_library_classpath}", "net.sourceforge.pmd.cli.PmdCli", "--version"]
+execute:
+  executable: '${java}'
+  argv: ["-Xmx512m", "-Dfile.encoding=UTF-8", "-Djava.awt.headless=true", "-cp", "${pmd_library_classpath}", "net.sourceforge.pmd.cli.PmdCli", "check", "--file-list", "${source_list}", "--rulesets", "category/java/errorprone.xml/BrokenNullCheck,category/java/errorprone.xml/CloseResource,category/java/errorprone.xml/ReturnFromFinallyBlock,category/java/errorprone.xml/UselessOperationOnImmutable,category/java/errorprone.xml/UseEqualsToCompareStrings,category/java/errorprone.xml/ImplicitSwitchFallThrough,category/java/bestpractices.xml/PreserveStackTrace,category/java/bestpractices.xml/UnusedLocalVariable,category/java/multithreading.xml/DontCallThreadRun,category/java/multithreading.xml/UnsynchronizedStaticFormatter", "--format", "json", "--encoding", "UTF-8", "--no-cache", "--no-progress", "--no-fail-on-violation", "--threads", "1", "--use-version", "java-${release}"]
+  cwd: '${workspace}'
+  timeout_seconds: 120
+  stdout_max_bytes: 8388608
+  env_allowlist: [PATH, LANG, SystemRoot, HOME, USERPROFILE, TMPDIR, TMP, TEMP]
+exit_codes:
+  clean: [0]
+  findings: []
+  error: [1, 2, 5]
+parser:
+  id: pmd
+  format: json
+  input: stdout-artifact

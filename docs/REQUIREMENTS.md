@@ -24,7 +24,7 @@ CODEYE는 프로젝트에 맞는 분석 계획을 만들고, 독립 작업공간
 | 결과 | 프로젝트별 실행 단계 요약과 상세 상태, 완료 수·추정 진행 정도, 요약·영역별·개별 상세 보고서 |
 | 확장 | 운영자가 최소·최대 워커, 병렬 수와 자원 예산을 설정. 자동 증감. 한 머신에서도 여러 워커, 취소, lease와 fencing |
 | 모델 | 사내에서는 허용된 OpenCode 연결을 우선. 직접 LLM API는 허용된 환경의 옵션 |
-| 언어 | C/C++, Python, JavaScript/TypeScript, Go, Rust |
+| 언어 | Java, Go, C/C++, Python, JavaScript/TypeScript, Rust |
 
 런타임·컴파일러 버전은 환경에서 탐지하고 프로젝트 요구와 대조한다. 특정 최신 버전의 설치를 강제하지 않는다. 노드를 추가하면 각 실행 환경에서 도구·자원을 관측한다. 모든 분석기가 모든 OS·버전에서 작동한다고 가정하지 않는다. 다중 노드 확장을 위해 전체를 다시 써야 하는 전역 상태 구조를 만들지 않는다.
 
@@ -48,8 +48,8 @@ CODEYE 저장소 자체의 자동 테스트(GitHub Actions)는 위 CI 비목표�
 | 실행 형태 | 상태 디렉터리의 관리형 PostgreSQL(기본) 또는 운영자가 준비한 PostgreSQL, controller(loopback, 또는 다른 머신용 TLS·명시적 평문 HTTP)와 로컬 에이전트. `codeye up`·`open`·`start`·`stop`·`status`(Linux 전용), 한 머신의 여러 워커와 최소·최대 자동 증감, 취소, lease·fencing |
 | 계정 | 이메일·비밀번호 회원가입과 로그인, 기존 사용자 이름·일회용 링크 로그인. 같은 소스를 등록해도 사용자마다 프로젝트·실행·보고서를 소유하고 접근은 프로젝트 ACL로 관리한다 |
 | 입력 | 서비스 Linux 계정이 읽을 수 있는 서버·NFS 폴더, 승인된 HTTPS 호스트의 Git 저장소 브랜치와 GitHub.com/GHES pull request. 저장소 웹훅과 PR 댓글 멘션으로도 분석을 요청한다. 비공개 저장소는 설치에 지정한 플랫폼 GitHub 계정으로 읽는다. 설명 없이 등록하고 문서·환경·모듈을 자동 탐색 |
-| 정적 분석 | Go(go vet·Staticcheck·gofmt), C/C++(cppcheck·clang-tidy), Python(ruff·mypy·pyright·bandit), JS/TS(ESLint·tsc), Rust(cargo check·clippy) 다섯 언어 팩과 구조·중복 지표(lizard·jscpd), 비밀정보 검사(gitleaks). Go 패키지의 내부 import와 C/C++ 진단에 연결된 위치를 코드 줄까지 확인할 수 있다. 도구는 운영자가 설치하고 경로를 지정한다 |
-| 기존 테스트 | `with-tests`에서 Go·npm 스크립트·Python unittest·Cargo의 기존 테스트를 작업 사본의 Linux 전용 loopback에서 실행한다. 저장소 코드 실행 권한이 필요하다. 실행 결과와 미실행 사유, 확인된 Go 실패의 선언 위치를 보고한다. [실행](EXECUTION.md#기존-테스트-실행) |
+| 정적 분석 | Java, Go, Python, JS/TS, C/C++, Rust에서 언어별 검사기를 실행한다. 도구별 검사 목적, 처리 범위와 진단 위치를 확인할 수 있다. [분석기 목록](ANALYZERS.md#분석기-목록) |
+| 기존 테스트 | Linux에서 실행 권한을 받은 작업 사본으로 선택한 기존 테스트를 수행한다. 확인한 개별 케이스와 전체 집계, 실패 위치, 미실행 사유를 제공한다. [언어별 진입점](EXECUTION.md#기존-테스트-실행) |
 | 모델 검토 | 검토 지침 하나(`prompts/review`), 승인된 OpenCode 연결. 모델 없이도 도구 결과 보고서가 나온다 |
 | 보고서 | 종합에서 문서와 구현의 대조, 도구 실행과 진단, 구조·중복 지표, 비밀정보, 코드 검토와 분석 공백의 상세 근거로 이동한다. 웹에서 문서 대조와 발견을 검색하고 같은 리비전을 JSON·Markdown·HTML로 내보낸다. 내보내기는 코드 미포함이 기본이다. [보고서](REPORT.md#보고서-패널) |
 | 진행 | 프로젝트별 단계 표시, 완료 수와 가중 진행률, SSE 재접속 |

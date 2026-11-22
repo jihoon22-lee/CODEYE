@@ -9,6 +9,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/progress"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
@@ -65,6 +66,10 @@ func validateSections(r Report) error {
 		if err := validStage(st); err != nil {
 			return err
 		}
+	}
+
+	if err := validateDocumentationGaps(r.Documents, r.Export.IncludeCode); err != nil {
+		return err
 	}
 
 	// Observation partition.
@@ -346,6 +351,51 @@ func validateModelSections(r Report) error {
 	return nil
 }
 
+func validateDocumentationGaps(d *DocumentsSection, includeCode bool) error {
+	if len(d.DocumentationGaps) == 0 {
+		return nil
+	}
+	if d.Discovery != DiscoveryAccepted || len(d.DocumentationGaps) > envdoc.MaxDocumentationGaps {
+		return invalidf("documentation gaps without accepted discovery")
+	}
+	items := map[string]DocItem{}
+	for _, item := range d.Items {
+		items[item.Path] = item
+	}
+	for _, g := range d.DocumentationGaps {
+		if g.Kind != envdoc.DocGapOption && g.Kind != envdoc.DocGapEnvironment ||
+			includeCode && (!envdoc.ValidDocumentationSymbol(g.Kind, g.Symbol) || !envdoc.ValidDocumentationDefault(g.Default)) ||
+			!includeCode && (g.Symbol != "" || g.Default != "") || !envdoc.ValidPath(g.Scope) ||
+			domain.ValidateEvidencePath(g.Source.Path) != nil || !envdoc.Under(g.Source.Path, g.Scope) ||
+			g.Source.StartLine < 1 || g.Source.EndLine < g.Source.StartLine || g.Source.EndLine-g.Source.StartLine >= 25 ||
+			len(g.Searched) == 0 || len(g.Searched) > envdoc.MaxGapDocuments {
+			return invalidf("documentation gap provenance")
+		}
+		guideCount := 0
+		for _, item := range d.Items {
+			if !envdoc.UserGuide(envdoc.Doc{AppliesTo: item.AppliesTo, Class: item.Class}, g.Scope) {
+				continue
+			}
+			if item.Status != envdoc.DocSelected || item.LineCount == nil {
+				return invalidf("documentation gap has unread guidance")
+			}
+			guideCount++
+		}
+		if guideCount != len(g.Searched) {
+			return invalidf("documentation gap has incomplete search")
+		}
+		for i, x := range g.Searched {
+			item := items[x.Path]
+			if (i > 0 && g.Searched[i-1].Path >= x.Path) || item.Status != envdoc.DocSelected ||
+				item.LineCount == nil || x.LineCount != *item.LineCount ||
+				!envdoc.UserGuide(envdoc.Doc{AppliesTo: item.AppliesTo, Class: item.Class}, g.Scope) {
+				return invalidf("documentation gap search provenance")
+			}
+		}
+	}
+	return nil
+}
+
 // projectSections is the code-free projection of the sections: every model
 // statement becomes the omission label (as finding prose does) and a
 // requirement constraint that is not version-constraint text is withheld.
@@ -408,6 +458,11 @@ func projectSections(out *Report, r Report) {
 		for i, x := range d.InstructionNotes {
 			x.Note, x.EvidenceIDs = textOmitted, slices.Clone(x.EvidenceIDs)
 			c.InstructionNotes[i] = x
+		}
+		c.DocumentationGaps = slices.Clone(c.DocumentationGaps)
+		for i := range c.DocumentationGaps {
+			c.DocumentationGaps[i].Symbol = ""
+			c.DocumentationGaps[i].Default = ""
 		}
 		out.Documents = &c
 	}

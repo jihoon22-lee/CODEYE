@@ -18,6 +18,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/report"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/testexec/resultdoc"
 )
 
 // Store is the persistence the publisher needs.
@@ -172,7 +173,7 @@ func (p *Publisher) PublishRun(ctx context.Context, runID string) (Outcome, erro
 			r := ref
 			in.ResultManifest = &r
 		}
-		if !isManifest && !p.Registry.Wants(art.MediaType) {
+		if (art.MediaType == resultdoc.MediaType && (art.Role != "other" || art.SizeBytes > resultdoc.MaxBytes)) || (!isManifest && !p.Registry.Wants(art.MediaType)) {
 			continue
 		}
 		body, ok, err := p.read(art)

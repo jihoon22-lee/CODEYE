@@ -113,7 +113,13 @@ func TestGoFailureReceiptFromScopedWorkerExecution(t *testing.T) {
 			if tc.passed {
 				wantStatus = domain.TaskSucceeded
 			}
-			if result.Status != wantStatus || calls != 3 || (len(result.Artifacts) == 1) != tc.want {
+			var failures []analysis.ArtifactFile
+			for _, a := range result.Artifacts {
+				if a.MediaType == faildoc.MediaType {
+					failures = append(failures, a)
+				}
+			}
+			if result.Status != wantStatus || calls != 3 || (len(failures) == 1) != tc.want {
 				t.Fatalf("status %s, calls %d, artifacts %+v", result.Status, calls, result.Artifacts)
 			}
 			if tc.reason != "" && result.Reason != tc.reason {
@@ -122,7 +128,7 @@ func TestGoFailureReceiptFromScopedWorkerExecution(t *testing.T) {
 			if !tc.want {
 				return
 			}
-			art := result.Artifacts[0]
+			art := failures[0]
 			body, err := os.ReadFile(art.Path)
 			if err != nil || art.Role != "other" || art.MediaType != faildoc.MediaType || bytes.Contains(body, []byte("unpublished")) || bytes.Contains(body, []byte("private-subtest")) {
 				t.Fatalf("unsafe or missing artifact: %+v, error %v", art, err)

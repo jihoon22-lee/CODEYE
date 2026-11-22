@@ -148,6 +148,16 @@
 - **코드 리뷰**에서는 정상본과 한 가지 동작만 달라지는 격리 사본을 준비한다. 기존 테스트 또는 독립적인 입력·출력 확인으로 차이를 먼저 기록한다. 검토자에게는 정답을 주지 않는다. 실제 보고서의 발생 조건·결과·파일과 줄이 맞는지, 정상본에도 같은 지적을 냈는지 확인한다.
 - **절 간 일관성**을 확인한다. 검증된 코드 발견에 나온 구현을 문서 절에서 찾지 못했다고 기록한 경우, 두 절이 받은 근거와 인용을 따로 대조한다. 새 근거가 도달한 건수, 올바른 판정으로 바뀐 건수, 미확인으로 남은 건수를 구별한다.
 
+### 언어별 분석 깊이 비교
+
+| 비교 | 같은 조건으로 고정할 것 | 확인할 결과 |
+|---|---|---|
+| 한 동작을 여러 언어로 구현 | 문서의 약속, 정상·실패 입력, 관찰할 값, 한 곳만 다른 수정 전후 코드 | 원인을 지목한 코드 줄, 실패를 입증한 테스트와 단언, 수정본에 같은 지적을 반복했는지 |
+| 공개 프로젝트의 같은 커밋을 두 버전으로 분석 | 커밋, 분석 범위, 모델, 호출 한도, 테스트 실행 여부 | 대표 동작의 조건과 결과를 어디까지 답하는지, 문서·구현·테스트 중 실제 보고서가 인용한 근거 |
+| 실제 도구와 테스트 연동 | 버전, 실행 가능한 도구·의존성, 대상 범위 | 실행 성공 여부와 발견 결과, 누락된 모듈, 실패·통과한 테스트 수와 원본의 해당 줄 |
+
+판독에는 완전 답변·부분 답변·미포착·오답을 쓴다. 질문을 언제 정했고 모델에 전달했는지, 같은 결함을 여러 언어로 옮긴 대조인지, 처음 보는 프로젝트인지 함께 기록한다. 한 가지 결함으로 여섯 언어의 전반적인 분석 정확도를 추정하지 않는다.
+
 ### 관점별 코드 검토 비교
 
 같은 입력을 같은 모델에 보내 일반 지침의 독립 조사 두 번과 관점을 나눈 조사 두 번을 비교한다. 각 비교군에는 같은 후보 검증을 적용한다. 입력 파일과 줄, 호출 수, 모델별 사용량, 수정 전후의 실제 동작을 기록한다. 서로 다른 문장으로 같은 원인을 두 번 지적한 경우와, 준비한 정답에 없지만 소스에서 확인되는 별도 문제를 구별해 채점한다. 호출이 늘어난 만큼 다른 파일 검토가 줄어드는지도 확인한다.
@@ -198,7 +208,7 @@
 - 실행: `CODEYE_PILOT_RELAY_FILE`에 relay ready file을, `CODEYE_PILOT_RESULTS`에 새 비공개 결과 디렉터리를 지정하고 `python3 scripts/test_postgres.py --pilot`을 실행한다. 실제 모델 요청을 보낸다.
 - 대상 한정: `CODEYE_PILOT_CASES`에 `Q01-before,Q01-after,...,modules,caller-closes,pilot,git`처럼 쉼표로 준다. 비우면 합성 쌍 전체, 고정 공개 커밋, 공개 HTTPS `main`을 실행한다. 고정 입력 `modules`·`caller-closes`는 명시할 때만 들어간다.
 - 모듈 단위 slice: `CODEYE_PILOT_GITLEAKS`(gitleaks 절대 경로. 없으면 slice는 미선별로 실행되고 보고서에 미선별 공백이 남는다)와 `CODEYE_PILOT_REVIEW_MAX_CALLS`(비우면 에이전트 기본값 99)를 에이전트에 넘긴다. `CODEYE_PILOT_TOOLS`(공백으로 구분한 `name=path`, 예: `ruff=/abs/ruff node=/abs/node eslint=/abs/eslint/bin/eslint.js`)는 에이전트 플래그 `--name path`가 된다. 파일럿 사본은 Python·JS 모듈의 ruff·eslint가 판정에 필요하므로, 이 도구가 없으면 파일럿은 `partial`이고 아래 조건을 통과하지 못한다. `CODEYE_PILOT_LEDGER`를 주면 그 relay 장부도 검사한다. 실행 뒤 `check_coverage`가 다음을 확인하고 결과를 `coverage-check.json`에 남긴다. 하나라도 어긋나면 실행이 실패한다.
-  - 파일럿이 아닌 사례에는 slice task가 없고, 검토 호출의 지침 digest가 Go 단독 선택의 고정값이다.
+  - 짧은 합성 사례에서는 범위 장부를 만들 수 있고, 예약된 후속 조사·검증은 남은 줄이 없을 때 모델 호출 없이 끝난다. 검토 호출에는 선택한 언어 지침의 고정 digest가 기록된다.
   - 파일럿은 `completed`이고 AI 검토가 `performed`다. 보고서가 검토 산출물을 모두 읽었다(`unrecognized_artifact`·`artifact_rejected`·`review_lineage_mismatch` 등이 없다). 범위 산출물과 보고서 [장부](REPORT.md#모듈별-검토-장부)의 상한이 설정과 같고, 장부의 `calls_used`(slice 앞 attempt 호출 수와 slice 기록의 호출)가 알려져 있고 상한 이하다. `budget_exhausted` slice에는 기록도 호출도 없다. overview와 slice의 investigate가 같은 파일을 보내지 않는다. 장부의 모델에 보낸 파일 합과 보고서의 `llm_exposed_files`가 overview가 보낸 파일 수보다 크다.
   - 시험 장부(가짜 upstream)의 dry run에서는 두 원인을 실패가 아닌 `dry_run_expected`로 적는다. 가짜 upstream 응답이 거부된 검토 task(`review_output_invalid`, 이때 `llm_exposed_files`는 미확정)와 이 호스트에 설정하지 않은 필수 분석기(`tool_not_configured`) 때문에 파일럿이 `partial`인 경우다. 두 원인은 대개 함께 나타난다. 분석기가 없으면 `review.interpret`에 들어갈 관찰이 없고, 가짜 upstream은 관찰이 없을 때 항목 없는 응답을 돌려줘 거부된다. `CODEYE_PILOT_TOOLS`로 ruff·eslint·node를 주면 dry run 파일럿도 `completed`이고 `dry_run_expected`는 비어 있다. 다른 원인은 그대로 실패이고, 유료 실행에는 이 예외가 없다.
   - relay 장부에 `refused`·`blocked` 요청이 없다.

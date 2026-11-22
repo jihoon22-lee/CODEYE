@@ -24,7 +24,17 @@ import (
 type HandlerInfo struct{ Name, Version, Capability string }
 
 // Job is one attempt as seen by a handler.
+type ObservedTest struct {
+	Path   string
+	Line   int
+	Status string
+}
+
+const MaxTestEvidence = 2048
+
 type Job struct {
+	// TestEvidence is populated by the worker after accepted with-tests tasks.
+	TestEvidence []ObservedTest
 	// AllowModelReview is set from the node operator's explicit source grant.
 	AllowModelReview bool
 	// AllowRepositoryCode is the node operator's explicit grant to run
@@ -49,6 +59,8 @@ type Job struct {
 	// Snapshot.SnapshotDir is read-only; Snapshot.WorkspaceDir is a fresh
 	// writable clone for this attempt. Snapshot.Digest is the manifest digest.
 	Snapshot source.Snapshot
+	// SourceDir is the private local source path, used only to reject local auxiliary dependency inputs from the original project.
+	SourceDir string
 	// Scratch is the attempt-private writable directory; every file a
 	// handler returns (execution streams, artifacts) must live inside it.
 	Scratch string

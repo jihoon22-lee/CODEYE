@@ -21,6 +21,7 @@ import (
 // secView is the translated section model shared by Markdown and HTML.
 type secView struct {
 	view
+	testEvidence   map[string][]testLine
 	Sections       []secBlock
 	Appendix       []secPart
 	OverviewDetail []secPart
@@ -263,7 +264,7 @@ func listPart(heading string, items []secItem, empty string) secPart {
 }
 
 func newSecView(r Report, digest string, l Locale) secView {
-	v := secView{view: newView(r, digest, l)}
+	v := secView{view: newView(r, digest, l), testEvidence: testLines(r.Executions)}
 	findings := map[string]Finding{}
 	for _, f := range r.Findings {
 		findings[f.ID] = f
@@ -335,7 +336,14 @@ func newSecView(r Report, digest string, l Locale) secView {
 	if e.Discovery == DiscoveryAccepted {
 		mt := &secTable{Head: []string{l.Label("col.module"), l.Label("col.ecosystem"), l.Label("col.path"), l.Label("col.in_scope")}}
 		for _, m := range e.Modules {
-			mt.Rows = append(mt.Rows, []secCell{code(m.ID), code(m.Ecosystem), code(m.Path), txt(lab(l, "in_scope", strconv.FormatBool(m.InScope)))})
+			modulePath := code(m.Path)
+			if m.BuildSystem != "" {
+				modulePath.Note = m.BuildSystem
+				if m.BuildRoot != m.Path {
+					modulePath.Note += " · " + m.BuildRoot
+				}
+			}
+			mt.Rows = append(mt.Rows, []secCell{code(m.ID), code(m.Ecosystem), modulePath, txt(lab(l, "in_scope", strconv.FormatBool(m.InScope)))})
 		}
 		env.Parts = append(env.Parts, secPart{Heading: l.Label("env.modules"), Table: mt})
 		qt := &secTable{Head: []string{l.Label("col.module"), l.Label("col.tool"), l.Label("col.constraint"), l.Label("col.comparison"), l.Label("col.source")}}
@@ -393,6 +401,29 @@ func newSecView(r Report, digest string, l Locale) secView {
 		lead = append(lead, tf(l, "docs.budget", b.PerDocumentBytes, b.TotalBytes, b.MaxDocuments, b.ReadBytes))
 	}
 	docs.Parts = append(docs.Parts, secPart{Paras: lead, Counts: countsOf(l, SectionDocuments, overviewCounts(r, SectionDocuments), countOrder[SectionDocuments])})
+	if len(d.DocumentationGaps) > 0 {
+		table := &secTable{Head: []string{l.Label("docs.gaps.interface"), l.Label("docs.gaps.default"), l.Label("col.source"), l.Label("docs.gaps.searched")}}
+		for _, gap := range d.DocumentationGaps {
+			name := gap.Symbol
+			if name == "" {
+				name = l.Label("docs.gaps." + gap.Kind)
+			}
+			source := gap.Source.Path + ":" + strconv.Itoa(gap.Source.StartLine)
+			if gap.Source.EndLine > gap.Source.StartLine {
+				source += "–" + strconv.Itoa(gap.Source.EndLine)
+			}
+			var searched []string
+			for _, file := range gap.Searched {
+				loc := file.Path
+				if file.LineCount > 0 {
+					loc += ":1–" + strconv.Itoa(file.LineCount)
+				}
+				searched = append(searched, loc)
+			}
+			table.Rows = append(table.Rows, []secCell{code(name), code(gap.Default), code(source), code(strings.Join(searched, ", "))})
+		}
+		docs.Parts = append(docs.Parts, secPart{Heading: l.Label("docs.gaps.heading"), Paras: []string{l.Label("docs.gaps.note")}, Table: table})
+	}
 	if d.Discovery == DiscoveryAccepted {
 		it := &secTable{Head: []string{l.Label("col.path"), l.Label("col.class"), l.Label("col.applies_to"), l.Label("col.status"), l.Label("col.reason"), l.Label("col.size"), l.Label("col.lines")}}
 		for _, x := range d.Items {

@@ -612,6 +612,18 @@ func (v secView) comparisonDetails(c DocComparison, evidence []SectionEvidence) 
 		}
 		items = append(items, secItem{Label: l.Label(label), Text: reason})
 	}
+	if c.RelatedWorkflow != nil || len(c.CodeEvidenceIDs) > 0 {
+		refs := slices.Clone(c.CodeEvidenceIDs)
+		if c.AdditionalObservation != nil {
+			refs = append(refs, c.AdditionalObservation.CodeEvidenceIDs...)
+		}
+		if c.RelatedWorkflow != nil {
+			refs = append(refs, c.RelatedWorkflow.TestEvidenceID)
+		}
+		if counts := v.citedTestCounts(refs, evidence); counts.Total() > 0 {
+			items = append(items, secItem{Label: l.Label("tests.contract_observation"), Text: tf(l, "tests.case_counts", counts.Passed, counts.Failed, counts.Skipped)})
+		}
+	}
 	priorRefs := slices.Clone(c.DocumentEvidenceIDs)
 	for _, id := range c.CodeEvidenceIDs {
 		if c.AdditionalObservation == nil || !slices.Contains(c.AdditionalObservation.CodeEvidenceIDs, id) {

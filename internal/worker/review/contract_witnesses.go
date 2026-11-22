@@ -49,7 +49,11 @@ type witnessQuery struct {
 	performance          bool
 	members              []string
 	navigationNames      []string
+	jsAPINames           []string
+	jsOptionNames        []string
+	javaDocs             map[string][]record.Excerpt
 	pythonDocs           map[string][]record.Excerpt
+	rustDocs             map[string][]record.Excerpt
 	pythonCalls          []string
 	formula              pythonFormulaQuery
 	cFamilies            []cAPIFamily
@@ -71,19 +75,22 @@ type contractWitness struct {
 }
 
 type contractCall struct {
-	caller, callee contractWitness
-	symbol         string
+	caller, callee       contractWitness
+	callerEnd, calleeEnd int
+	symbol               string
 }
 
 type contractSelection struct {
 	witnesses, additional []contractWitness
-	calls                 []contractCall
+	rustAPI               []contractWitness
+	calls, javaCalls      []contractCall
 	member                memberPair
 	sources               map[string]string
 	goTraces              []goWrapperTrace
 	goOption              goOptionTrace
 	goJSONFields          []goJSONTrace
 	claimWitnesses        [][]contractWitness
+	jsOptions             []jsOptionTrace
 	cDefinitions          []contractWitness
 	cFamily               []contractWitness
 	queries               []witnessQuery
@@ -199,6 +206,8 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 	candidates = append(candidates, named[namedFirst:]...)
 
 	matches := make([][2][]contractWitness, len(queries))
+	javaRuntime := make([]contractWitness, len(queries))
+	var javaCalls []contractCall
 	pythonRuntime := make([]contractWitness, len(queries))
 	pythonTests := make([]contractWitness, len(queries))
 	formulas := make([]contractWitness, len(queries))
@@ -209,15 +218,12 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 	additional := make([][]contractWitness, len(queries))
 	calls := make([][]contractCall, len(queries))
 	members := memberWitnesses{sources: map[memberKey][]contractWitness{}, tests: map[string][]memberTest{}}
-	manifest := make(map[string]source.Entry, len(s.j.Snapshot.Manifest.Entries))
-	for _, entry := range s.j.Snapshot.Manifest.Entries {
-		manifest[entry.Path] = entry
-	}
+	catalog := s.callCatalog()
+	manifest := catalog.files
 	remaining := witnessScanBytes
 	scanned := map[string]bool{}
 	contents := map[string]string{}
 	safe := map[string]string{}
-	definitions := map[[2]string]struct{ start, end int }{}
 	readSafe := func(e source.Entry) (string, bool, error) {
 		if err := s.ctx.Err(); err != nil {
 			return "", false, err
@@ -254,6 +260,28 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 		contents[e.Path] = content
 		return content, true, err
 	}
+	bindings := catalog.calls(func(e source.Entry) (string, bool, error) {
+		if callPathMetadata(e.Path) {
+			return readSafe(e)
+		}
+		if _, ok := eligible[e.Path]; !ok {
+			return "", false, nil
+		}
+		return read(e)
+	})
+	rustBindings := make([][]rustDocumentBinding, len(queries))
+	rustRuntime := make([]contractWitness, len(queries))
+	rustTests := make([]contractWitness, len(queries))
+	for i, q := range queries {
+		bound, err := rustDocumentedBindings(bindings, q)
+		if err != nil {
+			return contractSelection{}, err
+		}
+		if len(bound) == 1 {
+			rustBindings[i] = bound
+			rustRuntime[i] = rustImplementationWitness(bound[0], q)
+		}
+	}
 	processed := map[string]bool{}
 	for _, c := range candidates {
 		e := c.entry
@@ -280,18 +308,50 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 			}
 		}
 		for i, query := range queries {
+			if len(query.javaDocs) > 0 {
+				found[i] = contractWitness{}
+				if w := documentedJavaImplementation(e, content, query); w.line != 0 {
+					w.query = i + 1
+					javaRuntime[i] = w
+					javaCalls = append(javaCalls, documentedJavaCalls(e, content, w, query.terms)...)
+				}
+				continue
+			}
+			if len(query.rustDocs) > 0 {
+				found[i] = contractWitness{}
+				if len(rustBindings[i]) == 1 {
+					w, err := rustBindings[i][0].linkedAssertion(bindings, e, content, query)
+					if err != nil {
+						return contractSelection{}, err
+					}
+					if w.score > rustTests[i].score {
+						rustTests[i] = w
+					}
+				}
+				continue
+			}
 			if w := documentedPythonWitness(e, content, query); w.line != 0 {
 				w.query = i + 1
 				if w.score > pythonRuntime[i].score {
 					pythonRuntime[i] = w
 				}
 				found[i] = w
-			} else if w := documentedPythonTestRows(e, content, query); w.line != 0 {
-				w.query = i + 1
-				if w.score > pythonTests[i].score {
-					pythonTests[i] = w
+			} else if len(query.pythonDocs) > 0 {
+				w := documentedPythonTestRows(e, content, query)
+				if w.line == 0 {
+					var err error
+					w, err = linkedPythonAssertion(bindings, e, content, query)
+					if err != nil {
+						return contractSelection{}, err
+					}
 				}
-				found[i] = w
+				if w.line != 0 {
+					w.query = i + 1
+					if w.score > pythonTests[i].score {
+						pythonTests[i] = w
+					}
+					found[i] = w
+				}
 			}
 		}
 		wholeFile := shortReviewSource(content, roleMaxCodeFile)
@@ -336,49 +396,38 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 				matches[i][kind] = append(matches[i][kind], w)
 			}
 		}
-		for i, trace := range contractCalls(content, e, queries, found, c.penalties) {
-			if trace.site.line == 0 || queries[i].hasGoCommandRoute || (found[i].end > 0 && len(queries[i].pythonDocs[e.Path]) != 0) {
-				continue
-			}
-			python := callLanguage(e.Path) == "python"
-			p := directModule(manifest, e.Path, trace.site.module, python)
-			if len(queries[i].pythonDocs[p]) > 0 {
-				continue // prefer the executable window after the cited docstring
-			}
-			target, allowed := eligible[p]
-			if !allowed || !record.ScopeUnder(p, queries[i].scope) {
-				continue
-			}
-			definition, ok, err := read(target.entry)
-			if err != nil {
-				return contractSelection{}, err
-			}
-			if !ok {
-				continue
-			}
-			key := [2]string{p, trace.site.symbol}
-			w, cached := definitions[key]
-			if !cached {
-				first, last := directDefinition(callTokens(definition, python), trace.site.symbol, python)
-				if first > 0 && fitsWitness(strings.Split(definition, "\n"), first, last) {
-					w.start, w.end = first, last
+		checked := map[string]bool{}
+		for i, w := range found {
+			if scope := queries[i].scope; w.line != 0 && !checked[scope] {
+				checked[scope] = true
+				bound, err := bindings.from(e.Path, scope)
+				if err != nil {
+					return contractSelection{}, err
 				}
-				definitions[key] = w
+				for _, trace := range contractCalls(content, e, bound, queries, found, c.penalties, scope) {
+					i, q := trace.query, queries[trace.query]
+					if q.hasGoCommandRoute || (found[i].end > 0 && len(q.pythonDocs[e.Path]) != 0) || len(q.pythonDocs[trace.site.callee.path]) > 0 {
+						continue
+					}
+					target, allowed := eligible[trace.site.callee.path]
+					if !allowed || windowKind(target.entry.Path) != "code" {
+						continue
+					}
+					if c.inOverview && target.inOverview && inWitnessPrefix(content, trace.site.caller.end) &&
+						inWitnessPrefix(contents[target.entry.Path], trace.site.callee.end) {
+						continue
+					}
+					calls[i] = append(calls[i], contractCall{
+						caller:    contractWitness{entry: e, line: trace.start, score: trace.score, query: i + 1},
+						callee:    contractWitness{entry: target.entry, line: trace.site.callee.start, query: i + 1},
+						callerEnd: trace.site.caller.end, calleeEnd: trace.site.callee.end, symbol: trace.site.symbol,
+					})
+				}
 			}
-			if w.start == 0 {
-				continue
-			}
-			if c.inOverview && target.inOverview && inWitnessPrefix(content, trace.site.end) && inWitnessPrefix(definition, w.end) {
-				continue
-			}
-			calls[i] = append(calls[i], contractCall{
-				caller: contractWitness{entry: e, line: trace.start, score: trace.score, query: i + 1},
-				callee: contractWitness{entry: target.entry, line: w.start, query: i + 1},
-				symbol: trace.site.symbol,
-			})
 		}
 	}
 
+	jsOptions := jsOptionTraces(queries, contents, manifest, maintenance)
 	goOption, err := s.goOptionWitness(queries, contents, readSafe)
 	if err != nil {
 		return contractSelection{}, err
@@ -398,6 +447,12 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 	var linked []contractCall
 	seen := map[string]bool{}
 	hasCode := make([]bool, len(matches))
+	for i, w := range javaRuntime {
+		if len(out) < witnessMaxExcerpts && w.line > 0 && !seen[w.entry.Path] {
+			out = append(out, w)
+			seen[w.entry.Path], hasCode[i] = true, true
+		}
+	}
 	member, paired := members.choose(queries, manifest)
 	if paired {
 		out = append(out, member.source, member.test)
@@ -538,8 +593,18 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 			}
 		}
 	}
-	return contractSelection{witnesses: out, additional: extras, calls: linked, member: member, sources: contents,
-		goTraces: goTraces, goOption: goOption, goJSONFields: goJSONFields, cDefinitions: cRuntime.choose(queries), cFamily: cFamilies.choose(queries), queries: queries, claimWitnesses: contractClaimCandidates(matches)}, nil
+	var rustAPI []contractWitness
+	for i, w := range rustRuntime {
+		if w.line > 0 {
+			rustAPI = []contractWitness{w}
+			if test := rustTests[i]; test.line > 0 {
+				rustAPI = append(rustAPI, test)
+				break
+			}
+		}
+	}
+	return contractSelection{witnesses: out, additional: extras, rustAPI: rustAPI, calls: linked, javaCalls: javaCalls, member: member, sources: contents,
+		goTraces: goTraces, goOption: goOption, goJSONFields: goJSONFields, cDefinitions: cRuntime.choose(queries), cFamily: cFamilies.choose(queries), queries: queries, claimWitnesses: contractClaimCandidates(matches), jsOptions: jsOptions}, nil
 }
 
 func minifiedSource(path string) bool {
@@ -548,49 +613,33 @@ func minifiedSource(path string) bool {
 }
 
 type contractCallChoice struct {
-	site         callSite
-	start, score int
+	site                sourceCall
+	start, score, query int
 }
 
-// contractCalls pairs an explicit direct invocation with its nearby lexical
-// contract anchor. Two equally plausible invocations in the same file are
-// left to the ordinary lexical fallback.
-func contractCalls(content string, e source.Entry, queries []witnessQuery, found []contractWitness, penalties []int) []contractCallChoice {
-	lang := callLanguage(e.Path)
-	if lang == "" {
-		return nil
-	}
-	matched := false
-	for _, w := range found {
-		matched = matched || w.line > 0
-	}
-	if !matched {
-		return nil
-	}
-	python := lang == "python"
-	sites := importedCalls(callTokens(content, python), python)
-	if len(sites) == 0 {
-		return nil
-	}
+// contractCalls ties resolved calls to a lexical contract anchor. Equally
+// relevant distinct calls leave the ordinary source selection intact.
+func contractCalls(content string, e source.Entry, sites []sourceCall, queries []witnessQuery, found []contractWitness,
+	penalties []int, scope string) []contractCallChoice {
 	lines := strings.Split(content, "\n")
 	choices := make([]contractCallChoice, len(queries))
 	tied := make([]bool, len(queries))
 	for _, site := range sites {
-		if !fitsWitness(lines, site.line, site.end) {
+		from, to := site.caller.start, site.caller.end
+		if !fitsWitness(lines, from, to) {
 			continue
 		}
-		start := site.line
-		anchor := lines[site.line-1]
-		if site.line > 1 {
-			previous := strings.TrimSpace(lines[site.line-2])
-			if len(previous) <= witnessMaxExcerpt && witnessControl.MatchString(previous) && fitsWitness(lines, site.line-1, site.end) {
+		anchor := lines[from-1]
+		if from > 1 {
+			previous := strings.TrimSpace(lines[from-2])
+			if len(previous) <= witnessMaxExcerpt && witnessControl.MatchString(previous) && fitsWitness(lines, from-1, to) {
 				anchor = previous + " " + anchor
-				start--
+				from--
 			}
 		}
 		words := witnessTerms(anchor)
 		for i, q := range queries {
-			if found[i].line == 0 {
+			if found[i].line == 0 || q.scope != scope {
 				continue
 			}
 			score := witnessMatch(words, q.terms)
@@ -605,19 +654,20 @@ func contractCalls(content string, e source.Entry, queries []witnessQuery, found
 			}
 			switch {
 			case score > choices[i].score:
-				choices[i] = contractCallChoice{site: site, start: start, score: score}
+				choices[i] = contractCallChoice{site: site, start: from, score: score, query: i}
 				tied[i] = false
 			case score == choices[i].score && choices[i].site != site:
 				tied[i] = true
 			}
 		}
 	}
-	for i, tie := range tied {
-		if tie {
-			choices[i] = contractCallChoice{}
+	var out []contractCallChoice
+	for i, match := range choices {
+		if !tied[i] && match.start > 0 {
+			out = append(out, match)
 		}
 	}
-	return choices
+	return out
 }
 
 func fitsWitness(lines []string, start, end int) bool {
@@ -673,6 +723,8 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 		addWitnessWords(statement, c.Statement, 4)
 		paths := map[string]bool{}
 		var pythonDocs map[string][]record.Excerpt
+		var rustDocs map[string][]record.Excerpt
+		var javaDocs map[string][]record.Excerpt
 		var pythonCalls []string
 		var formula pythonFormulaQuery
 		var cFamilies []cAPIFamily
@@ -738,7 +790,13 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 					exactNames = append(exactNames, name)
 				}
 			}
-			if x.DirectivePath != "" {
+			if x.IsRustAPIDocument() {
+				if rustDocs == nil {
+					rustDocs = map[string][]record.Excerpt{}
+				}
+				rustDocs[x.Path] = append(rustDocs[x.Path], x)
+				paths[x.Path] = true
+			} else if x.DirectivePath != "" {
 				if pythonDocs == nil {
 					pythonDocs = map[string][]record.Excerpt{}
 				}
@@ -746,6 +804,13 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 				paths[x.Path] = true
 				addWitnessWords(terms, strings.TrimSuffix(path.Base(x.Path), ".py"), 4)
 				addPythonDocExampleTerms(terms, raw)
+			}
+			if x.IsJavaAPIDocument() {
+				if javaDocs == nil {
+					javaDocs = map[string][]record.Excerpt{}
+				}
+				javaDocs[x.Path] = append(javaDocs[x.Path], x)
+				paths[x.Path] = true
 			}
 			if ref := x.PackageReference; !ref.IsZero() && ref.Scope() == c.AppliesTo && ref.Matches(c.Statement) {
 				paths[ref.EntryPath] = true
@@ -759,10 +824,19 @@ func (s *roleStage) witnessQueries(docs record.Record) ([]witnessQuery, error) {
 				members = documentedMembers(passage, false)
 			}
 		}
+		if len(javaDocs) > 0 {
+			members = nil
+		}
 		if len(terms) != 0 || len(paths) != 0 {
+			var jsAPINames []string
+			for _, m := range documentedCall.FindAllStringSubmatch(c.Statement, len(exactNames)) {
+				if slices.Contains(exactNames, m[1]) && !slices.Contains(jsAPINames, m[1]) {
+					jsAPINames = append(jsAPINames, m[1])
+				}
+			}
 			out = append(out, witnessQuery{contractIndex: i + 1, scope: c.AppliesTo, terms: terms, statement: statement, paths: paths,
 				operation: maintenanceOperation(c.Statement), typeContract: mentionsJavaScriptTypes(c.Statement),
-				performance: performanceContract(c.Statement), members: members, navigationNames: exactNames, pythonDocs: pythonDocs, pythonCalls: pythonCalls,
+				performance: performanceContract(c.Statement), members: members, navigationNames: exactNames, jsAPINames: jsAPINames, jsOptionNames: jsDocumentedOptions(c.Statement, exactNames), javaDocs: javaDocs, pythonDocs: pythonDocs, rustDocs: rustDocs, pythonCalls: pythonCalls,
 				formula: formula, cFamilies: cFamilies, packageEntry: packageEntry, goExamples: goExamples, goCommands: goCommands,
 				goDefaults: goDefaults, goJSONFields: goJSONFields})
 		}

@@ -84,7 +84,7 @@ func TestValidateRejects(t *testing.T) {
 		"go vet kind":                func(d map[string]any) { d["kind"] = "go_vet_observations" },
 		"unknown field":              func(d map[string]any) { d["extra"] = 1 },
 		"hyphen analyzer id":         func(d map[string]any) { d["analyzer"].(map[string]any)["id"] = "go.static-check" },
-		"unknown ecosystem":          func(d map[string]any) { d["analyzer"].(map[string]any)["ecosystem"] = "java" },
+		"unknown ecosystem":          func(d map[string]any) { d["analyzer"].(map[string]any)["ecosystem"] = "ruby" },
 		"success with partial parse": func(d map[string]any) { d["outcome"].(map[string]any)["partial_parse"] = true },
 		"success with reason":        func(d map[string]any) { d["outcome"].(map[string]any)["reason"] = "x" },
 		"success wrong exit class":   func(d map[string]any) { d["outcome"].(map[string]any)["exit_class"] = ExitSuccessWithoutFindings },

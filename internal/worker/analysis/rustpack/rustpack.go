@@ -1,8 +1,8 @@
 // Package rustpack is the Rust pack: cargo check (the baseline analyzer)
-// and cargo clippy (extra depth) run natively through the executor runner in the
+// and the optional cargo clippy and cargo doc checks run natively through the executor runner in the
 // attempt workspace copy, offline, with the real toolchain binaries the
 // operator named (never a rustup proxy, never PATH), and record the result in
-// the generic observations envelope (obsdoc). Both execute repository code
+// the generic observations envelope (obsdoc). All three can execute repository code
 // (build scripts, proc macros, repository Cargo configuration), so every task
 // is pack.Task.RepositoryCode=true and runs only under the node operator's
 // repository-code grant (docs/ANALYZERS.md#저장소-코드-실행-허가, docs/ANALYZERS.md).
@@ -63,12 +63,24 @@ func CheckDescriptor() pack.Descriptor {
 	return pack.Descriptor{ID: CheckAnalyzerID, Name: CheckName, Ecosystem: "rust", Required: true, Tool: CheckTool, VersionArgs: []string{"--version"}, ParseVersion: ParseCargoVersion}
 }
 
+// DocDescriptor checks documentation links in the active workspace build.
+func DocDescriptor() pack.Descriptor {
+	return pack.Descriptor{ID: "rust.rustdoc", Name: "cargo-doc", Ecosystem: "rust", Tool: CheckTool, VersionArgs: []string{"--version"}, ParseVersion: ParseCargoVersion}
+}
+
+func DocPlan(ctx context.Context, job analysis.Job) ([]pack.Task, error) {
+	return planTasks(ctx, KindDoc, job)
+}
+
 // ClippyDescriptor is clippy's pack identity: an extra-depth analyzer.
 func ClippyDescriptor() pack.Descriptor {
 	return pack.Descriptor{ID: ClippyAnalyzerID, Name: ClippyName, Ecosystem: "rust", Required: false, Tool: ClippyTool, VersionArgs: []string{"--version"}, ParseVersion: ParseClippyVersion}
 }
 
 func (k Kind) descriptor() pack.Descriptor {
+	if k == KindDoc {
+		return DocDescriptor()
+	}
 	if k == KindClippy {
 		return ClippyDescriptor()
 	}
@@ -76,6 +88,9 @@ func (k Kind) descriptor() pack.Descriptor {
 }
 
 func (k Kind) title() string {
+	if k == KindDoc {
+		return "cargo doc"
+	}
 	if k == KindClippy {
 		return "cargo clippy"
 	}
@@ -101,7 +116,7 @@ func planTasks(ctx context.Context, k Kind, job analysis.Job) ([]pack.Task, erro
 		return nil, err
 	}
 	if pr.Placeholder != "" {
-		if k == KindClippy {
+		if k != KindCheck {
 			return nil, nil // the baseline analyzer shows the gap once
 		}
 		n := pack.SourceFiles(job.Snapshot.Manifest, job.Scope)["rust"]
@@ -212,6 +227,9 @@ func New(kind Kind, cfg Config) (*Analyzer, error) {
 	if _, err := os.Lstat(filepath.Join(dir, exeName("rustup"))); err == nil {
 		return nil, errors.New("cargo is in a rustup proxy directory; name the toolchain's own bin directory")
 	}
+	if kind == KindDoc && !regularExecutable(filepath.Join(dir, exeName("rustdoc"))) {
+		return nil, errors.New("rustdoc is not next to cargo")
+	}
 	a := &Analyzer{kind: kind, cfg: cfg, tcDir: dir, rustc: rustc, cargo: cfg.Cargo, toolExe: cfg.Cargo, linker: FindLinker(cfg.ToolPath)}
 	if kind == KindClippy {
 		if !filepath.IsAbs(cfg.Clippy) {
@@ -272,6 +290,10 @@ func (a *Analyzer) env(home, target, host string) map[string]string {
 		"CARGO_INCREMENTAL":        "0",
 		"RUSTC_WRAPPER":            "",
 		"RUSTC_WORKSPACE_WRAPPER":  "",
+	}
+	if a.kind == KindDoc {
+		env["RUSTDOC"] = filepath.Join(a.tcDir, exeName("rustdoc"))
+		env["RUSTDOCFLAGS"] = "-W rustdoc::broken_intra_doc_links --cap-lints warn"
 	}
 	if host != "" {
 		env["CARGO_BUILD_TARGET"] = host
@@ -457,6 +479,8 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	steps := []step{{execRustc, a.rustc, []string{"-vV"}, &in.Rustc}, {execCargo, a.cargo, []string{"--version"}, &in.Cargo}}
 	if a.kind == KindClippy {
 		steps = append(steps, step{execClippyV, a.toolExe, []string{"--version"}, &in.ClippyV}, step{execClippy, a.toolExe, ClippyArgs(), &in.Main})
+	} else if a.kind == KindDoc {
+		steps = append(steps, step{execDoc, a.cargo, DocArgs(), &in.Main})
 	} else {
 		steps = append(steps, step{execCheck, a.toolExe, CheckArgs(), &in.Main})
 	}
@@ -493,7 +517,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		default:
 			ok = true
 		}
-		if !ok || (!pack.ExitedZero(&res) && s.name != execCheck && s.name != execClippy) {
+		if !ok || (!pack.ExitedZero(&res) && s.name != a.kind.main()) {
 			break
 		}
 	}

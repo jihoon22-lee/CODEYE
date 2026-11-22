@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
@@ -204,9 +205,10 @@ type MsgRecord struct {
 
 // ArtifactRecord is one compiler-artifact record.
 type ArtifactRecord struct {
-	PackageID, ManifestPath, TargetName string
-	TargetKinds                         []string
-	Fresh                               bool
+	PackageID, ManifestPath, TargetName, SourcePath string
+	Documentation                                   bool
+	TargetKinds                                     []string
+	Fresh                                           bool
 }
 
 // BuildScript is one build-script-executed record: evidence that a build
@@ -297,6 +299,7 @@ type targetJSON struct {
 	Kind    []string `json:"kind"`
 	Name    *string  `json:"name"`
 	SrcPath *string  `json:"src_path"`
+	Doc     bool     `json:"doc"`
 }
 
 func targetOf(raw json.RawMessage) (name string, kinds []string, ok bool) {
@@ -357,7 +360,22 @@ func ParseStream(stdout []byte) Stream {
 				out.ShapeErrors++
 				continue
 			}
-			out.Artifacts = append(out.Artifacts, ArtifactRecord{PackageID: *r.PackageID, ManifestPath: *r.ManifestPath, TargetName: name, TargetKinds: kinds, Fresh: *r.Fresh})
+			var target targetJSON
+			json.Unmarshal(r.Target, &target)
+			var sourcePath string
+			if target.SrcPath != nil {
+				sourcePath = *target.SrcPath
+			}
+			var outputs []string
+			if err := json.Unmarshal(r.Filenames, &outputs); err != nil {
+				out.ShapeErrors++
+				continue
+			}
+			documented := target.Doc && slices.ContainsFunc(outputs, func(f string) bool {
+				p := strings.ReplaceAll(f, "\\", "/")
+				return strings.HasSuffix(p, "/index.html")
+			})
+			out.Artifacts = append(out.Artifacts, ArtifactRecord{Documentation: documented, SourcePath: sourcePath, PackageID: *r.PackageID, ManifestPath: *r.ManifestPath, TargetName: name, TargetKinds: kinds, Fresh: *r.Fresh})
 		case "build-script-executed":
 			if r.PackageID == nil || r.OutDir == nil {
 				out.ShapeErrors++

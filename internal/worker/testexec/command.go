@@ -31,6 +31,18 @@ func (h *Handler) command(job analysis.Job, p testPlan, key, scratch, dir string
 			return executor.Spec{}, "scratch_unavailable"
 		}
 		args := append([]string{"test", "-json", "-vet=off", "-count=1", "-timeout=9m"}, p.args...)
+		if h.tools.GoTestRun != "" {
+			args = append(args, "-run", h.tools.GoTestRun)
+		}
+		if h.tools.GoRace {
+			cc := findTool(toolPath, "cc")
+			if cc == "" {
+				return executor.Spec{}, toolUnavailable
+			}
+			env["CGO_ENABLED"], env["CC"] = "1", cc
+			env["PATH"] = joinPath([]string{filepath.Dir(h.goTool.Executable())}, toolPath)
+			args = append(args, "-race")
+		}
 		return executor.Spec{Executable: h.goTool.Executable(), Args: args, Env: env}, ""
 	case isJavaScript(key):
 		if h.tools.Node == "" || h.tools.Npm == "" {
@@ -44,7 +56,18 @@ func (h *Handler) command(job analysis.Job, p testPlan, key, scratch, dir string
 		env["npm_config_audit"] = "false"
 		env["npm_config_fund"] = "false"
 		env["CI"] = "true"
-		return executor.Spec{Executable: h.tools.Node, Args: []string{h.tools.Npm, "--offline", "run", p.args[0]}, Env: env, Redact: []string{h.tools.Npm}}, ""
+		args := []string{h.tools.Npm, "--offline", "run", p.args[0]}
+		report := filepath.Join(scratch, "framework-report")
+		switch p.runner {
+		case "jest":
+			args = append(args, "--", "--json", "--testLocationInResults", "--outputFile", report)
+		case "vitest":
+			args = append(args, "--", "--run", "--includeTaskLocation", "--reporter=json", "--outputFile="+report)
+		case "playwright":
+			args = append(args, "--", "--reporter=json", "--retries=0")
+			env["PLAYWRIGHT_JSON_OUTPUT_FILE"] = report
+		}
+		return executor.Spec{Executable: h.tools.Node, Args: args, Env: env, Redact: []string{h.tools.Npm}}, ""
 	case key == "python":
 		if h.tools.Python == "" {
 			return executor.Spec{}, toolUnavailable
@@ -54,8 +77,15 @@ func (h *Handler) command(job analysis.Job, p testPlan, key, scratch, dir string
 		if site := python.PreparedSite(job, h.tools.DependencyCacheRoot, p.spec.Key, pythonKey, p.dir); site != "" {
 			env["PYTHONPATH"] = site
 		}
-		return executor.Spec{Executable: h.tools.Python, Args: []string{"-B", "-m", "unittest", "discover", "-s", p.args[0]}, Env: env}, ""
-	case key == "rust":
+		var args []string
+		if p.runner == "pytest" {
+			args = append([]string{"-B", "-m", "pytest", "-o", "junit_family=xunit1",
+				"--junitxml=" + filepath.Join(scratch, "framework-report")}, p.args...)
+		} else {
+			args = []string{"-B", "-m", "unittest", "discover", "--verbose", "-s", p.args[0]}
+		}
+		return executor.Spec{Executable: h.tools.Python, Args: args, Env: env}, ""
+	case key == "rust" || key == "rust-nextest":
 		if h.rustTool == nil {
 			return executor.Spec{}, toolUnavailable
 		}
@@ -71,7 +101,14 @@ func (h *Handler) command(job analysis.Job, p testPlan, key, scratch, dir string
 		if _, err := os.Stat(filepath.Join(dir, "Cargo.lock")); err == nil {
 			args = append(args, "--locked")
 		}
-		return executor.Spec{Executable: h.rustTool.Cargo(), Args: args, Env: env}, ""
+		args = append(args, p.args...)
+		rust := executor.Spec{Executable: h.rustTool.Cargo(), Args: args, Env: env}
+		if key == "rust-nextest" {
+			return h.nextestCommand(job, p, scratch, rust)
+		}
+		return rust, ""
+	case key == "maven" || key == "gradle":
+		return h.javaCommand(p, scratch)
 	default:
 		return executor.Spec{}, toolUnavailable
 	}
@@ -123,6 +160,13 @@ func findTool(dirs []string, name string) string {
 		}
 	}
 	return ""
+}
+
+func (h *Handler) tool(configured, name string) string {
+	if configured != "" {
+		return regularPath(configured, true)
+	}
+	return findTool(h.toolPath(), name)
 }
 
 // The launcher is fixed text. The validated tool paths, script name and

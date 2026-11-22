@@ -104,6 +104,12 @@ def main() -> None:
     validators["report.schema.json"].validate(report)
     test_failure_negatives = check_go_test_failure_contracts(validators, report)
     print(f"PASS: Go test failure evidence and code-free report projection; {test_failure_negatives} negative cases")
+    test_results = json_file(ROOT / "examples/test-results.json")
+    validate_test_results = validators["test-results.schema.json"].validate
+    validate_test_results(test_results)
+    for bad in (test_results | {"counts": {"passed": 0, "failed": 0, "skipped": 0}},
+                test_results | {"cases": [{"name": "example", "status": "failed", "path": "tests/example.py"}]}):
+        expect_invalid("test result without a terminal case or with an incomplete location", validate_test_results, bad)
     document_excerpt_negatives = check_document_excerpt_contracts(validators, report)
     print(f"PASS: complete document excerpt bounds and builder compatibility; {document_excerpt_negatives} negative cases")
     validators["analyzer.schema.json"].validate(analyzer)
@@ -167,6 +173,51 @@ def main() -> None:
     ensure(gofmt["analyzer"]["id"] == "go.gofmt" and gofmt["outcome"]["exit_class"] == "success_with_findings"
            and all(e["command"]["argv"][1:3] == ["-l", "--"] for e in gofmt["executions"])
            and [o["rule_id"] for o in gofmt["observations"]] == ["format_mismatch"], "Read-only gofmt example")
+    for name, analyzer_id, rule, runs_code in (
+            ("errcheck", "go.errcheck", "unchecked_error", False),
+            ("rustdoc", "rust.rustdoc", "rustdoc::broken_intra_doc_links", True)):
+        descriptor = yaml_file(ROOT / f"examples/analyzer-{name}.yaml")
+        validators["analyzer.schema.json"].validate(descriptor)
+        check_analyzer(descriptor)
+        observed = json_file(ROOT / f"examples/observations-{name}.json")
+        validators["analyzer-observations.schema.json"].validate(observed)
+        check_analyzer_observations(observed)
+        ensure(descriptor["id"] == observed["analyzer"]["id"] == analyzer_id
+               and descriptor["executes_repository_code"] == runs_code
+               and descriptor["network_policy"] == "none"
+               and any(o["rule_id"] == rule and o["location_state"] == "resolved" for o in observed["observations"]),
+               f"{name}: checked rule, location and execution policy")
+    for name, required, build, rule in (
+            ("pmd", True, False, "UnusedLocalVariable"),
+            ("spotbugs", False, True, "NP_ALWAYS_NULL")):
+        descriptor = yaml_file(ROOT / f"examples/analyzer-{name}.yaml")
+        validators["analyzer.schema.json"].validate(descriptor)
+        check_analyzer(descriptor)
+        envelope = json_file(ROOT / f"examples/observations-{name}.json")
+        validators["analyzer-observations.schema.json"].validate(envelope)
+        check_analyzer_observations(envelope)
+        ensure(descriptor["id"] == f"java.{name}" and descriptor["requires_build"] == build
+               and not descriptor["executes_repository_code"] and descriptor["network_policy"] == "none",
+               f"{name}: Java analyzer execution policy")
+        ensure(envelope["analyzer"] == {"id": f"java.{name}", "ecosystem": "java", "required": required}
+               and envelope["outcome"]["task_status"] == "succeeded"
+               and any(o["rule_id"] == rule and o["location_state"] == "resolved" for o in envelope["observations"]),
+               f"{name}: checked Java source location")
+    for name, identity, rule in (
+            ("dependency-cruiser", "javascript.dependency_cruiser", "no-cycle"),
+            ("import-linter", "python.import_linter", "layering")):
+        descriptor = yaml_file(ROOT / f"examples/analyzer-{name}.yaml")
+        validators["analyzer.schema.json"].validate(descriptor)
+        check_analyzer(descriptor)
+        envelope = json_file(ROOT / f"examples/observations-{name}.json")
+        validators["analyzer-observations.schema.json"].validate(envelope)
+        check_analyzer_observations(envelope)
+        ensure(descriptor["id"] == identity and not descriptor["requires_build"]
+               and not descriptor["executes_repository_code"],
+               f"{name}: dependency check without repository code")
+        ensure(envelope["analyzer"]["id"] == identity and not envelope["analyzer"]["required"]
+               and [o["rule_id"] for o in envelope["observations"]] == [rule]
+               and envelope["observations"][0]["location_state"] == "resolved", f"{name}: source witness")
     staticcheck_negatives = check_staticcheck_pack_contracts(validators)
     print(f"PASS: analyzer pack contracts (staticcheck descriptor, real envelope example, analyzer_tools; {staticcheck_negatives} negative cases)")
     print(f"PASS: C/C++ pack (cppcheck/clang-tidy descriptors, real envelopes bound to the fixture, expected outcomes; {check_cpp_pack_contracts(validators)} negative cases)")
@@ -242,6 +293,13 @@ def main() -> None:
         environment = json_file(ROOT / name)
         validators["environment.schema.json"].validate(environment)
         check_environment_example(environment)
+    document_search = json_file(ROOT / "examples/documentation-gaps.json")
+    validators["environment.schema.json"].validate(document_search)
+    discover_docs = document_search["documents"]
+    for gap in discover_docs["documentation_gaps"]:
+        selected = [item["path"] for item in discover_docs["items"] if item["status"] == "selected"]
+        ensure(gap["searched"] == selected, "Documentation search example must use the complete guide set")
+        ensure(gap["source"]["start_line"] <= gap["source"]["end_line"], "Invalid source range in documentation search example")
     platform = yaml_file(ROOT / "examples/platform.yaml")
     scheduler = platform["scheduler"]
     ensure(0 < scheduler["heartbeat_seconds"] < scheduler["lease_seconds"] - scheduler["lease_safety_margin_seconds"], "Invalid lease timing")

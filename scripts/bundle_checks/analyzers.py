@@ -189,6 +189,31 @@ def check_cpp_pack_contracts(validators: dict) -> int:
            "clang-tidy alias families report the same diagnostic twice")
     ensure("bugprone-*" in checks and "-clang-analyzer-security.FloatLoopCounter" in checks, "CSA FloatLoopCounter duplicates bugprone-float-loop-counter (measured)")
 
+    gcc = yaml_file(ROOT / "examples/analyzer-gcc-analyzer.yaml")
+    validators["analyzer.schema.json"].validate(gcc)
+    check_analyzer(gcc)
+    ensure(gcc["languages"] == ["c"] and gcc["network_policy"] == "none" and not gcc["executes_repository_code"] and not gcc["requires_build"],
+           "GCC file descriptor task covers C translation units and uses only the configured compiler")
+    gcc_argv = gcc["execute"]["argv"]
+    ensure(gcc_argv[1:-2] == go_string_slice(package / "gcc_analyzer.go", "gccAnalyzerArgs"), "GCC descriptor argv differs from the adapter")
+    gcc_doc = json_file(ROOT / "examples/observations-gcc-analyzer.json")
+    validators["analyzer-observations.schema.json"].validate(gcc_doc)
+    check_analyzer_observations(gcc_doc)
+    ensure(gcc_doc["analyzer"] == {"id": "cpp.gcc_analyzer", "ecosystem": "cpp", "required": False}, "GCC is optional")
+    ensure(gcc_doc["rule_pack"]["selection"] == go_string_slice(package / "gcc_analyzer.go", "GCCAnalyzerSelection"),
+           "GCC envelope differs from the file-descriptor rule selection")
+    gcc_input = fixture / "gcc-analyzer/input"
+    gcc_digest = hashlib.sha256((gcc_input / "compile_commands.json").read_bytes()).hexdigest()
+    ensure(gcc_doc["rule_pack"]["config_files"] == [{"path": "compile_commands.json", "sha256": gcc_digest}], "GCC compile DB digest differs")
+    ensure(gcc_doc["coverage"]["processed_paths"] == ["src/clean.c", "src/descriptor.c"] and
+           len(gcc_doc["observations"]) == 1 and gcc_doc["observations"][0]["rule_id"] == "analyzer-fd-use-after-close",
+           "GCC example should show the file descriptor error and the healthy control")
+    for obs in gcc_doc["observations"]:
+        for loc in [obs["location"], *[r["location"] for r in obs["related"]]]:
+            source = (gcc_input / loc["path"]).read_bytes()
+            ensure(loc["blob_sha256"] == hashlib.sha256(source).hexdigest() and loc["end_line"] <= len(source.splitlines()),
+                   "GCC diagnostic location not bound to the captured source")
+
     envelope_validator = validators["analyzer-observations.schema.json"]
     db_sha = hashlib.sha256((fixture / "input/compile_commands.json").read_bytes()).hexdigest()
     expected = json_file(fixture / "expected.json")

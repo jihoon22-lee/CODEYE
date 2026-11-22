@@ -23,18 +23,26 @@
 
 ## 기존 테스트 실행
 
-`with-tests`는 정적 분석과 모델 검토가 끝난 뒤 기존 테스트 작업을 실행한다. 워커는 [저장소 코드 실행 허가](#신뢰와-실행-권한)를 적용하고, 고정된 스냅샷에서 찾은 테스트를 attempt 작업 사본에서 실행한다. 실행마다 새 home·temp를 사용한다. 선택 범위에 실행할 테스트 진입점이 없으면 `test.unavailable`에 `test_entries_unavailable`을 기록한다.
+`with-tests`는 정적 분석 뒤 기존 테스트를 실행한다. 모델 검토를 켜면 독립 조사·도구 해석과 후보 검증 사이에 테스트를 배치한다. 검증 역할은 제시한 테스트 발췌와 실행 위치가 겹칠 때 해당 케이스의 결과를 함께 읽는다. 워커는 [저장소 코드 실행 허가](#신뢰와-실행-권한)를 적용하고, 고정된 스냅샷에서 찾은 테스트를 attempt 작업 사본에서 실행한다. 실행마다 새 home·temp를 사용한다. 선택 범위에 실행할 테스트 진입점이 없으면 `test.unavailable`에 `test_entries_unavailable`을 기록한다.
 
 | 대상 | 실행 범위와 명령 |
 |---|---|
-| Go | 범위에 `_test.go`가 있는 모듈. `go test -json -vet=off -count=1`에 전체 모듈 또는 선택 패키지 패턴을 넘긴다. `go mod edit -json`으로 사본 밖 모듈 경로를 먼저 확인한다. `go vet`은 별도의 정적 분석 작업이다. |
-| JS/TS | `package.json`에 이름이 선언된 `test:unit` 또는 `test`, `test:module` 또는 `test:integration`, `test:e2e` 또는 `e2e`를 각각 `npm run`으로 실행한다. 파일 단위 선택에서 모듈 전체를 실행해야 하는 스크립트는 `test_scope_unsupported`다. |
-| Python | `test*.py`가 있는 모듈에서 `python -B -m unittest discover`를 실행한다. 통상 `tests` 디렉터리를 쓰며 준비된 의존성이 있으면 해당 모듈의 site-packages를 읽는다. |
-| Rust | 선택한 Cargo 모듈에서 `cargo test --workspace --offline`을 실행한다. 작업 사본에 `Cargo.lock`이 있으면 `--locked`를 추가한다. |
+| Go | 범위에 `_test.go`가 있는 모듈에 `go test -json -vet=off -count=1`과 모듈·패키지 패턴을 넘긴다. `go mod edit -json`으로 사본 밖 모듈 경로를 먼저 확인한다. `go vet`은 별도 정적 분석 작업이다. 운영자는 `-run`의 Go 정규식으로 하위 테스트를 고르고 `-race`를 켤 수 있다. |
+| JS/TS | `package.json`에 선언된 `test:unit` 또는 `test`, `test:module` 또는 `test:integration`, `test:e2e` 또는 `e2e`를 `npm run`으로 실행한다. 동일한 명령을 한 번만 실행하며 전용 스크립트를 호출하는 묶음 `test`도 제외한다. Jest·Vitest·Playwright를 직접 실행하는 스크립트에 JSON reporter를 지정하고, `node --test`에서는 TAP을 읽는다. 다른 스크립트의 실행과 종료 코드는 기록되며 개별 테스트 근거가 없으면 `test_results_unavailable`로 끝난다. |
+| Python | `test*.py`·`*_test.py`가 있는 모듈에서 pytest 설정·`conftest.py`·pytest 테스트 선언이 보이면 pytest와 JUnit XML을 사용한다. 다른 모듈은 `python -B -m unittest discover --verbose`를 쓴다. pytest는 다른 Python 모듈의 하위 디렉터리를 제외하고 프로젝트의 수집 설정을 따른다. 두 방식 모두 준비된 해당 모듈의 site-packages를 읽을 수 있다. |
+| C/C++ | `enable_testing()` 또는 `include(CTest)`와 정적으로 확인할 수 있는 테스트 등록이 있는 CMake 프로젝트를 configure·build한 뒤 CTest를 실행한다. `add_subdirectory`로 포함된 하위 디렉터리는 상위 빌드와 함께 실행한다. 구성·빌드가 실패하면 `test_preparation_failed`이고 종료까지 도달한 CTest의 JUnit XML로 건수를 센다. |
+| Java | `src/test`·`src/integrationTest`의 Java 테스트를 포함하는 Maven reactor 또는 Gradle 빌드 루트를 한 번 실행한다. Maven은 오프라인 `verify`로 Surefire 테스트와 POM에 연결된 Failsafe 테스트를 실행한다. Gradle은 오프라인 `test`를 실행한다. 빌드 설정의 provider가 JUnit 4·5 또는 TestNG를 실행해 표준 XML을 써야 테스트를 확인할 수 있다. |
+| Rust | Cargo 모듈에서 `cargo test --workspace --offline`을 실행한다. `Cargo.lock`이 있으면 `--locked`를 추가한다. 모듈에 `.config/nextest.toml`이 있으면 nextest가 일반 테스트를 한 번 실행하고, 라이브러리 소스가 있으면 `cargo test --doc`이 문서 예제를 별도로 실행한다. 운영자가 설치한 `cargo-nextest`가 필요하며 nextest 재시도는 끈다. |
+
+Go 선택과 race를 설치에서 지정하는 필드는 `agent.tests.go_run`과 `agent.tests.go_race`다. 예를 들어 `go_run: "^TestConfig$/^missing$"`은 선택한 패키지에서 `TestConfig/missing`을 요청한다. 같은 기능을 별도 노드에서는 `--test-go-run REGEXP`와 `--test-go-race`로 지정한다. race는 이를 지원하는 Go toolchain과 노드의 C 컴파일러가 필요하다. Java는 JDK와 `mvn` 또는 `gradle`이 필요하다. CMake·CTest, Maven·Gradle, nextest는 노드의 `agent.toolchain_path`에서 찾는다. 오프라인 Java 의존성과 플러그인이 필요하면 준비한 캐시 디렉터리를 `agent.tests.maven_repository` 또는 `agent.tests.gradle_home`으로 지정한다. 별도 노드의 플래그는 `--test-maven-repository DIR`와 `--test-gradle-home DIR`다. Maven·Gradle wrapper가 빌드 도구를 내려받는 경로는 사용하지 않는다. SpotBugs의 정적 컴파일에 쓸 JAR의 출처와 해시는 별도의 [Java 로컬 클래스패스](ANALYZERS.md#java-로컬-클래스패스)에서 설정한다.
+
+JS/TS·Python·Rust·Java·CMake에서 모듈이나 빌드 루트 전체가 필요한 작업은 파일 선택만으로 실행 범위를 넓히지 않는다. Playwright의 브라우저가 필요한 테스트는 노드에 브라우저와 실행에 필요한 라이브러리가 준비되어 있어야 한다.
 
 모든 테스트 명령은 Linux의 사용자·네트워크·PID namespace 안에서 실행한다. 노드에 `unshare`, `ip`, `sh`가 필요하며 해당 계정으로 namespace와 그 `/proc`을 만들 수 있어야 한다. `test.isolation` 확인 뒤 테스트 명령의 namespace에서 loopback 인터페이스만 올린다. 호스트의 IP 루프백 서비스와 외부 IP 라우트는 이 네트워크에 없다. 테스트 프로세스가 끝나면 PID namespace에 남은 프로세스도 종료한다. 전제 조건을 충족하지 못한 노드에서는 `test_isolation_unavailable`로 남긴다. 파일과 파일 경로의 UNIX 소켓은 여전히 실행 계정 권한 범위에서 접근 가능하므로 신뢰한 소스에만 실행을 허용한다. 실행 환경에 브라우저·데이터베이스·외부 서비스 등 별도 테스트 구성요소를 설치하거나 시작하는 기능은 제공 범위 밖이다.
 
-각 테스트 명령은 최대 10분이며 stdout 8 MiB와 stderr 2 MiB를 기록한다. 프로세스 종료·정리·출력 상태로 작업 성공 여부를 결정한다. Go·Python·Rust에서 통과한 테스트를 출력으로 확인하지 못하면 `no_tests_executed`다. npm은 선언된 스크립트의 종료 코드를 기록하고 개별 검사 수는 추정하지 않는다. 취소·제한시간·정리 불확실 상태는 기존 실행기 규칙을 적용한다.
+각 테스트 명령은 최대 10분이며 stdout 8 MiB와 stderr 2 MiB를 기록한다. 완료한 테스트 중 통과한 항목이 하나 이상 있고, 실패가 없으며, 프로세스가 정상 종료한 경우에 작업을 성공으로 기록한다. 실행 결과가 비어 있거나 전부 건너뛴 경우는 `no_tests_executed`다. 확인할 수 있는 reporter 산출물이 없으면 `test_results_unavailable`다. 취소·제한시간·정리 불확실 상태는 기존 실행기 규칙을 적용한다. Java XML은 실행 전에 있었던 표준 보고서의 해시와 대조해 새로 작성되거나 내용이 바뀐 파일만 읽는다.
+
+[테스트 결과 산출물](../schemas/test-results.schema.json)은 실행·시도·스냅샷·작업 키·`test.run`의 stdout·stderr SHA-256에 묶인다. reporter를 읽어 확인한 통과·실패·건너뜀 건수와 최대 128개의 예를 남기며 실패 예를 우선한다. 코드 위치가 있는 경우 스냅샷과 작업 사본의 SHA-256을 대조한다. Go의 하위 테스트는 같은 상태의 상위 테스트와 중복 집계하지 않고 유일한 리터럴 `t.Run` 위치를 확인한 경우만 그 줄을 연결한다. Java는 고유한 선언을 찾을 수 있는 경우 위치를 연결한다. 다른 이름·위치가 오거나 파일이 바뀐 경우에도 확인한 건수와 작업 상태는 남긴다. [합성 예시](../examples/test-results.json)
 
 Go 작업이 0이 아닌 종료 코드로 끝나고 정리와 출력이 확인되면 `test.run`의 기존 `go test -json` stdout에서 최상위 테스트의 시작·실패 이벤트와 그 패키지의 실패를 함께 확인한다. 모듈 경로는 앞서 실행한 `go mod edit -json`에서 가져온다. 실행 패턴에 포함된 패키지 안에서 이름이 유일한 `func Test…(*testing.T)`를 찾아 고정 스냅샷의 파일 해시와 작업 사본을 대조한다. 같은 이름의 대체 구현이 있거나 선언이 빌드 조건에 따라 달라지는 파일에만 있으면 위치는 기록하지 않는다. 선언 위치는 테스트 함수의 실제 파일 줄이다.
 

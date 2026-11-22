@@ -1,0 +1,164 @@
+{
+  "adapter": {
+    "id": "dependency-cruiser",
+    "version": "1"
+  },
+  "analyzer": {
+    "ecosystem": "javascript",
+    "id": "javascript.dependency_cruiser",
+    "required": false
+  },
+  "coverage": {
+    "files_in_scope": 2,
+    "files_skipped": 0,
+    "files_unlisted": 0,
+    "processed_paths": [
+      "a.js",
+      "b.js"
+    ],
+    "unit": "file",
+    "units": {}
+  },
+  "executions": [
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "[REDACTED]",
+          "--permission",
+          "--allow-fs-read=[REDACTED]",
+          "--allow-fs-read=[REDACTED]/analyzers/dependency-cruiser",
+          "[REDACTED]",
+          "--config",
+          "[REDACTED]/analyzers/dependency-cruiser/dependency-rules.json",
+          "--output-type",
+          "json",
+          "--no-cache",
+          "--no-ignore-known",
+          "--",
+          "."
+        ],
+        "dir": "analyzers/dependency-cruiser/project",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "PREFIX",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE",
+          "npm_config_prefix"
+        ]
+      },
+      "exit_code": 0,
+      "name": "dependency-cruiser.check",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 7535,
+        "incomplete": false,
+        "sha256": "a9d2aaf3442e2172655dc7e18efab5853785203e6e5517990e4593752e35ac7f",
+        "total_bytes": 7637,
+        "truncated": false
+      }
+    }
+  ],
+  "kind": "analyzer_observations",
+  "limitations": [
+    "dependency_resolution_project_sources_only"
+  ],
+  "module": {
+    "dir": ".",
+    "name": ""
+  },
+  "observations": [
+    {
+      "category": "maintainability",
+      "id": "obs_8ee444b743547ffe4bcc",
+      "location": {
+        "blob_sha256": "d60eb42c8afe3f8a2dc32d470ca2238c942fbf3a24bb9c21c53d7d8ab223317d",
+        "column_unit": "byte",
+        "end_col": 0,
+        "end_line": 1,
+        "path": "a.js",
+        "start_col": 0,
+        "start_line": 1
+      },
+      "location_state": "resolved",
+      "path": "a.js",
+      "raw_message": "Dependency rule violated: no-cycle",
+      "raw_ref": {
+        "byte_end": 2857,
+        "byte_start": 2256,
+        "execution": "dependency-cruiser.check",
+        "json_pointer": "",
+        "record_index": 0,
+        "stream": "stdout",
+        "stream_sha256": "a9d2aaf3442e2172655dc7e18efab5853785203e6e5517990e4593752e35ac7f"
+      },
+      "raw_severity": null,
+      "related": [],
+      "rule_id": "no-cycle",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "a.js"
+    }
+  ],
+  "outcome": {
+    "exit_class": "success_with_findings",
+    "partial_parse": false,
+    "reason": null,
+    "task_status": "succeeded"
+  },
+  "parse": {
+    "observations": 1,
+    "ok": true,
+    "records": 1,
+    "shape_errors": 0,
+    "tool_errors": 0,
+    "unparsed_bytes": 0,
+    "unresolved_observations": 0
+  },
+  "parser": {
+    "id": "dependency-cruiser",
+    "version": "1"
+  },
+  "patterns": [
+    "."
+  ],
+  "rule_pack": {
+    "config_files": [
+      {
+        "path": ".dependency-cruiser.json",
+        "sha256": "6785421e31acce248e9898a14d6d83a38000553867ff10581d25831ff4a6d522"
+      }
+    ],
+    "id": "codeye-dependency-cruiser",
+    "repository_config": "honored",
+    "selection": [],
+    "source_suppressions": "none",
+    "unreported_suppression_rules": [],
+    "version": "1"
+  },
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "c034118ccede805902638c1945c19304bc59d7fa314ce786972705aa59afa1f0",
+  "target": {
+    "platform": null,
+    "properties": {}
+  },
+  "task_key": "dependency-cruiser",
+  "tool": {
+    "name": "dependency-cruiser",
+    "version": "18.8.0",
+    "version_tested": true
+  },
+  "tool_errors": [],
+  "workspace_drift": []
+}

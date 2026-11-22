@@ -148,6 +148,9 @@ func ValidateReport(r Report) error {
 			return invalidf("test status differs from accepted task and execution records")
 		}
 	}
+	if err := validateTestCases(r); err != nil {
+		return err
+	}
 	if err := validateGoTestFailureEvidence(r); err != nil {
 		return err
 	}
@@ -169,7 +172,7 @@ func ValidateReport(r Report) error {
 		if o.EvidenceState == EvidenceVerified && o.Location == nil {
 			return invalidf("verified observation without location")
 		}
-		if len(o.Related) > 64 || len(o.Related) > 0 && (version < AnalysisEvidenceSince || o.Metric != nil || o.Tool != "cpp.cppcheck" && o.Tool != "cpp.clang_tidy") {
+		if len(o.Related) > 64 || len(o.Related) > 0 && (version < AnalysisEvidenceSince || o.Metric != nil || o.Tool != "cpp.cppcheck" && o.Tool != "cpp.clang_tidy" && o.Tool != "cpp.gcc_analyzer") {
 			return invalidf("invalid related diagnostic locations")
 		}
 		next := o.RawRef.ByteStart
@@ -437,6 +440,11 @@ func Project(r Report, includeCode bool) Report {
 	out.Export = Export{IncludeCode: false}
 	out.Executions = slices.Clone(r.Executions)
 	for i := range out.Executions {
+		if cases := out.Executions[i].TestCases; cases != nil {
+			copy := *cases
+			copy.Cases = nil
+			out.Executions[i].TestCases = &copy
+		}
 		rows := slices.Clone(out.Executions[i].GoTestFailures)
 		for j := range rows {
 			rows[j].Name = ""

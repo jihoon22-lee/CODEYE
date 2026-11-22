@@ -29,7 +29,7 @@ func NewSelection(paths []string) *Selection {
 		if administrative(p, class) {
 			continue
 		}
-		if class == Design {
+		if class == Design || class == JavaAPI {
 			s.design = true
 			s.guides = s.guides || guide(p) != notGuide
 		}
@@ -178,7 +178,7 @@ func (s *Selection) rank(p, class string) int {
 	}
 }
 
-var classOrder = map[string]int{Agent: 0, Readme: 1, Contributing: 2, Design: 3, Other: 4}
+var classOrder = map[string]int{Agent: 0, Readme: 1, Contributing: 2, Design: 3, JavaAPI: 4, Other: 5}
 
 // Sort orders documents before applying a caller's budget. With no
 // selection pressure, pass nil to retain the class, depth, path order.

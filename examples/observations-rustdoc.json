@@ -1,0 +1,288 @@
+{
+  "adapter": {
+    "id": "cargo-doc",
+    "version": "1"
+  },
+  "analyzer": {
+    "ecosystem": "rust",
+    "id": "rust.rustdoc",
+    "required": false
+  },
+  "coverage": {
+    "files_in_scope": 2,
+    "files_skipped": 0,
+    "files_unlisted": 0,
+    "processed_paths": [
+      "src/lib.rs"
+    ],
+    "unit": "crate",
+    "units": {
+      "analyzed_with_findings": 1
+    }
+  },
+  "executions": [
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "rustc",
+          "-vV"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CARGO",
+          "CARGO_HOME",
+          "CARGO_INCREMENTAL",
+          "CARGO_NET_OFFLINE",
+          "CARGO_TARGET_DIR",
+          "CARGO_TERM_COLOR",
+          "CARGO_TERM_PROGRESS_WHEN",
+          "HOME",
+          "LANG",
+          "PATH",
+          "RUSTC",
+          "RUSTC_WORKSPACE_WRAPPER",
+          "RUSTC_WRAPPER",
+          "RUSTDOC",
+          "RUSTDOCFLAGS",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "rustc.version",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 196,
+        "incomplete": false,
+        "sha256": "f22d5e4e9ced367e774ce5bc140d9e6b1235c1882fec80d011044851f3ae6369",
+        "total_bytes": 196,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "cargo",
+          "--version"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CARGO",
+          "CARGO_BUILD_TARGET",
+          "CARGO_HOME",
+          "CARGO_INCREMENTAL",
+          "CARGO_NET_OFFLINE",
+          "CARGO_TARGET_DIR",
+          "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER",
+          "CARGO_TERM_COLOR",
+          "CARGO_TERM_PROGRESS_WHEN",
+          "HOME",
+          "LANG",
+          "PATH",
+          "RUSTC",
+          "RUSTC_WORKSPACE_WRAPPER",
+          "RUSTC_WRAPPER",
+          "RUSTDOC",
+          "RUSTDOCFLAGS",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "cargo.version",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 36,
+        "incomplete": false,
+        "sha256": "c35608815f43d0b8788a9b826fad2bb17384f49fb328dc4fe64da9db5f5ef4d6",
+        "total_bytes": 36,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "cargo",
+          "doc",
+          "--offline",
+          "--locked",
+          "--workspace",
+          "--no-deps",
+          "--message-format=json"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CARGO",
+          "CARGO_BUILD_TARGET",
+          "CARGO_HOME",
+          "CARGO_INCREMENTAL",
+          "CARGO_NET_OFFLINE",
+          "CARGO_TARGET_DIR",
+          "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER",
+          "CARGO_TERM_COLOR",
+          "CARGO_TERM_PROGRESS_WHEN",
+          "HOME",
+          "LANG",
+          "PATH",
+          "RUSTC",
+          "RUSTC_WORKSPACE_WRAPPER",
+          "RUSTC_WRAPPER",
+          "RUSTDOC",
+          "RUSTDOCFLAGS",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "cargo.doc",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 230,
+        "incomplete": false,
+        "sha256": "e51ed5e37de4d7e12a3d0ccdb910b2ac535368c998757ed9514cd9f77f208498",
+        "total_bytes": 454,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 2837,
+        "incomplete": false,
+        "sha256": "544c8e05ec224a453e8959c64fd5a340fc9ddf566b344b37df983cfb2f51e74a",
+        "total_bytes": 3801,
+        "truncated": false
+      }
+    }
+  ],
+  "kind": "analyzer_observations",
+  "limitations": [
+    "build_script_executed",
+    "default_features_only",
+    "host_target_only",
+    "linker_from_toolchain_path",
+    "offline_scratch_cargo_home",
+    "rustc_wrapper_overridden",
+    "rustdoc_module_coverage_partial"
+  ],
+  "module": {
+    "dir": ".",
+    "name": ""
+  },
+  "observations": [
+    {
+      "category": "maintainability",
+      "id": "obs_2bf277c3cc89ced18119",
+      "location": {
+        "blob_sha256": "6da1c9300c777052046c14fb6153faa614be0f983a3cfdc422a339cd1895e966",
+        "column_unit": "byte",
+        "end_col": 34,
+        "end_line": 1,
+        "path": "src/lib.rs",
+        "start_col": 23,
+        "start_line": 1
+      },
+      "location_state": "resolved",
+      "path": "src/lib.rs",
+      "raw_message": "unresolved link to `MissingItem`",
+      "raw_ref": {
+        "byte_end": 2288,
+        "byte_start": 770,
+        "execution": "cargo.doc",
+        "json_pointer": "/message",
+        "record_index": 2,
+        "stream": "stdout",
+        "stream_sha256": "544c8e05ec224a453e8959c64fd5a340fc9ddf566b344b37df983cfb2f51e74a"
+      },
+      "raw_severity": "warning",
+      "related": [],
+      "rule_id": "rustdoc::broken_intra_doc_links",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "manual"
+    }
+  ],
+  "outcome": {
+    "exit_class": "success_with_findings",
+    "partial_parse": false,
+    "reason": null,
+    "task_status": "succeeded"
+  },
+  "parse": {
+    "observations": 1,
+    "ok": true,
+    "records": 5,
+    "shape_errors": 0,
+    "tool_errors": 0,
+    "unparsed_bytes": 0,
+    "unresolved_observations": 0
+  },
+  "parser": {
+    "id": "cargo-json-v1",
+    "version": "1"
+  },
+  "patterns": [
+    "."
+  ],
+  "rule_pack": {
+    "config_files": [],
+    "id": "codeye-rust-doc",
+    "repository_config": "honored",
+    "selection": [
+      "doc",
+      "--offline",
+      "--locked",
+      "--workspace",
+      "--no-deps",
+      "--message-format=json",
+      "-W rustdoc::broken_intra_doc_links",
+      "--cap-lints warn",
+      "keep:rustdoc::*"
+    ],
+    "source_suppressions": "honored",
+    "unreported_suppression_rules": [],
+    "version": "1"
+  },
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "e9f40ce356ecee804c31ba51668c0fa4359c61d2eb2773d32c00e8d2bd7411af",
+  "target": {
+    "platform": "x86_64-unknown-linux-gnu",
+    "properties": {
+      "cargo": "1.99.1",
+      "features": "default",
+      "host_only": "true",
+      "profile": "dev",
+      "rustc": "1.99.1",
+      "targets": "documentation",
+      "workspace": "true"
+    }
+  },
+  "task_key": "cargo-doc",
+  "tool": {
+    "name": "cargo",
+    "version": "1.99.1 (5f94df478 2026-08-27)",
+    "version_tested": true
+  },
+  "tool_errors": [],
+  "workspace_drift": []
+}

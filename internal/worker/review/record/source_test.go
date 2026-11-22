@@ -15,7 +15,7 @@ func TestSourceKinds(t *testing.T) {
 		"test.js": "test", "src/test.ts": "test", "src/index.test-d.ts": "test",
 		"src/lib.rs": "code", "src/parse/tests.rs": "test", "tests/it.rs": "test", "benches/b.rs": "code",
 		"src/ring.cc": "code", "include/ring.h": "code", "tests/ring.cc": "test", "src/ring_test.cc": "test", "src/ring_unittest.cpp": "test", "src/test_ring.c": "test", "src/ring-test.cxx": "test",
-		"README.md": "", "package.json": "", "Cargo.toml": "", "src/main.java": "", "Makefile": "",
+		"README.md": "", "package.json": "", "Cargo.toml": "", "src/main.java": "code", "src/test/java/StoreTest.java": "test", "src/services/Main.kt": "", "Makefile": "",
 	}
 	for p, want := range cases {
 		if got := SourceKind(p); got != want {
@@ -71,7 +71,21 @@ func TestPythonDocstringEvidenceRequiresSeparateImplementation(t *testing.T) {
 	if !doc.ValidDirectivePath() || doc.DocumentScope() != "module" {
 		t.Fatalf("docstring did not inherit its authored page's scope: %+v", doc)
 	}
-	for _, p := range []string{"another/docs/api.md", "../docs/api.md", "module/docs/api.rst", implementation} {
+	sphinx := doc
+	sphinx.DirectivePath = "module/docs/api.rst"
+	if !sphinx.ValidDirectivePath() || sphinx.DocumentScope() != "module" {
+		t.Fatalf("Sphinx docstring did not inherit the authored page scope: %+v", sphinx)
+	}
+	rustdoc := doc
+	rustdoc.Path = "module/src/values.rs"
+	if !rustdoc.IsRustAPIDocument() {
+		t.Fatalf("Cargo rustdoc did not inherit the authored page scope: %+v", rustdoc)
+	}
+	rustdoc.DirectivePath = sphinx.DirectivePath
+	if rustdoc.ValidDirectivePath() {
+		t.Fatalf("accepted Sphinx directive for Rust source: %+v", rustdoc)
+	}
+	for _, p := range []string{"another/docs/api.md", "../docs/api.md", "module/docs/api.txt", implementation} {
 		bad := doc
 		bad.DirectivePath = p
 		if bad.ValidDirectivePath() {

@@ -1,0 +1,74 @@
+{
+  "schema_version": "0.1",
+  "kind": "documents",
+  "snapshot_manifest_digest": "2c1cf7e3aa50ec429319f60cd36a574094e66cb097e891363bec43c4c0513d85",
+  "run_id": "9e286b84-a9f6-4083-b8a3-230f1e913915",
+  "attempt_id": "89712758-f023-4835-94e8-1825e8695ee8",
+  "scope": {
+    "kind": "full",
+    "paths": []
+  },
+  "modules": [],
+  "documents": {
+    "budget": {
+      "total_bytes": 4194304,
+      "per_document_bytes": 524288,
+      "max_documents": 1000,
+      "read_bytes": 67
+    },
+    "items": [
+      {
+        "path": "README.md",
+        "applies_to": ".",
+        "class": "readme",
+        "status": "selected",
+        "reason": null,
+        "size_bytes": 30,
+        "sha256": "6a4d515c7beb509816eda386c0e2c58bb740254fdc9c015a5810d3c450223373",
+        "line_count": 1
+      },
+      {
+        "path": "docs/usage.md",
+        "applies_to": ".",
+        "class": "design",
+        "status": "selected",
+        "reason": null,
+        "size_bytes": 37,
+        "sha256": "edd4b84f0b6477e026a13daf2c5fb59f4ceb9fcd0c4142297d0614850fcd23de",
+        "line_count": 1
+      }
+    ],
+    "modules": [],
+    "overlapping_guidance": [
+      {
+        "path": ".",
+        "documents": [
+          "README.md",
+          "docs/usage.md"
+        ],
+        "assessment": "not_assessed_without_model"
+      }
+    ],
+    "documentation_gaps": [
+      {
+        "kind": "cli_option",
+        "symbol": "--report-zone",
+        "default": "UTC",
+        "scope": ".",
+        "source": {
+          "path": "main.go",
+          "sha256": "e4eca5a3156cf90ea88230e88173f1e7f112c35ca38c206a149124ff7428ed97",
+          "start_line": 4,
+          "end_line": 4
+        },
+        "searched": [
+          "README.md",
+          "docs/usage.md"
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "semantic_conflicts_not_assessed"
+  ]
+}

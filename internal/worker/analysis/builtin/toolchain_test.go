@@ -238,7 +238,7 @@ func TestParseNodeVersion(t *testing.T) {
 // env.discover runtime tool, and every toolchain a catalog descriptor needs
 // is in the table (otherwise its analyzer could never be built).
 func TestToolchainNamesAreReserved(t *testing.T) {
-	if got := ToolchainFlags(); !slices.Equal(got, []string{"node"}) {
+	if got := ToolchainFlags(); !slices.Equal(got, []string{"java", "node"}) {
 		t.Fatalf("toolchain flags %v", got)
 	}
 	table := ToolchainFlags()
@@ -263,7 +263,7 @@ func TestToolchainNamesAreReserved(t *testing.T) {
 		t.Fatalf("node in the real catalog: %+v", missing)
 	}
 	probes := ToolchainProbes(Config{Tools: map[string]string{"node": "/n"}})
-	if len(probes) != 1 || probes[0].Tool != "node" || probes[0].Executable != "/n" || !slices.Equal(probes[0].Args, []string{"--version"}) || probes[0].ParseVersion == nil || probes[0].Analyzers == nil {
+	if len(probes) != 2 || probes[1].Tool != "node" || probes[1].Executable != "/n" || !slices.Equal(probes[1].Args, []string{"--version"}) || probes[1].ParseVersion == nil || probes[1].Analyzers == nil {
 		t.Fatalf("toolchain probes %+v", probes)
 	}
 	if p := ToolchainProbes(Config{}); p[0].Executable != "" {
@@ -287,7 +287,7 @@ func TestProbesCarryToolchains(t *testing.T) {
 		t.Fatalf("tool probe %+v", lint)
 	}
 	tc := toolchainProbesOf(cfg, f.entries())
-	if len(tc) != 1 || tc[0].Executable != "/n/node" || !slices.Equal(tc[0].Analyzers, []string{"javascript.fakelint"}) || !slices.Equal(tc[0].Ecosystems, []string{"javascript"}) {
+	if len(tc) != 2 || tc[1].Executable != "/n/node" || !slices.Equal(tc[1].Analyzers, []string{"javascript.fakelint"}) || !slices.Equal(tc[1].Ecosystems, []string{"javascript"}) {
 		t.Fatalf("toolchain probe %+v", tc)
 	}
 	if p := probesOf(Config{Tools: map[string]string{"fakelint": "/l/fakelint.js"}}, f.entries()); p[1].Interpreter != "node" || p[1].InterpreterExecutable != "" {

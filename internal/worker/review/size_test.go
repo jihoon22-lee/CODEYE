@@ -266,22 +266,24 @@ func polyglotWorstCase(t *testing.T, root string) {
 	rs := "    if a < b && c > d { let p = &q; } // <tag> & \"quoted\" \\ text\n"
 	for m := range 3 {
 		files := map[string]string{
-			"native%02d/CMakeLists.txt": "cmake_minimum_required(VERSION 3.20)\nproject(native)\n",
-			"native%02d/main.cc":        "int main() {\n" + body(cpp) + "}\n",
-			"native%02d/lib.cc":         "void helper(int a, int b, int c, int d) {\n" + body(cpp) + "}\n",
-			"native%02d/lib_test.cc":    "void test_helper() {\n" + body(cpp) + "}\n",
-			"py%02d/pyproject.toml":     "[project]\nname = \"py\"\n",
-			"py%02d/main.py":            "def main():\n" + body(py),
-			"py%02d/lib.py":             "def helper(a, b, c, d):\n" + body(py),
-			"py%02d/tests/test_lib.py":  "def test_helper():\n" + body(py),
-			"web%02d/package.json":      "{\"name\": \"web\"}\n",
-			"web%02d/index.ts":          "export function main() {\n" + body(ts) + "}\n",
-			"web%02d/lib.ts":            "export function helper(a, b, c, d) {\n" + body(ts) + "}\n",
-			"web%02d/lib.test.ts":       "test('helper', () => {\n" + body(ts) + "});\n",
-			"crate%02d/Cargo.toml":      "[package]\nname = \"c\"\nversion = \"0.1.0\"\n",
-			"crate%02d/src/main.rs":     "fn main() {\n" + body(rs) + "}\n",
-			"crate%02d/src/lib.rs":      "pub fn helper(a: i32, b: i32, c: i32, d: i32) {\n" + body(rs) + "}\n",
-			"crate%02d/tests/it.rs":     "#[test]\nfn helper() {\n" + body(rs) + "}\n",
+			"jvm%02d/pom.xml":                "<project><modelVersion>4.0.0</modelVersion><artifactId>lib</artifactId></project>\n",
+			"jvm%02d/src/main/java/Lib.java": "public class Lib { boolean choose(int a, int b) {\n" + body("if (a < b) { return true; } // example\n") + "return false; }}\n",
+			"native%02d/CMakeLists.txt":      "cmake_minimum_required(VERSION 3.20)\nproject(native)\n",
+			"native%02d/main.cc":             "int main() {\n" + body(cpp) + "}\n",
+			"native%02d/lib.cc":              "void helper(int a, int b, int c, int d) {\n" + body(cpp) + "}\n",
+			"native%02d/lib_test.cc":         "void test_helper() {\n" + body(cpp) + "}\n",
+			"py%02d/pyproject.toml":          "[project]\nname = \"py\"\n",
+			"py%02d/main.py":                 "def main():\n" + body(py),
+			"py%02d/lib.py":                  "def helper(a, b, c, d):\n" + body(py),
+			"py%02d/tests/test_lib.py":       "def test_helper():\n" + body(py),
+			"web%02d/package.json":           "{\"name\": \"web\"}\n",
+			"web%02d/index.ts":               "export function main() {\n" + body(ts) + "}\n",
+			"web%02d/lib.ts":                 "export function helper(a, b, c, d) {\n" + body(ts) + "}\n",
+			"web%02d/lib.test.ts":            "test('helper', () => {\n" + body(ts) + "});\n",
+			"crate%02d/Cargo.toml":           "[package]\nname = \"c\"\nversion = \"0.1.0\"\n",
+			"crate%02d/src/main.rs":          "fn main() {\n" + body(rs) + "}\n",
+			"crate%02d/src/lib.rs":           "pub fn helper(a: i32, b: i32, c: i32, d: i32) {\n" + body(rs) + "}\n",
+			"crate%02d/tests/it.rs":          "#[test]\nfn helper() {\n" + body(rs) + "}\n",
 		}
 		for name, text := range files {
 			writeFile(t, root, fmt.Sprintf(name, m), text)
@@ -294,7 +296,7 @@ func polyglotWorstCase(t *testing.T, root string) {
 func polyglotObservations(j analysis.Job) []govet.Observation {
 	out := worstCaseObservations(j)
 	for _, e := range j.Snapshot.Manifest.Entries {
-		if !slices.Contains([]string{"native00/lib.cc", "py00/lib.py", "web00/lib.ts", "crate00/src/lib.rs"}, e.Path) {
+		if !slices.Contains([]string{"native00/lib.cc", "py00/lib.py", "web00/lib.ts", "crate00/src/lib.rs", "jvm00/src/main/java/Lib.java"}, e.Path) {
 			continue
 		}
 		p := e.Path
@@ -355,9 +357,8 @@ func allLanguagesRun(t *testing.T, j analysis.Job, obs func(analysis.Job) []gove
 	return recs, sizes, dropped
 }
 
-// The worst case with source of all five ecosystems in scope, so every
-// request carries the five language guides (about 7.4 KB more instructions
-// than the Go guide alone). "tiny" has a one-line file of each other
+// The worst case with source of all six ecosystems in scope, so every
+// request carries all six language guides. "tiny" has a one-line file of each other
 // language; "large" gives every language three maximal modules and an
 // observation, so code excerpts, windows and candidates of several languages
 // reach the roles.
@@ -368,7 +369,7 @@ func TestReviewRequestSizeWorstCaseAllLanguages(t *testing.T) {
 		obs  func(analysis.Job) []govet.Observation
 	}{
 		{"tiny", func(root string) {
-			for _, name := range []string{"native/codec.cc", "tools/gen.py", "web/app.ts", "crate/src/lib.rs"} {
+			for _, name := range []string{"native/codec.cc", "tools/gen.py", "web/app.ts", "crate/src/lib.rs", "jvm/src/main/java/Lib.java"} {
 				writeFile(t, root, name, "x\n")
 			}
 		}, worstCaseObservations},
@@ -388,7 +389,7 @@ func TestReviewRequestSizeWorstCaseAllLanguages(t *testing.T) {
 			t.Logf("investigate code excerpts %d (limitations %v), verify: %d of 6 maximal candidates left unreviewed for the budget", code, recs["investigate"].Limitations, dropped)
 			for _, stage := range record.Stages {
 				for _, call := range recs[stage].Calls {
-					if len(guideFiles(call.PackFiles)) != 5 {
+					if len(guideFiles(call.PackFiles)) != 6 {
 						t.Fatalf("%s pack_files %v", stage, call.PackFiles)
 					}
 				}
@@ -397,7 +398,7 @@ func TestReviewRequestSizeWorstCaseAllLanguages(t *testing.T) {
 				return
 			}
 			// The first round of the code corpus reaches every language;
-			// the excerpts that fit next to five guides are sent.
+			// the excerpts that fit next to six guides are sent.
 			langs := map[string]bool{}
 			for _, e := range recs["investigate"].Evidence {
 				if e.Kind == "code" || e.Kind == "test" {

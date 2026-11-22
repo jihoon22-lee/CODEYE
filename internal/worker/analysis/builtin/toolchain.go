@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/nativepath"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/javapack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
@@ -35,6 +36,7 @@ type toolchainSpec struct {
 // reserved: no analyzer tool may use one (TestToolchainNamesAreReserved).
 func toolchainTable() []toolchainSpec {
 	return []toolchainSpec{
+		{name: "java", versionArgs: []string{"--version"}, parse: javapack.ParseJavaVersion},
 		{name: "node", versionArgs: []string{"--version"}, parse: parseNodeVersion},
 	}
 }

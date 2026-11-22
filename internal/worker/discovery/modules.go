@@ -7,6 +7,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/javaproject"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
@@ -120,12 +121,17 @@ func inModuleScope(p string, m envdoc.Module) bool {
 // module are merged into the outermost one, because add_subdirectory and
 // recursive make layouts cannot be told apart without evaluating build files.
 func DetectModules(m source.Manifest, scope envdoc.Scope) ([]envdoc.Module, []string) {
+	modules, limits, _ := detectModules(m, scope, nil)
+	return modules, limits
+}
+
+func detectModules(m source.Manifest, scope envdoc.Scope, read readFunc) ([]envdoc.Module, []string, error) {
 	type key struct{ eco, dir string }
 	found := map[key][]string{}
 	for p := range included(m) {
 		base := path.Base(p)
 		eco, ok := manifestEcosystem(base)
-		if !ok || skippedManifest(p, eco) {
+		if !ok || skippedManifest(p, eco) || (read != nil && eco == envdoc.EcoJava) {
 			continue
 		}
 		k := key{eco, envdoc.Dir(p)}
@@ -156,6 +162,16 @@ func DetectModules(m source.Manifest, scope envdoc.Scope) ([]envdoc.Module, []st
 	for k, manifests := range found {
 		sort.Strings(manifests)
 		mods = append(mods, envdoc.Module{ID: envdoc.ModuleID(k.eco, k.dir), Ecosystem: k.eco, Path: k.dir, Manifests: manifests, ExcludedPaths: []string{}})
+	}
+	if read != nil {
+		java, err := javaproject.ScanWithRead(m, read)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, mod := range java {
+			mans := append([]string{}, mod.Manifests...)
+			mods = append(mods, envdoc.Module{ID: envdoc.ModuleID(envdoc.EcoJava, mod.Dir), Ecosystem: envdoc.EcoJava, Path: mod.Dir, Manifests: mans, ExcludedPaths: []string{}, BuildSystem: mod.BuildSystem, BuildRoot: mod.BuildRoot})
+		}
 	}
 	sort.Slice(mods, func(i, j int) bool {
 		if mods[i].Path != mods[j].Path {
@@ -198,5 +214,5 @@ func DetectModules(m source.Manifest, scope envdoc.Scope) ([]envdoc.Module, []st
 	for i := range mods {
 		mods[i].InScope = moduleInScope(mods[i], scope)
 	}
-	return mods, lims
+	return mods, lims, nil
 }

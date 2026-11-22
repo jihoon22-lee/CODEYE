@@ -49,7 +49,8 @@ const (
 )
 
 // Handler composes the static analyzer with the candidate roles of the
-// review. Planning reads only the manifest; every role reads
+// review. Planning uses the manifest and bounded embedded documentation;
+// every role reads
 // only platform artifacts of this attempt and accepted earlier role records,
 // each validated again. Model output never decides a task status, a platform
 // verdict or a reproduction.
@@ -108,6 +109,12 @@ func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec,
 		return nil, err
 	}
 	docs := len(discovery.EligibleDocuments(j.Snapshot.Manifest, j.Scope)) > 0
+	if !docs {
+		docs, err = discovery.HasJavaAPIDocuments(ctx, j.Snapshot, j.Scope, j.PullRequest)
+		if err != nil {
+			return nil, err
+		}
+	}
 	plan = append(plan,
 		analysis.TaskSpec{Key: "review.environment", Required: false, Title: "환경 영향 검토", Stage: domain.StageEnvironment},
 		analysis.TaskSpec{Key: "review.documents", Required: docs, Title: "문서 계약 검토", Stage: domain.StageDocuments},

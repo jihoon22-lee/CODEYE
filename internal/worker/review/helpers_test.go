@@ -285,13 +285,14 @@ func runRoleWith(t *testing.T, j analysis.Job, rh Handler, goVersion string) ([]
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan, err := h.Plan(t.Context(), j)
+	ctx := WithAttemptSourceIndex(t.Context(), j)
+	plan, err := h.Plan(ctx, j)
 	if err != nil {
 		t.Fatal(err)
 	}
 	out := map[string]analysis.TaskResult{}
 	for _, task := range plan {
-		out[task.Key] = h.Run(t.Context(), j, task, nil)
+		out[task.Key] = h.Run(ctx, j, task, nil)
 	}
 	return plan, out
 }

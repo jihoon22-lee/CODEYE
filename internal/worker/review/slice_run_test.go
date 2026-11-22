@@ -400,9 +400,9 @@ func overviewContext(t *testing.T, j analysis.Job) []string {
 	return out
 }
 
-// TC-167 (size part): the worst case with source of all five ecosystems,
+// TC-167 (size part): the worst case with source of all six ecosystems,
 // maximal role outputs and every slice admitted. Every slice request fits
-// PromptBudget and carries the five language guides.
+// PromptBudget and carries the six language guides.
 func TestSliceRequestSizeWorstCaseAllLanguages(t *testing.T) {
 	j := worstCaseJob(t, func(root string) { polyglotWorstCase(t, root) })
 	f := &scriptedCaller{script: maxScript(t)}
@@ -428,7 +428,7 @@ func TestSliceRequestSizeWorstCaseAllLanguages(t *testing.T) {
 				t.Fatal(name, err)
 			}
 			for _, c := range rec.Calls {
-				if c.RequestBytes <= 0 || c.RequestBytes > PromptBudget || len(guideFiles(c.PackFiles)) != 5 {
+				if c.RequestBytes <= 0 || c.RequestBytes > PromptBudget || len(guideFiles(c.PackFiles)) != 6 {
 					t.Fatalf("%s.%s request_bytes %d, pack_files %v", rec.Stage, key, c.RequestBytes, c.PackFiles)
 				}
 			}

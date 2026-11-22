@@ -43,7 +43,7 @@ func TestCargoAloneAdvertisesDeepReview(t *testing.T) {
 	dir := fakeRust(t, false)
 	cfg := Config{Tools: map[string]string{"cargo": filepath.Join(dir, "cargo")}, ProbeDir: t.TempDir()}
 	hs, missing := Handlers(context.Background(), cfg, &executor.Executor{})
-	if len(hs) != 1 || !slices.Equal(reasons(missing), slices.Concat([]string{"go-vet:not_configured", "staticcheck:not_configured", "gofmt:not_configured"}, cppUnconfigured, pythonUnconfigured, jsUnconfigured, []string{"clippy:not_configured"}, anyMissing)) {
+	if len(hs) != 1 || !slices.Equal(reasons(missing), slices.Concat([]string{"go-vet:not_configured", "staticcheck:not_configured", "gofmt:not_configured", "errcheck:not_configured"}, cppUnconfigured, pythonUnconfigured, jsUnconfigured, []string{"clippy:not_configured", "cargo-doc:invalid_config"}, javaUnconfigured, anyMissing)) {
 		t.Fatalf("handlers %d missing %v", len(hs), reasons(missing))
 	}
 	c, ok := hs[0].(*pack.Composite)

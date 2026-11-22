@@ -1,0 +1,28 @@
+schema_version: '0.1'
+id: python.import_linter
+languages: [python]
+planned_platforms: [linux]
+availability: verified
+version_contract: import-linter-2.17
+analysis_scope: [interfile, structural]
+executes_repository_code: false
+requires_build: false
+network_policy: none
+version_probe:
+  executable: '${lint_imports}'
+  argv: [--version]
+execute:
+  executable: '${operator_python}'
+  argv: [-I, -B, '${managed_script}', '${declared_configuration}']
+  cwd: '${staged_sources}'
+  timeout_seconds: 120
+  stdout_max_bytes: 8388608
+  env_allowlist: [PATH, LANG, HOME, USERPROFILE, TMPDIR, TMP, TEMP]
+exit_codes:
+  clean: [0]
+  findings: []
+  error: [1, 2]
+parser:
+  id: import-linter
+  format: json
+  input: stdout-artifact

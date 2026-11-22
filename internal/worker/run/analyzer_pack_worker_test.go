@@ -290,7 +290,7 @@ func TestAnalyzerPackWithoutStaticcheck(t *testing.T) {
 		}
 	}
 	at := withoutAnyEcosystemTools(t, analyzerTools(r.envs))
-	if len(at) != 1 || at[0].Tool != "staticcheck" || at[0].Status != envdoc.ObsNotProbed {
+	if len(at) != 2 || at[0].Tool != "errcheck" || at[1].Tool != "staticcheck" || at[0].Status != envdoc.ObsNotProbed || at[1].Status != envdoc.ObsNotProbed {
 		t.Fatalf("analyzer tools %+v", at)
 	}
 }

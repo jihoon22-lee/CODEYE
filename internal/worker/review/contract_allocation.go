@@ -95,6 +95,9 @@ func (s *roleStage) contractClaimAllocation(base []record.Excerpt, selected cont
 		}
 		add(trace.contractIndex, windows, kind)
 	}
+	for _, trace := range selected.jsOptions {
+		add(trace.index, trace.windows(s, selected.sources), typedGuard)
+	}
 	for _, link := range workflow {
 		for _, index := range link.indices {
 			// Keep the route's independent origin and implementation together.

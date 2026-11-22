@@ -1,0 +1,28 @@
+schema_version: '0.1'
+id: cpp.gcc_analyzer
+languages: [c]
+planned_platforms: [linux]
+availability: verified
+version_contract: gcc-13.4-and-15.2-fixture-tested
+analysis_scope: [typed, intraprocedural, interprocedural]
+executes_repository_code: false
+requires_build: false
+network_policy: none
+version_probe:
+  executable: '${gcc}'
+  argv: [--version]
+execute:
+  executable: '${gcc}'
+  argv: ['${sanitized_compile_flags}', -fanalyzer, -Wanalyzer-too-complex, -fdiagnostics-format=json, -fdiagnostics-column-unit=byte, -fdiagnostics-color=never, -fdiagnostics-show-option, -S, -o, '${null_device}', '${workspace}/${translation_unit}']
+  cwd: '${scratch}/cwd'
+  timeout_seconds: 45
+  stdout_max_bytes: 65536
+  env_allowlist: [PATH, LANG, SystemRoot]
+exit_codes:
+  clean: [0]
+  findings: []
+  error: [1]
+parser:
+  id: gcc-diagnostics-json
+  format: json
+  input: stderr-artifact

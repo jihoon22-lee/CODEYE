@@ -1,0 +1,177 @@
+{
+  "adapter": {
+    "id": "pmd",
+    "version": "1"
+  },
+  "analyzer": {
+    "ecosystem": "java",
+    "id": "java.pmd",
+    "required": true
+  },
+  "coverage": {
+    "files_in_scope": 1,
+    "files_skipped": 0,
+    "files_unlisted": 0,
+    "processed_paths": [
+      "app/src/main/java/example/Example.java"
+    ],
+    "unit": "file",
+    "units": {}
+  },
+  "executions": [
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "[REDACTED]",
+          "-Xmx512m",
+          "-Dfile.encoding=UTF-8",
+          "-Djava.awt.headless=true",
+          "-cp",
+          "[REDACTED]/*:[REDACTED]/conf",
+          "net.sourceforge.pmd.cli.PmdCli",
+          "check",
+          "--file-list",
+          "[REDACTED]/analyzers/pmd.m01/sources.txt",
+          "--rulesets",
+          "category/java/errorprone.xml/BrokenNullCheck,category/java/errorprone.xml/CloseResource,category/java/errorprone.xml/ReturnFromFinallyBlock,category/java/errorprone.xml/UselessOperationOnImmutable,category/java/errorprone.xml/UseEqualsToCompareStrings,category/java/errorprone.xml/ImplicitSwitchFallThrough,category/java/bestpractices.xml/PreserveStackTrace,category/java/bestpractices.xml/UnusedLocalVariable,category/java/multithreading.xml/DontCallThreadRun,category/java/multithreading.xml/UnsynchronizedStaticFormatter",
+          "--format",
+          "json",
+          "--encoding",
+          "UTF-8",
+          "--no-cache",
+          "--no-progress",
+          "--no-fail-on-violation",
+          "--threads",
+          "1",
+          "--use-version",
+          "java-21"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "pmd.check",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 26,
+        "incomplete": false,
+        "sha256": "2cd56656717bde95103a7c4918c579f1633731df1805e646d27d283c36a0b678",
+        "total_bytes": 26,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 742,
+        "incomplete": false,
+        "sha256": "87723184c482537d65b1a8fabc7450be51b4ccb4f9fbf667ba7a49beb4c32aea",
+        "total_bytes": 742,
+        "truncated": false
+      }
+    }
+  ],
+  "kind": "analyzer_observations",
+  "limitations": [
+    "java_project_classpath_not_loaded"
+  ],
+  "module": {
+    "dir": "app",
+    "name": ""
+  },
+  "observations": [
+    {
+      "category": "maintainability",
+      "id": "obs_b99b8b795365149af94c",
+      "location": {
+        "blob_sha256": "8a16dd6d605b5d4dc7902c07d81eb5fd218560cbe5128e40012478c11f4ee091",
+        "column_unit": "byte",
+        "end_col": 0,
+        "end_line": 4,
+        "path": "app/src/main/java/example/Example.java",
+        "start_col": 0,
+        "start_line": 4
+      },
+      "location_state": "resolved",
+      "path": "app/src/main/java/example/Example.java",
+      "raw_message": "pmd reported UnusedLocalVariable",
+      "raw_ref": {
+        "byte_end": 637,
+        "byte_start": 207,
+        "execution": "pmd.check",
+        "json_pointer": "",
+        "record_index": 0,
+        "stream": "stdout",
+        "stream_sha256": "87723184c482537d65b1a8fabc7450be51b4ccb4f9fbf667ba7a49beb4c32aea"
+      },
+      "raw_severity": null,
+      "related": [],
+      "rule_id": "UnusedLocalVariable",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "app/src/main/java/example/Example.java"
+    }
+  ],
+  "outcome": {
+    "exit_class": "success_with_findings",
+    "partial_parse": false,
+    "reason": null,
+    "task_status": "succeeded"
+  },
+  "parse": {
+    "observations": 1,
+    "ok": true,
+    "records": 1,
+    "shape_errors": 0,
+    "tool_errors": 0,
+    "unparsed_bytes": 0,
+    "unresolved_observations": 0
+  },
+  "parser": {
+    "id": "pmd",
+    "version": "1"
+  },
+  "patterns": [
+    "app"
+  ],
+  "rule_pack": {
+    "config_files": [],
+    "id": "codeye-java-pmd",
+    "repository_config": "overridden",
+    "selection": [
+      "category/java/errorprone.xml/BrokenNullCheck",
+      "category/java/errorprone.xml/CloseResource",
+      "category/java/errorprone.xml/ReturnFromFinallyBlock",
+      "category/java/errorprone.xml/UselessOperationOnImmutable",
+      "category/java/errorprone.xml/UseEqualsToCompareStrings",
+      "category/java/errorprone.xml/ImplicitSwitchFallThrough",
+      "category/java/bestpractices.xml/PreserveStackTrace",
+      "category/java/bestpractices.xml/UnusedLocalVariable",
+      "category/java/multithreading.xml/DontCallThreadRun",
+      "category/java/multithreading.xml/UnsynchronizedStaticFormatter"
+    ],
+    "source_suppressions": "honored",
+    "unreported_suppression_rules": [],
+    "version": "1"
+  },
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "7391bd909c0f0e36954776cde6078bf7df41031023f070efba3b10fc60925dac",
+  "target": {
+    "platform": null,
+    "properties": {}
+  },
+  "task_key": "pmd.m01",
+  "tool": {
+    "name": "pmd",
+    "version": "7.29.0",
+    "version_tested": true
+  },
+  "tool_errors": [],
+  "workspace_drift": []
+}

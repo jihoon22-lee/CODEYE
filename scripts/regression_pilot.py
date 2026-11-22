@@ -166,7 +166,7 @@ _UNREAD = ("artifact_rejected", "review_lineage_mismatch", "unrecognized_artifac
 def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None):
     """The conditions registered before a paid run with slices (docs/EVALUATION.md#회귀-집합-실행).
 
-    Non-pilot cases plan no slice task and their review calls use the pinned
+    Small synthetic cases need no model call in a follow-up slot. Their review calls use the pinned
     Go-only pack digests. The pilot completes with the AI review performed;
     its report reads every review artifact and carries the review ledger
     with the configured ceiling; the ledger's calls_used (the attempt counter
@@ -195,9 +195,19 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
         if label == "git":
             continue
         if label != "pilot":
-            slices = [t["key"] for t in row["tasks"] if SLICE_TASK.match(t["key"])]
-            if slices:
-                failures.append(f"{label}: slice tasks {slices}")
+            # The planner may reserve slots before it knows how many lines
+            # the overview will cover. A reserved slot is not a model call.
+            if re.fullmatch(r"Q[0-9]+-(before|after)", label):
+                for task in row["tasks"]:
+                    key = task["key"]
+                    if key == "review.scope" and task["status"] != "succeeded":
+                        failures.append(f"{label}: scope inventory {task['status']}")
+                    elif SLICE_TASK.match(key) and key != "review.scope" and (task["status"], task["reason"]) != ("skipped_policy", "no_review_scope"):
+                        failures.append(f"{label}: unnecessary or incomplete follow-up {key}: {task['status']}/{task['reason']}")
+                report = json.loads((output / (label + ".json")).read_text())
+                extra_calls = [c["task_key"] for c in report["coverage"].get("review_calls", []) if SLICE_TASK.match(c.get("task_key", ""))]
+                if extra_calls:
+                    failures.append(f"{label}: unexpected model calls {extra_calls}")
             for call in row["review_calls"]:
                 want = roles.get(call["role"], {}).get("digest")
                 if call["pack_sha256"] != want:

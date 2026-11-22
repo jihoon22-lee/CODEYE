@@ -181,7 +181,7 @@
     "class": {"enum": ["primary", "secondary"]},
     "rank": {"enum": ["tool_observations", "analyzer_not_succeeded", "entry_point", "source", "test"]},
     "path": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)[^:\\\\\\u0000-\\u001f\\u007f]+(?<!/)$"},
-    "module": {"type": "string", "pattern": "^(cpp|go|javascript|python|rust):(\\.|[^:\\u0000-\\u001f]+)$"},
+    "module": {"type": "string", "pattern": "^(cpp|go|java|javascript|python|rust):(\\.|[^:\\u0000-\\u001f]+)$"},
     "upstream": {
       "type": "object", "additionalProperties": false, "required": ["source", "state"],
       "properties": {"source": {"const": "review.investigate"}, "state": {"enum": ["accepted", "skipped", "failed", "unavailable"]}, "reason": {"$ref": "#/$defs/code"}, "sha256": {"$ref": "#/$defs/digest"}}

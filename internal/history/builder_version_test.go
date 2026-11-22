@@ -13,10 +13,10 @@ import (
 // Analysis summaries and additional evidence can change between revisions
 // that still compare the same findings by fp2 and rule context.
 func TestEarlierBuilderBaselinesAgainstCurrentBuilder(t *testing.T) {
-	if report.BuilderVersion != "18" {
+	if report.BuilderVersion != "19" {
 		t.Fatalf("builder version %s: revisit this test", report.BuilderVersion)
 	}
-	for _, version := range []string{"4", "12", "13", "14", "15", "16", "17"} {
+	for _, version := range []string{"4", "12", "13", "14", "15", "16", "17", "18"} {
 		t.Run(version, func(t *testing.T) { checkHistoricalBaseline(t, version) })
 	}
 }

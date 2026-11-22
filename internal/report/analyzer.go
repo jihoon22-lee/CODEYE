@@ -124,7 +124,7 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 		obs := Observation{ID: o.ID, TaskKey: ctx.Task.Key, TaskExecutionID: ctx.TaskExecutionID, Tool: d.Analyzer.ID, ToolVersion: d.Tool.Version, RuleID: o.RuleID,
 			RawSeverity: severity, RawMessage: &msg, LocationState: o.LocationState, EvidenceState: EvidenceUnresolved, SuggestedFixes: o.SuggestedFixes, Suppressed: o.Suppressed,
 			RawRef: RawRef{ArtifactID: a.ID, SHA256: a.SHA256, StreamIndex: o.RawRef.RecordIndex, JSONPointer: o.RawRef.JSONPointer, ByteStart: o.RawRef.ByteStart, ByteEnd: o.RawRef.ByteEnd}}
-		if obs.Tool == "cpp.cppcheck" || obs.Tool == "cpp.clang_tidy" {
+		if obs.Tool == "cpp.cppcheck" || obs.Tool == "cpp.clang_tidy" || obs.Tool == "cpp.gcc_analyzer" {
 			for _, r := range o.Related {
 				kind := r.Kind
 				if kind == "" {

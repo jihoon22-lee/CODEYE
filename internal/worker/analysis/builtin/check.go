@@ -8,6 +8,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/eslint"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/gitleaks"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/javapack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jscpd"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/lizard"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
@@ -59,22 +60,29 @@ func seriesOf(series string) testedInfo {
 // constants of the packs, so a parser re-capture changes them in one place.
 func testedTable() map[string]testedInfo {
 	return map[string]testedInfo{
-		"go":                {series: "1.27", tested: govet.GoVersionTested},
-		staticcheck.Tool:    {series: staticcheck.TestedRelease, tested: staticcheck.VersionTested},
-		cpp.CppcheckTool:    {series: cpp.CppcheckTestedRelease, tested: cpp.CppcheckVersionTested},
-		cpp.ClangTidyTool:   {series: cpp.ClangTidyTestedRelease, tested: cpp.ClangTidyVersionTested},
-		python.RuffTool:     seriesOf(python.RuffTestedSeries),
-		python.MypyTool:     seriesOf(python.MypyTestedSeries),
-		python.PyrightTool:  {series: python.PyrightTestedVersion, tested: func(v string) bool { return v == python.PyrightTestedVersion }},
-		python.BanditTool:   seriesOf(python.BanditTestedSeries),
-		eslint.Tool:         {series: eslint.TestedSeries, tested: eslint.VersionTested},
-		tsc.Tool:            {series: tsc.TestedSeries, tested: tsc.VersionTested},
-		rustpack.CheckTool:  {series: rustpack.TestedCargo, tested: rustpack.CargoVersionTested},
-		rustpack.ClippyTool: {series: rustpack.TestedClippy, tested: rustpack.ClippyVersionTested},
-		lizard.Tool:         {series: lizard.TestedSeries, tested: lizard.VersionTested},
-		jscpd.Tool:          {series: jscpd.TestedSeries, tested: jscpd.VersionTested},
-		gitleaks.Tool:       {series: gitleaks.TestedSeries, tested: gitleaks.VersionTested},
-		"node":              {},
+		"go":                 {series: "1.27", tested: govet.GoVersionTested},
+		"errcheck":           {series: "v1.30.0", tested: func(v string) bool { return v == "v1.30.0" }},
+		staticcheck.Tool:     {series: staticcheck.TestedRelease, tested: staticcheck.VersionTested},
+		cpp.CppcheckTool:     {series: cpp.CppcheckTestedRelease, tested: cpp.CppcheckVersionTested},
+		cpp.ClangTidyTool:    {series: cpp.ClangTidyTestedRelease, tested: cpp.ClangTidyVersionTested},
+		cpp.GCCAnalyzerTool:  {series: cpp.GCCAnalyzerTestedRelease, tested: cpp.GCCAnalyzerVersionTested},
+		python.RuffTool:      seriesOf(python.RuffTestedSeries),
+		python.MypyTool:      seriesOf(python.MypyTestedSeries),
+		python.PyrightTool:   {series: python.PyrightTestedVersion, tested: func(v string) bool { return v == python.PyrightTestedVersion }},
+		python.BanditTool:    seriesOf(python.BanditTestedSeries),
+		eslint.Tool:          {series: eslint.TestedSeries, tested: eslint.VersionTested},
+		tsc.Tool:             {series: tsc.TestedSeries, tested: tsc.VersionTested},
+		rustpack.CheckTool:   {series: rustpack.TestedCargo, tested: rustpack.CargoVersionTested},
+		rustpack.ClippyTool:  {series: rustpack.TestedClippy, tested: rustpack.ClippyVersionTested},
+		lizard.Tool:          {series: lizard.TestedSeries, tested: lizard.VersionTested},
+		jscpd.Tool:           {series: jscpd.TestedSeries, tested: jscpd.VersionTested},
+		gitleaks.Tool:        {series: gitleaks.TestedSeries, tested: gitleaks.VersionTested},
+		"node":               {},
+		"java":               {},
+		"dependency-cruiser": seriesOf("18.8"),
+		"import-linter":      {series: "2.17", tested: func(v string) bool { return v == "2.17" || pack.SeriesTested(v, "2.17") }},
+		javapack.PMD:         seriesOf("7.29"),
+		javapack.SpotBugs:    seriesOf("4.10"),
 	}
 }
 

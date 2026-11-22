@@ -95,7 +95,7 @@ func (c ContractComparison) Valid(catalog map[string]Excerpt) bool {
 		code := catalog[id]
 		return code.Kind == "code" && !slices.ContainsFunc(c.DocumentEvidenceIDs, func(docID string) bool {
 			doc := catalog[docID]
-			return doc.DirectivePath != "" && doc.Path == code.Path && doc.Start <= code.End && code.Start <= doc.End
+			return (doc.DirectivePath != "" || doc.IsJavaAPIDocument()) && doc.Path == code.Path && doc.Start <= code.End && code.Start <= doc.End
 		})
 	})
 }

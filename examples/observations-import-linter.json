@@ -1,0 +1,156 @@
+{
+  "adapter": {
+    "id": "import-linter",
+    "version": "1"
+  },
+  "analyzer": {
+    "ecosystem": "python",
+    "id": "python.import_linter",
+    "required": false
+  },
+  "coverage": {
+    "files_in_scope": 3,
+    "files_skipped": 0,
+    "files_unlisted": 0,
+    "processed_paths": [
+      "src/pkg/__init__.py",
+      "src/pkg/a.py",
+      "src/pkg/b.py"
+    ],
+    "unit": "file",
+    "units": {
+      "import_contracts_broken": 1,
+      "import_contracts_checked": 1
+    }
+  },
+  "executions": [
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "[REDACTED]",
+          "-I",
+          "-B",
+          "[REDACTED]/analyzers/import-linter/check-contracts.py",
+          ".importlinter"
+        ],
+        "dir": "analyzers/import-linter/project",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "import-linter.check",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 1,
+        "incomplete": false,
+        "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+        "total_bytes": 1,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 277,
+        "incomplete": false,
+        "sha256": "151992f1216c0e7da46af7ceb0de7ec89e6a20109c243c181030e25612916453",
+        "total_bytes": 277,
+        "truncated": false
+      }
+    }
+  ],
+  "kind": "analyzer_observations",
+  "limitations": [],
+  "module": {
+    "dir": ".",
+    "name": ""
+  },
+  "observations": [
+    {
+      "category": "maintainability",
+      "id": "obs_e1f5da9f0bf88501d127",
+      "location": {
+        "blob_sha256": "3454c77b14a5e1e005f1f0a24cbb595561d67afcfafde2c01a4820dd4b792536",
+        "column_unit": "byte",
+        "end_col": 0,
+        "end_line": 1,
+        "path": "src/pkg/a.py",
+        "start_col": 0,
+        "start_line": 1
+      },
+      "location_state": "resolved",
+      "path": "src/pkg/a.py",
+      "raw_message": "Dependency rule violated: layering",
+      "raw_ref": {
+        "byte_end": 274,
+        "byte_start": 139,
+        "execution": "import-linter.check",
+        "json_pointer": "",
+        "record_index": 0,
+        "stream": "stdout",
+        "stream_sha256": "151992f1216c0e7da46af7ceb0de7ec89e6a20109c243c181030e25612916453"
+      },
+      "raw_severity": null,
+      "related": [],
+      "rule_id": "layering",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "src/pkg/a.py"
+    }
+  ],
+  "outcome": {
+    "exit_class": "success_with_findings",
+    "partial_parse": false,
+    "reason": null,
+    "task_status": "succeeded"
+  },
+  "parse": {
+    "observations": 1,
+    "ok": true,
+    "records": 1,
+    "shape_errors": 0,
+    "tool_errors": 0,
+    "unparsed_bytes": 0,
+    "unresolved_observations": 0
+  },
+  "parser": {
+    "id": "import-linter",
+    "version": "1"
+  },
+  "patterns": [
+    "."
+  ],
+  "rule_pack": {
+    "config_files": [
+      {
+        "path": ".importlinter",
+        "sha256": "66dc6041bbad07a239fb4918465949c8a6965bd801ef3595578da53bf8e6af25"
+      }
+    ],
+    "id": "codeye-import-linter",
+    "repository_config": "honored",
+    "selection": [],
+    "source_suppressions": "none",
+    "unreported_suppression_rules": [],
+    "version": "1"
+  },
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "4cf67265b9c96aec870ee9c7faa1122f8b9923cad05f46f4755e3155a38a55ba",
+  "target": {
+    "platform": null,
+    "properties": {}
+  },
+  "task_key": "import-linter",
+  "tool": {
+    "name": "import-linter",
+    "version": "2.17",
+    "version_tested": true
+  },
+  "tool_errors": [],
+  "workspace_drift": []
+}

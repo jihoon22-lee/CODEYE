@@ -140,7 +140,7 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
             ensure((obs["raw_message"] is not None) == report["export"]["include_code"], "Export leaked or omitted diagnostic text")
             related_end = raw["byte_start"]
             for note in obs.get("related_locations", []):
-                ensure(obs["tool"] in ("cpp.cppcheck", "cpp.clang_tidy") and "metric" not in obs,
+                ensure(obs["tool"] in ("cpp.cppcheck", "cpp.clang_tidy", "cpp.gcc_analyzer") and "metric" not in obs,
                        "Related note is not a C/C++ diagnostic")
                 ensure(report["export"]["include_code"] or not ("raw_message" in note or "excerpt" in note),
                        "Code-free export has related tool text")

@@ -11,7 +11,7 @@ const s = reportKo.sections;
 const knownTypes = new Set(['javascript.tsc', 'python.mypy', 'python.pyright', 'rust.cargocheck']);
 const analyzerForTask: Record<string, string> = {
   'go-vet': 'go.vet', staticcheck: 'go.staticcheck', gofmt: 'go.gofmt', tsc: 'javascript.tsc',
-  mypy: 'python.mypy', pyright: 'python.pyright', bandit: 'python.bandit', 'cargo-check': 'rust.cargocheck',
+  mypy: 'python.mypy', pyright: 'python.pyright', bandit: 'python.bandit', 'cargo-check': 'rust.cargocheck', 'dependency-cruiser': 'javascript.dependency_cruiser', 'import-linter': 'python.import_linter', pmd: 'java.pmd', spotbugs: 'java.spotbugs',
   lizard: 'any.lizard', jscpd: 'any.jscpd',
 };
 

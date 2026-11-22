@@ -18,8 +18,31 @@ func MarkdownDirectivePath(p string) bool {
 
 // ValidDirectivePath constrains docstring provenance to its own project scope.
 func (e Excerpt) ValidDirectivePath() bool {
-	return e.DirectivePath == "" || (e.Kind == "document" && path.Ext(e.Path) == ".py" &&
-		SourceKind(e.Path) == "code" && MarkdownDirectivePath(e.DirectivePath) && ScopeUnder(e.Path, e.DocumentScope()))
+	if e.DirectivePath == "" {
+		return true
+	}
+	if e.Kind != "document" || SourceKind(e.Path) != "code" || !ScopeUnder(e.Path, e.DocumentScope()) {
+		return false
+	}
+	markdown := MarkdownDirectivePath(e.DirectivePath)
+	switch path.Ext(e.Path) {
+	case ".py":
+		return markdown || SphinxDirectivePath(e.DirectivePath)
+	case ".rs":
+		return markdown
+	}
+	return false
+}
+
+// SphinxDirectivePath is an authored reStructuredText guidance page.
+func SphinxDirectivePath(p string) bool {
+	return domain.ValidateEvidencePath(p) == nil && strings.EqualFold(path.Ext(p), ".rst") &&
+		slices.Contains([]string{docpath.Design, docpath.Readme}, docpath.Classify(p))
+}
+
+// IsRustAPIDocument reports source documentation selected through an authored guide.
+func (e Excerpt) IsRustAPIDocument() bool {
+	return e.Kind == "document" && path.Ext(e.Path) == ".rs" && e.DirectivePath != "" && e.ValidDirectivePath()
 }
 
 // DocumentPath identifies the authored documentation page.
@@ -31,6 +54,12 @@ func (e Excerpt) DocumentPath() string {
 }
 
 func (e Excerpt) DocumentScope() string { return docpath.Scope(e.DocumentPath()) }
+
+// IsJavaAPIDocument reports a document excerpt taken from a production Java
+// source path. The producer matches its range to a complete attached comment.
+func (e Excerpt) IsJavaAPIDocument() bool {
+	return e.Kind == "document" && docpath.JavaAPIPath(e.Path)
+}
 
 // Source classification of snapshot paths. It decides from a
 // path alone whether an excerpt may carry kind code, test or config, so the
@@ -45,8 +74,9 @@ var sourceExtensions = map[string]string{
 	".py": "python", ".pyi": "python",
 	".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
 	".ts": "javascript", ".tsx": "javascript", ".mts": "javascript", ".cts": "javascript",
-	".rs": "rust",
-	".c":  "cpp", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp", ".c++": "cpp",
+	".java": "java",
+	".rs":   "rust",
+	".c":    "cpp", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp", ".c++": "cpp",
 	".h": "cpp", ".hh": "cpp", ".hpp": "cpp", ".hxx": "cpp", ".h++": "cpp",
 }
 
@@ -64,7 +94,8 @@ var manifests = map[string]string{
 	"go.mod":         "go",
 	"pyproject.toml": "python", "setup.cfg": "python",
 	"package.json": "javascript", "tsconfig.json": "javascript",
-	"cargo.toml":     "rust",
+	"cargo.toml": "rust",
+	"pom.xml":    "java", "build.gradle": "java", "build.gradle.kts": "java", "settings.gradle": "java", "settings.gradle.kts": "java",
 	"cmakelists.txt": "cpp",
 }
 
@@ -104,6 +135,8 @@ func IsTestPath(p string) bool {
 		return strings.HasPrefix(base, "test_") || strings.HasSuffix(stem, "_test") || base == "conftest.py" || inDir("test", "tests")
 	case "javascript":
 		return jsTestFile(base) || strings.HasSuffix(stem, ".test") || strings.HasSuffix(stem, ".spec") || inDir("__tests__", "test", "tests")
+	case "java":
+		return inDir("test") || strings.HasSuffix(base, "Test.java") || strings.HasSuffix(base, "Tests.java")
 	case "rust":
 		return base == "tests.rs" || inDir("tests")
 	}

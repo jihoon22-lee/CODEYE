@@ -75,7 +75,7 @@ const (
 )
 
 // Ecosystems an analyzer may target; "any" is language independent.
-var Ecosystems = []string{"any", "cpp", "go", "javascript", "python", "rust"}
+var Ecosystems = []string{"any", "cpp", "go", "java", "javascript", "python", "rust"}
 
 // Categories are the report finding categories an adapter policy may assign.
 var Categories = []string{"api_contract", "concurrency", "correctness", "data_integrity", "error_handling", "maintainability", "performance", "resource_lifecycle", "security", "test_gap"}

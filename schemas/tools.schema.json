@@ -49,7 +49,7 @@
     "tools": {
       "type": "array",
       "minItems": 24,
-      "maxItems": 24,
+      "maxItems": 31,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -67,6 +67,7 @@
               "node",
               "opencode",
               "staticcheck",
+              "errcheck",
               "gitleaks",
               "ruff",
               "mypy",
@@ -75,11 +76,17 @@
               "lizard",
               "cppcheck",
               "clang-tidy",
+              "gcc",
               "eslint",
+              "dependency-cruiser",
+              "import-linter",
               "tsc",
               "jscpd",
               "cargo",
               "clippy",
+              "java",
+              "pmd",
+              "spotbugs",
               "npm",
               "pnpm",
               "yarn",
@@ -400,6 +407,19 @@
             "properties": {
               "name": {
                 "const": "clang-tidy"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "gcc"
               }
             },
             "required": [

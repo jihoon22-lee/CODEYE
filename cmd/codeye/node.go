@@ -85,6 +85,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	autoscale := fs.Bool("autoscale", false, "")
 	maxWorkers := fs.Int("max-workers", 2, "")
 	toolPath := fs.String("toolchain-path", "/usr/bin:/bin", "")
+	javaClasspath := fs.String("java-classpath-catalog", "", "")
 	git := fs.String("git", "", "")
 	// A Git host token file (the service's GitHub token): workers read it
 	// for a fetch of its host; the token is never an argument.
@@ -112,6 +113,11 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		managerFlags[name] = fs.String(name, "", "")
 	}
 	pipIndex := fs.String("pip-index-url", "", "")
+	var testSettings workerproto.TestSettings
+	fs.StringVar(&testSettings.GoRun, "test-go-run", "", "")
+	fs.BoolVar(&testSettings.GoRace, "test-go-race", false, "")
+	fs.StringVar(&testSettings.MavenRepository, "test-maven-repository", "", "")
+	fs.StringVar(&testSettings.GradleHome, "test-gradle-home", "", "")
 	// Offline mode and the internal CA (docs/OPERATIONS.md#오프라인-모드).
 	offline := fs.Bool("offline", false, "")
 	caBundle := fs.String("ca-bundle", "", "")
@@ -141,6 +147,16 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	if !review.ValidMaxCalls(*reviewMaxCalls) {
 		fmt.Fprintln(stderr, "invalid --review-max-calls; expected 15..2013 (default 99)")
 		return agent.ExitUsage
+	}
+	if len(testSettings.GoRun) > 512 || strings.ContainsAny(testSettings.GoRun, "\x00\r\n") {
+		fmt.Fprintln(stderr, "invalid --test-go-run; expected one line of at most 512 bytes")
+		return agent.ExitUsage
+	}
+	for _, path := range []string{testSettings.MavenRepository, testSettings.GradleHome} {
+		if path != "" && (!filepath.IsAbs(path) || filepath.Clean(path) != path) {
+			fmt.Fprintln(stderr, "invalid test cache directory; expected an absolute, clean path")
+			return agent.ExitUsage
+		}
 	}
 	// --autoscale starts with zero workers and follows controller
 	// commands; it excludes an explicit --workers (legacy static mode, the
@@ -202,7 +218,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	cfg := agent.Config{
 		ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile,
 		SourceRoots: mapping, Workers: *workers, Autoscale: *autoscale, MaxWorkers: *maxWorkers,
-		ToolPath: *toolPath, GitExecutable: *git, GitHosts: gitHosts, GitCredentialFile: *gitCredential, GoExecutable: *goExe, GoModCache: *goModCache, AnalyzerTools: tools,
+		ToolPath: *toolPath, JavaClasspathCatalog: *javaClasspath, GitExecutable: *git, GitHosts: gitHosts, GitCredentialFile: *gitCredential, GoExecutable: *goExe, GoModCache: *goModCache, AnalyzerTools: tools,
 		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelCredentialFile: *modelCredential, ModelTimeout: *modelTimeout, ModelSourceRoots: approved, ReviewMaxCalls: *reviewMaxCalls,
 		RepositoryCodeSourceRoots: codeApproved,
 		StorageQuota:              limits,
@@ -210,6 +226,9 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		Log:                       stderr,
 	}
 	cfg.ModelConfigFile = *modelConfig
+	if testSettings != (workerproto.TestSettings{}) {
+		cfg.Tests = &testSettings
+	}
 	if *modelInstance != "" {
 		cfg.ModelSettings = localModelSettings(*modelInstance, filepath.Dir(abs), instanceModelEnv())
 	}
@@ -311,7 +330,7 @@ func workerHandlersWithCaller(ctx context.Context, h *workerproto.Hello, runner 
 	if h.ReviewMaxCalls != 0 && !review.ValidMaxCalls(h.ReviewMaxCalls) {
 		return nil, nil, errors.New("review call ceiling out of range")
 	}
-	cfg := builtin.Config{GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, Tools: h.AnalyzerTools, ProbeDir: h.ScratchRoot, ToolPath: h.ToolPath}
+	cfg := builtin.Config{GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, Tools: h.AnalyzerTools, ProbeDir: h.ScratchRoot, ToolPath: h.ToolPath, JavaClasspathCatalog: h.JavaClasspathCatalog}
 	var depCfg deps.Config
 	if d := h.Dependencies; d != nil {
 		if !filepath.IsAbs(d.CacheRoot) {
@@ -381,8 +400,13 @@ func workerHandlersWithCaller(ctx context.Context, h *workerproto.Hello, runner 
 			if testPython == "" {
 				testPython = depCfg.Python
 			}
-			testHandler = testexec.New(testBase, testexec.Config{Go: h.GoExecutable, GoModCache: h.GoModCache, Node: h.AnalyzerTools["node"], Npm: testNpm,
-				Python: testPython, Cargo: h.AnalyzerTools["cargo"], ToolPath: h.ToolPath, DependencyCacheRoot: cfg.DependencyCacheRoot})
+			testTools := testexec.Config{Go: h.GoExecutable, GoModCache: h.GoModCache, Node: h.AnalyzerTools["node"], Npm: testNpm,
+				Python: testPython, Cargo: h.AnalyzerTools["cargo"], Java: h.AnalyzerTools["java"], ToolPath: h.ToolPath, DependencyCacheRoot: cfg.DependencyCacheRoot}
+			if t := h.Tests; t != nil {
+				testTools.GoTestRun, testTools.GoRace = t.GoRun, t.GoRace
+				testTools.MavenRepository, testTools.GradleHome = t.MavenRepository, t.GradleHome
+			}
+			testHandler = testexec.New(testBase, testTools)
 		}
 	}
 	if testHandler != nil {

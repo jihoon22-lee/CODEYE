@@ -21,6 +21,8 @@ func ManifestEcosystem(base string) (string, bool) {
 		return EcoJavaScript, true
 	case "pyproject.toml", "setup.cfg", ".python-version":
 		return EcoPython, true
+	case "pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts":
+		return EcoJava, true
 	case "Cargo.toml", "rust-toolchain", "rust-toolchain.toml":
 		return EcoRust, true
 	case "CMakeLists.txt", "meson.build", "Makefile", "makefile", "GNUmakefile", "compile_commands.json":
