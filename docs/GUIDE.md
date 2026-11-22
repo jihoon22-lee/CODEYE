@@ -17,19 +17,19 @@ Ubuntu에서는 `sudo apt install postgresql`로 PostgreSQL을 설치할 수 있
 
 CPU에 맞는 배포 파일과 SHA-256 검증 파일을 같은 폴더에 받는다. 압축을 이미 풀었다면 그 안의 `INSTALL.md`를 연다.
 
-| Linux CPU | CODEYE v0.1.1 | 검증 파일 |
+| Linux CPU | CODEYE v0.1.2 | 검증 파일 |
 |---|---|---|
-| x86-64 (`amd64`) | [다운로드](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.1/codeye-v0.1.1-linux-amd64.tar.gz) | [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.1/codeye-v0.1.1-linux-amd64.tar.gz.sha256) |
-| ARM64 (`arm64`) | [다운로드](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.1/codeye-v0.1.1-linux-arm64.tar.gz) | [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.1/codeye-v0.1.1-linux-arm64.tar.gz.sha256) |
+| x86-64 (`amd64`) | [다운로드](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.2/codeye-v0.1.2-linux-amd64.tar.gz) | [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.2/codeye-v0.1.2-linux-amd64.tar.gz.sha256) |
+| ARM64 (`arm64`) | [다운로드](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.2/codeye-v0.1.2-linux-arm64.tar.gz) | [SHA-256](https://github.com/jihoon22-lee/CODEYE/releases/download/v0.1.2/codeye-v0.1.2-linux-arm64.tar.gz.sha256) |
 
-**v0.1.0을 사용 중이라면** 기존 설정과 상태 디렉터리에서 계속 실행한다. 백업, 배포 파일 교체와 DB 처리 순서는 [배포판 업그레이드](OPERATIONS.md#배포판-업그레이드)를 따른다.
+**이전 배포판을 사용 중이라면** 기존 설정과 상태 디렉터리에서 계속 실행한다. 백업, 배포 파일 교체와 DB 처리 순서는 [배포판 업그레이드](OPERATIONS.md#배포판-업그레이드)를 따른다.
 
 처음 설치하는 x86-64 머신에서는 내려받은 폴더에서 다음과 같이 실행한다. ARM64는 명령의 `amd64`를 `arm64`로 바꾼다.
 
 ```sh
-sha256sum -c codeye-v0.1.1-linux-amd64.tar.gz.sha256 &&
-  tar --keep-old-files -xzf codeye-v0.1.1-linux-amd64.tar.gz &&
-  cd codeye-v0.1.1-linux-amd64 &&
+sha256sum -c codeye-v0.1.2-linux-amd64.tar.gz.sha256 &&
+  tar --keep-old-files -xzf codeye-v0.1.2-linux-amd64.tar.gz &&
+  cd codeye-v0.1.2-linux-amd64 &&
   sha256sum -c SHA256SUMS &&
   ./codeye up
 ```
@@ -121,6 +121,8 @@ CODEYE 웹 계정은 프로젝트를 열거나 실행할 권한을 정한다. �
 | Rust | Cargo·Clippy와 rustdoc의 API 문서 참조 검사 | Cargo 단위·통합·문서 테스트, 선택한 cargo-nextest |
 
 분석 노드에 설치한 도구, 프로젝트 설정, 읽을 수 있는 의존성이 실제 범위를 결정한다. 런타임에서만 결정되는 호출이나 다른 빌드 구성의 동작은 코드에서 확인한 경로와 구분한다. [도구와 규칙](ANALYZERS.md) · [테스트 실행 조건](EXECUTION.md#기존-테스트-실행)
+
+Java를 처음 분석할 때는 웹의 **도구** 화면이나 `./codeye tools`에서 JDK·PMD·SpotBugs의 탐색 결과를 확인한다. 외부 JAR가 필요한 프로젝트는 노드의 로컬 클래스패스 목록을 설정한다. 기존 Java 테스트까지 실행하려면 해당 빌드에 필요한 Maven 또는 Gradle과 의존성 캐시를 준비한다. [Java 클래스패스](ANALYZERS.md#java-로컬-클래스패스) · [테스트 실행 조건](EXECUTION.md#기존-테스트-실행)
 
 ## 사용할 수 있는 도구 확인
 
@@ -216,7 +218,7 @@ Linux의 systemd 사용자 서비스에서 실행한다. `codeye service install
 
 ## 업그레이드
 
-v0.1.0 설치의 계정, 프로젝트와 보고서를 이어서 쓰려면 기존 설치를 백업한 뒤 같은 설정과 상태 디렉터리로 v0.1.1을 시작한다. 관리형·외부 PostgreSQL별 이전 절차와 서비스 재시작 방법은 [배포판 업그레이드](OPERATIONS.md#배포판-업그레이드)에 있다.
+v0.1.1에서 쓰던 계정, 프로젝트와 보고서를 이어서 쓰려면 기존 설치를 백업한 뒤 같은 설정과 상태 디렉터리로 v0.1.2을 시작한다. 관리형·외부 PostgreSQL별 이전 절차와 서비스 재시작 방법은 [배포판 업그레이드](OPERATIONS.md#배포판-업그레이드)에 있다.
 
 ## 문제 해결
 
