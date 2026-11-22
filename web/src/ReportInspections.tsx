@@ -4,7 +4,7 @@ import type { Excerpt, Sections, StaticTool } from './parseReportSections';
 import { explainReason, label, PinnedSourceLink, ReportPreview, sourceLocation } from './ReportParts';
 import { cutLine } from './format';
 import { acceptedStaticResult as shown, ruleGroups, secondaryReviewPath, sevRank } from './reportGroups';
-import { reportKo } from './locales/report-ko';
+import { reportKo, diagnosticDescription, genericDiagnosticMessage } from './locales/report-ko';
 import { inspectionsKo as i } from './locales/report-inspections-ko';
 
 const s = reportKo.sections;
@@ -168,7 +168,7 @@ export function StaticDiagnosticReading({ languages, findings, byID, severityOf 
       const severity = (o: Observation) => sevRank(severityOf.get(o.id) ?? o.severity ?? '');
       const candidates = g.observations.map(id => byID.get(id)!).sort((a, b) => severity(b) - severity(a) || rank(a) - rank(b));
       const o = candidates[0];
-      const message = reportKo.ruleDescriptions[g.analyzer + ':' + g.rule] ?? cutLine(o.message);
+      const message = diagnosticDescription(g.analyzer, g.rule, o.message) ?? cutLine(o.message);
       return {
         id: 'static-' + o.id,
         cells: [<><code>{g.rule}</code><br /><small>{g.analyzer}</small></>,
@@ -177,7 +177,7 @@ export function StaticDiagnosticReading({ languages, findings, byID, severityOf 
           <Place value={o.location} />],
         detail: () => <>
           <InspectionExcerpt place={o.location} excerpt={evidenceByObservation.get(o.id)} />
-          {o.message && o.message.trim() !== message && <p>{o.message}</p>}
+          {o.message && o.message.trim() !== message && !genericDiagnosticMessage(g.analyzer, g.rule, o.message) && <p>{o.message}</p>}
           <RelatedEvidence observation={o} />
           {candidates.length > 1 && <details className="inspection-paths"><summary>{i.otherLocations(candidates.length - 1)}</summary>
             <ul className="plain">{candidates.slice(1).map(other => <li key={other.id}>{other.related?.length

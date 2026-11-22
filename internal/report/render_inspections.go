@@ -296,11 +296,7 @@ func (v secView) staticResults(language StaticLanguage, obs map[string]Observati
 			}
 		}
 		location := l.Label("none")
-		message := v.Message[o.ID]
-		summary := cutLine(message, summaryMessageRunes)
-		if isPromiseRejectDiagnostic(g.Analyzer, g.Rule) {
-			summary = l.Label("rule.promise_rejection")
-		}
+		summary := cutLine(l.ruleDescription(g.Analyzer, g.Rule, v.Message[o.ID]), summaryMessageRunes)
 		detail := v.staticDiagnosticDetail(o, excerpts[o.ID], summary)
 		if len(detail.Sources) > 0 {
 			location = detail.Sources[0].Location
@@ -320,7 +316,7 @@ func (v secView) staticResults(language StaticLanguage, obs map[string]Observati
 func (v secView) staticDiagnosticDetail(o Observation, excerpt *sourceexcerpt.Excerpt, shownMessage string) secTableDetail {
 	l := v.L
 	detail := secTableDetail{ID: "static-detail-" + o.ID, Label: o.RuleID}
-	if message := v.Message[o.ID]; shownMessage != strings.TrimSpace(message) {
+	if message := optText(o.RawMessage, ""); shownMessage != strings.TrimSpace(message) && !genericDiagnosticMessage(o.Tool, o.RuleID, message) {
 		detail.Text = message
 	}
 	if o.Location != nil {

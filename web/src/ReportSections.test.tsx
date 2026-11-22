@@ -1385,3 +1385,16 @@ describe('analysis sections', () => {
     expect(doc.tasks.some((x: { reason: string | null }) => x.reason === 'secret_screen_failed')).toBe(false);
   });
 });
+
+it('gives a projected flat tool finding a localized title without replacing its stored identity', () => {
+  const doc = example('report-go-vet.json');
+  const stored = doc.findings[0];
+  const observation = doc.observations.find((o: Record<string, unknown>) => o.id === stored.observation_ids[0]);
+  expect(observation).toBeTruthy();
+  observation.tool = 'java.spotbugs';
+  observation.rule_id = 'EI_EXPOSE_REP2';
+  stored.title = 'java.spotbugs EI_EXPOSE_REP2 진단 (sample.java:4)';
+  const report = parseAnalysisReport(doc, doc.run_id);
+  expect(report.findings[0]).toMatchObject({ title: stored.title, fingerprint: stored.fingerprint ?? null,
+    displayTitle: expect.stringContaining('외부에서 받은 가변 객체를 그대로 저장') });
+});

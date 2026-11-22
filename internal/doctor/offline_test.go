@@ -110,8 +110,11 @@ func TestOfflineReadiness(t *testing.T) {
 			t.Errorf("%s = %+v, want %+v", kind, got, want)
 		}
 	}
-	if l := languageOf(o, "go"); l.Status != "partial" || l.Dependencies != "internal_registry" || strings.Join(l.Missing, ",") != "staticcheck" {
+	if l := languageOf(o, "go"); l.Status != "partial" || l.Dependencies != "internal_registry" || strings.Join(l.Missing, ",") != "staticcheck,errcheck" {
 		t.Errorf("go %+v", l)
+	}
+	if l := languageOf(o, "java"); l.Status != "unavailable" || strings.Join(l.Missing, ",") != "pmd,java,spotbugs" {
+		t.Errorf("Java offline tools = %+v", l)
 	}
 	if l := languageOf(o, "rust"); l.Status != "unavailable" || l.Dependencies != "none" || !strings.Contains(strings.Join(l.Missing, ","), "dependency_source") {
 		t.Errorf("rust %+v", l)

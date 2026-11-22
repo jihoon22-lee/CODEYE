@@ -716,7 +716,7 @@ func (v secView) primaryDiagnostic() projectDecision {
 			continue
 		}
 		return projectDecision{Tone: "neutral", State: l.Label("opening.tool"), Title: o.Tool + " · " + o.RuleID,
-			Reason:  openingText(optText(o.RawMessage, ""), ""),
+			Reason:  openingText(l.ruleDescription(o.Tool, o.RuleID, optText(o.RawMessage, "")), ""),
 			Sources: []sourceCitation{v.citeEvidence("code", o.Location.Path, o.Location.StartLine, o.Location.EndLine, nil)}}
 	}
 	return projectDecision{}

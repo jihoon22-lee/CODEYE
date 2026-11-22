@@ -621,7 +621,7 @@ CODEYE는 자식 프로세스 환경에 다섯 변수를 같은 파일로 넣는
 - `enabled`, `ca_bundle`(`status`가 `not_configured`, `available`(`certificates`에 인증서 수), `unavailable`(`ca_bundle_unreadable`: 읽을 수 없거나 인증서가 없음)).
 - `destinations[]`: 이 설정으로 CODEYE가 접속할 곳마다 `kind`(`go_proxy`·`go_sumdb`·`npm_registry`·`pip_index`·`crates_registry`·`git_host`·`github_api`·`model_endpoint`), `value`, `origin`(`config`·`user_go_env`·`user_npm_config`·`model_key_file`·`relay_file`·`builtin_default`·`none`), 접속하지 않으면 `reason`. 오프라인인데 `builtin_default`가 남으면 그것이 공개 서비스다.
 - `postgres`: 관리형 DB에 쓸 PostgreSQL 프로그램(`initdb`, `pg_ctl`, `postgres`, `pg_dump`, `pg_restore`, `psql`)을 찾았는지와 버전.
-- `languages[]`: Go·Python·JS/TS·Rust·C/C++·공통·모델마다 없는 도구와 의존성 준비 상태.
+- `languages[]`: Go·Python·JS/TS·Rust·C/C++·Java·공통·모델마다 없는 도구와 의존성 준비 상태.
 
 schema는 [doctor schema](../schemas/doctor.schema.json)의 `offline`, 예시는 [examples/doctor.json](../examples/doctor.json)이다.
 

@@ -152,10 +152,25 @@ func equalParts(a, b []string) bool {
 // GeneratedHeader reports whether a conventional generated-code marker
 // occurs in the first ten lines. Both Go marker phrases must be on one line.
 func GeneratedHeader(head []byte) bool {
-	for i := 0; i < 10 && len(head) > 0; i++ {
+	end := 0
+	for range 10 {
+		line := bytes.IndexByte(head[end:], '\n')
+		if line < 0 {
+			end = len(head)
+			break
+		}
+		end += line + 1
+	}
+	head = head[:end]
+	if bytes.Contains(head, []byte("@generated")) {
+		return true
+	}
+	if !bytes.Contains(head, []byte("Code generated")) || !bytes.Contains(head, []byte("DO NOT EDIT")) {
+		return false
+	}
+	for len(head) > 0 {
 		line, rest, _ := bytes.Cut(head, []byte("\n"))
-		if bytes.Contains(line, []byte("@generated")) ||
-			bytes.Contains(line, []byte("Code generated")) && bytes.Contains(line, []byte("DO NOT EDIT")) {
+		if bytes.Contains(line, []byte("Code generated")) && bytes.Contains(line, []byte("DO NOT EDIT")) {
 			return true
 		}
 		head = rest

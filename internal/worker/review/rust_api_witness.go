@@ -10,10 +10,79 @@ import (
 )
 
 type rustDocumentBinding struct {
-	entry source.Entry
-	name  string
-	decl  rustFunction
-	text  string
+	entry       source.Entry
+	name        string
+	decl        rustFunction
+	text        string
+	documentIDs []string
+}
+
+const rustAPIContextOmitted = "rust_api_implementation_outside_review_input"
+
+type rustContractWitness struct {
+	binding              rustDocumentBinding
+	contractIndex        int
+	implementation, test contractWitness
+}
+
+type rustAPILink struct {
+	ContractIndex    int      `json:"contract_index"`
+	DocumentIDs      []string `json:"document_evidence_ids"`
+	Symbol           string   `json:"symbol"`
+	ImplementationID string   `json:"implementation_evidence_id"`
+	TestID           string   `json:"test_evidence_id,omitempty"`
+}
+
+func submittedRustAPILinks(links []rustAPILink, excerpts []record.Excerpt) []rustAPILink {
+	available := catalogOf(excerpts)
+	var out []rustAPILink
+	for _, link := range links {
+		if _, found := available[link.ImplementationID]; !found {
+			continue
+		}
+		if _, found := available[link.TestID]; !found {
+			link.TestID = ""
+		}
+		out = append(out, link)
+	}
+	return out
+}
+
+func rustAPIImplementationMissing(contracts []record.Contract, docs []record.Excerpt, links []rustAPILink) bool {
+	catalog := catalogOf(docs)
+	for i, contract := range contracts {
+		for _, id := range contract.EvidenceIDs {
+			if catalog[id].IsRustAPIDocument() && !slices.ContainsFunc(links, func(link rustAPILink) bool {
+				return link.ContractIndex == i+1 && slices.Contains(link.DocumentIDs, id)
+			}) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func rustAPIComparisonValid(comparison record.ContractComparison, witnesses []rustContractWitness, catalog map[string]record.Excerpt) bool {
+	if comparison.Status == "unknown" {
+		return true
+	}
+	for _, id := range comparison.DocumentEvidenceIDs {
+		if !catalog[id].IsRustAPIDocument() {
+			continue
+		}
+		if !slices.ContainsFunc(witnesses, func(trace rustContractWitness) bool {
+			b := trace.binding
+			return trace.contractIndex == comparison.ContractIndex && slices.Contains(b.documentIDs, id) &&
+				slices.ContainsFunc(comparison.CodeEvidenceIDs, func(codeID string) bool {
+					e := catalog[codeID]
+					return e.Kind == "code" && e.Path == b.entry.Path && e.SHA256 == b.entry.SHA256 &&
+						e.Start >= b.decl.first && e.End <= b.decl.last
+				})
+		}) {
+			return false
+		}
+	}
+	return true
 }
 
 func rustDocumentedBindings(c *sourceCalls, q witnessQuery) ([]rustDocumentBinding, error) {
@@ -44,10 +113,17 @@ func rustDocumentedBindings(c *sourceCalls, q witnessQuery) ([]rustDocumentBindi
 			name := tokens[i+1].text
 			d := rustPublicFunction(tokens, name)
 			start, end := rustDocLines(lines, d.docThrough)
-			if start > 0 && slices.ContainsFunc(q.rustDocs[p], func(doc record.Excerpt) bool {
-				return doc.SHA256 == e.SHA256 && doc.Start >= start && doc.End <= end
-			}) {
-				out = append(out, rustDocumentBinding{e, name, d, text})
+			if start == 0 {
+				continue
+			}
+			var ids []string
+			for _, doc := range q.rustDocs[p] {
+				if doc.SHA256 == e.SHA256 && doc.Start >= start && doc.End <= end {
+					ids = append(ids, doc.ID)
+				}
+			}
+			if len(ids) > 0 {
+				out = append(out, rustDocumentBinding{entry: e, name: name, decl: d, text: text, documentIDs: ids})
 			}
 		}
 	}

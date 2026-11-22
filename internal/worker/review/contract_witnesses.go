@@ -82,7 +82,7 @@ type contractCall struct {
 
 type contractSelection struct {
 	witnesses, additional []contractWitness
-	rustAPI               []contractWitness
+	rustAPIs              []rustContractWitness
 	calls, javaCalls      []contractCall
 	member                memberPair
 	sources               map[string]string
@@ -269,17 +269,16 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 		}
 		return read(e)
 	})
-	rustBindings := make([][]rustDocumentBinding, len(queries))
-	rustRuntime := make([]contractWitness, len(queries))
-	rustTests := make([]contractWitness, len(queries))
+	rustAPIs := make([][]rustContractWitness, len(queries))
 	for i, q := range queries {
 		bound, err := rustDocumentedBindings(bindings, q)
 		if err != nil {
 			return contractSelection{}, err
 		}
-		if len(bound) == 1 {
-			rustBindings[i] = bound
-			rustRuntime[i] = rustImplementationWitness(bound[0], q)
+		for _, b := range bound {
+			rustAPIs[i] = append(rustAPIs[i], rustContractWitness{
+				binding: b, contractIndex: q.contractIndex, implementation: rustImplementationWitness(b, q),
+			})
 		}
 	}
 	processed := map[string]bool{}
@@ -319,13 +318,14 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 			}
 			if len(query.rustDocs) > 0 {
 				found[i] = contractWitness{}
-				if len(rustBindings[i]) == 1 {
-					w, err := rustBindings[i][0].linkedAssertion(bindings, e, content, query)
+				for j := range rustAPIs[i] {
+					trace := &rustAPIs[i][j]
+					w, err := trace.binding.linkedAssertion(bindings, e, content, query)
 					if err != nil {
 						return contractSelection{}, err
 					}
-					if w.score > rustTests[i].score {
-						rustTests[i] = w
+					if w.score > trace.test.score {
+						trace.test = w
 					}
 				}
 				continue
@@ -593,17 +593,8 @@ func (s *roleStage) contractWitnesses(g codeGroups, docs record.Record) (contrac
 			}
 		}
 	}
-	var rustAPI []contractWitness
-	for i, w := range rustRuntime {
-		if w.line > 0 {
-			rustAPI = []contractWitness{w}
-			if test := rustTests[i]; test.line > 0 {
-				rustAPI = append(rustAPI, test)
-				break
-			}
-		}
-	}
-	return contractSelection{witnesses: out, additional: extras, rustAPI: rustAPI, calls: linked, javaCalls: javaCalls, member: member, sources: contents,
+
+	return contractSelection{witnesses: out, additional: extras, rustAPIs: slices.Concat(rustAPIs...), calls: linked, javaCalls: javaCalls, member: member, sources: contents,
 		goTraces: goTraces, goOption: goOption, goJSONFields: goJSONFields, cDefinitions: cRuntime.choose(queries), cFamily: cFamilies.choose(queries), queries: queries, claimWitnesses: contractClaimCandidates(matches), jsOptions: jsOptions}, nil
 }
 

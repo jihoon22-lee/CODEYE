@@ -220,6 +220,11 @@ func parseDiagnostics(doc *obsdoc.Document, data []byte, module string, roots []
 		scope[f.Path] = true
 	}
 	sha := obsdoc.SHA256Hex(data)
+	type position struct {
+		path      string
+		line, col int
+	}
+	occurrences := map[position]int{}
 	for start, i := 0, 0; start < len(data); i++ {
 		n := bytes.IndexByte(data[start:], '\n')
 		end := len(data)
@@ -236,7 +241,10 @@ func parseDiagnostics(doc *obsdoc.Document, data []byte, module string, roots []
 			if scope[rel] {
 				name, loc, state := resolver.Resolve(rel, line, line, col, col)
 				message := "returned error is discarded"
-				doc.Observations = append(doc.Observations, obsdoc.Observation{ID: obsdoc.ObservationID("go.errcheck", module, rel, rule, rel, strconv.Itoa(line)+":"+strconv.Itoa(col), message, 0), RuleID: rule, Category: "error_handling", RawMessage: message, Path: name, Location: loc, LocationState: state, Unit: rel, Related: []obsdoc.Related{}, RawRef: obsdoc.RawRef{Execution: "errcheck.check", Stream: "stdout", StreamSHA256: sha, RecordIndex: i, ByteStart: int64(start), ByteEnd: int64(end)}})
+				key := position{rel, line, col}
+				ordinal := occurrences[key]
+				occurrences[key]++
+				doc.Observations = append(doc.Observations, obsdoc.Observation{ID: obsdoc.ObservationID("go.errcheck", module, rel, rule, rel, strconv.Itoa(line)+":"+strconv.Itoa(col), message, ordinal), RuleID: rule, Category: "error_handling", RawMessage: message, Path: name, Location: loc, LocationState: state, Unit: rel, Related: []obsdoc.Related{}, RawRef: obsdoc.RawRef{Execution: "errcheck.check", Stream: "stdout", StreamSHA256: sha, RecordIndex: i, ByteStart: int64(start), ByteEnd: int64(end)}})
 			}
 		}
 		start = end

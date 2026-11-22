@@ -181,7 +181,7 @@ func (v secView) staticGroups(lang StaticLanguage, obs map[string]Observation, s
 			k := analyzer + "\x00" + o.RuleID
 			g := byKey[k]
 			if g == nil {
-				g = &ruleGroup{Analyzer: analyzer, Rule: o.RuleID, Message: cutLine(v.Message[o.ID], summaryMessageRunes), order: analyzers[analyzer]}
+				g = &ruleGroup{Analyzer: analyzer, Rule: o.RuleID, Message: cutLine(v.L.ruleDescription(analyzer, o.RuleID, v.Message[o.ID]), summaryMessageRunes), order: analyzers[analyzer]}
 				byKey[k] = g
 				groups = append(groups, g)
 			}
@@ -205,7 +205,7 @@ func (v secView) staticGroups(lang StaticLanguage, obs map[string]Observation, s
 				g.Secondary = append(g.Secondary, loc)
 			} else {
 				if o.Location != nil && len(g.Primary) == 0 {
-					g.Message = cutLine(v.Message[o.ID], summaryMessageRunes)
+					g.Message = cutLine(v.L.ruleDescription(analyzer, o.RuleID, v.Message[o.ID]), summaryMessageRunes)
 				}
 				g.Primary = append(g.Primary, loc)
 			}
@@ -713,13 +713,7 @@ func (v secView) summaryStatic(b secBlock, obs map[string]Observation, findings 
 		}
 		gt := &secTable{Head: []string{l.Label("col.tool"), l.Label("col.rule"), l.Label("col.count"), l.Label("col.severity"), l.Label("col.message"), l.Label("col.location")}}
 		for _, g := range groups {
-			message := g.Message
-			if isPromiseRejectDiagnostic(g.Analyzer, g.Rule) {
-				if description := l.Labels["rule.promise_rejection"]; description != "" {
-					message = description
-				}
-			}
-			gt.Rows = append(gt.Rows, []secCell{code(g.Analyzer), code(g.Rule), num(g.Count), code(joinOr([]string{g.Severity}, "-")), txt(message), txt(placesText(l, g.Primary, g.Secondary))})
+			gt.Rows = append(gt.Rows, []secCell{code(g.Analyzer), code(g.Rule), num(g.Count), code(joinOr([]string{g.Severity}, "-")), txt(g.Message), txt(placesText(l, g.Primary, g.Secondary))})
 		}
 		parts = append(parts, secPart{Heading: tf(l, "summary.static_rules", heading), Table: gt})
 	}

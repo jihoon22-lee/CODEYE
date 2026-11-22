@@ -139,6 +139,42 @@ func documentedRustTargets(text string) []rustAPIUse {
 	return out
 }
 
+const rustAPIExportScan = 24
+
+// rustCrateReexports provides a bounded fallback when a crate README has no
+// named usage example. Only public bindings in the conventional library
+// root are candidates. The resolver still checks the entire binding path.
+func rustCrateReexports(c *sourceCalls, scope string) ([]rustAPIUse, bool, error) {
+	name, err := documentedRustCrate(c, scope)
+	if err != nil || name == "" {
+		return nil, false, err
+	}
+	text, ok, err := c.text(path.Join(scope, "src/lib.rs"))
+	if !ok || err != nil {
+		return nil, false, err
+	}
+	tokens := documentationTokens(text, false)
+	var out []rustAPIUse
+	for i, t := range tokens {
+		if t.depth != 0 || !tokenIs(tokens, i, "use") || !tokenIs(tokens, i-1, "pub") {
+			continue
+		}
+		if _, safe := rustAttributes(tokens, i-1); !safe {
+			continue
+		}
+		for _, use := range rustUsePaths(tokens, i) {
+			if use.local == "_" {
+				continue
+			}
+			if len(out) >= rustAPIExportScan {
+				return out, true, nil
+			}
+			out = append(out, rustAPIUse{target: name + "::" + use.local, local: use.local})
+		}
+	}
+	return out, false, nil
+}
+
 var cargoAPILabel = regexp.MustCompile(`^name[ \t]*=[ \t]*(?:"([A-Za-z][A-Za-z0-9_-]*)"|'([A-Za-z][A-Za-z0-9_-]*)')[ \t]*(?:#.*)?$`)
 
 func rustDocumentationCrate(text string) string {
@@ -211,16 +247,23 @@ func rustAPIModule(tokens []callToken, name string, public bool) bool {
 	return found
 }
 
-func documentedRustObject(c *sourceCalls, scope string, use rustAPIUse) (source.Entry, string, string, error) {
+func documentedRustCrate(c *sourceCalls, scope string) (string, error) {
 	cargo := path.Join(scope, "Cargo.toml")
 	manifest, ok, err := c.text(cargo)
 	if !ok || err != nil {
-		return source.Entry{}, "", "", err
+		return "", err
 	}
 	if _, custom := c.files[path.Join(scope, "build.rs")]; custom {
-		return source.Entry{}, "", "", nil
+		return "", nil
 	}
-	crate := rustDocumentationCrate(manifest)
+	return rustDocumentationCrate(manifest), nil
+}
+
+func documentedRustObject(c *sourceCalls, scope string, use rustAPIUse) (source.Entry, string, string, error) {
+	crate, err := documentedRustCrate(c, scope)
+	if err != nil {
+		return source.Entry{}, "", "", err
+	}
 	names := strings.Split(use.target, "::")
 	if crate == "" || len(names) < 2 || names[0] != crate {
 		return source.Entry{}, "", "", nil

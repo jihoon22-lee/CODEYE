@@ -68,6 +68,16 @@ mod checks {
 				"src/lib.rs":     rustModules,
 				"src/reading.rs": strings.Repeat("// library declarations\n", 60) + rustBody,
 			}},
+		{name: "Rust documented reexport without a README example",
+			guide: "README.md", implementation: "src/reading.rs", testFile: "src/reading.rs",
+			class: "rustdoc", statement: "빈 kind에서 measure는 None을 반환한다.",
+			code: "return None;", assertion: "assert_eq!(super::decode(\"\"), None);",
+			tree: map[string]string{
+				"README.md":      "# Survey\n\nCollects and formats measurements.\n",
+				"Cargo.toml":     "[package]\nname = \"survey-kit\"\nversion = \"0.1.0\"\n",
+				"src/lib.rs":     rustModules,
+				"src/reading.rs": strings.Repeat("// library declarations\n", 60) + rustBody,
+			}},
 		{name: "Rust public reexport and integration assertion",
 			guide: "README.md", implementation: "src/reading.rs", testFile: "tests/reading.rs",
 			class: "rustdoc", statement: "빈 kind에서 measure는 None을 반환한다.",
@@ -199,6 +209,169 @@ func TestAuthoredPublicAPIBindingRejectsAmbiguityAndScope(t *testing.T) {
 				if e.DirectivePath != "" {
 					t.Fatalf("unsafe API binding: %+v", e)
 				}
+			}
+		})
+	}
+}
+
+func TestRustPublicReexportWithoutExampleUsesBoundedSample(t *testing.T) {
+	const page = "README.md"
+	const first = "src/mappings.rs"
+	files := map[string]string{
+		page:         "# Palette\n\nTransforms color components.\n",
+		"Cargo.toml": "[package]\nname = 'palette-map'\n",
+		"src/lib.rs": `mod mappings;
+mod alternate;
+pub(crate) use mappings::show_preview;
+#[cfg(feature = "convert")]
+pub use mappings::show_preview;
+pub use mappings::same_name as check;
+pub use alternate::same_name as check;
+pub use mappings::{brighten, dim, blend};
+`,
+		first: `/// Return the brighter representation.
+pub fn brighten(value: u8) -> u8 { value.saturating_add(10) }
+/// Return the dimmer representation.
+pub fn dim(value: u8) -> u8 { value.saturating_sub(10) }
+/// Return an average representation.
+pub fn blend(left: u8, right: u8) -> u8 { left / 2 + right / 2 }
+/// Format a preview.
+pub fn show_preview(value: u8) -> String { value.to_string() }
+/// Return an unchanged number.
+pub fn same_name(value: u8) -> u8 { value }
+`,
+		"src/alternate.rs": "/// Return a constant.\npub fn same_name(_: u8) -> u8 { 0 }\n",
+	}
+	j := treeJob(t, files)
+	entry := includedFiles(j.Snapshot.Manifest)[page]
+	lines := 3
+	stage := &roleStage{j: j, ctx: context.Background(), h: Handler{}}
+	found, err := stage.documentExcerpts([]envdoc.Doc{{Path: page, Class: envdoc.ClassReadme, AppliesTo: ".", SHA256: &entry.SHA256, LineCount: &lines}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rustdoc []record.Excerpt
+	for _, excerpt := range found.excerpts {
+		if excerpt.IsRustAPIDocument() {
+			rustdoc = append(rustdoc, excerpt)
+		}
+	}
+	if len(rustdoc) != 2 || rustdoc[0].Path != first || rustdoc[0].Start != 1 ||
+		rustdoc[1].Path != first || rustdoc[1].Start != 3 || !slices.Contains(found.limitations, rustAPISampled) {
+		t.Fatalf("expected a bounded sample of unambiguous public Rust functions: %+v, %v", rustdoc, found.limitations)
+	}
+}
+
+func TestRustContractEvidenceKeepsDistinctImplementations(t *testing.T) {
+	for _, tight := range []bool{false, true} {
+		name := "keeps both implementations before the second assertion"
+		if tight {
+			name = "exposes the omitted implementation at the file limit"
+		}
+		t.Run(name, func(t *testing.T) {
+			const filename = "src/conversion.rs"
+			var pad string
+			if tight {
+				pad = strings.Repeat("    let _padding = \""+strings.Repeat("x", 128)+"\";\n", 8)
+			}
+			body := `/// A negative reading returns no value.
+pub fn calibrated(reading: i32) -> Option<i32> {
+` + pad + `    if reading < 0 { return None; }
+    Some(reading)
+}
+
+/// Clamp a level at the upper limit.
+pub fn limited(level: u16) -> u16 {
+` + pad + `    if level > 90 { return 90; }
+    level
+}
+
+#[cfg(test)]
+mod checks {
+    #[test]
+    fn preserves_the_limit() {
+        assert_eq!(super::limited(120), 90);
+    }
+}
+`
+			j := treeJob(t, map[string]string{
+				"README.md":  "# Readings\n\nConverts sensor levels.\n",
+				"Cargo.toml": "[package]\nname = 'sensor-readings'\n",
+				"src/lib.rs": "mod conversion;\npub use self::conversion::{calibrated, limited};\n",
+				filename:     body,
+			})
+			script := maxScript(t)
+			var ids [2]string
+			script["documents"] = func(_ int, q opencode.Request) opencode.Reply {
+				in := decodeAs[docsInput](t, q)
+				contracts := make([]record.Contract, len(ids))
+				for _, ex := range in.Documents {
+					if ex.Path != filename || ex.Class != "rustdoc" {
+						continue
+					}
+					index, statement := 0, "`calibrated`는 음수 입력에서 None을 반환한다."
+					if strings.Contains(ex.Text, "Clamp a level") {
+						index, statement = 1, "`limited`는 90을 넘는 값을 90으로 제한한다."
+					}
+					entry := includedFiles(j.Snapshot.Manifest)[ex.Path]
+					ids[index] = record.ExcerptID(j.Snapshot.Digest, ex.Path, entry.SHA256, ex.StartLine, ex.EndLine)
+					contracts[index] = record.Contract{Statement: statement, AppliesTo: ".", EvidenceIDs: []string{ex.EvidenceID}}
+				}
+				if ids[0] == "" || ids[1] == "" {
+					t.Fatalf("expected both public API documents: %+v", in.Documents)
+				}
+				return asJSON(docsOutput{Contracts: contracts,
+					Conflicts: []record.Conflict{}, Questions: []record.Question{}, InstructionNotes: []record.InstructionNote{}})
+			}
+			var rejectedSwap bool
+			script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
+				in := decodeAs[investigateInput](t, q)
+				if !in.Scope.WholeRun {
+					return asJSON(map[string]any{"candidates": []any{}})
+				}
+				want := 2
+				if tight {
+					want = 1
+				}
+				if len(in.Scope.RustAPIs) != want || slices.Contains(in.Scope.Limitations, rustAPIContextOmitted) != tight {
+					t.Fatalf("wrong delivered Rust API coverage: %+v %v", in.Scope.RustAPIs, in.Scope.Limitations)
+				}
+				catalog := catalogOf(in.Scope.Excerpts)
+				a := in.Scope.RustAPIs[0]
+				if a.ContractIndex != 1 || len(a.DocumentIDs) != 1 || a.DocumentIDs[0] != ids[0] || a.Symbol != "calibrated" ||
+					!strings.Contains(catalog[a.ImplementationID].Text, "if reading < 0 { return None; }") || a.TestID != "" {
+					t.Fatalf("first contract lost its own implementation: %+v", a)
+				}
+				claim := func(link rustAPILink, codeID string) record.ContractComparison {
+					return record.ContractComparison{ContractIndex: link.ContractIndex, AppliesTo: ".", Status: "match",
+						Reason: "인용한 구현에서 각 조건의 반환값을 확인했다.", DocumentEvidenceIDs: link.DocumentIDs, CodeEvidenceIDs: []string{codeID}}
+				}
+				comparisons := []record.ContractComparison{claim(a, a.ImplementationID)}
+				if !tight {
+					b := in.Scope.RustAPIs[1]
+					if b.ContractIndex != 2 || len(b.DocumentIDs) != 1 || b.DocumentIDs[0] != ids[1] || b.Symbol != "limited" ||
+						!strings.Contains(catalog[b.ImplementationID].Text, "if level > 90 { return 90; }") ||
+						!strings.Contains(catalog[b.TestID].Text, "assert_eq!(super::limited(120), 90)") ||
+						a.ImplementationID == b.ImplementationID {
+						t.Fatalf("second contract uses unrelated or absent evidence: %+v", b)
+					}
+					if in.Repair == nil {
+						comparisons[0] = claim(a, b.ImplementationID)
+					} else {
+						rejectedSwap = slices.Contains(in.Repair.OutputErrors, "contract_comparison_invalid")
+					}
+					comparisons = append(comparisons, claim(b, b.ImplementationID))
+				}
+				return asJSON(map[string]any{"candidates": []any{}, "contract_comparisons": comparisons})
+			}
+			h := Handler{Static: vetStub{}, Caller: &scriptedCaller{script: script}}
+			_, results := runRoleWith(t, j, h, "1.27.4")
+			if got := results["review.investigate"]; got.Status != domain.TaskSucceeded || !tight && !rejectedSwap {
+				t.Fatalf("unexpected investigation or wrong-function comparison accepted: %+v, %v", got, rejectedSwap)
+			}
+			stored := readRecord(t, j, "investigate")
+			if slices.Contains(stored.Limitations, rustAPIContextOmitted) != tight {
+				t.Fatalf("record omitted its Rust API coverage: %+v", stored.Limitations)
 			}
 		})
 	}

@@ -223,11 +223,12 @@ var languageNeeds = []struct {
 	managers []string
 	source   string
 }{
-	{"go", []string{"go", "staticcheck"}, []string{"go"}, "go_proxy"},
-	{"python", []string{"ruff", "mypy|pyright", "bandit"}, []string{"python|uv"}, "pip_index"},
-	{"javascript", []string{"eslint", "node", "tsc"}, []string{"npm|pnpm|yarn"}, "npm_registry"},
+	{"go", []string{"go", "staticcheck", "errcheck"}, []string{"go"}, "go_proxy"},
+	{"python", []string{"ruff", "mypy|pyright", "bandit", "import-linter"}, []string{"python|uv"}, "pip_index"},
+	{"javascript", []string{"eslint", "node", "tsc", "dependency-cruiser"}, []string{"npm|pnpm|yarn"}, "npm_registry"},
 	{"rust", []string{"cargo", "clippy"}, []string{"cargo"}, "crates_registry"},
-	{"cpp", []string{"cppcheck", "clang-tidy"}, nil, ""},
+	{"cpp", []string{"cppcheck", "clang-tidy", "gcc"}, nil, ""},
+	{"java", []string{"pmd", "java", "spotbugs"}, nil, ""},
 	{"common", []string{"git", "gitleaks", "lizard", "jscpd"}, nil, ""},
 	{"model", []string{"opencode"}, nil, "model_endpoint"},
 }

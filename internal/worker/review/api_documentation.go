@@ -14,14 +14,16 @@ const (
 	maxDocumentAPIBytes = 64 << 10
 	maxAPISourceFiles   = 32
 	maxAPISourceBytes   = 512 << 10
+	rustAPISampled      = "rust_public_api_partially_sampled"
 )
 
 type documentedAPISources struct {
-	stage   *roleStage
-	catalog *sourceCalls
-	content map[string]string
-	files   int
-	bytes   int64
+	stage       *roleStage
+	catalog     *sourceCalls
+	content     map[string]string
+	files       int
+	bytes       int64
+	readLimited bool
 }
 
 func (s *roleStage) documentedAPISources(entries map[string]source.Entry) *documentedAPISources {
@@ -37,8 +39,11 @@ func (r *documentedAPISources) read(entry source.Entry) (string, bool, error) {
 	if err := r.stage.ctx.Err(); err != nil {
 		return "", false, err
 	}
-	if entry.Size == nil || r.files >= maxAPISourceFiles || *entry.Size > maxAPISourceBytes-r.bytes ||
-		!inScope(entry.Path, normalizedScope(r.stage.j.Scope)) || r.stage.h.secondary().Match(entry.Path) != "" {
+	if entry.Size == nil || !inScope(entry.Path, normalizedScope(r.stage.j.Scope)) || r.stage.h.secondary().Match(entry.Path) != "" {
+		return "", false, nil
+	}
+	if r.files >= maxAPISourceFiles || *entry.Size > maxAPISourceBytes-r.bytes {
+		r.readLimited = true
 		return "", false, nil
 	}
 	r.files++
@@ -58,9 +63,9 @@ func (r *documentedAPISources) target(p string) bool {
 		(r.stage.j.PullRequest == nil || slices.Contains(r.stage.j.PullRequest.Changed, p))
 }
 
-func (r *documentedAPISources) excerpts(page envdoc.Doc, content string, budget, limit int) ([]record.Excerpt, error) {
+func (r *documentedAPISources) excerpts(page envdoc.Doc, content string, budget, limit int) ([]record.Excerpt, bool, error) {
 	if limit <= 0 || len(content) > maxDocumentAPIBytes || r.stage.h.secondary().Match(page.Path) != "" {
-		return nil, nil
+		return nil, false, nil
 	}
 	var out []record.Excerpt
 	add := func(x record.Excerpt) {
@@ -75,7 +80,7 @@ func (r *documentedAPISources) excerpts(page envdoc.Doc, content string, budget,
 		}
 		entry, object, text, err := pythonDocumentedObject(r.catalog, page.AppliesTo, target)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if entry.Path != "" && r.target(entry.Path) {
 			if excerpt, ok := r.stage.pythonDocExcerpt(entry, page.Path, text, object, min(roleMaxDocBytes, budget)); ok {
@@ -83,23 +88,35 @@ func (r *documentedAPISources) excerpts(page envdoc.Doc, content string, budget,
 			}
 		}
 	}
+	partial := false
 	if len(out) < limit && budget >= 128 && record.MarkdownDirectivePath(page.Path) {
-		for _, use := range documentedRustTargets(content) {
+		uses := documentedRustTargets(content)
+		fallback := len(uses) == 0 && page.Class == envdoc.ClassReadme
+		if fallback {
+			var err error
+			uses, partial, err = rustCrateReexports(r.catalog, page.AppliesTo)
+			if err != nil {
+				return nil, false, err
+			}
+		}
+		for _, use := range uses {
+			if len(out) >= limit || budget < 128 {
+				partial = partial || fallback
+				break
+			}
 			entry, symbol, text, err := documentedRustObject(r.catalog, page.AppliesTo, use)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			if entry.Path != "" && r.target(entry.Path) {
 				if excerpt, ok := r.stage.rustDocExcerpt(entry, page.Path, text, symbol, min(roleMaxDocBytes, budget)); ok {
 					add(excerpt)
 				}
 			}
-			if len(out) >= limit || budget < 128 {
-				break
-			}
 		}
+		partial = partial || fallback && r.readLimited
 	}
-	return out, nil
+	return out, partial, nil
 }
 
 type apiFence struct {

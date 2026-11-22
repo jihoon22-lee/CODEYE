@@ -601,6 +601,7 @@ type investigateScope struct {
 	MemberTest      *memberTestHint         `json:"member_test,omitempty"`
 	WorkflowRoutes  []workflowEvidenceInput `json:"workflow_routes,omitempty"`
 	ContractAnchors []contractAnchorInput   `json:"contract_anchors,omitempty"`
+	RustAPIs        []rustAPILink           `json:"rust_api,omitempty"`
 	Limitations     []string                `json:"limitations"`
 }
 
@@ -618,6 +619,7 @@ func (scope investigateScope) withExcerpts(list []record.Excerpt, links corpusLi
 	}
 	scope.MemberTest = links.member.hint(list)
 	scope.WorkflowRoutes = workflowEvidence(links.workflow, list)
+	scope.RustAPIs = submittedRustAPILinks(links.rustAPILinks, list)
 	return scope
 }
 
@@ -809,6 +811,10 @@ func (s *roleStage) investigate() analysis.TaskResult {
 			in.Scope.ContractAnchors = links.claims.submitted(sent)
 		}
 	}
+	if s.slice == nil && rustAPIImplementationMissing(in.Documents.Contracts, docEv, in.Scope.RustAPIs) {
+		s.rec.Limitations = addLim(s.rec.Limitations, rustAPIContextOmitted)
+		in.Scope.Limitations = s.rec.Limitations
+	}
 	contract := investigateContract
 	var navigation []contractNavigationCandidate
 	if s.slice == nil && uDoc.State == record.UpstreamAccepted {
@@ -873,7 +879,8 @@ func (s *roleStage) investigate() analysis.TaskResult {
 			if record.ForeignInsightProse(x.Reason) {
 				errs = addLim(errs, record.InsightLanguageError)
 			} else if s.slice != nil || seen[x.ContractIndex] || !x.Valid(catalog) || !x.MatchesContract(in.Documents.Contracts) ||
-				!s.existingDir(x.AppliesTo) || !javaAPIComparisonValid(x, javaBindings, catalog) {
+				!s.existingDir(x.AppliesTo) || !javaAPIComparisonValid(x, javaBindings, catalog) ||
+				!rustAPIComparisonValid(x, links.rustAPIs, catalog) {
 				errs = addLim(errs, "contract_comparison_invalid")
 			}
 			seen[x.ContractIndex] = true

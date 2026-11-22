@@ -3,7 +3,7 @@ import { sourceEvidenceURL, type AnalysisReport, type Finding, type GoTestFailur
 import type { Dependency, Ledger, LedgerModule, ModelState, SectionStage, Sections } from './parseReportSections';
 import { ComparisonSection, HIDDEN } from './HistoryView';
 import { ko } from './locales/ko';
-import { reportKo as t } from './locales/report-ko';
+import { reportKo as t, diagnosticDescription } from './locales/report-ko';
 import { inspectionsKo } from './locales/report-inspections-ko';
 import { Citations, FindingList, PinnedSourceLink, ReportCalls, ReportCounts, ReportExports, ReportIdentity, ReportPath, ReportReviewStatus, ReportScope, ReportSourceContext, ReportTasks, TextList, explainReason, label, sourceLocation, type ReportHistory } from './ReportParts';
 import { ReportAction, ReportIcon, ReportLayout } from './ReportLayout';
@@ -202,7 +202,7 @@ function ObservationTable({ ids, byID }: { ids: string[]; byID: Map<string, Obse
           <code key="r">{o?.rule}</code>,
           <code key="l">{o?.path ?? o?.state}</code>,
           <>
-            {o?.message ?? t.unknown}
+            {o ? diagnosticDescription(o.tool ?? '', o.rule, o.message) ?? o.message ?? t.unknown : t.unknown}
             {o?.metric && <small> ({t.metricMarker(o.metric.value, o.metric.threshold)})</small>}
           </>,
         ];

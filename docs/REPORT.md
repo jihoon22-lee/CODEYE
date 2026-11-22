@@ -10,7 +10,7 @@
 |---|---|
 | `schema_version` | `0.1`. 새 필드는 모두 선택 필드로 추가했다. |
 | `demo` | 제품이 게시한 보고서는 항상 `false`다. [`examples/report.json`](../examples/report.json)은 현재 builder가 실제 worker 파이프라인과 대본 모델 응답으로 만든 합성 예시(`demo: true`)이고, [`examples/report-go-vet.json`](../examples/report-go-vet.json)은 builder 1 시절의 실제 코드 미포함 내보내기다(분석 종류별 절 없음). |
-| `builder.id` / `builder.version` | `codeye-report` / `18`. 생성 시점의 버전을 저장한다. 이전 보고서에 없는 필드는 비워 두고, 화면은 저장된 절과 근거만 표시한다. |
+| `builder.id` / `builder.version` | `codeye-report` / `19`. 생성 시점의 버전을 저장한다. 이전 보고서에 없는 필드는 비워 두고, 화면은 저장된 절과 근거만 표시한다. |
 | `builder.input_digest` | run·snapshot·attempt 사실, task 행, 결과 manifest, 산출물 행, 게시 시점 판정 집합과 builder ID·버전·스키마 버전을 SHA-256으로 계산한다. 프로젝트 정보가 있으면 프로젝트명·소스 경로·분석 시작 및 종료 시각을 포함한다. PR 실행에는 고정한 PR 정보도 포함한다. 보고서 ID·리비전·보고서 생성 시각은 제외한다. |
 | `export.include_code` | 저장본은 `true`다. 코드 미포함 내보내기는 같은 저장본의 projection이며 `false`다. |
 
@@ -70,6 +70,8 @@ builder 5부터 보고서는 위 필드에 더해 분석 종류마다 한 블록
 | 8 | 분석 공백 | `gaps` | 분석하지 못했거나 일부만 분석한 범위(`section`, `code`, 선택 `subject`·`detail`). 비어 있으면 생략한다. |
 
 "이전 실행과 비교"는 저장 문서의 절이 아니다. 비교는 요청마다 계산하므로([run 비교](#run-비교)) 웹 화면만 종합 아래에 그 결과를 따로 보여주고, 내보내기에는 넣지 않는다.
+
+정적 분석 화면과 HTML·Markdown은 알려진 분석기·규칙에 한 문장 설명을 붙인다. 같은 분석기·규칙의 위치는 한 행에서 읽으며, 확인한 위치와 원시 진단을 상세 근거에서 볼 수 있다. 사용자가 정의한 의존 규칙은 규칙 이름과 해당 분석 방식으로 설명한다. 코드 미포함 내보내기에도 규칙 설명과 분석기 출처가 표시된다.
 
 정적 진단의 `related_locations`에는 도구가 보고한 관련 위치와 메모가 붙는다. 가정과 분기 위치를 주 진단에서 읽으며 진단 수는 한 건이다. 구조·중복 절의 `go_package_dependencies`에는 확인된 패키지·테스트 소비자와 의존 관계, 운영 코드의 순환을 뒷받침하는 import 줄이 있다. 적용 패키지와 사용한 빌드 구성을 함께 읽는다. [Go 패키지 관계](ANALYZERS.md#go-내부-패키지-의존-관계)
 

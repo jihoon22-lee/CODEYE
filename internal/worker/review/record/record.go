@@ -97,7 +97,7 @@ var sensitive = regexp.MustCompile(`(?i)(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk
 // Sensitive reports credential-like content that must not reach a model,
 // record or report.
 func Sensitive(b []byte) bool {
-	if len(b) < 15 {
+	if len(b) < len("sk-")+12 {
 		return false
 	}
 	// The scanner handles ASCII case pairs. Go's regexp case folding also
@@ -151,7 +151,7 @@ func credentialNameSuffix(name []byte, suffix string) bool {
 
 // SafeText bounds model prose kept in a record.
 func SafeText(s string) bool {
-	return strings.TrimSpace(s) != "" && len(s) <= 2400 && !sensitive.MatchString(s)
+	return strings.TrimSpace(s) != "" && len(s) <= 2400 && !Sensitive([]byte(s))
 }
 
 var (

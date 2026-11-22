@@ -1,4 +1,31 @@
-const promiseRejectionDescription = 'Promise 거부 사유에 Error 객체의 메시지와 스택이 필요한지 인용된 호출에서 확인합니다.';
+import ruleDescriptions from '../../../internal/report/reportui/rule_descriptions_ko.json';
+
+const descriptions: Partial<Record<string, string>> = ruleDescriptions;
+
+export function genericDiagnosticMessage(analyzer: string, rule: string, message: string) {
+  switch (analyzer) {
+    case 'java.pmd': return message === 'pmd reported ' + rule;
+    case 'java.spotbugs': return message === 'spotbugs reported ' + rule;
+    case 'javascript.dependency_cruiser':
+    case 'python.import_linter': return message === 'Dependency rule violated: ' + rule;
+    default: return false;
+  }
+}
+
+export function diagnosticDescription(analyzer: string, rule: string, raw?: string | null) {
+  const known = descriptions[analyzer + ':' + rule];
+  if (known) return known;
+  if (!raw || genericDiagnosticMessage(analyzer, rule, raw)) return descriptions[analyzer + ':*'];
+}
+
+export function diagnosticFindingTitle(title: string, analyzer: string, rule: string, raw: string | null) {
+  if (!analyzer || !rule) return;
+  const prefix = analyzer + ' ' + rule;
+  if (!title.startsWith(prefix + ': ') && !title.startsWith(prefix + ' 진단')) return;
+  const explanation = diagnosticDescription(analyzer, rule, raw);
+  if (explanation) return prefix + ' · ' + explanation;
+  if (raw && genericDiagnosticMessage(analyzer, rule, raw)) return prefix;
+}
 const summaryNumber = new Intl.NumberFormat('ko-KR');
 const n = (value: number) => summaryNumber.format(value);
 
@@ -23,10 +50,7 @@ export const reportKo = {
   viewTestCode: '테스트 코드 보기',
   sourceActionAt: (action: string, location: string) => `${action} (${location})`,
   qualityTitle: '문서 품질', comparisonsTitle: '문서와 구현', modelReading: 'AI 해석',
-  ruleDescriptions: {
-    'javascript.eslint:prefer-promise-reject-errors': promiseRejectionDescription,
-    'javascript.eslint_typed:@typescript-eslint/prefer-promise-reject-errors': promiseRejectionDescription,
-  } as Partial<Record<string, string>>,
+  ruleDescriptions: descriptions,
   strengthsTitle: '코드에서 관찰한 동작', scopeTitle: '적용 범위',
   tests: {
     heading: '기존 테스트 실행 결과', test: '테스트', declaration: '테스트 선언 위치', unverified: '실행 결과 미확인',
@@ -181,6 +205,8 @@ export const reportKo = {
     imports_unresolved: '가져온 라이브러리를 찾지 못함',
     credential_like_content: '자격증명과 비슷한 내용이 있어 문서 검토 입력에서 제외했습니다.',
     no_public_api_javadoc: '공개 메서드에 연결된 Javadoc을 확인하지 못했습니다.',
+    rust_api_implementation_outside_review_input: '인용한 Rust 공개 API 중 일부 구현을 검토 입력으로 보내지 못했습니다.',
+    rust_public_api_partially_sampled: 'Rust 공개 API 문서는 예산 안에서 일부 재공개만 확인했습니다.',
     documents_not_selected: '탐색에서 검토할 문서가 선택되지 않았습니다.',
     excerpt_only: '검토는 선택된 코드 발췌 범위에 한정됩니다.',
     no_document_in_selected_context:

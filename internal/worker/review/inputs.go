@@ -427,6 +427,8 @@ func goIgnored(p string) bool {
 }
 
 type corpusLinks struct {
+	rustAPIs      []rustContractWitness
+	rustAPILinks  []rustAPILink
 	directCalls   []directCall
 	member        memberPair
 	witnessSource map[string]string
@@ -574,22 +576,54 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 			keep(window, len(lines))
 		}
 	}
-	if len(selected.rustAPI) > 0 {
-		var trace []record.Excerpt
-		for _, w := range selected.rustAPI {
-			lines := strings.Split(selected.sources[w.entry.Path], "\n")
-			if window, ok := s.boundedExcerpt(w.entry, windowKind(w.entry.Path), "context", w.line, lines[w.line-1:w.end], witnessMaxExcerpt); ok && window.End == w.end {
-				trace = append(trace, window)
+	if len(selected.rustAPIs) > 0 {
+		links.rustAPIs = selected.rustAPIs
+		addRustWindow := func(w contractWitness) string {
+			if w.line == 0 {
+				return ""
 			}
+			lines := strings.Split(selected.sources[w.entry.Path], "\n")
+			x, ok := s.boundedExcerpt(w.entry, windowKind(w.entry.Path), "context", w.line, lines[w.line-1:w.end], witnessMaxExcerpt)
+			if !ok || x.End != w.end {
+				return ""
+			}
+			windows, ok := wholeTraceWindows(out, []record.Excerpt{x}, remain, roleMaxCodeFiles-2)
+			if !ok {
+				return ""
+			}
+			for _, window := range windows {
+				keep(window, len(lines))
+			}
+			return x.ID
 		}
-		if len(trace) == len(selected.rustAPI) {
-			if windows, ok := wholeTraceWindows(out, trace, remain, roleMaxCodeFiles-2); ok {
-				for _, window := range windows {
-					keep(window, len(strings.Split(selected.sources[window.Path], "\n")))
-				}
+		chosen := map[sourceCallLocation]bool{}
+		var deferred []int
+		for i, trace := range selected.rustAPIs {
+			b := trace.binding
+			link := rustAPILink{ContractIndex: trace.contractIndex, DocumentIDs: b.documentIDs, Symbol: b.name}
+			location := sourceCallLocation{b.entry.Path, b.decl.first, b.decl.last}
+			if chosen[location] {
+				deferred = append(deferred, i)
+			} else {
+				link.ImplementationID = addRustWindow(trace.implementation)
+				chosen[location] = true
+			}
+			links.rustAPILinks = append(links.rustAPILinks, link)
+		}
+		// A second contract about an already visited API can reuse the same
+		// window or request its own. Visit other APIs before adding that window.
+		for _, i := range deferred {
+			links.rustAPILinks[i].ImplementationID = addRustWindow(selected.rustAPIs[i].implementation)
+		}
+		// Test windows support their own implementation. Give every contract
+		// its implementation opportunity before spending slots on assertions.
+		for i, trace := range selected.rustAPIs {
+			if links.rustAPILinks[i].ImplementationID != "" {
+				links.rustAPILinks[i].TestID = addRustWindow(trace.test)
 			}
 		}
 	}
+
 	for _, pair := range []bool{true, false} {
 		for _, trace := range selected.jsOptions {
 			if (trace.override.line > 0) != pair {
@@ -1122,9 +1156,12 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 			if apiSources == nil {
 				apiSources = s.documentedAPISources(manifest)
 			}
-			items, err := apiSources.excerpts(d, content, remain, min(roleMaxDocs-len(out), maxAPIDocExcerpts-apiExcerpts))
+			items, partial, err := apiSources.excerpts(d, content, remain, min(roleMaxDocs-len(out), maxAPIDocExcerpts-apiExcerpts))
 			if err != nil {
 				return documentEvidence{}, err
+			}
+			if partial {
+				lims = append(lims, rustAPISampled)
 			}
 			for _, api := range items {
 				if apiEvidence[api.ID] {

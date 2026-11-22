@@ -274,6 +274,7 @@ func newSecView(r Report, digest string, l Locale) secView {
 		for _, f := range r.Findings {
 			for _, id := range ids {
 				if f.ID == id {
+					f.Title = v.FindingTitle[f.ID]
 					out = append(out, f)
 				}
 			}
@@ -323,7 +324,7 @@ func newSecView(r Report, digest string, l Locale) secView {
 		var pr []secItem
 		for _, id := range r.Summary.Priorities {
 			f := findings[id]
-			pr = append(pr, secItem{Text: f.Title + " — " + f.Validation + " / " + f.Severity, Codes: []string{id}, Link: id})
+			pr = append(pr, secItem{Text: v.FindingTitle[f.ID] + " — " + f.Validation + " / " + f.Severity, Codes: []string{id}, Link: id})
 		}
 		ov.Parts = append(ov.Parts, listPart(l.Label("overview_priorities"), pr, ""))
 	}

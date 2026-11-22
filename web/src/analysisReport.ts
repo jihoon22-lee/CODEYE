@@ -1,5 +1,6 @@
 // Validate the projection used by the report view before rendering any model or tool text.
 import { excerptFits, parseSections, parseExcerpt, type Excerpt, type Sections } from './parseReportSections';
+import { diagnosticFindingTitle } from './locales/report-ko';
 
 export type Evidence = {
   id: string;
@@ -17,6 +18,7 @@ export type Finding = {
   // The disposition stamped at publication (immutable); the current one comes from the comparison.
   disposition: string;
   title: string;
+  displayTitle?: string;
   category: string;
   severity: string;
   validation: string;
@@ -339,6 +341,13 @@ export function parseAnalysisReport(
     }
   }
   const sections = parseSections(r, observations.map(o => o.id), findings.map(f => f.id), counts.total, includesCode, expandedDocuments);
+  const observationByID = new Map(observations.map(o => [o.id, o]));
+  for (const f of findings) {
+    const o = observationByID.get(f.observations[0]);
+    if (f.validation === 'unreviewed' && o?.tool && !o.metric) {
+      f.displayTitle = diagnosticFindingTitle(f.title, o.tool, o.rule, o.message);
+    }
+  }
   const modelFindings = new Set(sections?.codeReview.findings);
   for (const finding of findings) {
     for (const evidence of finding.evidence) {

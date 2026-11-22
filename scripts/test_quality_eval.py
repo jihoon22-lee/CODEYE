@@ -197,13 +197,14 @@ class RegressionPilotCoverageTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.out = Path(self.tmp.name)
         (self.out / "pilot").mkdir()
+        (self.out / "Q01-before.json").write_text(json.dumps({"coverage": {"review_calls": []}}))
 
     def tearDown(self):
         self.tmp.cleanup()
 
-    def record(self, name, stage, files, calls, slice_key=None):
+    def record(self, name, stage, files, calls, slice_key=None, line=1):
         doc = {"schema_version": "0.3" if slice_key else "0.2", "stage": stage, "calls": [{}] * calls,
-               "evidence": [{"path": p, "kind": "code", "origin": "context"} for p in files]}
+               "evidence": [{"path": p, "kind": "code", "origin": "context", "start_line": line, "end_line": line} for p in files]}
         if slice_key:
             doc["slice"] = {"key": slice_key, "modules": ["go:."]}
         (self.out / "pilot" / (name + ".json")).write_text(json.dumps(doc))
@@ -243,7 +244,14 @@ class RegressionPilotCoverageTests(unittest.TestCase):
     def test_each_condition_fails(self):
         self.write_pilot()
         rows = self.rows(regression_tasks=("review.investigate", "review.scope"))
-        self.assertIn("slice tasks", self.check(rows)[0][0])
+        rows[0]["tasks"].append({"key": "review.investigate.s001", "status": "skipped_policy", "reason": "no_review_scope"})
+        self.assertEqual(self.check(rows)[0], [])
+        rows[0]["tasks"][-1]["status"] = "succeeded"
+        self.assertIn("unnecessary or incomplete follow-up", self.check(rows)[0][0])
+        case = self.out / "Q01-before.json"
+        case.write_text(json.dumps({"coverage": {"review_calls": [{"task_key": "review.investigate.s001"}]}}))
+        self.assertIn("unexpected model calls", self.check(self.rows())[0][0])
+        case.write_text(json.dumps({"coverage": {"review_calls": []}}))
         rows = self.rows()
         rows[0]["review_calls"][0]["pack_sha256"] = "0" * 64
         self.assertIn("pack digest", self.check(rows)[0][0])
@@ -268,6 +276,8 @@ class RegressionPilotCoverageTests(unittest.TestCase):
         self.assertEqual(len(pilot["dry_run_expected"]), 2)
         rows[1]["tasks"].append({"key": "go-vet", "status": "failed", "reason": "toolchain_mismatch"})
         self.assertIn("status partial", self.check(rows, exposed=None, required=("ruff", "go-vet"), ledger=test)[0][0])
+        self.record("investigate.s002", "investigate", ["a.go"], 1, "s002", line=8)
+        self.assertEqual(self.check(self.rows(), ledger_sent=3)[0], [])
         self.record("investigate.s002", "investigate", ["a.go"], 1, "s002")
         self.assertIn("two investigate requests", self.check(self.rows())[0][0])
         ledger = self.out / "ledger.jsonl"
