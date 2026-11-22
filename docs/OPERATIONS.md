@@ -541,6 +541,7 @@ python3 scripts/offline_pack.py check-web web/dist
 | `codeye` | 정적 링크 실행 파일(CGO 없음). `file`은 statically linked, `ldd`는 not a dynamic executable이고 ELF에 interpreter·dynamic section이 없다. build가 이를 검사해 동적이면 실패한다 |
 | `web/dist/` | 빌드된 웹 화면. 외부 주소를 불러오지 않는다(아래) |
 | `docs/` | 사용 안내서, 이 문서와 함께 읽는 주제 문서 |
+| `CHANGELOG.md` | 배포판별 변경 이력 |
 | `examples/config-offline.json` | 오프라인 설정 예시(`*.corp.example` 주소, 실제 주소 아님) |
 | `INSTALL.md` | 설치 절차(확인, 놓을 곳, 설정, 점검, 실행) |
 | `THIRD_PARTY_NOTICES/` | 함께 배포한 Go·웹 구성 요소의 라이선스 고지 |

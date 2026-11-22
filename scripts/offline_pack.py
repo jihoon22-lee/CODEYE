@@ -42,7 +42,7 @@ SCHEMA_VERSION = "0.1"
 MANIFEST = "MANIFEST.json"
 SUMS = "SHA256SUMS"
 # User-facing documentation and examples, kept in their repository layout.
-DOCS = ["docs/ANALYZERS.md", "docs/API.md", "docs/ARCHITECTURE.md", "docs/EXECUTION.md",
+DOCS = ["CHANGELOG.md", "docs/ANALYZERS.md", "docs/API.md", "docs/ARCHITECTURE.md", "docs/EXECUTION.md",
         "docs/GITHUB.md", "docs/GUIDE.md", "docs/OPERATIONS.md", "docs/REPORT.md",
         "docs/REQUIREMENTS.md", "docs/REVIEW.md", "docs/SECURITY.md"]
 EXAMPLES = ["examples/config-offline.json"]
