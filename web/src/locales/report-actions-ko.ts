@@ -13,6 +13,7 @@ export const reportActionsKo = {
   limitation: '판단 범위',
   evidenceLink: (evidence: number, counter: number) => `근거와 반대 근거 보기 (근거 ${evidence}건 · 반대 근거 ${counter}건)`,
   notAssessed: '이번 분석에서는 조치 항목을 판단하지 못했습니다. 목록이 비어 있는 것은 확인한 결과가 아니라 판단하지 않았다는 뜻입니다.',
+  nonePartial: '일부 AI 검토 결과만 확보했으므로 확보하지 못한 범위에는 조치 항목이 있을 수 있습니다.',
   noneNotAProof: '결함이 없다는 뜻이 아닙니다. 위 범위에서 근거로 지지하거나 재현한 항목을 찾지 못했다는 뜻입니다.',
   noAcceptedReview: '수락한 모델 검토 결과가 없습니다.',
   modelNotPerformed: '이 실행에서 사용할 수 있는 AI 검토 결과를 확보하지 못했습니다.',

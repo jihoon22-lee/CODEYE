@@ -192,6 +192,7 @@ export function ReportActions({ report, sections, isDisposed, openFinding, openC
     sections.codeReview.ledger?.modules.some(module => module.completed > 0)) {
     lead = t.codeReading.none;
     if (facts.scope) paragraphs.push(t.sections.summary.reviewScope(facts.scope.primary, facts.scope.primarySent));
+    if (report.aiReview === 'partial') paragraphs.push(a.nonePartial);
     paragraphs.push(a.noneNotAProof);
   } else {
     lead = t.codeReading.noEvidence;

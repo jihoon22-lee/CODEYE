@@ -2,6 +2,7 @@ package report
 
 import (
 	"cmp"
+	"html"
 	"slices"
 	"strconv"
 	"strings"
@@ -248,6 +249,9 @@ func (v secView) buildActions() actionBlock {
 			if line := reviewScopeLine(l, r.CodeReview); line != "" {
 				a.Paras = append(a.Paras, line)
 			}
+			if ai.Status == AIReviewPartial {
+				a.Paras = append(a.Paras, l.Label("actions.none_partial"))
+			}
 			a.Paras = append(a.Paras, l.Label("actions.none_not_a_proof"))
 		} else {
 			a.Lead = l.Label("review.reading_no_evidence")
@@ -394,7 +398,7 @@ func (v secView) mismatchCards(anchors map[string]bool) []mismatchCard {
 			if status == "partial" {
 				card.Tone = "partial"
 			}
-			if text := openingText(c.Reason, ""); text != "" || len(c.CodeEvidenceIDs) > 0 {
+			if text := openingText(c.Reason, ""); text != "" {
 				card.Rows = append(card.Rows, actionRow{Label: l.Label("actions.observed"), Text: text, Inline: true})
 			}
 			if scope := displayDocumentScope(c.AppliesTo); scope != "" {
@@ -548,6 +552,14 @@ func (v secView) anchorSet() map[string]bool {
 
 // --- Markdown ----------------------------------------------------------------
 
+// mdSummary is the text of a <summary> line. A line that starts with
+// <details> is a raw HTML block: backslash escapes would show, so the text is
+// HTML-escaped and the characters that open links or code are numeric entities.
+func mdSummary(s string) string {
+	s = html.EscapeString(oneLine(s))
+	return strings.NewReplacer("[", "&#91;", "]", "&#93;", "(", "&#40;", ")", "&#41;", "!", "&#33;", "`", "&#96;", "\\", "&#92;").Replace(s)
+}
+
 // mdCoverageLine is the sentence under the status banner.
 func mdCoverageLine(p func(...string), a actionBlock) {
 	if a.CoverageLine == "" {
@@ -590,7 +602,7 @@ func mdCandidateFold(p func(...string), fold candidateFold) {
 		return
 	}
 	mdReadingAnchor(p, fold.ID)
-	p("<details><summary>", mdText(oneLine(fold.Label)), "</summary>")
+	p("<details><summary>", mdSummary(fold.Label), "</summary>")
 	p()
 	p(mdText(fold.Note))
 	p()
@@ -617,7 +629,7 @@ func mdDiagnosticFold(p func(...string), fold diagFold) {
 		return
 	}
 	mdReadingAnchor(p, fold.ID)
-	p("<details><summary>", mdText(oneLine(fold.Label)), "</summary>")
+	p("<details><summary>", mdSummary(fold.Label), "</summary>")
 	p()
 	p(mdText(fold.Note))
 	p()
@@ -633,7 +645,7 @@ func mdDiagnosticFold(p func(...string), fold diagFold) {
 		if g.Description != "" {
 			summary += " — " + g.Description
 		}
-		p("<details><summary>", mdText(oneLine(summary)), "</summary>")
+		p("<details><summary>", mdSummary(summary), "</summary>")
 		p()
 		for _, place := range g.Places {
 			p("- ", mdCode(place))
@@ -697,7 +709,7 @@ func mdActionBlock(p func(...string), a actionBlock, l Locale) {
 		p()
 		mdMismatchCards(p, a.Mismatches)
 		if len(a.MismatchMore) > 0 {
-			p("<details><summary>", mdText(oneLine(a.MismatchMoreLabel)), "</summary>")
+			p("<details><summary>", mdSummary(a.MismatchMoreLabel), "</summary>")
 			p()
 			mdMismatchCards(p, a.MismatchMore)
 			p("</details>")

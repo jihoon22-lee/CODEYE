@@ -177,4 +177,24 @@ describe('action-first overview', () => {
     expect(plan.assessed).toBe(true);
     expect(plan.mismatches.map(m => m.comparison.status)).toEqual(['mismatch', 'partial']);
   });
+  it('opens the evidence of a card in the code analysis tab and names the document comparison', () => {
+    const { overview } = overviewOf(scenario());
+    fireEvent.click(within(overview.querySelector<HTMLElement>('[data-finding-card="review_second"]')!).getByRole('button', { name: a.evidenceLink(1, 0) }));
+    const tab = screen.getByRole('tab', { name: t.sections.titles.code_review });
+    expect(tab.getAttribute('aria-selected')).toBe('true');
+    const panel = screen.getByRole('tabpanel', { name: t.sections.titles.code_review });
+    expect(panel.querySelector('.report-finding-heading')?.textContent).toBe('빈 응답을 성공으로 취급한다');
+    cleanup();
+    const again = overviewOf(scenario()).overview;
+    fireEvent.click(within(again.querySelector<HTMLElement>('.report-mismatch-card')!).getByRole('button', { name: a.openComparison }));
+    expect(screen.getByRole('tab', { name: t.sections.titles.documents }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('says a partial review that found nothing may have missed what it did not read', () => {
+    const report = parsed('report-slices.json');
+    report.aiReview = 'partial';
+    const { overview } = overviewOf(report);
+    expect(within(overview).getByText(a.nonePartial)).toBeTruthy();
+    expect(within(overview).getByText(a.noneNotAProof)).toBeTruthy();
+  });
 });

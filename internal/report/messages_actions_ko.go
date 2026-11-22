@@ -11,6 +11,7 @@ func init() {
 		"actions.severity":             "심각도 %s",
 		"actions.evidence_link":        "근거와 반대 근거 보기 (근거 %d건 · 반대 근거 %d건)",
 		"actions.not_assessed":         "이번 분석에서는 조치 항목을 판단하지 못했다. 목록이 비어 있는 것은 확인한 결과가 아니라 판단하지 않았다는 뜻이다.",
+		"actions.none_partial":         "일부 AI 검토 결과만 확보했으므로 확보하지 못한 범위에는 조치 항목이 있을 수 있다.",
 		"actions.none_not_a_proof":     "결함이 없다는 뜻이 아니다. 위 범위에서 근거로 지지하거나 재현한 항목을 찾지 못했다는 뜻이다.",
 		"actions.others_candidates":    "추가 확인이 필요한 후보 %d건이 아래에 있다.",
 		"actions.others_secondary":     "예제·시험 등 부차 경로의 항목 %d건이 아래에 있다.",

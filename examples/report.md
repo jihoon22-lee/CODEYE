@@ -49,17 +49,17 @@ CODEYE 분석 보고서
 
 <a id="tool-diagnostics"></a>
 
-<details><summary>도구 진단 2건 \(규칙 2종, 도구 1종\)</summary>
+<details><summary>도구 진단 2건 &#40;규칙 2종, 도구 1종&#41;</summary>
 
 정적 분석 도구가 보고한 진단이며 결함으로 확인된 것이 아니다\. 분석기와 규칙별로 묶었고 규칙을 펼치면 위치가 나온다\.
 
-<details><summary>go\.staticcheck SA4006 · 1건 · low — this value of err is overwritten before the previous attempt\'s error is logged \(synthetic example\)</summary>
+<details><summary>go.staticcheck SA4006 · 1건 · low — this value of err is overwritten before the previous attempt&#39;s error is logged &#40;synthetic example&#41;</summary>
 
 - `gateway.go:13-13`
 
 </details>
 
-<details><summary>go\.staticcheck SA6005 · 1건 · low — should use strings\.EqualFold instead \(synthetic example\)</summary>
+<details><summary>go.staticcheck SA6005 · 1건 · low — should use strings.EqualFold instead &#40;synthetic example&#41;</summary>
 
 - `svc/a/normalize.go:8-8`
 

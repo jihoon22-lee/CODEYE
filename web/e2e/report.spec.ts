@@ -257,6 +257,37 @@ test('action cards keep status, line numbers and expanders inside phone and desk
   await expect(page.locator('.report-action-list')).toBeHidden();
 });
 
+test('a link from an action card opens the collapsed blocks around its target in the saved HTML', async ({page}, info) => {
+  const assets = new URL('../../internal/report/reportui/', import.meta.url);
+  const css = ['tabler.css', 'report.css', 'export.css', 'workbench.css', 'actions.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
+  const script = readFileSync(new URL('export-navigation.js', assets), 'utf8');
+  const hash = createHash('sha256').update(script).digest('base64');
+  const file = info.outputPath('actions.html');
+  mkdirSync(dirname(file), {recursive: true});
+  writeFileSync(file, `<!doctype html><html lang="ko"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'">
+    <style>${css}</style>
+    <body class="review-theme report-export"><div class="report-layout export-page">
+    <nav class="report-rail"><div class="export-desktop-nav"><ul class="nav"><li><a href="#overview" class="nav-link">종합</a></li></ul></div></nav>
+    <main class="report-main"><section class="export-section" id="overview"><h2>종합</h2>
+      <p class="report-coverage-note"><strong>분석 범위의 한계</strong> 분석 공백 1건 <a id="to-coverage" href="#coverage">분석 범위와 상태 보기</a></p>
+      <article class="card report-action-card"><div class="card-body"><a id="to-evidence" href="#finding-row" class="btn btn-sm btn-ghost-primary report-card-action">근거와 반대 근거 보기</a></div></article>
+      <details class="card report-disclosure" id="candidates"><summary>추가 확인이 필요한 후보 1건</summary>
+        <details class="report-diag-group"><summary>규칙</summary><p id="finding-row">숨은 근거 행</p></details></details>
+      <section id="coverage" tabindex="-1"><h3>주요 분석 결과</h3></section>
+    </section></main></div><script>${script}</script></body></html>`);
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({width, height: 800});
+    await page.goto(pathToFileURL(file).href);
+    await expect(page.locator('#finding-row')).toBeHidden();
+    await page.locator('#to-evidence').click();
+    await expect(page.locator('#finding-row')).toBeVisible();
+    await expect(page.locator('#candidates')).toHaveJSProperty('open', true);
+    await page.locator('#to-coverage').click();
+    await expect(page.locator('#coverage')).toBeInViewport();
+  }
+});
+
 test('published report exposes the same counts, evidence and revision in the browser and exports', async ({page}) => {
   const login = process.env.CODEYE_TEST_REPORT_LOGIN;
   test.skip(!login, '실제 게시 보고서는 회귀 파일럿에서 생성한다');

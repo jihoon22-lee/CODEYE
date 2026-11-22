@@ -314,8 +314,35 @@ func TestCodeFreeActionCards(t *testing.T) {
 			}
 		}
 		opening := out[:strings.Index(out, Korean.Label("reading.outcome"))]
+		if strings.Contains(opening, Korean.Label("actions.observed")) {
+			t.Fatalf("%s: a code-free mismatch card keeps an empty observation row", name)
+		}
 		if n := strings.Count(opening, textOmitted); n > 0 {
 			t.Fatalf("%s: %d unreplaced omission marker(s) in the opening", name, n)
 		}
+	}
+}
+
+// A partial review that found nothing to act on says so inside the block, and
+// a fold summary shows no backslash escapes in Markdown (it is raw HTML).
+func TestPartialReviewWithoutCardsAndFoldSummaries(t *testing.T) {
+	r := exampleFile(t, "../../examples/report-slices.json")
+	r.Coverage.AIReview.Status = AIReviewPartial
+	md, html := renderBoth(t, r, DetailSummary)
+	for name, out := range map[string]string{"markdown": md, "html": html} {
+		if !strings.Contains(out, Korean.Label("actions.none_partial")) && !strings.Contains(out, mdText(Korean.Label("actions.none_partial"))) {
+			t.Fatalf("%s: a partial review without a finding does not say so", name)
+		}
+	}
+	md, _ = renderBoth(t, actionScenario(t), DetailSummary)
+	for _, line := range strings.Split(md, "\n") {
+		if strings.HasPrefix(line, "<details><summary>도구 진단") || strings.HasPrefix(line, "<details><summary>go.staticcheck") {
+			if strings.Contains(line, "\\") {
+				t.Fatalf("a raw HTML summary line shows backslash escapes: %s", line)
+			}
+		}
+	}
+	if !strings.Contains(md, "<details><summary>도구 진단 2건 &#40;규칙 2종, 도구 1종&#41;</summary>") {
+		t.Fatal("the diagnostic fold summary is not entity-encoded")
 	}
 }
