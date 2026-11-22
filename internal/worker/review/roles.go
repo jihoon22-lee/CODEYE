@@ -765,6 +765,9 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	build := func(list []record.Excerpt) ([]byte, error) {
 		x := in
 		x.Scope = in.Scope.withExcerpts(list, links)
+		if s.slice == nil && rustAPIImplementationMissing(x.Documents.Contracts, docEv, x.Scope.RustAPIs) {
+			x.Scope.Limitations = addLim(x.Scope.Limitations, rustAPIContextOmitted)
+		}
 		return marshal(x)
 	}
 	instructions := s.instructions(investigateContract)
@@ -806,9 +809,12 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	in.Scope = in.Scope.withExcerpts(sent, links)
 	if links.claims.keep > 0 {
 		if balanced, ok := s.fitContractAllocation(in, links, docEv); ok {
-			sent = balanced
-			in.Scope = in.Scope.withExcerpts(sent, links)
-			in.Scope.ContractAnchors = links.claims.submitted(sent)
+			balancedScope := in.Scope.withExcerpts(balanced, links)
+			if len(balancedScope.RustAPIs) >= len(in.Scope.RustAPIs) {
+				sent = balanced
+				in.Scope = balancedScope
+				in.Scope.ContractAnchors = links.claims.submitted(sent)
+			}
 		}
 	}
 	if s.slice == nil && rustAPIImplementationMissing(in.Documents.Contracts, docEv, in.Scope.RustAPIs) {
