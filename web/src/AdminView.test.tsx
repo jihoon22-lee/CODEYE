@@ -313,3 +313,41 @@ describe('server audit log', () => {
     expect(row.textContent).toContain(t.accounts.audit.actorUnknown('robot'));
   });
 });
+
+describe('admin runtime paths', () => {
+  const route = '/api/v1/admin/runtime-paths';
+  const settings = { editable: true, auto_detect: true, paths: { go: '/opt/go/bin/go' }, automatic_paths: { java: '/usr/bin/java' } };
+
+  it('saves only changed tools and restores automatic selection when cleared', async () => {
+    const { calls } = await openAdmin({
+      ['GET ' + route]: () => json(200, settings),
+      ['PATCH ' + route]: c => {
+        const java = (c.body as { paths: { java: string } }).paths.java;
+        return json(200, { ...settings, paths: java ? { ...settings.paths, java: java + '/bin/java' } : settings.paths });
+      },
+    });
+    adminTab(a.tabs.runtimes);
+    await flush();
+    const jdk = screen.getByLabelText('JDK') as HTMLInputElement;
+    const save = screen.getByRole('button', { name: t.runtimePaths.save });
+    expect(screen.getByText('/usr/bin/java')).toBeTruthy();
+    fireEvent.change(jdk, { target: { value: '/opt/jdk-21' } });
+    fireEvent.click(save);
+    await flush();
+    expect(jdk.value).toBe('/opt/jdk-21/bin/java');
+    fireEvent.change(jdk, { target: { value: '' } });
+    fireEvent.click(save);
+    await flush();
+    expect(jdk.value).toBe('');
+    expect(calls.filter(c => c.method === 'PATCH' && c.url === route).map(c => c.body))
+      .toEqual([{ paths: { java: '/opt/jdk-21' } }, { paths: { java: '' } }]);
+  });
+
+  it('shows the node configuration instructions on a standalone controller', async () => {
+    await openAdmin({ ['GET ' + route]: () => json(200, { ...settings, editable: false, paths: {}, automatic_paths: {} }) });
+    adminTab(a.tabs.runtimes);
+    await flush();
+    expect(screen.getByText(t.runtimePaths.readOnly)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: t.runtimePaths.save })).toBeNull();
+  });
+});

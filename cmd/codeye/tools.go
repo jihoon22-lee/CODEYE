@@ -154,11 +154,16 @@ func useDetectedTools(cfg *instance.Config, res toolfind.Result) {
 // the result. It returns the detection result; with detection off the result
 // is empty and cfg.Agent is unchanged.
 func prepareTools(ctx context.Context, cfg *instance.Config, out io.Writer) (toolfind.Result, error) {
+	layout := instance.Layout{Root: cfg.StateDir}
 	if !cfg.Agent.AutoDetectEnabled() {
-		return toolfind.Result{}, nil
+		return toolfind.Result{}, layout.WriteRuntimeDefaults(map[string]string{})
 	}
 	res := detectTools(ctx, cfg)
-	var werr error
+	defaults, err := toolfind.AutomaticPaths(ctx, instance.RuntimeToolNames[:], res, explicitTools(cfg))
+	if err == nil {
+		err = layout.WriteRuntimeDefaults(defaults)
+	}
+	werr := err
 	if err := toolfind.Write(filepath.Join(cfg.StateDir, toolfind.FileName), res); err != nil {
 		werr = errors.New("cannot write " + toolfind.FileName)
 	}

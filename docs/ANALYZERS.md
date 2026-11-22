@@ -97,6 +97,8 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 
 `codeye up`·`start`는 도구 경로를 손으로 적지 않아도 된다. 시작할 때마다 `internal/toolfind`가 이 머신의 도구를 찾고, 위 플래그가 될 값을 정한다. `codeye tools`가 같은 탐색을 하고 표로 보여 준다([운영](OPERATIONS.md#codeye-tools)). 서버·노드 에이전트를 직접 띄울 때는 탐색이 없고 위 플래그만 쓴다.
 
+로컬 워커가 사용할 Python, JDK, Go, Cargo, Node.js는 관리 화면에서 지정할 수 있다. 실행 파일이나 설치 디렉터리를 저장하면 다음 분석에서 그 도구를 사용한다. 분석기 자체의 실행 파일은 기존 설정 키로 지정한다. [언어 도구 경로](GUIDE.md#언어-도구-경로)
+
 **찾는 대상.** go, git, node, java, OpenCode와 이 빌드의 분석기 도구 전부다(staticcheck, gitleaks, ruff, mypy, pyright, bandit, lizard, cppcheck, clang-tidy, gcc, eslint, tsc, jscpd, cargo, clippy, pmd, spotbugs, import-linter, dependency-cruiser), 그리고 의존성을 받는 패키지 관리자 npm, pnpm, yarn, uv, python이다. 결과의 `name`은 에이전트 플래그 이름이며 `agent.tools.<name>`과 같다. go는 `agent.go`, git은 `agent.git`, OpenCode는 `agent.model.opencode`다.
 
 **찾는 위치.** 순서대로 사용자의 `PATH`, `~/.local/bin`, `~/go/bin`, `/usr/local/go/bin`과 시스템 디렉터리, `~/.opencode/bin`, CODEYE 도구 접두사 `~/.local/share/codeye-tools/{bin,cpp/bin,go/bin}`이다. 모양이 정해진 도구는 다음처럼 찾는다.

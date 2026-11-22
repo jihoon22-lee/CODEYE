@@ -91,7 +91,7 @@ type Store interface {
 	AddProviderBy(ctx context.Context, by postgres.Principal, host string) (postgres.Provider, bool, error)
 	GetServiceSettings(ctx context.Context) (postgres.ServiceSettings, error)
 	SetServiceSettings(ctx context.Context, by postgres.Principal, p postgres.ServiceSettingsPatch) (postgres.ServiceSettings, error)
-	RecordOpenCodeOperation(ctx context.Context, by postgres.Principal, operation string) error
+	RecordLocalSettingsOperation(ctx context.Context, by postgres.Principal, target, operation string) error
 	OfferFor(ctx context.Context, user string) (nodeproto.AnalysisOffer, error)
 	// Run event stream and schedules.
 	RunEvents(ctx context.Context, actor, id string, after int64, limit int) (postgres.EventPage, error)

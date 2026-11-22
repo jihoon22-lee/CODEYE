@@ -46,7 +46,11 @@ type Handler struct {
 func New(base analysis.Handler, tools Config) *Handler {
 	g, _ := govet.New(govet.Config{GoExecutable: tools.Go, GoModCache: tools.GoModCache, DependencyCacheRoot: tools.DependencyCacheRoot})
 	r, _ := rustpack.New(rustpack.KindCheck, rustpack.Config{Cargo: tools.Cargo, ToolPath: tools.ToolPath, DependencyCacheRoot: tools.DependencyCacheRoot})
-	tools.Node, tools.Npm, tools.Python = regularPath(tools.Node, true), regularPath(tools.Npm, false), regularPath(tools.Python, true)
+	tools.Node, tools.Npm = regularPath(tools.Node, true), regularPath(tools.Npm, false)
+	// Python discovers its virtual environment from the invoked interpreter path.
+	if regularPath(tools.Python, true) == "" {
+		tools.Python = ""
+	}
 	return &Handler{base: base, tools: tools, goTool: g, rustTool: r}
 }
 

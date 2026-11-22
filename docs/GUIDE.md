@@ -46,6 +46,12 @@ sha256sum -c codeye-v0.1.2-linux-amd64.tar.gz.sha256 &&
 ./codeye up https://github.com/OWNER/REPO
 ```
 
+### 첫 관리자 로그인
+
+`./codeye up`을 처음 실행하면 서비스가 링크로 로그인하는 관리자 계정을 만든다. 브라우저가 없는 서버에서는 `./codeye up --no-open`을 실행하고 터미널에 표시된 링크를 연다. 링크를 다시 발급하려면 서비스 머신에서 같은 Linux 계정으로 `./codeye open --no-open`을 실행한다.
+
+이메일·비밀번호로 관리하고 싶다면 별도 브라우저나 시크릿 창에서 본인 이메일로 가입한다. 처음 발급한 링크로 로그인한 창에서 **관리 > 사용자**를 열고 해당 이메일 행의 **관리자로 지정**을 누른다. 이후에는 그 이메일과 비밀번호로 관리 화면에 들어갈 수 있다.
+
 ## 다른 사람 초대
 
 ### 다른 머신에서 열 수 있게 하기
@@ -131,6 +137,36 @@ codeye tools
 ```
 
 이 머신에서 찾은 도구(경로와 버전), 찾지 못한 도구와 추가하는 방법을 표로 보여 준다. 화면의 **도구** 메뉴도 `codeye up`이 마지막으로 찾은 같은 표와 모델과 호스트별 플랫폼 GitHub 연결 상태를 보여 준다(도구 경로는 관리자에게만 보인다). `codeye up`은 시작할 때 같은 탐색을 하므로 도구 경로를 설정에 적지 않아도 된다. 설정의 `agent.tools.<이름>`에 적은 경로는 항상 탐색보다 우선한다. 없는 도구에 해당하는 분석은 보고서에 "미지원"으로 나온다([도구 찾기](ANALYZERS.md#도구-찾기), [운영](OPERATIONS.md#codeye-tools)).
+
+### 언어 도구 경로
+
+`codeye up`으로 시작한 서비스에서는 관리자로 로그인해 **관리 > 언어 도구 경로**를 연다. 웹에 접속한 PC가 아닌 **서비스 머신**에 설치된 실행 파일이나 설치 디렉터리를 입력하고 **경로 저장**을 누른다. 저장 시 실행 파일을 확인하며 다음 로컬 분석부터 적용한다. 실행 중인 분석은 시작할 때 선택한 도구로 마친다.
+
+| 도구 | 웹 입력 예시 | 설정 파일 키 |
+|---|---|---|
+| Python | `/opt/venvs/qa/bin/python` 또는 가상환경 디렉터리 | `agent.tools.python` |
+| JDK | `/opt/jdk-21` 또는 `bin/java`의 절대 경로. 같은 JDK의 `javac` 필요 | `agent.tools.java` |
+| Go | `/opt/go` 또는 `/opt/go/bin/go` | `agent.go` |
+| Rust | `rustup which cargo`가 출력한 실제 도구체인의 Cargo 경로 | `agent.tools.cargo` |
+| Node.js | `/opt/node/bin/node` | `agent.tools.node` |
+
+입력란을 비우고 저장하면 그 아래 표시한 자동 탐색 경로로 돌아간다. `agent.auto_detect`가 `false`이면 수동 지정만 해제된다. 별도 머신에서 띄운 노드는 그 머신의 에이전트 설정을 따른다.
+
+v0.1.2 배포판에서는 설정 파일에 실행 파일의 절대 경로를 적는다. 기본 파일은 `~/.config/codeye/config.json`이다. 기존 설정의 해당 항목을 바꾸고 서비스 머신에서 `./codeye up --no-open --no-probe`를 다시 실행한다.
+
+```json
+{
+  "schema_version": "0.1",
+  "agent": {
+    "go": "/opt/go/bin/go",
+    "tools": {
+      "python": "/opt/venvs/qa/bin/python",
+      "java": "/opt/jdk-21/bin/java",
+      "cargo": "/opt/rust-toolchain/bin/cargo"
+    }
+  }
+}
+```
 
 ## 분석 실행
 

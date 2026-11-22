@@ -6,6 +6,7 @@ import { CopyText } from './CopyText';
 import { AuditLog, type ActorOption } from './AuditLog';
 import { describeError, shorten, type ErrorText } from './format';
 import { ko as t } from './locales/ko';
+import { RuntimePathForm } from './RuntimePathForm';
 import { OpenCodeSettings } from './OpenCodeSettings';
 import { ErrorNote } from './RunPanel';
 import type { SessionController } from './session';
@@ -13,8 +14,8 @@ import type { SessionController } from './session';
 // The administrator area: the address to share, accounts, the service switches, the approved Git hosts and the server-wide audit log. Being
 // an administrator opens no project; the screen says so.
 
-export type AdminTab = 'users' | 'service' | 'opencode' | 'providers' | 'audit';
-const TABS: AdminTab[] = ['users', 'service', 'opencode', 'providers', 'audit'];
+export type AdminTab = 'users' | 'service' | 'runtimes' | 'opencode' | 'providers' | 'audit';
+const TABS: AdminTab[] = ['users', 'service', 'runtimes', 'opencode', 'providers', 'audit'];
 // Pickers need every user; the list is small in practice, so follow the cursor to a fixed bound.
 const MAX_USER_PAGES = 50;
 
@@ -61,7 +62,7 @@ export function AdminView({ api, controller, me, initialTab }: Props) {
   return <>
     <section aria-labelledby="admin-title">
       <h1 id="admin-title">{s.title}</h1>
-      {tab !== 'opencode' && <>
+      {tab !== 'opencode' && tab !== 'runtimes' && <>
         <p>{s.intro}</p>
         <p className="notice">{s.noProjectAccess}</p>
         {current && <div id="service-address" className="field">
@@ -79,6 +80,7 @@ export function AdminView({ api, controller, me, initialTab }: Props) {
       <h2 id="admin-tab-title">{s.tabs[tab]}</h2>
       {tab === 'users' && <AdminUsers api={api} me={me} users={users} onChanged={reloadUsers} onForbidden={forbidden} />}
       {tab === 'service' && <ServiceSwitches api={api} settings={current} error={settings.error} reload={settings.reload} onSaved={settings.set} onForbidden={forbidden} />}
+      {tab === 'runtimes' && <RuntimePathForm api={api} onForbidden={forbidden} />}
       {tab === 'opencode' && <OpenCodeSettings api={api} onForbidden={forbidden} />}
       {tab === 'providers' && <Providers api={api} onForbidden={forbidden} />}
       {tab === 'audit' && <AuditLog load={loadAudit} actors={actors} projectFilter intro={t.accounts.audit.globalIntro} onForbidden={forbidden} />}

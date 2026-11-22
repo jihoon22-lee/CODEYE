@@ -10,6 +10,7 @@ Linux 전용이다. 모델 호출·네트워크 다운로드는 없다.
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import socket
 import stat
@@ -593,6 +594,31 @@ def pull_request(root, env, directory, fixture):
         subprocess.run([binary, "stop"], cwd=home, env=menv, capture_output=True, timeout=300)
         fake.close()
 
+def check_runtime_paths(session, home, project_id):
+    route = "admin/runtime-paths"
+    original = session.request("GET", route)
+    assert original["editable"] and original["auto_detect"] and original["paths"] == {}, original
+    go = original["automatic_paths"]["go"]
+    marker = home / "custom-vet-ran"
+    install = home / "custom-go"
+    wrapper = install / "bin/go"
+    wrapper.parent.mkdir(parents=True)
+    (install / "src").symlink_to(Path(go).resolve().parents[1] / "src", target_is_directory=True)
+    wrapper.write_text(
+        "#!/bin/sh\n"
+        f'if [ "$1" = vet ]; then : > {shlex.quote(str(marker))}; fi\n'
+        f'exec {shlex.quote(go)} "$@"\n'
+    )
+    wrapper.chmod(0o700)
+    saved = session.request("PATCH", route, {"paths": {"go": str(install)}})
+    assert saved["paths"] == {"go": str(wrapper)} and not marker.exists(), saved
+    view = session.finished(session.enqueue(project_id))
+    assert view["report"] and marker.exists(), "다음 분석에서 지정한 Go로 vet을 실행하지 않음"
+    reset = session.request("PATCH", route, {"paths": {"go": ""}})
+    assert reset == original, reset
+    print("PASS: 웹 관리자 도구 경로 저장·실행 중인 서비스에서 다음 go vet 실행·자동 탐색 복원")
+
+
 def managed(base, root, env, directory, source):
     """TC-170~173: codeye up with no configuration file and the managed PostgreSQL.
 
@@ -688,6 +714,9 @@ def managed(base, root, env, directory, source):
         assert "registered project" in again and "restarting the agent" not in again, again
         link_b, _ = link_of(again)
         finished(Session(state, origin, link_b), link_b.rsplit("&run=", 1)[1])
+
+        project_b = next(p for p in session.request("GET", "projects")["items"] if p["name"] == "src-b")
+        check_runtime_paths(session, home, project_b["id"])
 
         # TC-173: stop also stops PostgreSQL; up reuses the cluster; backup needs no configuration.
         stopped = json.loads(cli("stop", "--format", "json").stdout)

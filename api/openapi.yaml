@@ -1214,6 +1214,45 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/AdminProvider'}
         default: {$ref: '#/components/responses/Error'}
+  /api/v1/admin/runtime-paths:
+    get:
+      operationId: adminGetRuntimePaths
+      x-codeye-status: implemented
+      description: 관리자가 서비스 머신의 명시 경로와 시작할 때 자동 탐색한 대체 경로를 조회한다.
+      responses:
+        '200':
+          description: 언어 도구별 경로와 편집 가능 여부
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RuntimePathSettings'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      operationId: adminUpdateRuntimePaths
+      x-codeye-status: implemented
+      description: 보낸 항목만 변경한다. 빈 문자열은 명시 경로를 해제한다. 다음 로컬 분석부터 사용한다.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [paths]
+              properties:
+                paths:
+                  allOf:
+                    - {$ref: '#/components/schemas/RuntimePaths'}
+                    - {type: object, minProperties: 1}
+            example: {paths: {java: /opt/jdk-21, go: ''}}
+      responses:
+        '200':
+          description: 저장된 설정
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RuntimePathSettings'}
+        default: {$ref: '#/components/responses/Error'}
   /api/v1/admin/opencode:
     get:
       operationId: adminGetOpenCode
@@ -2283,6 +2322,24 @@ components:
         kind: {enum: [github, ghes]}
         host: {type: string}
         api_url: {type: [string, 'null']}
+    RuntimePaths:
+      type: object
+      additionalProperties: false
+      properties:
+        python: {type: string, maxLength: 4096}
+        java: {type: string, maxLength: 4096}
+        go: {type: string, maxLength: 4096}
+        cargo: {type: string, maxLength: 4096}
+        node: {type: string, maxLength: 4096}
+    RuntimePathSettings:
+      type: object
+      additionalProperties: false
+      required: [editable, auto_detect, paths, automatic_paths]
+      properties:
+        editable: {type: boolean}
+        auto_detect: {type: boolean}
+        paths: {$ref: '#/components/schemas/RuntimePaths'}
+        automatic_paths: {$ref: '#/components/schemas/RuntimePaths'}
     OpenCodeSettings:
       type: object
       additionalProperties: false

@@ -7,6 +7,15 @@ export const ko = {
   nav: { label: '주 메뉴', projects: '프로젝트·분석', doctor: '도구' },
 
   // --- tools panel (GET /setup; the doctor file view when the service recorded no tools) ---
+  runtimePaths: {
+    intro: '서비스 머신에서 사용할 실행 파일이나 설치 디렉터리를 지정하세요. 저장한 경로는 다음 로컬 분석부터 사용합니다.',
+    automatic: '비워 두면 자동 탐색', disabled: '자동 탐색 꺼짐', missing: '자동으로 찾은 경로가 없습니다.',
+    readOnly: '별도로 실행한 노드의 도구 경로는 해당 머신에서 설정합니다.',
+    save: '경로 저장', saving: '저장 중…', saved: '경로를 저장했습니다.', reload: '다시 불러오기',
+    invalid: (name: string) => `${name} 경로에서 실행 파일을 확인할 수 없습니다. 서비스 머신의 절대 경로와 실행 권한을 확인하세요.`,
+    fields: { python: 'Python', java: 'JDK', go: 'Go', cargo: 'Rust (Cargo)', node: 'Node.js' },
+    examples: { python: '/opt/venvs/qa/bin/python', java: '/opt/jdk-21', go: '/opt/go/bin/go', cargo: '/opt/rust-toolchain/bin/cargo', node: '/opt/node/bin/node' },
+  },
   tools: {
     title: '도구',
     intro: '이 서비스가 찾은 분석 도구와 모델, Git입니다. 서비스를 띄운 컴퓨터에서 codeye up을 실행할 때마다 다시 찾습니다.',
@@ -922,7 +931,7 @@ export const ko = {
       title: '관리',
       intro: '사용자, 서버 폴더와 Git 호스트, 다른 사용자가 쓸 수 있는 기능을 관리합니다.',
       noProjectAccess: 'ⓘ 관리자 권한은 프로젝트를 열거나 볼 권한을 주지 않습니다. 프로젝트에 접근하려면 그 프로젝트의 소유자나 관리 담당이 구성원으로 추가해야 합니다.',
-      tabs: { label: '관리 화면', service: '서비스', opencode: 'OpenCode 연결', users: '사용자', roots: '폴더', providers: 'Git 공급자', audit: '감사 기록' },
+      tabs: { label: '관리 화면', runtimes: '언어 도구 경로', service: '서비스', opencode: 'OpenCode 연결', users: '사용자', roots: '폴더', providers: 'Git 공급자', audit: '감사 기록' },
       opencode: {
         intro: '모델 검토에 사용할 OpenCode를 연결합니다.',
         defaults: '서버의 절대 경로나 ~/로 시작하는 경로를 입력하세요. ~/는 CODEYE 서비스 계정의 홈입니다.',

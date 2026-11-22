@@ -604,6 +604,11 @@ def check_openapi(file: Path) -> int:
             path_parameters = {p["name"] for p in parameters if p.get("in") == "path" and p.get("required")}
             ensure(needed == path_parameters, "Path parameter mismatch: " + route)
             ensure(bool(operation.get("responses")), "Missing responses: " + op_id)
+    body = document["paths"]["/api/v1/admin/runtime-paths"]["patch"]["requestBody"]["content"]["application/json"]
+    validator = Draft202012Validator({**body["schema"], "components": document["components"]})
+    validator.validate(body["example"])
+    for paths in ({}, {"other": ""}, {"python": None}):
+        ensure(not validator.is_valid({"paths": paths}), "Invalid runtime path patch allowed")
     return refs
 
 

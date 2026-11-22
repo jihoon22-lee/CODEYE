@@ -91,10 +91,10 @@ func TestAdminOpenCodeConnection(t *testing.T) {
 		t.Fatalf("probe did not report the saved model's outcome: %s", probed.raw)
 	}
 	ctx := context.Background()
-	if err := e.store.RecordOpenCodeOperation(ctx, postgres.UserPrincipal(member.id), "probe"); !errors.Is(err, domain.ErrForbidden) {
+	if err := e.store.RecordLocalSettingsOperation(ctx, postgres.UserPrincipal(member.id), "opencode", "probe"); !errors.Is(err, domain.ErrForbidden) {
 		t.Fatalf("non-admin store authorization = %v", err)
 	}
-	if err := e.store.RecordOpenCodeOperation(ctx, postgres.UserPrincipal(admin.id), "unknown"); !errors.Is(err, domain.ErrInvalid) {
+	if err := e.store.RecordLocalSettingsOperation(ctx, postgres.UserPrincipal(admin.id), "opencode", "unknown"); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("unknown operation = %v", err)
 	}
 	var events []string

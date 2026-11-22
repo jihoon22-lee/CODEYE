@@ -116,7 +116,8 @@ func (d *document) bytes() ([]byte, error) {
 
 // ConfigEdit is one change `codeye up` makes to the configuration file.
 type ConfigEdit struct {
-	OpenCode *OpenCodeEdit
+	OpenCode     *OpenCodeEdit
+	RuntimePaths map[string]string
 	// AddRoot appends a source root.
 	AddRoot *SourceRoot
 	// PostgresBinDir sets database.postgres_bin_dir.
@@ -192,6 +193,12 @@ func EditFile(path string, knownTools []string, e ConfigEdit) (*Config, error) {
 // EditFileChecked also validates the candidate against the running installation
 // before a successful atomic write. A rejected connection keeps the old one.
 func EditFileChecked(path string, knownTools []string, e ConfigEdit, check func(*Config) error) (*Config, error) {
+	return EditFileForStateDir(path, knownTools, e, "", check)
+}
+
+// EditFileForStateDir also supplies the running installation's default when
+// state_dir is absent and the controller has a different environment.
+func EditFileForStateDir(path string, knownTools []string, e ConfigEdit, defaultStateDir string, check func(*Config) error) (*Config, error) {
 	absolutePath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, errors.New("config path cannot be resolved")
@@ -214,6 +221,11 @@ func EditFileChecked(path string, knownTools []string, e ConfigEdit, check func(
 	doc, err := parseDocument(raw)
 	if err != nil {
 		return nil, err
+	}
+	if len(e.RuntimePaths) > 0 {
+		if err := editRuntimePaths(doc, e.RuntimePaths); err != nil {
+			return nil, err
+		}
 	}
 	if e.OpenCode != nil {
 		if err := e.OpenCode.apply(doc); err != nil {
@@ -286,7 +298,7 @@ func EditFileChecked(path string, knownTools []string, e ConfigEdit, check func(
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := Parse(out, knownTools)
+	cfg, err := parseConfig(out, knownTools, defaultStateDir)
 	if err != nil {
 		return nil, err
 	}

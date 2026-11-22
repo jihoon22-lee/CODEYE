@@ -18,6 +18,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/httpapi"
+	"github.com/jihoon22-lee/CODEYE/internal/instance"
 	"github.com/jihoon22-lee/CODEYE/internal/storage/postgres"
 )
 
@@ -436,6 +437,7 @@ func serveOn(ctx, startCtx context.Context, store *postgres.Store, c serveConfig
 	if c.stateDir != "" || c.offline {
 		cfg.Instance = &httpapi.Instance{StateDir: c.stateDir, Offline: c.offline, GitHosts: c.gitHosts, CABundle: c.caBundle}
 		if c.instanceConfig != "" {
+			cfg.Instance.RuntimePaths = managedRuntimePaths{path: c.instanceConfig, layout: instance.Layout{Root: c.stateDir}}
 			cfg.Instance.OpenCode = newManagedOpenCode(c.instanceConfig, c.stateDir, c.offline, c.caBundle)
 		}
 	}

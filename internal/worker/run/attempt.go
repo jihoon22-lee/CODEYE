@@ -279,6 +279,16 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 		return nodeproto.OutcomeFailed, nodeproto.ReasonHandlerError, nil
 	}
 	_ = os.Mkdir(filepath.Join(a.scratch, "tmp"), 0700)
+	if w.cfg.RefreshHandlers != nil {
+		registry, err := w.cfg.RefreshHandlers(a.ctx, w.runner)
+		if err != nil {
+			w.log("warn", "runtime_settings_unavailable", "")
+			return nodeproto.OutcomeFailed, nodeproto.ReasonHandlerError, nil
+		}
+		if registry != nil {
+			w.registry = registry
+		}
+	}
 	if w.cfg.PrepareAttempt != nil {
 		job.Source.ProtectedDirs = append(job.Source.ProtectedDirs, w.cfg.PrepareAttempt(a.scratch)...)
 	}

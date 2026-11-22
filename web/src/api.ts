@@ -171,6 +171,11 @@ export type ServiceAddressKind = 'configured' | 'this_machine' | 'name' | 'lan' 
 export type ServiceAddress = { origin: string; kind: ServiceAddressKind };
 // GET/PUT /admin/settings: the two service switches, the address to share and every address the service answers on.
 export type ServiceSettings = { others_model_review: boolean; others_build_scripts: boolean; updated_at: string; service_origin: string | null; service_addresses: ServiceAddress[] };
+export const runtimeTools = ['python', 'java', 'go', 'cargo', 'node'] as const;
+export type RuntimeTool = typeof runtimeTools[number];
+export type RuntimePaths = Partial<Record<RuntimeTool, string>>;
+export type RuntimePathSettings = { editable: boolean; auto_detect: boolean; paths: RuntimePaths; automatic_paths: RuntimePaths };
+
 export type OpenCodeSettingsInput = { executable: string; config_file: string; credential_file: string; model: string };
 export type OpenCodeSettings = OpenCodeSettingsInput & {
   editable: boolean; configured: boolean; effective_model: string | null; probe: string | null; reason: string | null;
@@ -330,6 +335,10 @@ export function createApi(options: ApiOptions = {}) {
     getSettings: (signal?: AbortSignal) => json({ method: 'GET', path: '/api/v1/admin/settings', signal }, parseSettings),
     putSettings: (patch: Partial<Pick<ServiceSettings, 'others_model_review' | 'others_build_scripts'>>) =>
       json({ method: 'PUT', path: '/api/v1/admin/settings', body: patch }, parseSettings),
+    getRuntimePaths: (signal?: AbortSignal) =>
+      json({ method: 'GET', path: '/api/v1/admin/runtime-paths', signal }, parseRuntimePaths),
+    saveRuntimePaths: (paths: RuntimePaths) =>
+      json({ method: 'PATCH', path: '/api/v1/admin/runtime-paths', body: {paths} }, parseRuntimePaths),
     getOpenCodeSettings: (signal?: AbortSignal) =>
       json({ method: 'GET', path: '/api/v1/admin/opencode', signal }, parseOpenCodeSettings),
     putOpenCodeSettings: (body: OpenCodeSettingsInput) =>
@@ -551,6 +560,16 @@ function parseSettings(v: unknown): ServiceSettings {
   const o = rec(v);
   return { others_model_review: bool(o.others_model_review), others_build_scripts: bool(o.others_build_scripts), updated_at: date(o.updated_at), service_origin: nullableStr(o.service_origin),
     service_addresses: list(parseServiceAddress)(o.service_addresses ?? []) };
+}
+function parseRuntimePaths(v: unknown): RuntimePathSettings {
+  const o = rec(v);
+  function paths(value: unknown): RuntimePaths {
+    const source = rec(value);
+    const parsed: RuntimePaths = {};
+    for (const name of runtimeTools) if (Object.hasOwn(source, name)) parsed[name] = str(source[name]);
+    return parsed;
+  }
+  return { editable: bool(o.editable), auto_detect: bool(o.auto_detect), paths: paths(o.paths), automatic_paths: paths(o.automatic_paths) };
 }
 function parseOpenCodeSettings(v: unknown): OpenCodeSettings {
   const o = rec(v);

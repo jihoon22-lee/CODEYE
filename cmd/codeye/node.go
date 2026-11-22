@@ -294,9 +294,12 @@ func pythonConsumers(cfg builtin.Config, missing []builtin.Unavailable) bool {
 
 func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
 	model := &instanceModelCaller{}
+	tools := &workerRuntimePaths{caller: model}
 	return workerrun.Main(ctx, workerrun.Config{In: in, Out: out, Stderr: stderr,
-		PrepareAttempt: model.prepareAttempt,
+		PrepareAttempt:  model.prepareAttempt,
+		RefreshHandlers: tools.refresh,
 		Handlers: func(ctx context.Context, h *workerproto.Hello, runner executor.Runner) ([]analysis.Handler, []string, error) {
+			tools.hello, tools.current = h, helloPaths(h)
 			model.settings, model.static, model.offline, model.caBundle = h.ModelSettings, workerModel(h), h.Offline, h.CABundle
 			return workerHandlersWithCaller(ctx, h, runner, model)
 		}})

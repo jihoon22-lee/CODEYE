@@ -129,6 +129,8 @@ func (s *Server) apiRoutes() []route {
 		r("DELETE", "admin/source-roots/{id}/grants/{id}", "admin.source_roots.revoke", true, false, (*Server).adminRevokeSourceRoot).admins().audits(postgres.AuditSourceRootRevoked),
 		r("GET", "admin/providers", "admin.providers.list", true, false, (*Server).adminListProviders).admins(),
 		r("POST", "admin/providers", "admin.providers.create", true, true, (*Server).adminAddProvider).admins().audits(postgres.AuditProviderAdded),
+		r("GET", "admin/runtime-paths", "admin.runtime_paths.get", true, false, (*Server).adminRuntimePaths).admins(),
+		r("PATCH", "admin/runtime-paths", "admin.runtime_paths.update", true, true, (*Server).adminRuntimePaths).admins().audits(postgres.AuditServiceSettingsSet),
 		r("GET", "admin/opencode", "admin.opencode.get", true, false, (*Server).adminGetOpenCode).admins(),
 		r("PUT", "admin/opencode", "admin.opencode.put", true, true, (*Server).adminPutOpenCode).admins().audits(postgres.AuditServiceSettingsSet),
 		r("POST", "admin/opencode/probe", "admin.opencode.probe", true, false, (*Server).adminProbeOpenCode).admins().audits(postgres.AuditServiceSettingsSet),

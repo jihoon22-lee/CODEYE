@@ -1,5 +1,9 @@
 # 변경 이력
 
+## 미배포
+
+- 관리자는 **관리 > 언어 도구 경로**에서 Python, JDK, Go, Rust(Cargo), Node.js 실행 파일을 지정하고 자동 탐색 값으로 되돌릴 수 있다. 다음 로컬 분석부터 적용된다. [사용 안내서](docs/GUIDE.md#언어-도구-경로)
+
 ## v0.1.2 · 2026-11-22
 
 Java를 추가하고 여섯 언어군에서 문서의 약속, 구현 코드, 기존 테스트의 실행 결과를 함께 읽을 수 있게 했다. [배포 파일](https://github.com/jihoon22-lee/CODEYE/releases/tag/v0.1.2) · [설치와 첫 분석](docs/GUIDE.md#첫-시작)
