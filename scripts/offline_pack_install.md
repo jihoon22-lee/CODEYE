@@ -25,6 +25,10 @@ sha256sum -c {{top}}.tar.gz.sha256 &&
 
 PostgreSQL을 찾지 못하면 `./codeye up --postgres-bin-dir /절대/경로/bin`으로 위치를 지정한다. 설정은 기본적으로 `~/.config/codeye/config.json`, 관리형 DB와 분석 데이터는 `~/.local/state/codeye`에 저장된다. [서비스 설정 파일](../docs/OPERATIONS.md#서비스-설정-파일)
 
+## 분석 도구 확인
+
+`./codeye tools --checklist`로 이 머신에서 사용 가능한 분석기를 확인한다. Java 프로젝트는 JDK와 PMD를 준비하고 바이트코드 검사에는 SpotBugs를 추가한다. **테스트 포함 분석**은 해당 언어의 빌드 도구와 테스트 의존성을 사용한다. [언어별 분석과 테스트](../docs/GUIDE.md#언어별-분석과-테스트)
+
 ## 인터넷 없는 머신
 
 오프라인으로 설치할 때는 처음부터 아래 명령으로 실행한다. `--offline`은 설정에 저장된다. 미러·사내 CA·모델 주소가 필요하면 `examples/config-offline.json`을 참고해 새 설정 파일을 준비하거나 기존 설정에서 필요한 항목을 편집한다. 예시의 주소와 경로는 설치할 머신에 맞춘다.
