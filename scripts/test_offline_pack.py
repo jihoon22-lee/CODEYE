@@ -71,6 +71,12 @@ class Distribution(unittest.TestCase):
         self.assertIn(f"[tests]({offline_pack.SOURCE_URL}/blob/{commit}/docs/TESTING.md#suite)", actual)
         self.assertIn("[here](#more)", actual)
 
+    def test_install_guide_links_from_the_archive_root(self):
+        template = offline_pack.INSTALL_TEMPLATE.relative_to(ROOT).as_posix()
+        page = "[Guide](../docs/GUIDE.md#첫-시작) [Upgrade](../docs/OPERATIONS.md#배포판-업그레이드)"
+        actual = offline_pack.release_doc(page, template, "a" * 40, destination="INSTALL.md")
+        self.assertEqual(actual, "[Guide](docs/GUIDE.md#첫-시작) [Upgrade](docs/OPERATIONS.md#배포판-업그레이드)")
+
     @unittest.skipUnless(shutil.which("go"), "Go toolchain required for binary notices")
     def test_go_notices_for_the_binary_and_linked_modules(self):
         with tempfile.TemporaryDirectory() as directory:

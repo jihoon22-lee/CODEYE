@@ -677,6 +677,14 @@ python3 scripts/offline_smoke.py --pack .codeye/pack/codeye-VERSION-linux-amd64.
 
 CI 러너에는 go vet 말고 분석 도구가 없어 실도구 시험은 skip되고 재생 시험만 돈다. Windows CI의 단위 시험은 Windows 11의 NativeExecutor·DB·전체 플랫폼 수용 시험을 대신하지 않는다.
 
+### 공개 배포판 설치와 업그레이드
+
+TC-170~173의 첫 실행·재시작과 TC-240·245의 배포팩 검증은 실제 릴리스 파일에서도 확인한다.
+
+1. 공개 릴리스에서 각 CPU용 압축 파일과 같은 이름의 `.sha256`을 새 디렉터리에 내려받는다. `sha256sum -c <파일>.sha256`으로 전송을 확인하고 `python3 scripts/offline_pack.py verify <파일>.tar.gz`로 내부 목록과 파일 해시를 검증한다.
+2. 해당 CPU에서 압축을 풀고 `./codeye version --json`의 버전·커밋을 릴리스 태그와 대조한다. 새 환경에서 `./codeye up`으로 시작해 브라우저 접속, 프로젝트 분석, 게시된 보고서 조회를 확인한다. 에뮬레이터에서 확인한 범위와 실제 호스트에서 확인한 범위를 구분해 기록한다.
+3. 이전 공개 배포판으로 프로젝트와 보고서를 만든 뒤 [배포판 업그레이드](OPERATIONS.md#배포판-업그레이드)를 따른다. 기존 보고서의 같은 리비전을 같은 옵션으로 JSON 내보냈을 때 바이트가 같은지 비교하고, 같은 프로젝트에서 새 분석과 HTML 내보내기가 되는지 확인한다.
+
 ## 보조 검증과 제품 시험의 차이
 
 `scripts/validate_bundle.py`는 문서 링크·schema·예시·계획 DAG·보고서 수치·범위 참조를 검사한다. `fixtures/cleanup/test_cleanup.py`는 합성 결함 전후를 검사하고, `fixtures/regression/corpus.py --check`는 회귀 집합 사례의 계약 시험을 검사한다. 이들의 성공을 TC 전체 통과나 실제 분석 성능 확보로 보고하지 않는다. scripted caller나 fixture handler의 결과는 플랫폼 경로의 근거이지 지침 품질이나 분석 정확도의 근거가 아니다. 코드 시험 결과와 제품 분석 정확도 평가는 별도 결과로 보고한다([평가](EVALUATION.md)).

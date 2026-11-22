@@ -1,11 +1,15 @@
 # 분석 품질 평가
 
-이 문서는 CODEYE의 분석·검토 품질을 재는 방법을 정한다. 원칙과 지표, 회귀 집합과 보류 집합, 평가 runner, 유료 batch 절차, 예산 relay와 장부, 지침 개정 규칙을 다룬다. 결과 수치는 이 문서에 쓰지 않는다. 실행 결과는 [평가 결과](EVALUATION-RESULTS.md)에만 둔다.
+실제 결함을 찾고, 근거를 정확히 짚고, 사용자가 보고서에서 조치할 일을 찾을 수 있는지 평가한다. 실행한 버전·대상·지표는 [평가 결과](EVALUATION-RESULTS.md)에 기록한다.
 
-- 구현: 회귀 집합 [`fixtures/regression`](../fixtures/regression/corpus.json), 실행 틀 [`scripts/eval_harness.py`](../scripts/eval_harness.py), 회귀 실행 [`scripts/regression_pilot.py`](../scripts/regression_pilot.py), 평가 runner [`scripts/quality_eval.py`](../scripts/quality_eval.py), 채점 [`scripts/quality_score.py`](../scripts/quality_score.py), 예산 relay [`scripts/model_budget_relay.py`](../scripts/model_budget_relay.py)
-- 요구사항: REQ-010/011/013/027, NFR-007/008/010([요구사항](REQUIREMENTS.md))
-- 수용 시험: TC-100, TC-120~122, TC-128, TC-129([시험](TESTING.md))
-- 검토 역할·입력·출력 규칙: [모델 검토](REVIEW.md)
+| 확인할 일 | 절차 |
+|---|---|
+| 검토 지침 변경 뒤 회귀 확인 | [지침 개정](#지침-개정과-회귀-검증)과 [회귀 집합 실행](#회귀-집합-실행) |
+| 같은 프로젝트에서 도구·모델 검토 비교 | [실험 구성](#실험-구성), [평가 runner](#평가-runner), [지표와 분모](#지표와-분모) |
+| 유료 모델 실행과 비용 확인 | [유료 batch 절차](#유료-batch-절차), [예산 relay와 장부](#예산-relay와-장부) |
+| 배포 판단 | [출시 판단](#출시-판단), [평가 한계](#평가-한계), [제품 수용 시험](TESTING.md) |
+
+검토 역할·입출력은 [모델 검토](REVIEW.md)에 있다. 관련 요구사항은 REQ-010/011/013/027, NFR-007/008/010이고 수용 시험은 TC-100, TC-120~122, TC-128, TC-129다. [요구사항](REQUIREMENTS.md) · [수용 시험](TESTING.md)
 
 ## 평가 원칙
 

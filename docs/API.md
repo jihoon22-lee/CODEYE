@@ -4,10 +4,14 @@
 
 ## 구현 범위
 
-- OpenAPI operation의 `x-codeye-status`가 `implemented`이면 서버가 실제로 제공한다. 그 밖의 operation은 설계 계약(미구현)이다. 저장소의 PR·멘션 웹훅은 `POST /api/v1/github/webhooks/{project_id}`로 받는다. 풀 관리와 provider 단위 웹훅은 설계 단계에 있다.
-- 서버가 등록한 라우트와 OpenAPI의 구현 operation이 같은지 [`internal/httpapi/contract_test.go`](../internal/httpapi/contract_test.go)가 확인한다. 라우트 표는 [`internal/httpapi/api.go`](../internal/httpapi/api.go)와 [`node.go`](../internal/httpapi/node.go)에 있다.
-- 사용자 인증은 세션 cookie뿐이며, 이메일·비밀번호 또는 일회용 로그인 링크로 세션을 만든다. 기존 사용자 이름을 사용하는 계정도 로그인할 수 있다. 사용자 Bearer 토큰(`UserBearer`)은 구현하지 않았다. loopback이 아닌 주소는 TLS나 명시적 평문 HTTP(`--plain-http`)로만 받는다([보안](SECURITY.md#네트워크와-브라우저)). 관리자는 `/admin/providers`와 `/admin/settings`로 Git 호스트와 서비스 스위치를 관리한다. 계정·구성원·감사 기록은 웹 화면과 CLI에서 다룬다.
-- 설계 계약(미구현) 사용자 API: 프로젝트 설정 변경(분석 선택 `PUT /projects/{id}/analysis`만 구현), 연결 진단·브랜치 조회, 개별 task·로그 조회(로그는 상태 이벤트와 별도의 byte/record cursor로 가져오는 설계), 첫 발견 시각 이력, 판정 일괄 적용, 풀·노드 관리 웹 API. 풀·노드 관리는 운영자 CLI를 쓴다([운영](OPERATIONS.md)).
+| 필요한 정보 | 어디서 확인하나 |
+|---|---|
+| 사용 가능한 경로 | [자원 개요](#자원-개요)와 OpenAPI에서 `x-codeye-status: implemented`로 표시한 operation. [계약 시험](../internal/httpapi/contract_test.go)이 서버 라우트와 대조한다. |
+| 사용자 로그인과 권한 | [인증](#인증). 이메일·비밀번호 또는 일회용 링크로 세션을 만든다. 관리자도 프로젝트 구성원 권한으로 보고서를 읽는다. |
+| 관리자·노드 운영 | [계정과 관리자](#계정과-관리자), [노드 API](#노드-api-요약), [운영 CLI](OPERATIONS.md). 관리자는 Git 호스트와 서비스 설정을 관리한다. |
+| GitHub 웹훅 | [프로젝트별 수신 주소와 이벤트](#github-저장소-웹훅) |
+
+프로젝트의 분석 선택은 `PUT /projects/{id}/analysis`로 변경한다. 일반 설정 변경, 연결 진단·브랜치 조회, 개별 task·로그 조회, 첫 발견 시각의 이력, 판정 일괄 적용, 풀·노드 관리 웹 API와 provider 단위 웹훅은 설계 단계다.
 
 ## 공통 규칙
 
@@ -383,40 +387,7 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 
 ## 보고서 경로
 
-`observations[].metric.counterpart`는 중복 쌍의 두 번째 블록을 가리킨다. 첫 블록은 같은 관찰의 `location`이다. 두 위치는 고정 스냅샷의 경로·줄 범위·파일 해시로 구성되며 코드 미포함 응답에도 남는다. 예전 리비전 또는 상대 위치를 확인할 수 없는 관찰은 선택 필드를 생략한다.
-
-C/C++ 진단의 `observations[].related_locations`에는 도구가 근거로 제시한 위치와 가정이 순서대로 들어간다. 코드 미포함 응답은 위치와 유형을 남기고 원문 메시지와 발췌를 생략한다. `metrics.go_package_dependencies`는 Go 모듈별 import 관계와 해당 줄을 제공한다. 패키지 목록을 끝까지 읽었으면 `unlisted_files`로 목록에 없던 후보 파일 수를 표시한다. 이전 리비전이나 집계가 불가능한 실행에서는 이 필드를 생략할 수 있다.
-
-보고서의 `documents.quality`, `documents.comparisons`, `code_review.strengths`는 수락된 모델 해석과 근거 ID를 담는 선택 필드다. `findings[].evidence[]`와 분석 절 근거의 `excerpt`에는 고정 스냅샷에서 저장한 실제 줄 범위와 원문이 들어간다. 도구 진단의 문맥은 최대 9줄이며 새 모델 발췌는 인용 시작 줄부터 최대 50줄이다. JSON 인코딩 1,800바이트에 닿으면 마지막으로 저장할 수 있는 완전한 줄까지 담는다. `include_code=false`에서는 발췌 필드를 생략하고 모델 문장을 생략 문구로 바꾼다. 이전 보고서에는 이 필드가 없을 수 있다.
-
-수락된 최종 대조가 기존 미확인 계약 하나의 판정을 갱신한 경우, 해당 비교에 선택 필드 `followup: true`가 있다. 계약 문서와 적용 범위는 기존과 같고 새 근거는 `code_evidence_ids`에 들어간다. 근거의 종류는 `documents.evidence[].kind`에서 코드와 테스트를 구별한다. `coverage.review_calls[].task_key`가 `review.contract`이면 이 작업의 호출 기록이다. 최종 대조가 여전히 미확인이면서 새 구현을 인용한 경우에는 `additional_observation`의 `reason`에 확인한 범위를 담는다. 그 안의 `code_evidence_ids`는 처음 조사에서 읽은 호출부와 함께 인용한 테스트를 포함해 최종 대조의 인용 순서를 유지한다. 원래 비교의 `status`, `reason`, `code_evidence_ids`는 그대로다. 이전 리비전은 선택 필드 없이 읽을 수 있다. 코드 미포함 응답은 상태와 근거 ID를 유지하고 추가 관찰의 `reason`도 다른 모델 문장과 같은 생략 문구로 바꾼다.
-
-```json
-{
-  "statement": "유효한 항목은 등록한 콜백으로 전달한다.",
-  "applies_to": "src",
-  "status": "unknown",
-  "reason": "공개 진입점에서 콜백까지 이어지는 호출을 확인하지 못했다.",
-  "document_evidence_ids": ["ev_0123456789abcdef01234567"],
-  "code_evidence_ids": [],
-  "additional_observation": {
-    "reason": "유효한 항목의 콜백 호출을 읽었다. 공개 진입점과의 연결은 확인되지 않았다.",
-    "code_evidence_ids": ["ev_89abcdef0123456789abcdef"]
-  }
-}
-```
-
-Python API docstring 근거는 `documents.evidence[]`에서 선택 필드 `directive_path`로 원래 Markdown 페이지를 가리킨다. `path`, 줄 범위, `blob_sha256`는 docstring이 담긴 스냅샷의 실제 Python 파일을 가리킨다. 코드 미포함 내보내기에도 출처 경로가 남는다. 생성기 18의 문서 근거 `excerpt`는 인용 시작과 끝이 일치하는 경우 최대 40줄·JSON 문자열 2,000바이트까지 담는다. 코드·테스트·도구 진단의 발췌는 기존 한도를 따른다.
-
-보고서 생성기 15부터 수락된 전체 검토에 조회·변경 코드와 실행 결과를 확인하는 테스트 단언이 함께 기록되면 연결된 문서 대조 행에 `related_workflow`가 생긴다. 이 객체의 `read_evidence_id`, `change_evidence_id`, `test_evidence_id`는 각각 `documents.evidence[]`의 코드·코드·테스트 위치를 참조한다. 예를 들어 `{"read_evidence_id":"ev_6de50b26e09a4a13b5a3ee60","change_evidence_id":"ev_a960e56bf22c43f2163e9f0d","test_evidence_id":"ev_d8c2833bb7f0d017d94f0eb0"}`는 합성 검토 예시의 값을 참조한다. 이 위치로 `status`, `reason`, `code_evidence_ids`, `coverage.test_status`를 바꾸지 않는다. 코드 미포함 내보내기는 위치와 ID를 남긴다. [검토 예시](../examples/review/investigate-workflow-reading.json)
-
-생성기 18부터 `with-tests`의 실패한 Go 실행에 선택 배열 `executions[].go_test_failures`가 생길 수 있다. 각 항목은 해당 스냅샷의 테스트 선언을 가리키는 `path`와 1부터 시작하는 `line`을 담는다. 코드 포함 JSON에는 `name`도 있다. 예를 들어 `{"name":"TestAnswer","path":"pkg/answer_test.go","line":5}`를 읽고, 같은 보고서의 코드 미포함 응답에서는 `name` 속성이 빠진다. 원시 stdout은 이 배열에 포함되지 않는다. 같은 실행에서 다른 패키지의 의존성 오류와 이름 있는 실패가 함께 확인되면 작업 사유와 실패 위치를 모두 제공한다. 배열이 없는 경우에는 상위 실행의 상태·종료 코드와 `coverage.test_status`를 읽는다. [워커 근거 예시](../examples/go-test-failures.json)
-
-문서의 호출 예제를 로컬 npm 패키지와 연결하면 `documents.evidence[].package_reference`에 `manifest_path`, `manifest_sha256`, `entry_path`, `entry_sha256`을 기록한다. 코드 포함 JSON은 패키지의 `name`, 사용 예제의 `callable`, 대응하는 `export`도 담는다. 문서 근거 자체의 `path`, 줄 범위와 `blob_sha256`는 안내 원문을 가리킨다. 계약의 구현 근거는 `code_evidence_ids`에서 읽는다.
-
-계약이나 질문은 확인된 호출 예제와 같은 문서에서 바로 이어진 설명을 함께 인용할 수 있다. 확인하지 못한 범위의 항목을 제외한 보고서는 `gaps[]`에 문서 분석의 `document_scope_items_omitted`를 남긴다.
-
-보고서 내용과 projection 규칙은 [보고서와 화면](REPORT.md)에 있다.
+프로젝트 구성원은 실행의 보고서를 조회하거나 게시된 리비전을 선택해 내려받을 수 있다. 보고서의 분석 항목과 화면 구성은 [보고서와 화면](REPORT.md)에서 설명한다.
 
 ### GET /runs/{id}/report
 
@@ -427,7 +398,7 @@ Python API docstring 근거는 `documents.evidence[]`에서 선택 필드 `direc
 | `include_code` | `true`, `false` | `false`(코드 미포함) |
 | `detail` | `summary`, `full` | `summary`(요약 보기) |
 
-- `detail`은 Markdown·HTML의 상세도다([내보내기 상세도](REPORT.md#내보내기-상세도)). `summary`는 값이 큰 절부터 놓고 긴 목록을 묶어 앞의 몇 개만 보인다. `full`은 모든 행을 싣는다. JSON은 언제나 전체이므로 `detail`이 바뀌어도 같은 바이트다. 다른 값은 400이다.
+- `detail`은 Markdown·HTML의 상세도다([내보내기 상세도](REPORT.md#내보내기-상세도)). `summary`는 긴 목록을 묶어 대표 항목을 보여 준다. `full`은 개별 진단·발견·작업의 전체 행을 싣는다. JSON은 언제나 전체이므로 `detail`이 바뀌어도 같은 바이트다. 다른 값은 400이다.
 - 다른 query parameter는 400이다. 프로젝트 구성원이 아니면 404이고, 권한은 요청마다 확인한다.
 - 성공한 요청마다 본문을 보내기 전에 `report.exported` 감사 행(형식, 코드 포함 여부, run·revision)을 쓰고, 쓰지 못하면 503이다. 웹 화면의 보고서 조회도 이 경로(JSON, 코드 포함)를 쓰므로 볼 때마다 행이 남는다([결정](DECISIONS.md) A35).
 - 저장된 본문을 엄격하게 다시 해석·검증하고 저장된 SHA-256과 대조한다. 실패하면 500 `REPORT_INVALID`이며 본문을 보내지 않는다.
@@ -448,6 +419,23 @@ Python API docstring 근거는 `documents.evidence[]`에서 선택 필드 `direc
 ### GET /runs/{id}/reports
 
 게시된 리비전 목록이다. 항목마다 `id`, `revision`, `status`, `quality_verdict`, `sha256`(저장 본문 해시), `size_bytes`, `created_at`을 주고, 함께 `latest_revision`, `formats`, `default_include_code: false`, `default_baseline`(`{run_id, revision, url}` 또는 null)을 준다. 비구성원은 404다.
+
+### 분석 근거 필드
+
+이 필드는 근거를 확보한 경우에만 반환한다. 예전 리비전에는 항목이 없을 수 있다. 전체 구조는 [보고서 스키마](../schemas/report.schema.json)에 있다.
+
+| 필드 | 해석 |
+|---|---|
+| `observations[].metric.counterpart` | 중복된 코드의 두 번째 블록. 첫 블록은 같은 관찰의 `location`이다. |
+| `observations[].related_locations` | C/C++ 도구가 원래 진단과 연결한 보조 위치·가정. 코드 미포함 응답은 위치와 유형을 남긴다. |
+| `metrics.go_package_dependencies` | Go 모듈의 import 관계와 줄 위치. 목록 조사가 끝나면 `unlisted_files`로 목록에 없던 후보 파일 수를 표시한다. |
+| `documents.quality`, `documents.comparisons`, `code_review.strengths` | 수락된 모델 해석과 근거 ID. 문서 비교의 `code_evidence_ids`를 따라가면 근거가 코드인지 테스트인지 구별할 수 있다. |
+| `documents.evidence[].directive_path`, `package_reference` | Python docstring을 가리킨 원래 문서, 또는 사용 예제와 연결된 로컬 npm 패키지의 manifest와 진입 파일. |
+| `executions[].go_test_failures` | 실패한 Go 테스트의 선언 경로와 줄. 코드 포함 응답에는 확인한 테스트 이름도 들어간다. 배열이 없으면 실행 상태·종료 코드와 `coverage.test_status`를 읽는다. [예시](../examples/go-test-failures.json) |
+
+**문서와 구현 대조.** 기존 미확인 계약의 판정이 바뀌면 비교에 `followup: true`와 새 근거를 싣는다. 결론을 유지하며 추가로 읽은 구현은 `additional_observation`에 둔다. `related_workflow`는 같은 동작의 조회 코드·변경 코드·테스트를 각각 근거 ID로 연결한다. 테스트 실행 여부는 `coverage.test_status`에서 확인한다. 조사 범위를 벗어나 생략한 항목은 `gaps[]`의 `document_scope_items_omitted`에 기록한다. [연결된 근거 예시](../examples/review/investigate-workflow-reading.json)
+
+**발췌와 내보내기.** 발췌는 고정 스냅샷에 저장한 원문이다. 도구 진단 문맥은 최대 9줄, 새 모델의 코드 발췌는 최대 50줄·JSON 인코딩 1,800바이트, 생성기 18의 문서 인용은 최대 40줄·2,000바이트다. `include_code=false`는 발췌를 생략하고 경로·줄·근거 참조를 보존한다. [코드 미포함 응답](REPORT.md#코드-미포함-내보내기)
 
 ## 비교와 판정 경로
 

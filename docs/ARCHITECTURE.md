@@ -10,8 +10,8 @@ flowchart TD
   GH[GitHub.com / GHES] -->|저장소 webhook| CP
   CP --> DB[(PostgreSQL)]
   CP --> AS[Artifact Store]
-  N1[Node Agent A] <-->|HTTPS API| CP
-  N2[Node Agent B] <-->|HTTPS API| CP
+  N1[Node Agent A] <-->|HTTP API| CP
+  N2[Node Agent B] <-->|HTTP API| CP
   N1 --> W1[Native Worker 1]
   N1 --> W2[Native Worker 2]
   N2 --> W3[Native Worker 3]
@@ -24,7 +24,7 @@ flowchart TD
 ```
 
 - `codeye up`은 한 머신에 관리 서버(controller)·PostgreSQL·노드 에이전트를 두고, 같은 서비스를 다른 머신의 사용자에게도 연다([운영](OPERATIONS.md)). 워커가 다른 노드로 옮겨도 관리 API 계약은 같다.
-- 노드 에이전트는 controller에 outbound HTTPS 연결만 만든다. SSH 원격 실행은 없다. 노드와 워커는 DB에 접근하지 않는다.
+- 노드 에이전트는 controller의 HTTP API에 outbound로 연결한다. loopback과 운영자가 명시한 평문 HTTP를 제외하면 TLS를 사용한다. 노드와 워커는 DB에 접근하지 않는다.
 - 스냅샷 사본은 그것을 만든 노드에 남는다. manifest와 결과 산출물만 인증된 API로 controller에 전송한다. 그래서 고정 입력 재시도에는 그 스냅샷을 보유한 노드가 필요하다. 노드 간 스냅샷 전송은 없다.
 - NFS는 필수 공용 버스가 아니다. 선택적인 소스 경로일 뿐이다.
 - 플랫폼 계정으로 저장소와 PR을 읽는다. 저장소 웹훅은 분석을 요청하고, 관리 서버는 결과 댓글을 전송한다. 조직 단위 GitHub App 설치는 후속 작업이다. [GitHub 연동](GITHUB.md)
@@ -59,6 +59,7 @@ SQLite·PostgreSQL 이중 저장 계층, Redis, Kafka, Kubernetes, 벡터 DB를 
 | 탐색 | 모듈·환경·문서 사실 | [worker/discovery](../internal/worker/discovery) |
 | 분석기 어댑터 | probe, plan, 실행, parse, 정규화 | [worker/analysis](../internal/worker/analysis) |
 | 검토 엔진 | 문맥·지침 팩·탐색·반증 | [worker/review](../internal/worker/review), [worker/opencode](../internal/worker/opencode) |
+| 기존 테스트 | 테스트 진입점·실행·Go 실패 위치 | [worker/testexec](../internal/worker/testexec) |
 | 진행 단계 | 저장 기록에서 단계 상태 계산 | [progress](../internal/progress) |
 | 발견 비교·사람 판정 | fingerprint, run 비교, 판정 | [history](../internal/history) |
 | 보고서 | 구조화 결과에서 웹·Markdown·HTML·JSON | [reportsvc](../internal/reportsvc), [report](../internal/report), [web/src](../web/src) |
@@ -79,7 +80,7 @@ SQLite·PostgreSQL 이중 저장 계층, Redis, Kafka, Kubernetes, 벡터 DB를 
 
 ## 데이터 흐름
 
-인증 → 프로젝트 revision 동결 → run 영속화 → 워커 용량 확보 → 호환 노드 배정·lease → 소스 확보 → snapshot 확정 → 탐색·계획 → 도구·모델 관찰 → 검증 → 보고서 게시.
+인증 → 프로젝트 revision 동결 → run 영속화 → 호환 노드 배정·lease → 소스 확보와 snapshot 확정 → task 계획 → 탐색·분석·검토 → 선택한 기존 테스트 → 보고서 게시.
 
 - artifact는 업로드 후 hash·크기 검증을 거쳐 finalize된다. 보고서는 참조하는 artifact가 준비된 뒤 게시한다([보고서](REPORT.md)).
 - PR 댓글 전송은 보고서 게시 후 별도 큐에서 처리한다. 전송 실패는 댓글 상태에 기록하고 게시된 보고서를 유지한다. [결과 댓글](GITHUB.md#결과-댓글)
@@ -88,21 +89,22 @@ SQLite·PostgreSQL 이중 저장 계층, Redis, Kafka, Kubernetes, 벡터 DB를 
 
 ### 단계와 산출물
 
-목표 파이프라인의 내부 단계다. 실행의 생명주기, 모델 역할, 화면 단계는 서로 다른 단위다. 화면 단계는 [진행 단계 판정](#진행-단계-판정)에 있다.
+작업 순서는 프로필의 계획에서 정한다. 화면의 분류와 표시 순서는 [진행 단계 판정](#진행-단계-판정)을 따른다.
 
 | 단계 | 산출물 | 주요 실패 처리 | 상태 |
 |---|---|---|---|
 | acquire | snapshot, source SHA, manifest | 접근 실패·불안정 복사면 failed | 구현 |
-| discover | 모듈 지도·환경 사실·문서 맥락 | 문서 없음은 정상, 읽지 못한 범위만 표시 | 구현 |
-| plan | task 목록(key·필수 여부·단계·가중치) | 미지원 검사를 숨기지 않고 사유 기록 | 구현(DAG 필드는 일부) |
+| plan | task 목록(key·필수 여부·단계·가중치) | 미지원 검사는 사유를 기록 | 구현(DAG 필드는 일부) |
+| discover | 모듈 지도·환경 사실·문서 맥락 | 문서 없음은 정상, 읽지 못한 범위 표시 | 구현 |
 | prepare | 실행 사본·런타임·도구 manifest, 모듈별 의존성 기록 | 의존성 준비 실패는 그 task만 끝내고 분석 계속 | Go·Rust·JS/TS·Python 의존성 받기 구현, C/C++ 의존성과 빌드는 설계 계약(미구현) |
 | analyze | 도구 observation, 맥락 중심 가설 | task별 제한시간과 부분 실패 | 구현 |
 | verify | 지지·기각·보류와 반대 근거 | 예산 종료 시 미검증 유지 | 구현 |
-| synthesize | finding group, risk·coverage | 무효 증거를 참조한 결론은 게시하지 않음 | 구현 |
-| report | 구조화 보고서·서술·export | 서술 실패 시 데이터 기반 보고서 | 구현 |
-| finalize | artifact finalize, 프로세스 종료 확인 | 정리 미확인은 recovery_required | 구현 |
+| test | 기존 테스트 실행 기록, 확인된 Go 실패 선언 위치 | 미실행·실패·시간 초과 사유를 기록 | `with-tests`에서 구현, Linux 전용 loopback 필요 |
+| finalize | 결과 manifest, 산출물 확정, 프로세스 정리 확인 | 정리 미확인은 `recovery_required` | 구현 |
+| synthesize | 발견 집계와 범위·한계 | 검증한 근거를 사용 | 구현 |
+| report | 구조화 보고서와 JSON·Markdown·HTML 내보내기 | 산출물을 확인하지 못하면 상태와 사유를 기록 | 구현 |
 
-현재 `deep-review` 프로필의 계획 순서는 탐색(`env.discover`, `docs.discover`) → 의존성 준비(`deps.*`, [의존성 준비](#의존성-준비)) → 분석기 팩 task → 검토 역할 task다. 분석기 task는 [분석기](ANALYZERS.md), 검토 역할 task는 [검토](REVIEW.md)에 있다.
+`deep-review`는 계획을 확정한 뒤 탐색(`env.discover`, `docs.discover`), 선택한 의존성 준비(`deps.*`), 분석기 팩, 모델 검토 순으로 작업을 실행한다. `with-tests`는 마지막 모델 검토 작업 뒤에 기존 테스트 작업(`test.*`)을 추가한다. 테스트에서 사용할 의존성은 분석기가 없어도 준비할 수 있다. [의존성 준비](#의존성-준비) · [분석기](ANALYZERS.md) · [검토](REVIEW.md) · [기존 테스트 실행](EXECUTION.md#기존-테스트-실행)
 
 ### task 계획 계약
 
@@ -218,7 +220,7 @@ lease·만료·정리 보고의 프로토콜은 [실행](EXECUTION.md)에 있다
 - Git 등록은 provider ID·repository URL·branch를 저장한다. 로컬 등록은 source root ID와 그 아래 상대 경로를 저장한다. 서비스 머신의 워커는 컨트롤러가 기록한 서버 경로를 사용한다. 별도 노드는 운영자가 지정한 로컬 매핑을 사용한다.
 - 서비스는 입력한 폴더를 실제 경로로 해석하고 Linux 계정의 접근을 확인한 뒤 프로젝트 소스로 등록한다. NFS 마운트에도 같은 절차를 적용한다.
 - 브라우저 PC의 경로와 서버·노드의 경로를 혼동하지 않는다. NFS의 같은 경로가 모든 노드에서 같은 권한으로 보인다고 가정하지 않는다.
-- 운영자 명령(`codeye source-root add`, `source-root grant`, `provider add`)은 [운영](OPERATIONS.md)에 있다.
+- `codeye up`의 내장 노드는 관리 서버가 확인한 로컬 경로와 승인한 Git 호스트를 작업에서 받는다. 따로 등록한 노드는 운영자가 지정한 root·호스트를 상한으로 삼는다. [플랫폼 소스 계정](GITHUB.md) · [운영](OPERATIONS.md)
 
 ### 로컬 사본
 
@@ -261,8 +263,9 @@ lease·만료·정리 보고의 프로토콜은 [실행](EXECUTION.md)에 있다
 - fetch 중에는 임시 저장소의 쓰기 용량을 0.2초 간격으로 확인해 `MaxTotalBytes`+25%+1 MiB를 넘으면 process group을 중지한다. 이는 polling 기반 soft 감시이며 filesystem quota가 아니다. 빠른 전송은 중지 전에 한도를 넘겨 쓸 수 있고, fetch 뒤의 정확한 객체 크기 검사를 대신하지 않는다.
 - 취소·timeout·용량 중지에서는 정리 완료를 확정하지 않고 `recovery_required`와 격리 디렉터리를 반환한다. 용량 중지는 `source_limit_exceeded`이면서 `recovery_required`다. recovery 디렉터리는 자동 재사용·삭제하지 않는다.
 - Linux는 git 명령의 process group을 중지한다. 다른 OS의 Git 자식 트리 종료 보증과 NFS의 중단 불가능한 kernel I/O는 검증하지 않았다.
-- private Git credential 전달, 사내 CA·proxy profile, submodule·LFS 객체 다운로드는 미구현이다. 사용자 credential이나 인터넷 대체 경로로 조용히 우회하지 않는다. 다른 호스트·저장소의 submodule은 해당 접근 정책을 다시 검사해야 한다(설계 계약). bare cache를 둔다면 credential scope별로 나누고 임의 repo hook을 실행하지 않는다(설계 계약).
-- PR 실행은 서버가 확인한 head·base SHA를 쓰며 자동으로 최신 HEAD로 바꾸지 않는다. 머지 결과 분석은 별도 프로필로 명시하지 않는 한 하지 않는다. PR 분석은 설계 계약(미구현)이다([GitHub](GITHUB.md)).
+- 비공개 저장소 fetch에는 승인한 호스트에 해당하는 플랫폼 인증정보를 쓴다. 내장 노드는 서비스의 인증 파일과 CA 번들을 사용하고, 별도로 시작한 노드는 운영자가 설정한 `--git-credential-file`과 `--ca-bundle` 경로를 사용한다. 인증이 필요한 요청이 실패하면 해당 사유를 기록한다. 노드에 요청마다 자격증명을 발급하거나 호스트별 CA·proxy profile을 배포하는 기능은 후속 작업이다. [플랫폼 GitHub 계정](GITHUB.md#플랫폼-github-계정) · [사내 CA](OPERATIONS.md#사내-ca)
+- PR 요청은 서버에서 base·head SHA와 변경 파일을 고정한다. 워커는 base 저장소의 `refs/pull/N/head`를 가져와 고정한 head와 대조한다. ref가 이동하면 고정 SHA를 다시 요청하고 확보할 수 없으면 실패한다. 분석 대상은 고정 head의 소스다. [PR 분석](GITHUB.md#pull-request-분석)
+- submodule·LFS 객체 다운로드와 bare cache는 설계 계약이다. 다른 호스트·저장소의 submodule에는 접근 정책을 다시 적용하고, bare cache는 credential 범위별로 나눈다.
 
 ### manifest와 입력 digest
 
@@ -326,7 +329,7 @@ lease·만료·정리 보고의 프로토콜은 [실행](EXECUTION.md)에 있다
 
 ### 프로젝트 환경 준비
 
-Go 모듈, Rust crate, JS/TS 패키지, Python 패키지(wheel만) 의존성 받기는 구현했다([의존성 준비](#의존성-준비)). 그 밖의 의존성 설치·빌드·테스트 실행은 설계 계약(미구현)이다.
+Go 모듈·Rust crate·JS/TS 패키지·Python wheel 의존성 받기와 `with-tests`의 기존 테스트 실행을 제공한다. C/C++ 의존성 받기와 별도 빌드 전용 단계는 설계 계약이다. [의존성 준비](#의존성-준비) · [기존 테스트 실행](EXECUTION.md#기존-테스트-실행)
 
 - 프로젝트 요구 환경, 확보한 환경, 차이, 분석 영향을 따로 저장한다. 모노레포는 모듈별로 다른 언어·버전을 허용한다. 같은 프로젝트의 두 버전 환경을 전역 PATH 수정으로 충돌시키지 않는다.
 - 버전 선택 우선순위는 명시된 프로젝트 제약 → lockfile → 검출된 호환 런타임 → 운영자 카탈로그다. 적합한 버전이 없으면 임의 최신 버전으로 바꾸지 않는다. 버전이 맞지 않아도 가능한 텍스트 검사는 계속하되 의미 분석·테스트의 유효 범위를 표시한다.
@@ -335,7 +338,7 @@ Go 모듈, Rust crate, JS/TS 패키지, Python 패키지(wheel만) 의존성 받
 - Go toolchain·module 다운로드, Rust toolchain·crate 접근, Node lifecycle script, Python build backend는 네트워크·코드 실행이 생길 수 있는 단계로 다룬다. 폐쇄망에서 실패하면 외부로 우회하지 않는다. 내부 CA·proxy·registry는 플랫폼 배포 설정에서 주입하고 저장소 설정이 대신하지 못한다.
 - C/C++: compile_commands의 directory·file·include 경로를 원본에서 snapshot·workspace로 매핑한다. 허용 root 밖 헤더는 명시적 read-only 입력으로 승인돼야 한다. 원본 command 문자열을 그대로 실행하지 않고 인자 배열·toolchain·플래그를 검증한다. 컴파일 DB를 configure·build로 생성하는 단계는 코드 실행이다. 전체 translation unit을 분석했는지 일부 variant만 분석했는지 보고한다. 복잡도와 텍스트 검사만 가능한 상태를 "C++ 정밀 분석 완료"로 표시하지 않는다.
 
-저장소 코드를 실행하는 분석 작업의 현재 허가 규칙(노드 운영자의 source root별 허가)은 [분석기](ANALYZERS.md)에 있다.
+작업 실행에는 읽기 권한과 별도로 [저장소 코드 실행 허가](EXECUTION.md#신뢰와-실행-권한)를 적용한다.
 
 ## 모듈·환경·문서 탐색
 
@@ -481,7 +484,7 @@ Go 모듈, Rust crate, JS/TS 패키지, Python 패키지(wheel만) 의존성 받
 
 ### 표시 단계와 task 단계
 
-- 표시 순서: `source`, `environment`, `documents`, (`build`, `test`), `static_analysis`, `code_review`, `report`. `build`·`test`는 그 단계의 task가 계획된 실행에만 나온다.
+- 화면은 `source`, `environment`, `documents`, (`build`, `test`), `static_analysis`, `code_review`, `report` 순서로 표시한다. `build`·`test`는 해당 task가 계획될 때만 표시한다. `with-tests`의 테스트는 실제 실행 순서에서 모델 검토 뒤에 온다.
 - `source`와 `report`는 서버 기록에서 계산한다. 나머지는 task의 단계 키(`tasks.stage`)에서 계산한다.
 - task 단계 enum: `environment`, `documents`, `static_analysis`, `code_review`, `build`, `test`.
 - 워커는 계획 때 `TaskSpec.Stage`를 채우고 `task_created`의 선택 필드 `stage`로 보낸다. 서버는 enum을 검증해 저장한다.
@@ -497,7 +500,8 @@ task key와 단계의 대응:
 | `docs.discover`, `review.documents` | `documents` |
 | 분석기 task(go vet 등) | `static_analysis` |
 | `review.investigate`, `review.interpret`, `review.verify` | `code_review` |
-| `review.scope`, `review.investigate.sNNN`, `review.verify.sNNN`(모듈 단위 slice, [검토](REVIEW.md#모듈-단위-검토-분할)) | `code_review` |
+| `review.scope`, `review.investigate.sNNN`, `review.verify.sNNN`(모듈 단위 slice, [검토](REVIEW.md#모듈-단위-검토-분할)), `review.contract` | `code_review` |
+| `test.*` | `test` |
 
 ### task 단계의 상태
 
