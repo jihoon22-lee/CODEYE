@@ -69,15 +69,25 @@ func cmdBackup(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "backup failed:", err)
 		return 1
 	}
-	if format == "json" {
-		printJSON(out, map[string]any{"output": abs, "manifest": m})
-		return 0
+	if err := writeBackupReceipt(out, format, abs, m); err != nil {
+		fmt.Fprintf(stderr, "backup saved at %s, but writing the command output failed: %v\n", abs, err)
+		return 1
 	}
-	fmt.Fprintf(out, "backup written to %s\n", abs)
-	fmt.Fprintf(out, "  database: migration %d, PostgreSQL %s, dump %d bytes sha256 %s\n", m.MigrationVersion, m.ServerVersion, m.Database.Size, m.Database.SHA256)
-	fmt.Fprintf(out, "  artifacts: %d contents, %d bytes (finalized at the same snapshot)\n", m.Artifacts.Count, m.Artifacts.Bytes)
-	fmt.Fprintf(out, "  rows: projects %d, runs %d, reports %d, evidence %d, schedules %d\n", m.Rows["projects"], m.Rows["runs"], m.Rows["reports"], m.Rows["evidence"], m.Rows["schedules"])
 	return 0
+}
+
+func writeBackupReceipt(out io.Writer, format, destination string, m backup.Manifest) error {
+	if format == "json" {
+		return printJSON(out, map[string]any{"output": destination, "manifest": m})
+	}
+	_, err := fmt.Fprintf(out, "backup written to %s\n"+
+		"  database: migration %d, PostgreSQL %s, dump %d bytes sha256 %s\n"+
+		"  artifacts: %d contents, %d bytes (finalized at the same snapshot)\n"+
+		"  rows: projects %d, runs %d, reports %d, evidence %d, schedules %d\n",
+		destination, m.MigrationVersion, m.ServerVersion, m.Database.Size, m.Database.SHA256,
+		m.Artifacts.Count, m.Artifacts.Bytes, m.Rows["projects"], m.Rows["runs"],
+		m.Rows["reports"], m.Rows["evidence"], m.Rows["schedules"])
+	return err
 }
 
 func cmdRestore(ctx context.Context, args []string, out, stderr io.Writer) int {

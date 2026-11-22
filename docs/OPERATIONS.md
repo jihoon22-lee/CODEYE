@@ -388,7 +388,7 @@ codeye restore [--config PATH] --from DIR [--format text|json]
 
 출력 디렉터리는 없거나 비어 있어야 한다. 기본 위치는 `<backup_dir>/codeye-<UTC 시각>`이고 설정이 없으면 `<state_dir>-backups` 아래에 둔다. 서비스 운영 중에도 백업할 수 있다. 정지 뒤 백업하면 진행 중인 실행의 복구가 필요 없다.
 
-DB 덤프와 확정 산출물 목록은 같은 논리 시점에 읽는다. 파일마다 SHA-256과 크기를 확인해 복사하며, 마지막에 `manifest.json`을 쓴다. manifest가 있는 세트만 유효하다. 백업은 서비스 lock을 잡아 start·stop·restore와 겹치지 않는다. `pg_dump`의 주 버전은 DB 서버와 같거나 높아야 한다.
+DB 덤프와 확정 산출물 목록은 같은 논리 시점에 읽는다. 파일마다 SHA-256과 크기를 확인해 복사하며, 마지막에 `manifest.json`을 쓴다. manifest가 있는 세트만 유효하다. 백업이 끝났어도 text·JSON 안내를 출력하지 못하면 명령은 종료 코드 1을 반환하고 표준 오류에 저장한 경로를 남긴다. 백업은 서비스 lock을 잡아 start·stop·restore와 겹치지 않는다. `pg_dump`의 주 버전은 DB 서버와 같거나 높아야 한다.
 
 **인증정보.** `pg_dump`·`pg_restore`는 관리형 cluster의 프로그램 디렉터리, external 모드면 `database.postgres_bin_dir`에서만 찾는다. argv에는 플래그와 파일 경로만 들어간다. 연결 정보는 자식 환경의 `PGHOST`·`PGPORT`·`PGUSER`·`PGPASSWORD`·`PGDATABASE`·`PGSSLMODE`·`PGSSLROOTCERT`로만 전달한다. `PGPASSFILE=/dev/null`로 사용자 `.pgpass`를 읽지 않게 하고, cwd는 임시 디렉터리다. 오류 문구의 비밀번호는 `[REDACTED]`로 바꾼다. URL 규칙은 controller와 같다(loopback만 `sslmode=disable`, 그 외 `verify-full`).
 

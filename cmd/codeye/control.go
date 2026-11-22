@@ -100,10 +100,10 @@ func withStore(ctx context.Context, stderr io.Writer, fn func(context.Context, *
 	return fn(opCtx, store)
 }
 
-func printJSON(out io.Writer, v any) {
+func printJSON(out io.Writer, v any) error {
 	enc := json.NewEncoder(out)
 	enc.SetEscapeHTML(false)
-	_ = enc.Encode(v)
+	return enc.Encode(v)
 }
 
 func sourceRootAdd(ctx context.Context, args []string, out, stderr io.Writer) int {
