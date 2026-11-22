@@ -28,8 +28,9 @@ type Instance struct {
 	// from it on each request, because `codeye up` rewrites them while the
 	// controller keeps running. The controller also reads the platform GitHub
 	// credentials from the state directory for each GitHub API call.
-	StateDir string
-	OpenCode OpenCodeConnection
+	StateDir     string
+	OpenCode     OpenCodeConnection
+	RuntimePaths RuntimePathManager
 	// GitHubAPI is the GitHub REST API base; "" is github.APIBase() (tests
 	// point it at a fake).
 	GitHubAPI string

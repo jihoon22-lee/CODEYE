@@ -241,11 +241,11 @@ func (s *Store) SetServiceSettings(ctx context.Context, by Principal, p ServiceS
 	})
 }
 
-// RecordOpenCodeOperation authorizes and audits a requested local OpenCode
+// RecordLocalSettingsOperation authorizes and audits a local installation
 // operation. Settings and probe work happen on the service machine outside
 // the transaction. The audit row records no paths or provider details.
-func (s *Store) RecordOpenCodeOperation(ctx context.Context, by Principal, operation string) error {
-	if operation != "save" && operation != "probe" {
+func (s *Store) RecordLocalSettingsOperation(ctx context.Context, by Principal, target, operation string) error {
+	if !(target == "opencode" && (operation == "save" || operation == "probe") || target == "runtime_paths" && operation == "save") {
 		return domain.ErrInvalid
 	}
 	_, err := transaction(ctx, s, func(tx pgx.Tx) (struct{}, error) {
@@ -253,7 +253,7 @@ func (s *Store) RecordOpenCodeOperation(ctx context.Context, by Principal, opera
 			return struct{}{}, err
 		}
 		detail := map[string]any{"kind": operation}
-		return struct{}{}, writeAudit(ctx, tx, principalAudit(by, AuditServiceSettingsSet).target("service", "opencode").with(detail))
+		return struct{}{}, writeAudit(ctx, tx, principalAudit(by, AuditServiceSettingsSet).target("service", target).with(detail))
 	})
 	return err
 }

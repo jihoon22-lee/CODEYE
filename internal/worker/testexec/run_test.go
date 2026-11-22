@@ -297,3 +297,21 @@ func TestMissingTestsAndZeroRunResults(t *testing.T) {
 		t.Fatal("zero passed tests treated as success")
 	}
 }
+
+func TestPythonVirtualEnvironmentKeepsInterpreterPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX virtual environment symlinks")
+	}
+	target, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	interpreter := filepath.Join(t.TempDir(), "python")
+	if err := os.Symlink(target, interpreter); err != nil {
+		t.Fatal(err)
+	}
+	handler := New(nil, Config{Python: interpreter})
+	if handler.tools.Python != interpreter {
+		t.Fatalf("test runner lost the selected interpreter: %q", handler.tools.Python)
+	}
+}

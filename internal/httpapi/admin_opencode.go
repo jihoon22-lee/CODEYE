@@ -116,7 +116,7 @@ func (s *Server) allowOpenCodeChange(q *request, operation string) bool {
 	}
 	ctx, cancel := q.ctx()
 	defer cancel()
-	if err := s.store.RecordOpenCodeOperation(ctx, q.principal(), operation); err != nil {
+	if err := s.store.RecordLocalSettingsOperation(ctx, q.principal(), "opencode", operation); err != nil {
 		s.storeError(q, err)
 		return false
 	}

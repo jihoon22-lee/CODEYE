@@ -497,6 +497,8 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 | `PUT/DELETE /admin/source-roots/{rid}/grants/{uid}` | — | 204. 이미 그 상태면 변경 없이 204 |
 | `GET /admin/providers` | — | `{items: [{id, kind, host, api_url}]}` |
 | `POST /admin/providers` | `{host}` | Git host 승인. 새로 더하면 201, 이미 있으면 200(`AdminProvider`). `github.com`은 `github`, 그 밖은 `ghes`. 형식 오류 422. 감사 `provider.added` |
+| `GET /admin/runtime-paths` | — | 관리자에게 로컬 도구의 수동 지정 값(`paths`), 시작 시 찾은 기본값(`automatic_paths`), `auto_detect`와 `editable`을 반환한다. |
+| `PATCH /admin/runtime-paths` | `{"paths":{"java":"/opt/jdk-21","go":""}}` | Python·JDK·Go·Cargo·Node 중 보낸 키만 한 번에 저장한다. 빈 문자열은 수동 지정을 해제한다. 일반 사용자 또는 CSRF 오류는 403, 별도 controller는 409, 알 수 없는 키는 400, 실행 파일 확인 실패는 422와 해당 키를 반환한다. [사용 안내서](GUIDE.md#언어-도구-경로) |
 | `GET /admin/opencode` | — | 관리자가 저장한 경로와 모델, 수정 가능 여부, 현재 선택된 모델과 연결 확인 결과. 인증 파일 내용은 전달하지 않는다. |
 | `PUT /admin/opencode` | `{executable, config_file, credential_file, model}` | 관리형 서비스의 로컬 OpenCode 설정을 교체한다. 경로는 절대 경로 또는 서비스 계정의 `~/`로 입력한다. 빈 값은 설치 기본값을 쓴다. 저장은 모델을 호출하지 않으며 새 분석부터 적용된다. |
 | `POST /admin/opencode/probe` | — | 저장된 설정으로 합성 입력을 한 번 보낸다. 응답의 `probe`와 `reason`으로 결과를 확인한다. [관리자 설정](GUIDE.md#관리자-화면에서-연결하기) |
@@ -506,7 +508,7 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 
 - 로그인 링크(`login_link.url`, `expires_at`)는 응답에 한 번만 나온다. 관리자는 링크를 사용자에게 안전한 경로로 전달하고, 사용자는 링크로 로그인한 뒤 `POST /session/password`로 비밀번호를 정한다. 그 전에는 다른 경로가 403 `PASSWORD_CHANGE_REQUIRED`다.
 - source root와 provider는 웹(위 경로)이나 운영자 CLI(`codeye source-root add`, `codeye provider add`)로 더한다. 웹에서 더한 root는 `codeye up`이 띄운 에이전트(능력 `source:controller`)가 배정에서 경로를 받아 바로 읽는다. 따로 띄운 노드는 자기 등록에 든 root만 읽는다.
-- 첫 관리자와 비밀번호 직접 지정은 운영자 CLI(`codeye user create --admin`, `codeye user passwd`)다([운영](OPERATIONS.md#계정과-관리자-cli)).
+- `codeye up`은 첫 관리자와 로그인 링크를 만든다. controller를 따로 띄운 운영자는 `codeye user create --admin`, 비밀번호 직접 지정은 `codeye user passwd`를 쓴다([운영](OPERATIONS.md#계정과-관리자-cli)).
 - 감사 기록 항목은 `id`(문자열), `occurred_at`, `actor_kind`, `actor_user_id`, `actor_username`, `actor_node_id`, `action`, `target_type`, `target_id`, `project_id`, `request_id`, `detail`이다. action 목록과 detail 규칙은 [보안](SECURITY.md#감사)에 있다.
 
 ## 노드 API 요약

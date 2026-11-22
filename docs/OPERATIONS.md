@@ -33,7 +33,7 @@ RHEL 8.10 호스트 커널과 실제 회사 NFS·CA·미러·GHES, macOS에서�
 
 ```text
 codeye migrate                                   # 외부 PostgreSQL schema 적용
-codeye user create [--name NAME] [--username NAME [--password-file PATH]] [--admin]   # 첫 관리자는 CLI로 만든다
+codeye user create [--name NAME] [--username NAME [--password-file PATH]] [--admin]   # 수동으로 띄운 controller의 관리자 생성
 codeye source-root add --label LABEL --path ABSOLUTE_DIR
 codeye source-root grant --root ROOT_ID --user USER_ID
 codeye provider add --kind github|ghes --host HOST [--api-url https://HOST/api/v3]
@@ -53,6 +53,8 @@ codeye agent --controller URL --state-dir DIR [--enroll-token-file PATH] [--auto
 - 한 머신 밖의 노드를 쓰는 배포는 검증하지 않았다([서버·노드 배포](#서버노드-배포)).
 
 ### 계정과 관리자 CLI
+
+`codeye up`은 처음 실행할 때 관리자를 자동 생성한다. [링크로 로그인하거나 본인 이메일에 관리자 권한 부여하기](GUIDE.md#첫-관리자-로그인)
 
 운영자 CLI는 `CODEYE_DATABASE_URL`로 DB에 직접 접근하며 감사 기록에는 행위자 `operator_cli`로 남는다. 사용자는 `--id USER_ID` 또는 `--username NAME` 중 하나로 가리킨다.
 
@@ -118,6 +120,8 @@ TOOL         STATUS  VERSION   WHERE / HOW TO ADD
 go           found   1.27.4    ~/.local/bin/go
 cppcheck     missing -         not found - `micromamba install -p ~/.local/share/codeye-tools/cpp cppcheck` (or ...) or set `agent.tools.cppcheck`
 ```
+
+관리자는 **관리 > 언어 도구 경로**에서 로컬 분석에 사용할 Python, JDK, Go, Cargo, Node.js를 변경할 수 있다. 시작 시 기록한 자동 탐색 경로가 각 입력란 아래 표시된다. 서비스 계정으로 실행할 수 있는 도구를 지정한다. [지원 경로와 설정 파일 키](GUIDE.md#언어-도구-경로)
 
 시작할 때(`codeye start`·`up`)도 같은 탐색을 하고 같은 표를 출력한다.
 
@@ -324,7 +328,7 @@ codeye up
 
 ## 배포판 업그레이드
 
-v0.1.1과 v0.1.2는 DB 마이그레이션 버전 16을 사용한다. 이전 보고서는 게시 당시의 리비전으로 열리며, 새 분석부터 테스트 케이스 수와 검증된 위치를 포함할 수 있다. 업그레이드 후 `./codeye tools --checklist`에서 새 언어 도구의 설치 상태를 확인한다. [언어별 분석과 테스트](GUIDE.md#언어별-분석과-테스트)
+v0.1.1부터 v0.1.3까지 DB 마이그레이션 버전은 16이다. 같은 설정·상태 디렉터리로 시작하면 계정, 프로젝트, 게시된 보고서와 기존 도구 경로를 이어서 사용한다. v0.1.3에서는 **관리 > 언어 도구 경로**에서 수동 지정값과 시작 시 찾은 기본 경로를 확인할 수 있다. [언어 도구 설정](GUIDE.md#언어-도구-경로)
 
 기존 설치에서 쓰던 Linux 계정으로 작업한다. 같은 설정 파일, `state_dir`와 DB를 사용하면 기존 웹 계정·프로젝트·실행·보고서를 열 수 있다. 기본 경로를 썼다면 `HOME`, `XDG_CONFIG_HOME`, `XDG_STATE_HOME` 값도 기존 실행 환경과 맞춘다. `state_dir`에 관리형 PostgreSQL 데이터와 산출물이 있으므로 배포판을 푸는 위치와 구분한다. 외부 PostgreSQL은 기존 연결 설정 `CODEYE_DATABASE_URL`을 사용한다. [서비스 설정 파일](#서비스-설정-파일) · [상태 디렉터리](#상태-디렉터리)
 

@@ -71,7 +71,7 @@ export function App({ api, controller, idempotency, link }: Props) {
       {signedIn?.logoutFailed && <p role="alert" className="error">{t.session.logoutFailed}</p>}
       {passwordSet && !forced && shown === 'projects' && <p role="status">{t.accounts.password.done}</p>}
       <div id="main" tabIndex={-1}>
-        {shown === 'doctor' ? (signedIn && !forced ? <ToolsView api={api} onOpenCode={signedIn.isAdmin ? () => go('admin', 'opencode') : undefined} /> : <DoctorView />)
+        {shown === 'doctor' ? (signedIn && !forced ? <ToolsView api={api} onRuntimePaths={signedIn.isAdmin ? () => go('admin', 'runtimes') : undefined} onOpenCode={signedIn.isAdmin ? () => go('admin', 'opencode') : undefined} /> : <DoctorView />)
           : !signedIn ? <ConnectionPanel session={session} controller={controller} />
           : shown === 'account' ? <>
             <PasswordForm key={signedIn.userId} controller={controller} user={signedIn} forced={forced} onDone={() => { if (forced) { setPasswordSet(true); setView('projects'); } }} />

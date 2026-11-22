@@ -16,4 +16,9 @@ test('the codeye up link signs in and opens the project run with its report', as
   await expect(page.getByRole('heading', { name: '현재 실행', exact: true })).toBeVisible();
   // The published report opens by itself.
   await expect(page.getByRole('article', { name: '분석 보고서' })).toBeVisible({ timeout: 25_000 });
+  await page.getByRole('button', { name: '관리', exact: true }).click();
+  await page.getByRole('button', { name: '언어 도구 경로', exact: true }).click();
+  await page.getByLabel('JDK', { exact: true }).fill('/nonexistent/codeye-missing-jdk');
+  await page.getByRole('button', { name: '경로 저장' }).click();
+  await expect(page.getByRole('alert')).toContainText('JDK');
 });

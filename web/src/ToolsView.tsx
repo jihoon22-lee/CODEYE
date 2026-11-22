@@ -12,7 +12,7 @@ const t = ko.tools;
 // the model and platform source access. A controller that recorded no setup (started
 // on its own) does not know its nodes' tools; there the doctor file view stays. Tool paths and
 // hints reach administrators only.
-export function ToolsView({ api, onOpenCode }: { api: Api; onOpenCode?: () => void }) {
+export function ToolsView({ api, onOpenCode, onRuntimePaths }: { api: Api; onOpenCode?: () => void; onRuntimePaths?: () => void }) {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [error, setError] = useState<ErrorText | null>(null);
   const [loads, setLoads] = useState(0);
@@ -25,7 +25,8 @@ export function ToolsView({ api, onOpenCode }: { api: Api; onOpenCode?: () => vo
   if (error) return <section className="panel"><ErrorNote error={{ ...error, message: `${t.failed} ${error.message}` }} /><button type="button" onClick={() => setLoads(n => n + 1)}>{t.reload}</button></section>;
   if (!setup) return <section className="panel" role="status"><p>{t.loading}</p></section>;
   const openCode = setup.is_admin && onOpenCode && <button type="button" onClick={onOpenCode}>{ko.accounts.admin.tabs.opencode}</button>;
-  if (setup.tools === null && setup.model === null) return <>{openCode}<DoctorView /></>;
+  const runtimePaths = setup.is_admin && onRuntimePaths && <button type="button" onClick={onRuntimePaths}>{ko.accounts.admin.tabs.runtimes}</button>;
+  if (setup.tools === null && setup.model === null) return <>{runtimePaths}{openCode}<DoctorView /></>;
   const tools = setup.tools?.tools ?? [];
   const status = (s: string) => (Object.hasOwn(t.statuses, s) ? t.statuses[s] : t.statusUnknown(s));
   const model = setup.model;
@@ -39,6 +40,7 @@ export function ToolsView({ api, onOpenCode }: { api: Api; onOpenCode?: () => vo
     <section aria-labelledby="tools-title"><h1 id="tools-title">{t.title}</h1><p>{t.intro}</p></section>
     <section className="panel" aria-labelledby="tools-table">
       <h2 id="tools-table">{t.table}</h2>
+      {runtimePaths}
       {setup.tools?.detected_at && <p className="small">{t.detectedAt(formatInstant(setup.tools.detected_at))}</p>}
       {tools.length === 0 ? <p>{t.none}</p> : <div className="table"><table>
         <thead><tr>{t.columns.map(c => <th key={c} scope="col">{c}</th>)}</tr></thead>
