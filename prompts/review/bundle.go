@@ -36,6 +36,7 @@ var roleFiles = map[string]string{
 var languageFiles = map[string]string{
 	"cpp":        "languages/cpp.md",
 	"go":         "languages/go.md",
+	"java":       "languages/java.md",
 	"javascript": "languages/javascript.md",
 	"python":     "languages/python.md",
 	"rust":       "languages/rust.md",

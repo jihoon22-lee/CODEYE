@@ -1074,7 +1074,7 @@
         "languages": {
           "type": "array",
           "minItems": 7,
-          "maxItems": 7,
+          "maxItems": 8,
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -1092,6 +1092,7 @@
                   "javascript",
                   "rust",
                   "cpp",
+                  "java",
                   "common",
                   "model"
                 ]

@@ -11,6 +11,7 @@ const (
 	Agent        = "agent_instructions"
 	Design       = "design"
 	Contributing = "contributing"
+	JavaAPI      = "java_javadoc"
 	Other        = "other"
 )
 
@@ -41,6 +42,8 @@ func Classify(p string) string {
 		return Readme
 	case strings.HasPrefix(lower, "contributing") && docExt[ext]:
 		return Contributing
+	case JavaAPIPath(p):
+		return JavaAPI
 	case !markupExt[ext]:
 		return ""
 	}
@@ -59,6 +62,27 @@ func Classify(p string) string {
 		}
 	}
 	return Other
+}
+
+// JavaAPIPath identifies conventional production Java paths that can carry API
+// documentation. A declaration parser still has to confirm an attached comment.
+func JavaAPIPath(p string) bool {
+	base := path.Base(p)
+	if !strings.HasSuffix(base, ".java") || strings.HasSuffix(base, "Test.java") ||
+		strings.HasSuffix(base, "Tests.java") || base == "package-info.java" || base == "module-info.java" {
+		return false
+	}
+	dirs := strings.Split(path.Dir(p), "/")
+	for _, dir := range dirs {
+		switch strings.ToLower(dir) {
+		case "test", "tests", "testdata", "vendor", "third_party", "third-party", "generated", "fixtures", "target", "build", "node_modules":
+			return false
+		}
+		if strings.HasPrefix(dir, ".") {
+			return false
+		}
+	}
+	return strings.Contains("/"+p, "/src/main/java/")
 }
 
 // Scope returns the default code directory described by a guidance document.

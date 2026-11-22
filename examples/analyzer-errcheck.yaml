@@ -1,0 +1,28 @@
+schema_version: '0.1'
+id: go.errcheck
+languages: [go]
+planned_platforms: [linux, windows]
+availability: verified
+version_contract: errcheck-1.30-fixture-tested
+analysis_scope: [typed, interfile]
+executes_repository_code: false
+requires_build: false
+network_policy: none
+version_probe:
+  executable: '${errcheck}'
+  argv: [-version]
+execute:
+  executable: '${errcheck}'
+  argv: [-mod=readonly, './...']
+  cwd: '${workspace}/${module_dir}'
+  timeout_seconds: 900
+  stdout_max_bytes: 8388608
+  env_allowlist: [PATH, LANG, SystemRoot, GOENV, GOWORK, GOTOOLCHAIN, GOPROXY, GOSUMDB, GOVCS, GOFLAGS, CGO_ENABLED, GOCACHE, GOPATH, GOMODCACHE]
+exit_codes:
+  clean: [0]
+  findings: [1]
+  error: [2]
+parser:
+  id: errcheck
+  format: text
+  input: stdout-artifact

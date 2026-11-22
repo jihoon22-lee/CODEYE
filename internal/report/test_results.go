@@ -39,7 +39,7 @@ func testResult(task Task, execution Execution) string {
 	switch {
 	case task.Status == string(domain.TaskSucceeded) && *execution.ExitCode == 0:
 		return TestPassed
-	case task.Status == string(domain.TaskFailed) && *execution.ExitCode != 0 && deref(task.Reason) != "no_tests_executed":
+	case task.Status == string(domain.TaskFailed) && (*execution.ExitCode != 0 || execution.TestCases != nil && execution.TestCases.Counts.Failed > 0) && deref(task.Reason) != "no_tests_executed":
 		return TestFailed
 	default:
 		return TestNotRun
@@ -116,8 +116,13 @@ func (v secView) TestRunPart() secPart {
 		if task.Reason != nil && *task.Reason != "test_command_failed" {
 			details = append(details, reason)
 		}
+		if summary := execution.TestCases; summary != nil {
+			counts := summary.Counts
+			details = append(details, tf(l, "tests.case_counts", counts.Passed, counts.Failed, counts.Skipped))
+			suite = summary.Runner
+		}
 		state := secCell{Text: label, Note: strings.Join(details, " · ")}
-		if status == TestFailed && len(execution.GoTestFailures) > 0 {
+		if status == TestFailed && len(execution.GoTestFailures) > 0 && !locatedFailure(execution.TestCases) {
 			state.Text = l.Label("tests.test_failed")
 			statusSummary = state.Text
 			for i, failure := range execution.GoTestFailures {
@@ -138,6 +143,22 @@ func (v secView) TestRunPart() secPart {
 				location.Suffix = ":" + strconv.Itoa(failure.Line)
 				location.URL = snapshotBrowserURL(r, failure.Path, failure.Line, failure.Line)
 				table.Rows = append(table.Rows, []secCell{test, location, result})
+			}
+			continue
+		}
+		if summary := execution.TestCases; summary != nil {
+			table.Rows = append(table.Rows, []secCell{{Text: suite, Note: directory}, txt("—"), state})
+			for _, c := range summary.Cases {
+				if c.Status != "failed" {
+					continue
+				}
+				loc := txt("—")
+				if c.Path != "" {
+					loc = code(c.Path)
+					loc.Suffix = ":" + strconv.Itoa(c.Line)
+					loc.URL = snapshotBrowserURL(r, c.Path, c.Line, c.Line)
+				}
+				table.Rows = append(table.Rows, []secCell{code(c.Name), loc, txt(l.Label("tests.test_failed"))})
 			}
 			continue
 		}

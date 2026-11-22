@@ -121,10 +121,10 @@ func (r Result) Tool(name string) (Tool, bool) {
 }
 
 // BaselineUsable reports whether at least one baseline analyzer of an
-// ecosystem (go vet, cppcheck, ruff, ESLint, cargo check) is usable, that is,
+// ecosystem (go vet, cppcheck, ruff, ESLint, cargo check, PMD) is usable, that is,
 // whether an analysis can produce any tool finding at all.
 func (r Result) BaselineUsable() bool {
-	for _, name := range []string{"go", "cppcheck", "ruff", "eslint", "cargo"} {
+	for _, name := range []string{"go", "cppcheck", "ruff", "eslint", "cargo", "pmd"} {
 		if t, ok := r.Tool(name); ok && t.Status == Found {
 			return true
 		}
@@ -181,8 +181,8 @@ type Options struct {
 }
 
 // order is the fixed order of Result.Tools.
-var order = append([]string{"go", "git", "gh", "node", "opencode", "staticcheck", "gitleaks", "ruff", "mypy", "pyright", "bandit", "lizard",
-	"cppcheck", "clang-tidy", "eslint", "tsc", "jscpd", "cargo", "clippy"},
+var order = append([]string{"go", "git", "gh", "node", "opencode", "staticcheck", "errcheck", "gitleaks", "ruff", "mypy", "pyright", "bandit", "lizard",
+	"cppcheck", "clang-tidy", "gcc", "eslint", "tsc", "dependency-cruiser", "import-linter", "jscpd", "cargo", "clippy", "java", "pmd", "spotbugs"},
 	// The package managers of the dependency fetch.
 	append(append([]string{}, jsManagerNames...), pythonManagerNames...)...)
 
@@ -222,9 +222,9 @@ func Detect(ctx context.Context, opts Options) Result {
 
 	// Phase one: tools that need no other tool. Phase two: tools run by node
 	// or needing go (Staticcheck), validated against the phase-one results.
-	d.run([]string{"go", "git", "gh", "node", "opencode", "cargo", "gitleaks", "ruff", "mypy", "bandit", "lizard", "cppcheck", "clang-tidy"})
-	d.run([]string{"staticcheck", "pyright", "eslint", "tsc", "jscpd"})
-	d.run([]string{"clippy"})
+	d.run([]string{"go", "git", "gh", "node", "opencode", "cargo", "java", "gitleaks", "ruff", "mypy", "bandit", "import-linter", "lizard", "cppcheck", "clang-tidy", "gcc"})
+	d.run([]string{"staticcheck", "errcheck", "pyright", "eslint", "tsc", "dependency-cruiser", "jscpd"})
+	d.run([]string{"clippy", "pmd", "spotbugs"})
 	// Package managers: the JS ones after node, python after uv (an
 	// interpreter without pip is usable with uv).
 	d.run(append(append([]string{}, jsManagerNames...), pythonManagerNames[0]))

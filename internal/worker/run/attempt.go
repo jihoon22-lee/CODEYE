@@ -21,6 +21,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
@@ -313,7 +314,11 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 		_ = json.Unmarshal(job.Scope, &scope)
 	}
 	ajob := analysis.Job{AllowModelReview: job.AllowModelReview, AllowRepositoryCode: job.AllowRepositoryCode, ModelReviewWithheld: job.ModelReviewWithheld, RepositoryCodeWithheld: job.RepositoryCodeWithheld, AllowDependencyFetch: job.AllowDependencyFetch, RunID: job.Attempt.RunID, AttemptID: id, Epoch: job.Attempt.Epoch, Profile: job.Profile, Scope: scope, Snapshot: a.snapshot, Scratch: a.scratch, PullRequest: job.PullRequest}
-	specs, err := safePlan(a.ctx, handler, ajob)
+	if job.Source.Kind == "local" && job.Source.ApprovedRoot != "" {
+		ajob.SourceDir = filepath.Join(job.Source.ApprovedRoot, filepath.FromSlash(job.Source.RelativePath))
+	}
+	taskContext := review.WithAttemptSourceIndex(a.ctx, ajob)
+	specs, err := safePlan(taskContext, handler, ajob)
 	if err != nil || len(specs) == 0 {
 		return nodeproto.OutcomeFailed, nodeproto.ReasonHandlerError, nil
 	}
@@ -354,7 +359,8 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 		if a.ctx.Err() != nil || a.stopNew.Load() {
 			break
 		}
-		w.runTask(a, handler, ajob, t)
+		w.runTask(taskContext, a, handler, ajob, t)
+		collectTestEvidence(&ajob, t)
 	}
 	if a.ctx.Err() != nil {
 		return nodeproto.OutcomeCancelled, nodeproto.ReasonCancelled, nil
@@ -459,13 +465,13 @@ func (w *worker) setTask(a *attempt, t *taskRun, status domain.TaskStatus, reaso
 	return nil
 }
 
-func (w *worker) runTask(a *attempt, h analysis.Handler, job analysis.Job, t *taskRun) {
+func (w *worker) runTask(ctx context.Context, a *attempt, h analysis.Handler, job analysis.Job, t *taskRun) {
 	if err := w.setTask(a, t, domain.TaskRunning, ""); err != nil {
 		return
 	}
 	t.started = true
 	runner := &journalRunner{w: w, a: a, task: t.spec.Key, taskID: t.taskID}
-	res := safeRun(a.ctx, h, job, t.spec, runner)
+	res := safeRun(ctx, h, job, t.spec, runner)
 	res.Limitations = append(res.Limitations, w.restoreWorkspace(a)...)
 	t.result = res
 	status, reason := w.verifyTaskResult(a, t.spec.Key, res)

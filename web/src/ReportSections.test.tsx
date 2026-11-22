@@ -40,6 +40,38 @@ function example(name: 'report.json' | 'report-go-vet.json' | 'report-slices.jso
   return doc;
 }
 
+describe('code-derived documentation coverage', () => {
+  it('pairs a declared selector with its exact searched guides and omits the section when there are no gaps', () => {
+    const doc = example('report.json');
+    doc.project = { name: 'Report printer' };
+    const guides = doc.documents.items
+      .filter((item: { status: string; class: string }) => item.status === 'selected' && ['readme', 'design', 'other'].includes(item.class))
+      .map(({ path, line_count }: { path: string; line_count: number }) => ({ path, line_count }));
+    expect(guides.length).toBeGreaterThan(0);
+    const gap = {
+      kind: 'cli_option', symbol: '--report-zone', default: 'UTC', scope: '.',
+      source: { path: 'cmd/tool/main.go', start_line: 12, end_line: 12 },
+      searched: guides,
+    };
+    doc.documents.documentation_gaps = [gap];
+    const { rerender } = render(<ReportDocument report={parseAnalysisReport(doc, doc.run_id)} />);
+    const documentsTab = t.sections.titles.documents;
+    fireEvent.click(screen.getByRole('tab', { name: documentsTab }));
+    const panel = within(screen.getByRole('tabpanel', { name: documentsTab }));
+    const table = within(panel.getByText(t.documentationGaps.heading).parentElement!);
+    expect(table.getByText('--report-zone')).toBeTruthy();
+    expect(table.getByText('UTC')).toBeTruthy();
+    expect(table.getByText('cmd/tool/main.go:12')).toBeTruthy();
+    for (const file of guides) {
+      expect(table.getByText(file.line_count > 1 ? `${file.path}:1–${file.line_count}` : `${file.path}:1`)).toBeTruthy();
+    }
+
+    delete doc.documents.documentation_gaps;
+    rerender(<ReportDocument report={parseAnalysisReport(doc, doc.run_id)} />);
+    expect(screen.queryByText(t.documentationGaps.heading)).toBeNull();
+  });
+});
+
 describe('existing test results', () => {
   const failure = { name: 'TestRetainsDeclaration', path: 'internal/billing/adjustment_test.go', line: 42 };
   const commit = '9'.repeat(40);
@@ -333,7 +365,7 @@ describe('analysis sections', () => {
     expect(within(screen.getByRole('tabpanel', { name })).getByText(text, { exact: false })).toBeTruthy();
   });
 
-  it('keeps Python API citations at their source lines and retains the Markdown page', () => {
+  it('keeps Python and Rust API citations at their source lines and retains the authored guide', () => {
     const doc = example('report.json');
     const evidence = doc.documents.evidence.find((item: Record<string, unknown>) => item.kind === 'document');
     evidence.path = 'src/example/api.py';
@@ -343,7 +375,13 @@ describe('analysis sections', () => {
       kind: 'document', path: 'src/example/api.py', directivePath: 'docs/api.md', line: evidence.start_line,
     });
     evidence.directive_path = 'docs/api.rst';
+    expect(parseAnalysisReport(doc, doc.run_id).sections?.documents.citations.find(item => item.id === evidence.id))
+      .toMatchObject({ path: 'src/example/api.py', directivePath: 'docs/api.rst' });
+    evidence.path = 'src/example/api.rs';
     expect(() => parseAnalysisReport(doc, doc.run_id)).toThrow();
+    evidence.directive_path = 'README.md';
+    expect(parseAnalysisReport(doc, doc.run_id).sections?.documents.citations.find(item => item.id === evidence.id))
+      .toMatchObject({ path: 'src/example/api.rs', directivePath: 'README.md' });
   });
 
   it('shows run identity and navigates the published report tabs by keyboard', () => {
@@ -1346,4 +1384,17 @@ describe('analysis sections', () => {
     expect(within(gaps).getByText(t.sections.gapLabels.model_input_not_screened)).toBeTruthy();
     expect(doc.tasks.some((x: { reason: string | null }) => x.reason === 'secret_screen_failed')).toBe(false);
   });
+});
+
+it('gives a projected flat tool finding a localized title without replacing its stored identity', () => {
+  const doc = example('report-go-vet.json');
+  const stored = doc.findings[0];
+  const observation = doc.observations.find((o: Record<string, unknown>) => o.id === stored.observation_ids[0]);
+  expect(observation).toBeTruthy();
+  observation.tool = 'java.spotbugs';
+  observation.rule_id = 'EI_EXPOSE_REP2';
+  stored.title = 'java.spotbugs EI_EXPOSE_REP2 진단 (sample.java:4)';
+  const report = parseAnalysisReport(doc, doc.run_id);
+  expect(report.findings[0]).toMatchObject({ title: stored.title, fingerprint: stored.fingerprint ?? null,
+    displayTitle: expect.stringContaining('외부에서 받은 가변 객체를 그대로 저장') });
 });

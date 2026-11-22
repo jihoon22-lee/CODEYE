@@ -1,5 +1,5 @@
 import { useContext, useMemo, type MouseEvent } from 'react';
-import { sourceEvidenceURL } from './analysisReport';
+import { sourceEvidenceURL, type AnalysisReport } from './analysisReport';
 import type { Sections } from './parseReportSections';
 import { reportKo as t } from './locales/report-ko';
 import { Citations, CodeWindow, PinnedSourceLink, ReportPreview, ReportSourceContext, WorkflowReading, label, sourceLocation } from './ReportParts';
@@ -42,12 +42,34 @@ function readingType(row: DocumentReading) {
   }
 }
 
-export function ReportDocumentReading({ documents, includesCode, id, comparisonId }: {
-  documents: Sections['documents']; includesCode: boolean; id: string; comparisonId: (index: number) => string;
+export function ReportDocumentReading({ documents, includesCode, id, comparisonId, results }: {
+  results?: AnalysisReport['testResults']; documents: Sections['documents']; includesCode: boolean; id: string; comparisonId: (index: number) => string;
 }) {
   const { groups, citations, sourceByRef } = useMemo(() => documentReadingGroups(documents, includesCode), [documents, includesCode]);
   const catalog = includesCode ? documents.citations : documents.citations.map(c => ({ ...c, excerpt: null }));
   const sourceBase = useContext(ReportSourceContext);
+  const testLines = useMemo(() => {
+    const byPath = new Map<string, { line: number; status: string }[]>();
+    for (const task of results?.tasks ?? []) {
+      for (const c of task.cases?.cases ?? []) {
+        if (!c.path || !c.line) continue;
+        const existing = byPath.get(c.path) ?? [];
+        existing.push({ line: c.line, status: c.status });
+        byPath.set(c.path, existing);
+      }
+    }
+    return byPath;
+  }, [results]);
+  function observedTests(refs: string[]) {
+    if (!testLines.size) return null;
+    const spans = refs.map(id => citations.get(id)).filter(c => c?.kind === 'test');
+    const paths = new Set(spans.map(c => c?.path));
+    const matched = [...paths].flatMap(path => path ? (testLines.get(path) ?? []).filter(item =>
+      spans.some(c => c?.path === path && c.line <= item.line && item.line <= c.end)) : []);
+    if (!matched.length) return null;
+    const count = (status: string) => matched.filter(c => c.status === status).length;
+    return <p><strong>{t.tests.contractObservation}</strong> {t.tests.caseCounts(count('passed'), count('failed'), count('skipped'))}</p>;
+  }
   const readingId = (row: DocumentReading) => row.kind === 'comparison' ? comparisonId(row.index) : `${id}-document-${row.kind}-${row.index + 1}`;
   const sourceId = (index: number) => `${id}-document-source-${index}`;
   const groupId = (index: number) => `${id}-document-path-${index + 1}`;
@@ -145,6 +167,7 @@ export function ReportDocumentReading({ documents, includesCode, id, comparisonI
                     <p><strong>{t.reading.additionalObservation}</strong>{includesCode && <> {reading.value.additional.reason}</>}</p>
                     <Citations refs={reading.value.additional.codeRefs} catalog={catalog} showLocation />
                   </>}
+                  {observedTests([...reading.value.codeRefs, ...(reading.value.additional?.codeRefs ?? []), ...(reading.value.workflow ? [reading.value.workflow.test] : [])])}
                   {reading.value.workflow && <WorkflowReading workflow={reading.value.workflow} catalog={catalog} />}
                 </>}
                 {reading.kind !== 'comparison' && <>

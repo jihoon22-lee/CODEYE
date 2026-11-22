@@ -33,11 +33,12 @@ def evidence_document_scope(evidence: dict, root: Path | None = None) -> str:
     page = PurePosixPath(directive)
     scope = document_scope(directive)
     src = PurePosixPath(evidence["path"])
-    ensure(evidence["kind"] == "document" and src.suffix == ".py" and page.suffix.lower() in {".md", ".markdown"}
+    formats = {".py": {".md", ".markdown", ".rst"}, ".rs": {".md", ".markdown"}}
+    ensure(evidence["kind"] == "document" and page.suffix.lower() in formats.get(src.suffix, set())
            and not page.is_absolute() and ".." not in page.parts and src.is_relative_to(PurePosixPath(scope)),
-           "Python API documentation provenance is invalid")
+           "Source API documentation provenance is invalid")
     if root is not None:
-        ensure((root / page).is_file(), "Python API documentation page is missing")
+        ensure((root / page).is_file(), "Source API documentation page is missing")
     return scope
 
 
@@ -136,7 +137,7 @@ def compact_json(text: str) -> bytes:
 # Language guides follow the snapshot's in-scope source ecosystems (A29).
 # The example snapshot has Go source only; TestReviewExampleRecords checks
 # that selection against the worker.
-ROLE_LANGUAGES = ("cpp", "go", "javascript", "python", "rust")
+ROLE_LANGUAGES = ("cpp", "go", "java", "javascript", "python", "rust")
 ROLE_EXAMPLE_LANGUAGES = ("go",)
 
 

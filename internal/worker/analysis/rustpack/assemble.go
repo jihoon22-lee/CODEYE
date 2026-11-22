@@ -58,9 +58,13 @@ type Kind int
 const (
 	KindCheck Kind = iota
 	KindClippy
+	KindDoc
 )
 
 func (k Kind) main() string {
+	if k == KindDoc {
+		return execDoc
+	}
 	if k == KindClippy {
 		return execClippy
 	}
@@ -72,6 +76,7 @@ const (
 	execRustc   = "rustc.version"
 	execCargo   = "cargo.version"
 	execClippyV = "clippy.version"
+	execDoc     = "cargo.doc"
 	execCheck   = "cargo.check"
 	execClippy  = "clippy.check"
 )
@@ -359,7 +364,14 @@ func CheckArgs() []string {
 	return []string{"check", "--offline", "--locked", "--message-format=json", "--workspace", "--all-targets"}
 }
 
+func DocArgs() []string {
+	return []string{"doc", "--offline", "--locked", "--workspace", "--no-deps", "--message-format=json"}
+}
+
 func keepCode(k Kind, code string) bool {
+	if k == KindDoc {
+		return strings.HasPrefix(code, "rustdoc::")
+	}
 	if k == KindClippy {
 		return strings.HasPrefix(code, "clippy::")
 	}
@@ -388,6 +400,10 @@ func assemble(in assembleInput) obsdoc.Document {
 		id, tool, rulePack, sel, adapter = ClippyAnalyzerID, "clippy", ClippyRulePackID, ClippySelection(), "clippy"
 		required = false
 	}
+	if in.Kind == KindDoc {
+		id, tool, rulePack, sel, adapter = "rust.rustdoc", "cargo", "codeye-rust-doc", append(DocArgs(), "-W rustdoc::broken_intra_doc_links", "--cap-lints warn", "keep:rustdoc::*"), "cargo-doc"
+		required = false
+	}
 	doc := obsdoc.New(obsdoc.Analyzer{ID: id, Ecosystem: "rust", Required: required}, obsdoc.Component{ID: adapter, Version: AdapterVersion},
 		obsdoc.Component{ID: ParserID, Version: ParserVersion}, in.TaskKey, in.ManifestDigest)
 	doc.Module.Dir = in.ModuleDir
@@ -404,6 +420,9 @@ func assemble(in assembleInput) obsdoc.Document {
 		doc.RulePack.ConfigFiles = nil
 	}
 	doc.Target.Properties = map[string]string{"features": "default", "targets": "all_targets", "workspace": "true", "host_only": "true", "profile": "dev"}
+	if in.Kind == KindDoc {
+		doc.Target.Properties["targets"] = "documentation"
+	}
 	doc.Coverage.Unit = "crate"
 	doc.Coverage.FilesInScope = ptr(len(in.ScopeFiles))
 	home := "offline_scratch_cargo_home"
@@ -451,7 +470,7 @@ func assemble(in assembleInput) obsdoc.Document {
 			cargoOK, cargoVersion = true, v
 			rel, _, _ := strings.Cut(v, " ")
 			doc.Target.Properties["cargo"] = rel
-			if in.Kind == KindCheck {
+			if in.Kind != KindClippy {
 				doc.Tool.Version, doc.Tool.VersionTested = ptr(v), CargoVersionTested(v)
 				if !doc.Tool.VersionTested {
 					limitations = append(limitations, "tool_version_untested")
@@ -651,7 +670,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	if omitted > 0 {
 		limitations = append(limitations, "observations_outside_scope_omitted")
 	}
-	if excluded > 0 && in.Kind == KindClippy {
+	if excluded > 0 && in.Kind != KindCheck {
 		limitations = append(limitations, "rustc_diagnostics_excluded")
 	}
 	if unattributed > 0 {
@@ -749,27 +768,58 @@ func assemble(in assembleInput) obsdoc.Document {
 		scope[f] = true
 	}
 	processed := []string{}
-	if in.DepInfoOK {
-		seen := map[string]bool{}
-		for _, f := range in.DepInfo {
-			if scope[f] && !seen[f] {
-				seen[f] = true
-				processed = append(processed, f)
+	if in.Kind == KindDoc {
+		// Cargo's documentation artifact names the crate's entry file.
+		// Other modules are reported only when rustdoc located a diagnostic in them.
+		verified := map[string]bool{}
+		for _, art := range st.Artifacts {
+			if !art.Documentation || art.SourcePath == "" {
+				continue
 			}
+			if rel, _, ok := pathResolver.snapshotPath(art.SourcePath); ok && scope[rel] && !in.Drift[rel] {
+				verified[rel] = true
+			}
+		}
+		for _, o := range doc.Observations {
+			if o.Path != nil && o.Location != nil && scope[*o.Path] {
+				verified[*o.Path] = true
+			}
+		}
+		for file := range verified {
+			processed = append(processed, file)
 		}
 		sort.Strings(processed)
+		if reason == "" && (len(crates) == 0 || len(processed) == 0) {
+			fail(domain.TaskUnsupported, ReasonNoCrates, obsdoc.ExitConfigurationError)
+		}
 		if reason == "" {
-			doc.Coverage.FilesUnlisted = len(in.ScopeFiles) - len(processed)
-			if doc.Coverage.FilesUnlisted > 0 {
-				limitations = append(limitations, "rust_files_not_compiled")
+			doc.Coverage.ProcessedPaths = processed
+		}
+		limitations = append(limitations, "rustdoc_module_coverage_partial")
+	} else {
+		if in.DepInfoOK {
+			seen := map[string]bool{}
+			for _, f := range in.DepInfo {
+				if scope[f] && !seen[f] {
+					seen[f] = true
+					processed = append(processed, f)
+				}
+			}
+			sort.Strings(processed)
+			if reason == "" {
+				doc.Coverage.FilesUnlisted = len(in.ScopeFiles) - len(processed)
+				if doc.Coverage.FilesUnlisted > 0 {
+					limitations = append(limitations, "rust_files_not_compiled")
+				}
 			}
 		}
-	}
-	if reason == "" && (!in.DepInfoOK || len(processed) == 0) {
-		fail(domain.TaskUnsupported, ReasonNoCrates, obsdoc.ExitConfigurationError)
-	}
-	if reason == "" {
-		doc.Coverage.ProcessedPaths = processed
+		if reason == "" && (!in.DepInfoOK || len(processed) == 0) {
+			fail(domain.TaskUnsupported, ReasonNoCrates, obsdoc.ExitConfigurationError)
+		}
+		if reason == "" {
+			doc.Coverage.ProcessedPaths = processed
+		}
+
 	}
 
 	partial := false

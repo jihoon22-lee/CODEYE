@@ -2,7 +2,7 @@
   "schema_version": "0.5",
   "pack": {
     "id": "review",
-    "version": "2.5.2"
+    "version": "2.6.0"
   },
   "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
   "run_id": "0195f3a0-0000-7000-8000-000000000025",
@@ -53,8 +53,8 @@
       "model": "fake/scripted",
       "opencode_version": "1.19.5",
       "pack_id": "review",
-      "pack_version": "2.5.2",
-      "pack_sha256": "fed289ac5d4b2e35ae127f7935b313fd9adb25afa9936f03db0264bd7494089b",
+      "pack_version": "2.6.0",
+      "pack_sha256": "394ccc0a7571197f1b85e120252644532f61d441064995d68ddda30271b69f42",
       "pack_files": [
         "00-core.md",
         "documents.md",

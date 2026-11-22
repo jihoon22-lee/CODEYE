@@ -9,8 +9,8 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// C/C++ pack (docs/ANALYZERS.md): both tools are single native executables that
-// need no shared toolchain; neither runs a compiler or build system.
+// C/C++ pack (docs/ANALYZERS.md): operator-installed native tools with
+// no separate build system or repository compiler invocation.
 
 func buildCpp(ctx context.Context, cfg Config, runner executor.Runner, name, tool string, mk func(cpp.Config) (prober, error)) built {
 	exe := cfg.Tools[tool]
@@ -27,4 +27,8 @@ func buildCppcheck(ctx context.Context, cfg Config, runner executor.Runner, _ *g
 
 func buildClangTidy(ctx context.Context, cfg Config, runner executor.Runner, _ *govet.Handler, _ map[string]pack.Toolchain) built {
 	return buildCpp(ctx, cfg, runner, cpp.ClangTidyName, cpp.ClangTidyTool, func(c cpp.Config) (prober, error) { return cpp.NewClangTidy(c) })
+}
+
+func buildGCCAnalyzer(ctx context.Context, cfg Config, runner executor.Runner, _ *govet.Handler, _ map[string]pack.Toolchain) built {
+	return buildCpp(ctx, cfg, runner, cpp.GCCAnalyzerName, cpp.GCCAnalyzerTool, func(c cpp.Config) (prober, error) { return cpp.NewGCCAnalyzer(c) })
 }

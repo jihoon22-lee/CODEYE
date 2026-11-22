@@ -146,9 +146,10 @@ def _kept_docs(directory):
     return records, scope
 
 
-def _context_files(record):
-    return {e["path"] for e in record.get("evidence", [])
-            if e.get("origin") == "context" and e.get("kind") in ("code", "test")}
+def _context_lines(record):
+    return {(e["path"], line) for e in record.get("evidence", [])
+            if e.get("origin") == "context" and e.get("kind") in ("code", "test")
+            for line in range(e["start_line"], e["end_line"] + 1)}
 
 
 def _test_ledger(ledger):
@@ -166,15 +167,14 @@ _UNREAD = ("artifact_rejected", "review_lineage_mismatch", "unrecognized_artifac
 def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None):
     """The conditions registered before a paid run with slices (docs/EVALUATION.md#회귀-집합-실행).
 
-    Non-pilot cases plan no slice task and their review calls use the pinned
+    Small synthetic cases need no model call in a follow-up slot. Their review calls use the pinned
     Go-only pack digests. The pilot completes with the AI review performed;
     its report reads every review artifact and carries the review ledger
     with the configured ceiling; the ledger's calls_used (the attempt counter
     before the slices plus the slice records) is known and at most the
     ceiling; a slice the ceiling refused has no record and no call; the
-    overview and the slices never send the same file; the ledger and
-    llm_exposed_files count more files sent to the model than the overview
-    sent; the relay ledger has no refused or blocked request.
+    overview and slices do not repeat source lines; the slices add source
+    lines and the ledger and llm_exposed_files cover the distinct sent files; the relay ledger has no refused or blocked request.
 
     With a test relay ledger (a dry run against the fake upstream) two causes
     are expected rather than failures, and are listed in dry_run_expected: a
@@ -195,9 +195,19 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
         if label == "git":
             continue
         if label != "pilot":
-            slices = [t["key"] for t in row["tasks"] if SLICE_TASK.match(t["key"])]
-            if slices:
-                failures.append(f"{label}: slice tasks {slices}")
+            # The planner may reserve slots before it knows how many lines
+            # the overview will cover. A reserved slot is not a model call.
+            if re.fullmatch(r"Q[0-9]+-(before|after)", label):
+                for task in row["tasks"]:
+                    key = task["key"]
+                    if key == "review.scope" and task["status"] != "succeeded":
+                        failures.append(f"{label}: scope inventory {task['status']}")
+                    elif SLICE_TASK.match(key) and key != "review.scope" and (task["status"], task["reason"]) != ("skipped_policy", "no_review_scope"):
+                        failures.append(f"{label}: unnecessary or incomplete follow-up {key}: {task['status']}/{task['reason']}")
+                report = json.loads((output / (label + ".json")).read_text())
+                extra_calls = [c["task_key"] for c in report["coverage"].get("review_calls", []) if SLICE_TASK.match(c.get("task_key", ""))]
+                if extra_calls:
+                    failures.append(f"{label}: unexpected model calls {extra_calls}")
             for call in row["review_calls"]:
                 want = roles.get(call["role"], {}).get("digest")
                 if call["pack_sha256"] != want:
@@ -209,8 +219,10 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
         records, scope = _kept_docs(output / "pilot")
         overview = next((r for r in records if r["stage"] == "investigate" and "slice" not in r), None)
         slice_inv = [r for r in records if r["stage"] == "investigate" and "slice" in r]
-        sent = [(_context_files(overview) if overview else set())] + [_context_files(r) for r in slice_inv]
-        union = set().union(*sent)
+        windows = [_context_lines(r) for r in [overview or {}, *slice_inv]]
+        combined = set().union(*windows)
+        overview_paths = {path for path, _ in windows[0]}
+        sent_paths = {path for path, _ in combined}
         exhausted = [k for k, t in tasks.items() if SLICE_TASK.match(k) and t["status"] == "budget_exhausted"]
         recorded = {"review." + r["stage"] + "." + r["slice"]["key"] for r in records if "slice" in r}
         called = {c.get("task_key") for c in report["coverage"].get("review_calls", [])}
@@ -224,7 +236,7 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
         expected = []
         pilot = {"calls_used": calls_used, "recorded_calls": sum(len(r.get("calls", [])) for r in records), "max_calls": max_calls,
                  "slice_tasks": sum(1 for k in tasks if SLICE_TASK.match(k)), "slices_admitted": len(slice_inv), "slice_tasks_budget_exhausted": len(exhausted),
-                 "overview_files": len(sent[0]), "files_sent_by_records": len(union), "ledger_status": book and book["status"],
+                 "overview_files": len(overview_paths), "files_sent_by_records": len(sent_paths), "new_source_lines": len(combined - windows[0]), "ledger_status": book and book["status"],
                  "ledger_files_sent_to_model": ledger_sent, "llm_exposed_files": exposed, "review_tasks_without_record": unrecorded, "dry_run_expected": expected}
         if unread:
             failures.append(f"pilot: report did not read {unread}")
@@ -240,14 +252,16 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
             failures.append(f"pilot: ledger calls_used {calls_used} unknown or above the ceiling {max_calls}")
         if set(exhausted) & (recorded | called):
             failures.append(f"pilot: budget-exhausted slices with a record or a call {sorted(set(exhausted) & (recorded | called))}")
-        if sum(len(x) for x in sent) != len(union):
-            failures.append("pilot: a file reached two investigate requests")
-        if not isinstance(ledger_sent, int) or ledger_sent <= len(sent[0]):
-            failures.append(f"pilot: ledger files sent to the model {ledger_sent} not above the overview's {len(sent[0])} files")
+        if sum(map(len, windows)) != len(combined):
+            failures.append("pilot: the same source lines reached two investigate requests")
+        if not combined - windows[0]:
+            failures.append("pilot: no additional source lines reached the model")
+        if not isinstance(ledger_sent, int) or ledger_sent < len(sent_paths):
+            failures.append(f"pilot: ledger files sent to the model {ledger_sent} below {len(sent_paths)} distinct files")
         if exposed is None and fake and set(unrecorded) <= set(fake):
             expected.append(f"llm_exposed_files unknown: the fake upstream reply was rejected for {fake}")
-        elif not isinstance(exposed, int) or exposed <= len(sent[0]):
-            failures.append(f"pilot: llm_exposed_files {exposed} not above the overview's {len(sent[0])} files")
+        elif not isinstance(exposed, int) or exposed < len(sent_paths):
+            failures.append(f"pilot: llm_exposed_files {exposed} below {len(sent_paths)} distinct files")
     if ledger is not None:
         bad = [r.get("type") for r in (json.loads(line) for line in Path(ledger).read_text().splitlines() if line.strip())
                if r.get("type") in ("refused", "blocked")]

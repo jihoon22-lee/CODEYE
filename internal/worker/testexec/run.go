@@ -2,12 +2,9 @@
 package testexec
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -34,6 +31,9 @@ const (
 
 type Config struct {
 	Go, GoModCache, Node, Npm, Python, Cargo, ToolPath, DependencyCacheRoot string
+	CMake, CTest, Java, Maven, Gradle, MavenRepository, GradleHome, Nextest string
+	GoTestRun                                                               string
+	GoRace                                                                  bool
 }
 
 type Handler struct {
@@ -63,10 +63,21 @@ func (h *Handler) Plan(ctx context.Context, job analysis.Job) ([]analysis.TaskSp
 	if err != nil {
 		return nil, err
 	}
-	for _, t := range p {
-		base = append(base, t.spec)
+	at := len(base)
+	if job.AllowModelReview {
+		for i, spec := range base {
+			if spec.Key == "review.verify" {
+				at = i
+				break
+			}
+		}
 	}
-	return base, nil
+	result := make([]analysis.TaskSpec, 0, len(base)+len(p))
+	result = append(result, base[:at]...)
+	for _, t := range p {
+		result = append(result, t.spec)
+	}
+	return append(result, base[at:]...), nil
 }
 
 func (h *Handler) Run(ctx context.Context, job analysis.Job, spec analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
@@ -115,17 +126,31 @@ func (h *Handler) run(ctx context.Context, job analysis.Job, p testPlan, runner 
 	key, _, _ := strings.Cut(strings.TrimPrefix(p.spec.Key, "test."), ".")
 	workspace := job.Snapshot.WorkspaceDir
 	dir := filepath.Join(workspace, filepath.FromSlash(p.dir))
-	spec, reason := h.command(job, p, key, scratch, dir)
+	var before []preparation
+	var spec executor.Spec
+	var reason string
+	if key == "cmake" {
+		spec, before, reason = h.cmakeCommand(scratch, dir)
+	} else {
+		spec, reason = h.command(job, p, key, scratch, dir)
+	}
 	if reason == "scratch_unavailable" {
 		return pack.Failed(reason)
 	}
 	if reason != "" {
 		return unsupported(reason)
 	}
-	spec.WorkspaceRoot, spec.Dir, spec.TempParent = workspace, dir, scratch
-	spec.ProtectedRoots = []string{job.Snapshot.SnapshotDir}
-	spec.Timeout, spec.StdoutLimit, spec.StderrLimit = commandTimeout, 8<<20, 2<<20
-	spec.Redact = append(spec.Redact, govet.RedactForms([]string{workspace, job.Snapshot.SnapshotDir, job.Scratch, spec.Executable, h.tools.GoModCache, h.tools.DependencyCacheRoot})...)
+	fullSpec := func(spec executor.Spec) executor.Spec {
+		spec.WorkspaceRoot, spec.Dir, spec.TempParent = workspace, dir, scratch
+		spec.ProtectedRoots = []string{job.Snapshot.SnapshotDir}
+		if spec.Timeout == 0 {
+			spec.Timeout = commandTimeout
+		}
+		spec.StdoutLimit, spec.StderrLimit = 8<<20, 2<<20
+		spec.Redact = append(spec.Redact, govet.RedactForms([]string{workspace, job.Snapshot.SnapshotDir, job.Scratch, spec.Executable, h.tools.GoModCache, h.tools.DependencyCacheRoot})...)
+		return spec
+	}
+	spec = fullSpec(spec)
 	var executions []analysis.Execution
 	run := func(name string, spec executor.Spec) (executor.Result, error) {
 		res := runner.Run(ctx, spec)
@@ -150,6 +175,27 @@ func (h *Handler) run(ctx context.Context, job analysis.Job, p testPlan, runner 
 	if !pack.ExitedZero(&isolation) || !pack.StreamsComplete(&isolation) {
 		return analysis.TaskResult{Status: domain.TaskUnsupported, Reason: isolationUnavailable, Executions: executions}
 	}
+	for _, step := range before {
+		marker := filepath.Join(scratch, step.name+".started")
+		_, command, _ := h.isolate(fullSpec(step.spec), marker)
+		res, err := run(step.name, command)
+		out := analysis.TaskResult{Executions: executions}
+		if testLaunched(marker) {
+			out.Limitations = append(out.Limitations, pack.LimRepositoryCodeExecuted)
+		}
+		if err != nil {
+			out.Status, out.Reason = domain.TaskFailed, analysis.ReasonHandlerError
+			return out
+		}
+		if status, reason, _ := pack.ExecutionOutcome([]*executor.Result{&res}, ctx.Err() != nil); reason != "" {
+			out.Status, out.Reason = status, reason
+			return out
+		}
+		if !pack.ExitedZero(&res) || !pack.StreamsComplete(&res) {
+			out.Status, out.Reason = domain.TaskFailed, "test_preparation_failed"
+			return out
+		}
+	}
 	var goModulePath string
 	if key == "go" {
 		probe := spec
@@ -170,15 +216,40 @@ func (h *Handler) run(ctx context.Context, job analysis.Job, p testPlan, runner 
 			return analysis.TaskResult{Status: domain.TaskSkippedPolicy, Reason: "replace_outside_snapshot", Executions: executions}
 		}
 	}
+	var reportsBefore []javaReport
+	if key == "maven" || key == "gradle" {
+		var ok bool
+		reportsBefore, ok = javaReports(workspace, p)
+		if !ok {
+			return analysis.TaskResult{Status: domain.TaskUnsupported, Reason: "test_results_unavailable", Executions: executions}
+		}
+	}
 	res, err := run(runName, isolated)
-	info, markerErr := os.Lstat(startedPath)
-	launched := markerErr == nil && info.Mode().IsRegular()
+	launched := testLaunched(startedPath)
 	out := analysis.TaskResult{Executions: executions}
-	if launched {
+	if launched || len(before) > 0 {
 		out.Limitations = append(out.Limitations, pack.LimRepositoryCodeExecuted)
 	}
-	if isJavaScript(key) {
+	if isJavaScript(key) && p.runner == "" {
 		out.Limitations = append(out.Limitations, "test_script_reported_exit_only")
+	}
+	var results testResults
+	if launched && err == nil && ctx.Err() == nil && res.Status == executor.StatusExited && res.Cleanup == executor.CleanupConfirmed && pack.StreamsComplete(&res) {
+		var name string
+		if key == "maven" || key == "gradle" {
+			name, results = key, javaResults(workspace, p, reportsBefore)
+		} else {
+			name, results = gatherResults(p, key, scratch, res)
+		}
+		if results.hasTests() {
+			linkResultCases(ctx, job, p, name, goModulePath, res.Stdout.Data, results.cases)
+			if artifact, ok := resultArtifact(job, p, scratch, name, res, results); ok {
+				out.Artifacts = append(out.Artifacts, artifact)
+			} else {
+				out.Status, out.Reason = domain.TaskFailed, analysis.ReasonHandlerError
+				return out
+			}
+		}
 	}
 	switch state, reason, _ := pack.ExecutionOutcome([]*executor.Result{&res}, ctx.Err() != nil); {
 	case reason != "":
@@ -189,12 +260,22 @@ func (h *Handler) run(ctx context.Context, job analysis.Job, p testPlan, runner 
 		out.Status, out.Reason = domain.TaskUnsupported, isolationUnavailable
 	case !pack.StreamsComplete(&res):
 		out.Status, out.Reason = domain.TaskFailed, "output_truncated"
+	case p.runner == "pytest" && strings.Contains(string(res.Stderr.Data), "No module named pytest"):
+		out.Status, out.Reason = domain.TaskUnsupported, toolUnavailable
+	case p.runner == "pytest" && pack.ExitCode(&res) == 5:
+		out.Status, out.Reason = domain.TaskUnsupported, "no_tests_executed"
+	case p.runner == "ctest" && results.confirmed && !results.hasTests() && pack.ExitCode(&res) == 8:
+		out.Status, out.Reason = domain.TaskUnsupported, "no_tests_executed"
 	case !pack.ExitedZero(&res):
 		out.Status, out.Reason = domain.TaskFailed, "test_command_failed"
 		if missingDependencies(key, res) {
 			out.Reason = dependenciesUnavailable
 		}
-	case !testsPassed(key, res):
+	case results.counts.Failed > 0:
+		out.Status, out.Reason = domain.TaskFailed, "test_command_failed"
+	case key != "go" && key != "rust" && p.runner != "unittest" && !results.confirmed && !results.hasTests():
+		out.Status, out.Reason = domain.TaskUnsupported, "test_results_unavailable"
+	case !results.hasTests() || results.counts.Passed == 0:
 		out.Status, out.Reason = domain.TaskUnsupported, "no_tests_executed"
 	default:
 		out.Status = domain.TaskSucceeded
@@ -206,6 +287,11 @@ func (h *Handler) run(ctx context.Context, job analysis.Job, p testPlan, runner 
 		}
 	}
 	return out
+}
+
+func testLaunched(marker string) bool {
+	info, err := os.Lstat(marker)
+	return err == nil && info.Mode().IsRegular()
 }
 
 func isJavaScript(key string) bool { return strings.HasPrefix(key, "javascript-") }
@@ -225,42 +311,18 @@ func regularPath(p string, executable bool) string {
 	return r
 }
 
-var (
-	pythonSummary    = regexp.MustCompile(`(?m)^Ran ([1-9][0-9]*) tests? in .+$`)
-	pythonAllSkipped = regexp.MustCompile(`(?m)^OK \(skipped=([1-9][0-9]*)\)\r?$`)
-	rustPassed       = regexp.MustCompile(`(?m)^test result: ok\. [1-9][0-9]* passed;`)
-)
-
-func testsPassed(key string, res executor.Result) bool {
-	switch key {
-	case "go":
-		for line := range bytes.SplitSeq(res.Stdout.Data, []byte{'\n'}) {
-			var event struct{ Action, Test string }
-			if json.Unmarshal(line, &event) == nil && event.Action == "pass" && event.Test != "" {
-				return true
-			}
-		}
-		return false
-	case "python":
-		count := pythonSummary.FindSubmatch(res.Stderr.Data)
-		skipped := pythonAllSkipped.FindSubmatch(res.Stderr.Data)
-		return count != nil && (skipped == nil || !bytes.Equal(count[1], skipped[1]))
-	case "rust":
-		return rustPassed.Match(res.Stdout.Data)
-	default:
-		return isJavaScript(key)
-	}
-}
-
 func missingDependencies(key string, res executor.Result) bool {
 	combined := string(res.Stderr.Data) + "\n" + string(res.Stdout.Data)
 	switch key {
 	case "go":
 		return strings.Contains(combined, "module lookup disabled by GOPROXY=off")
-	case "rust":
+	case "rust", "rust-nextest":
 		return strings.Contains(combined, "no matching package named") && strings.Contains(combined, "offline")
 	case "python":
 		return strings.Contains(combined, "ModuleNotFoundError:")
+	case "maven", "gradle":
+		return strings.Contains(combined, "offline mode") && (strings.Contains(combined, "not been downloaded") ||
+			strings.Contains(combined, "No cached version") || strings.Contains(combined, "has not been cached"))
 	default:
 		return false
 	}

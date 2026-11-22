@@ -60,6 +60,7 @@ var versionOutputs = map[string]string{
 	"bandit":      "bandit 1.9.4\n  python version = 3.12.3",
 	"lizard":      "1.26.1",
 	"cppcheck":    "Cppcheck 2.22.0",
+	"gcc":         "gcc (GCC) 13.4.0",
 	"clang-tidy":  "LLVM (http://llvm.org/):\n  LLVM version 23.1.5\n  Optimized build.",
 	"pyright":     "pyright 1.1.414",
 	"eslint":      "v10.15.0",
@@ -166,6 +167,7 @@ func TestDetectFindsEveryToolInItsLocation(t *testing.T) {
 	npmTool(t, globalModules, "jscpd/run-jscpd.js", versionOutputs["jscpd"])
 	// npm comes with node; pnpm and yarn are in the CODEYE tool prefix.
 	npmTool(t, globalModules, "npm/bin/npm-cli.js", versionOutputs["npm"])
+	script(t, filepath.Join(usrbin, "gcc"), versionOutputs["gcc"])
 	// ~/.local/bin, ~/.opencode/bin and the CODEYE tool prefix.
 	script(t, filepath.Join(tr.home, ".local", "bin", "ruff"), versionOutputs["ruff"])
 	script(t, filepath.Join(tr.home, ".opencode", "bin", "opencode"), "1.19.5")
@@ -214,6 +216,7 @@ func TestDetectFindsEveryToolInItsLocation(t *testing.T) {
 		"mypy":        {filepath.Join(tools, "bin", "mypy"), "2.4.1", "codeye-tools/bin"},
 		"bandit":      {filepath.Join(tools, "bin", "bandit"), "1.9.4", "codeye-tools/bin"},
 		"lizard":      {filepath.Join(tools, "bin", "lizard"), "1.26.1", "codeye-tools/bin"},
+		"gcc":         {filepath.Join(usrbin, "gcc"), "13.4.0", SourcePath},
 		"cppcheck":    {filepath.Join(tools, "cpp", "bin", "cppcheck"), "2.22.0", "codeye-tools/cpp/bin"},
 		"clang-tidy":  {filepath.Join(tools, "cpp", "bin", "clang-tidy"), "23.1.5", "codeye-tools/cpp/bin"},
 		"staticcheck": {filepath.Join(tools, "go", "bin", "staticcheck"), "2026.2.2", "codeye-tools/go/bin"},
@@ -230,13 +233,18 @@ func TestDetectFindsEveryToolInItsLocation(t *testing.T) {
 		"uv":          {filepath.Join(tr.home, ".local", "bin", "uv"), "0.12.5", "~/.local/bin"},
 		"python":      {filepath.Join(usrbin, "python3"), "3.14.4", SourcePath},
 	}
-	if len(res.Tools) != len(Names()) || len(want) != len(Names()) {
+	if len(res.Tools) != len(Names()) || len(want)+6 != len(Names()) {
 		t.Fatalf("%d tools, %d expected, %d names", len(res.Tools), len(want), len(Names()))
 	}
 	for name, w := range want {
 		got := mustTool(t, res, name)
 		if got.Status != Found || got.Path != w.path || got.Version != w.version || !got.VersionTested || got.Source != w.source || len(got.Notes) != 0 || got.Hint != "" {
 			t.Errorf("%s: %+v, want %+v", name, got, w)
+		}
+	}
+	for _, name := range []string{"java", "pmd", "spotbugs", "errcheck", "dependency-cruiser", "import-linter"} {
+		if tool := mustTool(t, res, name); tool.Status != NotFound || tool.Hint == "" {
+			t.Errorf("%s: %+v", name, tool)
 		}
 	}
 	if !res.PythonBothTypeCheckers || !res.BaselineUsable() {

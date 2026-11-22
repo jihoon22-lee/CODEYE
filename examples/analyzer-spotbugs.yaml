@@ -1,0 +1,28 @@
+schema_version: '0.1'
+id: java.spotbugs
+languages: [java]
+planned_platforms: [linux, windows]
+availability: verified
+version_contract: spotbugs-4.10
+analysis_scope: [typed, intraprocedural, interprocedural, interfile]
+executes_repository_code: false
+requires_build: true
+network_policy: none
+version_probe:
+  executable: '${java}'
+  argv: ["-Xmx512m", "-Dfile.encoding=UTF-8", "-Djava.awt.headless=true", "-cp", "${spotbugs_jar}", "edu.umd.cs.findbugs.Version"]
+execute:
+  executable: '${java}'
+  argv: ["-Xmx512m", "-Dfile.encoding=UTF-8", "-Djava.awt.headless=true", "-jar", "${spotbugs_jar}", "-textui", "-xml", "-effort:max", "-low", "-exitcode", "${attempt_classes}"]
+  cwd: '${workspace}'
+  timeout_seconds: 120
+  stdout_max_bytes: 8388608
+  env_allowlist: [PATH, LANG, SystemRoot, HOME, USERPROFILE, TMPDIR, TMP, TEMP]
+exit_codes:
+  clean: [0]
+  findings: [1]
+  error: [2, 3, 4, 5, 6, 7]
+parser:
+  id: spotbugs
+  format: xml
+  input: stdout-artifact

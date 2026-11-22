@@ -1,0 +1,12 @@
+[
+  {
+    "directory": "/build/input",
+    "file": "/build/input/src/descriptor.c",
+    "arguments": ["ccache", "/usr/bin/gcc", "-std=gnu11", "-fplugin=/build/input/plugin.so", "-specs=/build/input/untrusted.specs", "@unsafe-response", "-c", "src/descriptor.c", "-o", "descriptor.o"]
+  },
+  {
+    "directory": "/build/input",
+    "file": "/build/input/src/clean.c",
+    "arguments": ["gcc", "-std=gnu11", "-c", "src/clean.c", "-o", "clean.o"]
+  }
+]

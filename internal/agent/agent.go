@@ -90,15 +90,17 @@ type Config struct {
 	// Autoscale starts with zero workers and starts/drains/stops
 	// workers only on controller commands; MaxWorkers is then the local
 	// hard cap reported to the controller (1..16).
-	Autoscale     bool
-	MaxWorkers    int
-	ToolPath      string
-	GitExecutable string
-	GitHosts      []string
+	Autoscale            bool
+	MaxWorkers           int
+	ToolPath             string
+	JavaClasspathCatalog string
+	GitExecutable        string
+	GitHosts             []string
 	// GitCredentialFile (--git-credential-file) is where workers read a Git
 	// host token for a fetch of that host; it may not exist yet.
 	GitCredentialFile string
 	GoExecutable      string
+	Tests             *workerproto.TestSettings
 	GoModCache        string
 	// DependencyFetch (--dependency-fetch) is the operator's switch for the
 	// dependency tasks; a job fetches only when its project's
@@ -287,7 +289,7 @@ func New(cfg Config) (*Agent, error) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}
 	}
-	for _, p := range []string{cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.DependencyCacheDir, cfg.ModelExecutable, cfg.ModelRelayFile, cfg.ModelCredentialFile, cfg.ModelConfigFile, cfg.GitCredentialFile} {
+	for _, p := range []string{cfg.JavaClasspathCatalog, cfg.GitExecutable, cfg.GoExecutable, cfg.GoModCache, cfg.DependencyCacheDir, cfg.ModelExecutable, cfg.ModelRelayFile, cfg.ModelCredentialFile, cfg.ModelConfigFile, cfg.GitCredentialFile} {
 		if p != "" && !filepath.IsAbs(p) {
 			return nil, &ExitError{ExitUsage, "tool paths must be absolute"}
 		}

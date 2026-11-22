@@ -180,6 +180,7 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 | `agent.name` | `local` | 100자 이하 |
 | `agent.max_workers` | min(4, 논리 CPU 수/2), 최소 1 | 1~16. 에이전트는 `--autoscale --max-workers N`으로 시작하고, `up`·`start`가 `default` 풀의 최대 워커 수를 같은 값으로 둔다 |
 | `agent.toolchain_path` | `/usr/bin:/bin`(Linux) | 절대 경로 목록 |
+| `agent.java_classpath_catalog` | 비어 있음 | SpotBugs가 사용할 로컬 JAR 카탈로그의 절대 경로. [형식과 사용법](ANALYZERS.md#java-로컬-클래스패스) |
 | `agent.go`, `agent.go_mod_cache` | 빈 값 | 절대 경로. 비우면 [탐색](ANALYZERS.md#도구-찾기)이 찾은 go와 그 모듈 캐시를 쓴다 |
 | `agent.tools` | 빈 값 | 이 빌드의 분석기·toolchain 플래그 이름(`staticcheck`, `node`, `ruff` 등)을 키로, 실행 파일의 절대 경로를 값으로. 모르는 이름은 거부한다. 적지 않은 도구는 탐색이 찾은 것을 쓰고, 적은 값은 항상 우선한다 |
 | `agent.python_both_type_checkers` | false | mypy·pyright를 모두 실행. 탐색은 둘 다 찾으면 켠다 |
@@ -387,7 +388,7 @@ codeye restore [--config PATH] --from DIR [--format text|json]
 
 출력 디렉터리는 없거나 비어 있어야 한다. 기본 위치는 `<backup_dir>/codeye-<UTC 시각>`이고 설정이 없으면 `<state_dir>-backups` 아래에 둔다. 서비스 운영 중에도 백업할 수 있다. 정지 뒤 백업하면 진행 중인 실행의 복구가 필요 없다.
 
-DB 덤프와 확정 산출물 목록은 같은 논리 시점에 읽는다. 파일마다 SHA-256과 크기를 확인해 복사하며, 마지막에 `manifest.json`을 쓴다. manifest가 있는 세트만 유효하다. 백업은 서비스 lock을 잡아 start·stop·restore와 겹치지 않는다. `pg_dump`의 주 버전은 DB 서버와 같거나 높아야 한다.
+DB 덤프와 확정 산출물 목록은 같은 논리 시점에 읽는다. 파일마다 SHA-256과 크기를 확인해 복사하며, 마지막에 `manifest.json`을 쓴다. manifest가 있는 세트만 유효하다. 백업이 끝났어도 text·JSON 안내를 출력하지 못하면 명령은 종료 코드 1을 반환하고 표준 오류에 저장한 경로를 남긴다. 백업은 서비스 lock을 잡아 start·stop·restore와 겹치지 않는다. `pg_dump`의 주 버전은 DB 서버와 같거나 높아야 한다.
 
 **인증정보.** `pg_dump`·`pg_restore`는 관리형 cluster의 프로그램 디렉터리, external 모드면 `database.postgres_bin_dir`에서만 찾는다. argv에는 플래그와 파일 경로만 들어간다. 연결 정보는 자식 환경의 `PGHOST`·`PGPORT`·`PGUSER`·`PGPASSWORD`·`PGDATABASE`·`PGSSLMODE`·`PGSSLROOTCERT`로만 전달한다. `PGPASSFILE=/dev/null`로 사용자 `.pgpass`를 읽지 않게 하고, cwd는 임시 디렉터리다. 오류 문구의 비밀번호는 `[REDACTED]`로 바꾼다. URL 규칙은 controller와 같다(loopback만 `sslmode=disable`, 그 외 `verify-full`).
 
@@ -620,7 +621,7 @@ CODEYE는 자식 프로세스 환경에 다섯 변수를 같은 파일로 넣는
 - `enabled`, `ca_bundle`(`status`가 `not_configured`, `available`(`certificates`에 인증서 수), `unavailable`(`ca_bundle_unreadable`: 읽을 수 없거나 인증서가 없음)).
 - `destinations[]`: 이 설정으로 CODEYE가 접속할 곳마다 `kind`(`go_proxy`·`go_sumdb`·`npm_registry`·`pip_index`·`crates_registry`·`git_host`·`github_api`·`model_endpoint`), `value`, `origin`(`config`·`user_go_env`·`user_npm_config`·`model_key_file`·`relay_file`·`builtin_default`·`none`), 접속하지 않으면 `reason`. 오프라인인데 `builtin_default`가 남으면 그것이 공개 서비스다.
 - `postgres`: 관리형 DB에 쓸 PostgreSQL 프로그램(`initdb`, `pg_ctl`, `postgres`, `pg_dump`, `pg_restore`, `psql`)을 찾았는지와 버전.
-- `languages[]`: Go·Python·JS/TS·Rust·C/C++·공통·모델마다 없는 도구와 의존성 준비 상태.
+- `languages[]`: Go·Python·JS/TS·Rust·C/C++·Java·공통·모델마다 없는 도구와 의존성 준비 상태.
 
 schema는 [doctor schema](../schemas/doctor.schema.json)의 `offline`, 예시는 [examples/doctor.json](../examples/doctor.json)이다.
 

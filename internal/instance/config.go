@@ -27,6 +27,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/hostaddr"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
+	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
 
 // SchemaVersion of the service configuration file.
@@ -132,10 +133,12 @@ type SourceRoot struct {
 
 // Agent configures the local node agent (codeye agent flags, docs/EXECUTION.md).
 type Agent struct {
-	Name          string `json:"name,omitempty"`
-	MaxWorkers    int    `json:"max_workers,omitempty"`
-	ToolchainPath string `json:"toolchain_path,omitempty"`
-	Go            string `json:"go,omitempty"`
+	Name                 string                    `json:"name,omitempty"`
+	MaxWorkers           int                       `json:"max_workers,omitempty"`
+	ToolchainPath        string                    `json:"toolchain_path,omitempty"`
+	JavaClasspathCatalog string                    `json:"java_classpath_catalog,omitempty"`
+	Tests                *workerproto.TestSettings `json:"tests,omitempty"`
+	Go                   string                    `json:"go,omitempty"`
 	// Git is the git executable for Git sources (detected when unset).
 	Git                    string            `json:"git,omitempty"`
 	GoModCache             string            `json:"go_mod_cache,omitempty"`
@@ -505,9 +508,19 @@ func (c *Config) validate(knownTools []string) error {
 			return errors.New("agent.toolchain_path entries must be absolute, clean paths")
 		}
 	}
-	for name, p := range map[string]string{"agent.go": a.Go, "agent.git": a.Git, "agent.go_mod_cache": a.GoModCache} {
+	for name, p := range map[string]string{"agent.go": a.Go, "agent.git": a.Git, "agent.go_mod_cache": a.GoModCache, "agent.java_classpath_catalog": a.JavaClasspathCatalog} {
 		if p != "" && !absClean(p) {
 			return fmt.Errorf("%s must be an absolute, clean path", name)
+		}
+	}
+	if t := a.Tests; t != nil {
+		if len(t.GoRun) > 512 || strings.ContainsAny(t.GoRun, "\x00\r\n") {
+			return errors.New("agent.tests.go_run must be one line of at most 512 bytes")
+		}
+		for _, p := range []string{t.MavenRepository, t.GradleHome} {
+			if p != "" && !absClean(p) {
+				return errors.New("agent.tests cache directories must be absolute, clean paths")
+			}
 		}
 	}
 	if d := a.Dependencies; d != nil {

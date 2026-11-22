@@ -26,6 +26,7 @@ type contractReviewInput struct {
 	Scope    struct {
 		Snapshot       string                  `json:"snapshot_manifest_digest"`
 		Excerpts       []record.Excerpt        `json:"excerpts"`
+		DirectCalls    []directCall            `json:"direct_calls,omitempty"`
 		WorkflowRoutes []workflowEvidenceInput `json:"workflow_routes,omitempty"`
 	} `json:"scope"`
 	Repair *outputRepair `json:"repair,omitempty"`
@@ -99,14 +100,31 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 	workflow := workflowFollowupLinks(selectedWorkflow, prior)
 	keep := len(prior.DocumentEvidenceIDs)
 	documents := context[:keep]
+	javaBindings, err := s.javaAPIBindings(documents)
+	if err != nil {
+		return s.contractInputFailure(err)
+	}
+	javaWindows, err := s.javaContractWindows(prior.AppliesTo, contract.Statement, documents, javaBindings, files)
+	if err != nil {
+		return s.contractInputFailure(err)
+	}
 	named, err := s.contractNamedExcerpts(contract, prior.AppliesTo, documents)
 	if err != nil {
 		return s.contractInputFailure(err)
 	}
+	named = append(javaWindows, named...)
 	callers, err := s.contractCallerExcerpts(prior.AppliesTo, append(slices.Clone(named), extra...), inv.Evidence)
 	if err != nil {
 		return s.contractInputFailure(err)
 	}
+	anchors := append(slices.Clone(context[keep:]), named...)
+	anchors = append(anchors, extra...)
+	linked, err := s.sourceCallContext(prior.AppliesTo, anchors, inv.Evidence, maxContractCallers, 2*roleMaxWindowBytes)
+	if err != nil {
+		return s.contractInputFailure(err)
+	}
+	callers = append(linked, callers...)
+	callers = callers[:min(len(callers), maxContractCallers)]
 	extra = append(extra, named...)
 	strengthTerms := contractStrengthTerms(contract.Statement, documents)
 	later, err := s.contractSliceExcerpts(probe, prior, extra, uDoc, uInv, files, strengthTerms, inv.Evidence)
@@ -178,20 +196,22 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 	}
 	var in contractReviewInput
 	in.Contract, in.Prior, in.Scope.Snapshot = contract, prior, s.j.Snapshot.Digest
-	whole, err := s.contractWholeFiles(prior.AppliesTo, extra, inv.Evidence, pool[keep:], files)
-	if err != nil {
-		return s.contractInputFailure(err)
-	}
-	if len(whole) > 0 {
-		in.Scope.Excerpts = append(slices.Clone(documents), whole[0].excerpt)
-		in.Scope.WorkflowRoutes = workflowEvidence(workflow, in.Scope.Excerpts)
-		minimum, err := marshal(in)
+	if len(javaBindings) == 0 {
+		whole, err := s.contractWholeFiles(prior.AppliesTo, extra, inv.Evidence, pool[keep:], files)
 		if err != nil {
 			return s.contractInputFailure(err)
 		}
-		if _, fits := s.fits(s.instructions(contractOutput), minimum, true); fits {
-			code := preferWholeContractFiles(whole, pool[keep:], prior.CodeEvidenceIDs)
-			pool = append(pool[:keep], code...)
+		if len(whole) > 0 {
+			in.Scope.Excerpts = append(slices.Clone(documents), whole[0].excerpt)
+			in.Scope.WorkflowRoutes = workflowEvidence(workflow, in.Scope.Excerpts)
+			minimum, err := marshal(in)
+			if err != nil {
+				return s.contractInputFailure(err)
+			}
+			if _, fits := s.fits(s.instructions(contractOutput), minimum, true); fits {
+				code := preferWholeContractFiles(whole, pool[keep:], prior.CodeEvidenceIDs)
+				pool = append(pool[:keep], code...)
+			}
 		}
 	}
 	validImplementation := make(map[string]bool, len(pool))
@@ -204,7 +224,7 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 		if runtime {
 			runtimeImplementation[e.excerpt.ID] = true
 		}
-		if fresh {
+		if fresh && (len(javaBindings) == 0 || javaBindingSupports(javaBindings, e.excerpt)) {
 			validImplementation[e.excerpt.ID] = true
 		}
 	}
@@ -215,6 +235,7 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 	instructions := s.instructions(contractOutput)
 	build := func(list []record.Excerpt) ([]byte, error) {
 		in.Scope.Excerpts = list
+		in.Scope.DirectCalls = javaContractDirectCalls(javaBindings, documents, list)
 		in.Scope.WorkflowRoutes = workflowEvidence(workflow, list)
 		b, err := marshal(in)
 		if err != nil || len(in.Scope.WorkflowRoutes) == 0 {
@@ -294,7 +315,7 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 		proposed := s.rec
 		proposed.ContractComparisons = []record.ContractComparison{x.ContractComparison}
 		proposed.PartialSupport = x.PartialSupport
-		if !record.ValidateContractFollowup(proposed, doc, inv) {
+		if !record.ValidateContractFollowup(proposed, doc, inv) || !javaAPIComparisonValid(x.ContractComparison, javaBindings, catalog) {
 			return []string{"contract_comparison_invalid"}
 		}
 		if x.Status == "partial" {

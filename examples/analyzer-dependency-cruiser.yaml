@@ -1,0 +1,28 @@
+schema_version: '0.1'
+id: javascript.dependency_cruiser
+languages: [javascript]
+planned_platforms: [linux]
+availability: verified
+version_contract: dependency-cruiser-18.8
+analysis_scope: [interfile, structural]
+executes_repository_code: false
+requires_build: false
+network_policy: none
+version_probe:
+  executable: '${node}'
+  argv: ['${dependency_cruiser}', --version]
+execute:
+  executable: '${node}'
+  argv: [--permission, '--allow-fs-read=${tool_dir}', '--allow-fs-read=${task_dir}', '${dependency_cruiser}', --config, '${json_rules}', --output-type, json, --no-cache, --no-ignore-known, '--', '.']
+  cwd: '${staged_sources}'
+  timeout_seconds: 120
+  stdout_max_bytes: 8388608
+  env_allowlist: [PATH, LANG, HOME, USERPROFILE, TMPDIR, TMP, TEMP, PREFIX, npm_config_prefix]
+exit_codes:
+  clean: [0]
+  findings: []
+  error: [1, 2]
+parser:
+  id: dependency-cruiser
+  format: json
+  input: stdout-artifact

@@ -1,0 +1,29 @@
+# 문서 대상의 생성 결과와 실제 rustdoc 진단 위치로 검사 범위를 확인한다.
+schema_version: '0.1'
+id: rust.rustdoc
+languages: [rust]
+planned_platforms: [linux, windows, macos]
+availability: verified  # Linux cargo/rustc 1.99.1 실행으로 검증. Windows·macOS는 컴파일과 단위 시험만 대상이다.
+version_contract: cargo-1.99-fixture-tested
+analysis_scope: [typed, interfile]
+executes_repository_code: true
+requires_build: true  # build script와 proc macro를 빌드한다. 산출물(rmeta)은 scratch의 target에 둔다.
+network_policy: none  # --offline --locked, CARGO_NET_OFFLINE=true. 의존성 누락은 구성 오류다.
+version_probe:
+  executable: '${cargo}'
+  argv: [--version]
+execute:
+  executable: '${cargo}'
+  argv: [doc, --offline, --locked, --workspace, --no-deps, --message-format=json]
+  cwd: '${workspace}/${module_dir}'
+  timeout_seconds: 1800
+  stdout_max_bytes: 67108864
+  env_allowlist: [PATH, LANG, SystemRoot, CARGO, CARGO_HOME, CARGO_TARGET_DIR, CARGO_BUILD_TARGET, CARGO_NET_OFFLINE, CARGO_TERM_COLOR, CARGO_TERM_PROGRESS_WHEN, CARGO_INCREMENTAL, RUSTC, RUSTDOC, RUSTDOCFLAGS, RUSTC_WRAPPER, RUSTC_WORKSPACE_WRAPPER, 'CARGO_TARGET_<HOST_TRIPLE>_LINKER']
+exit_codes:
+  clean: [0]
+  findings: []
+  error: [101]
+parser:
+  id: cargo-json-v1
+  format: json
+  input: stdout-artifact

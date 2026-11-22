@@ -347,7 +347,7 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatalf("calls %+v exposed %v", r.Coverage.ReviewCalls, r.Coverage.LLMExposedFiles)
 			}
 			for _, call := range r.Coverage.ReviewCalls {
-				if call.PackID != "review" || call.PackVersion != "2.5.2" {
+				if call.PackID != "review" || call.PackVersion != "2.6.0" {
 					t.Fatalf("call %+v", call)
 				}
 			}
@@ -428,7 +428,7 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatal(err)
 			}
 			md := string(report.RenderMarkdown(r, strings.Repeat("0", 64), report.Korean))
-			if !strings.Contains(md, "review@2.5.2") || !strings.Contains(md, "`review.interpret`") || (tc.extra == nil && !strings.Contains(md, "`no_tool_observations`")) {
+			if !strings.Contains(md, "review@2.6.0") || !strings.Contains(md, "`review.interpret`") || (tc.extra == nil && !strings.Contains(md, "`no_tool_observations`")) {
 				t.Fatalf("markdown lacks the pack or the optional row:\n%s", md)
 			}
 		})

@@ -154,3 +154,22 @@ it('prefers main source over a fixture when rule severity ties across tools', ()
   const groups = [...container.querySelectorAll('tbody tr')].map(row => row.querySelector('td code')?.textContent);
   expect(groups).toEqual(['fixture-high', 'source-low', 'fixture-low']);
 });
+
+it('explains a legacy SpotBugs rule once and keeps both reported locations', () => {
+  const rule = 'EI_EXPOSE_REP', analyzer = 'java.spotbugs';
+  const description = '반환한 가변 객체를 바꾸면 객체 내부 상태도 함께 바뀔 수 있습니다.';
+  const observations: Observation[] = [4, 8].map(start => ({
+    id: 'java-' + start, rule, tool: analyzer, message: start === 4 ? 'spotbugs reported ' + rule : null,
+    path: 'src/Settings.java:' + start,
+    location: { path: 'src/Settings.java', start, end: start },
+    state: 'resolved', evidenceState: 'verified_against_source_manifest', severity: 'low', suppressed: false, metric: null,
+  }));
+  const languages = [{ ecosystem: 'java', tools: [tool('spotbugs', analyzer, { observations: observations.map(o => o.id) })] }];
+  render(<StaticDiagnosticReading languages={languages} findings={[]}
+    byID={new Map(observations.map(o => [o.id, o]))} severityOf={new Map()} />);
+  expect(screen.getAllByText(description)).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: '상세 보기' }));
+  expect(screen.getByText('src/Settings.java:8')).toBeTruthy();
+  expect(screen.getAllByText(description)).toHaveLength(1);
+  expect(screen.queryByText('spotbugs reported ' + rule)).toBeNull();
+});

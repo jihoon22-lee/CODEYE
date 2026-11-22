@@ -40,6 +40,7 @@ type callToken struct {
 	close, parent       int
 	name, quoted        bool
 	stringLiteral       bool
+	character           bool
 }
 
 func callLanguage(p string) string {
@@ -60,6 +61,14 @@ func callTokens(content string, python bool) []callToken {
 }
 
 func scanCallTokens(content string, python, member bool) []callToken {
+	return lexicalCallTokens(content, python, member, false, callMaxTokens)
+}
+
+func documentationTokens(content string, python bool) []callToken {
+	return lexicalCallTokens(content, python, false, !python, 4*callMaxTokens)
+}
+
+func lexicalCallTokens(content string, python, member, rust bool, limit int) []callToken {
 	var tokens []callToken
 	var stack []int
 	line, column := 1, 0
@@ -72,7 +81,7 @@ func scanCallTokens(content string, python, member bool) []callToken {
 		}
 	}
 	for len(content) > 0 {
-		if len(tokens) >= callMaxTokens || len(stack) > callMaxDepth {
+		if len(tokens) >= limit || len(stack) > callMaxDepth {
 			return nil
 		}
 		t := callToken{line: line, column: column, depth: len(stack), parent: -1}
@@ -94,6 +103,15 @@ func scanCallTokens(content string, python, member bool) []callToken {
 			content = content[size:]
 			continue
 		case !python && strings.HasPrefix(content, "/*"):
+			if rust {
+				size = rustCommentSize(content)
+				if size == 0 {
+					return nil
+				}
+				advance(content[:size])
+				content = content[size:]
+				continue
+			}
 			end := strings.Index(content[2:], "*/")
 			if end < 0 {
 				return nil
@@ -107,8 +125,20 @@ func scanCallTokens(content string, python, member bool) []callToken {
 			if size == 0 {
 				return nil
 			}
-		case c == '\'' || c == '"' || (!python && c == '`'):
+		case rust && rustRawStringPrefix(content) != "":
+			prefix := rustRawStringPrefix(content)
+			end := `"` + prefix[1:len(prefix)-1]
+			at := strings.Index(content[len(prefix):], end)
+			if at < 0 {
+				return nil
+			}
+			size = len(prefix) + at + len(end)
 			t.stringLiteral = true
+		case rust && c == '\'' && rustLifetime(content):
+			t.text = "'"
+		case c == '\'' || c == '"' || (!python && !rust && c == '`'):
+			t.stringLiteral = true
+			t.character = c == '\''
 			quote := content[:1]
 			if python && strings.HasPrefix(content, strings.Repeat(quote, 3)) {
 				quote = strings.Repeat(quote, 3)
@@ -135,7 +165,7 @@ func scanCallTokens(content string, python, member bool) []callToken {
 				t.text, t.quoted = raw, true
 			}
 			size += len(quote)
-		case !python && (c == '/' || c == '\\'):
+		case !python && !rust && (c == '/' || c == '\\'):
 			return nil
 		default:
 			first, n := utf8.DecodeRuneInString(content)
@@ -178,6 +208,43 @@ func scanCallTokens(content string, python, member bool) []callToken {
 		return nil
 	}
 	return tokens
+}
+
+func rustCommentSize(content string) int {
+	depth := 1
+	for i := 2; i+1 < len(content); i++ {
+		switch content[i : i+2] {
+		case "/*":
+			depth++
+			i++
+		case "*/":
+			depth--
+			if depth == 0 {
+				return i + 2
+			}
+			i++
+		}
+	}
+	return 0
+}
+
+func rustRawStringPrefix(text string) string {
+	if text[0] != 'r' {
+		return ""
+	}
+	i := 1
+	for i < len(text) && text[i] == '#' {
+		i++
+	}
+	if i < len(text) && text[i] == '"' {
+		return text[:i+1]
+	}
+	return ""
+}
+
+func rustLifetime(text string) bool {
+	r, n := utf8.DecodeRuneInString(text[1:])
+	return (unicode.IsLetter(r) || r == '_') && (len(text) <= n+1 || text[n+1] != '\'')
 }
 
 // memberTemplateSize skips simple template expressions as opaque text. A

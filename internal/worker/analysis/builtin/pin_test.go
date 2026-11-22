@@ -88,7 +88,7 @@ func TestGoVetUnchangedInComposite(t *testing.T) {
 			other = append(other, p)
 		}
 	}
-	if !reflect.DeepEqual(vet, want) || len(other) != 3 || other[0].Key != "staticcheck" || other[1].Key != "staticcheck.m01" || other[2].Key != "gofmt" || other[2].Required || plan[0].Key != "go-vet" {
+	if !reflect.DeepEqual(vet, want) || len(other) != 5 || other[0].Key != "staticcheck" || other[1].Key != "staticcheck.m01" || other[2].Key != "gofmt" || other[2].Required || other[3].Key != "errcheck" || other[4].Key != "errcheck.m01" || plan[0].Key != "go-vet" {
 		t.Fatalf("plan %+v, go vet alone %+v", plan, want)
 	}
 	for _, spec := range want {

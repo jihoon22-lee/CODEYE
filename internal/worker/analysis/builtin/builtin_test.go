@@ -47,17 +47,18 @@ func reasons(missing []Unavailable) []string {
 // are the C/C++, Python, JS/TS and Rust analyzers when none of their tool paths is
 // set: members that plan unsupported tasks.
 var (
-	cppUnconfigured    = []string{"cppcheck:not_configured", "clang-tidy:not_configured"}
-	pythonUnconfigured = []string{"ruff:not_configured", "mypy:not_configured", "pyright:not_configured", "bandit:not_configured"}
-	jsUnconfigured     = []string{"eslint:not_configured", "tsc:not_configured", "eslint-typed:not_configured"}
-	rustUnconfigured   = []string{"cargo-check:not_configured", "clippy:not_configured"}
+	cppUnconfigured    = []string{"cppcheck:not_configured", "clang-tidy:not_configured", "gcc-analyzer:not_configured"}
+	pythonUnconfigured = []string{"ruff:not_configured", "mypy:not_configured", "pyright:not_configured", "bandit:not_configured", "import-linter:not_configured"}
+	jsUnconfigured     = []string{"eslint:not_configured", "tsc:not_configured", "eslint-typed:not_configured", "dependency-cruiser:not_configured"}
+	rustUnconfigured   = []string{"cargo-check:not_configured", "clippy:not_configured", "cargo-doc:not_configured"}
+	javaUnconfigured   = []string{"pmd:not_configured", "spotbugs:not_configured"}
 )
 
 // withPacks appends the unconfigured C/C++, Python, JavaScript, Rust and
 // any-ecosystem members in catalog order (Go, C/C++, Python, JavaScript,
 // Rust, any).
 func withPacks(r ...string) []string {
-	return slices.Concat(r, cppUnconfigured, pythonUnconfigured, jsUnconfigured, rustUnconfigured, anyMissing)
+	return slices.Concat(r, []string{"errcheck:not_configured"}, cppUnconfigured, pythonUnconfigured, jsUnconfigured, rustUnconfigured, javaUnconfigured, anyMissing)
 }
 
 func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
@@ -94,7 +95,7 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	for _, d := range c.Descriptors() {
 		ids = append(ids, d.ID)
 	}
-	if !slices.Equal(ids, []string{"go.vet", "go.staticcheck", "go.gofmt", "cpp.cppcheck", "cpp.clang_tidy", "python.ruff", "python.mypy", "python.pyright", "python.bandit", "javascript.eslint", "javascript.tsc", "javascript.eslint_typed", "rust.cargocheck", "rust.clippy", "any.lizard", "any.jscpd", "any.gitleaks"}) {
+	if !slices.Equal(ids, []string{"go.vet", "go.staticcheck", "go.gofmt", "go.errcheck", "cpp.cppcheck", "cpp.clang_tidy", "cpp.gcc_analyzer", "python.ruff", "python.mypy", "python.pyright", "python.bandit", "python.import_linter", "javascript.eslint", "javascript.tsc", "javascript.eslint_typed", "javascript.dependency_cruiser", "rust.cargocheck", "rust.clippy", "rust.rustdoc", "java.pmd", "java.spotbugs", "any.lizard", "any.jscpd", "any.gitleaks"}) {
 		t.Fatalf("catalog order %v", ids)
 	}
 	// A configured staticcheck path that is not a file is invalid: the
@@ -122,7 +123,7 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 }
 
 func TestToolFlagsAndProbes(t *testing.T) {
-	if got := ToolFlags(); !slices.Equal(got, []string{"bandit", "cargo", "clang-tidy", "clippy", "cppcheck", "eslint", "gitleaks", "jscpd", "lizard", "mypy", "pyright", "ruff", "staticcheck", "tsc"}) {
+	if got := ToolFlags(); !slices.Equal(got, []string{"bandit", "cargo", "clang-tidy", "clippy", "cppcheck", "dependency-cruiser", "errcheck", "eslint", "gcc", "gitleaks", "import-linter", "jscpd", "lizard", "mypy", "pmd", "pyright", "ruff", "spotbugs", "staticcheck", "tsc"}) {
 		t.Fatalf("flags %v", got)
 	}
 	tc := fakeRust(t, false)
@@ -131,12 +132,14 @@ func TestToolFlagsAndProbes(t *testing.T) {
 	for _, p := range all {
 		tools = append(tools, p.Tool)
 	}
-	if !slices.Equal(tools, []string{"bandit", "cargo", "clang-tidy", "clippy", "cppcheck", "eslint", "gitleaks", "jscpd", "lizard", "mypy", "pyright", "ruff", "staticcheck", "tsc"}) {
+	if !slices.Equal(tools, []string{"bandit", "cargo", "clang-tidy", "clippy", "cppcheck", "dependency-cruiser", "errcheck", "eslint", "gcc", "gitleaks", "import-linter", "jscpd", "lizard", "mypy", "pmd", "pyright", "ruff", "spotbugs", "staticcheck", "tsc"}) {
 		t.Fatalf("probe tools %v", tools)
 	}
 	// The C/C++ probes are checked by TestCppAnalyzersAdvertiseOnlyWithTheBaseline,
 	// the any-ecosystem probes by TestAnyEcosystemCatalogEntries.
-	probes := withoutAny(slices.DeleteFunc(slices.Clone(all), func(p pack.ToolProbe) bool { return p.Tool == "clang-tidy" || p.Tool == "cppcheck" }))
+	probes := withoutAny(slices.DeleteFunc(slices.Clone(all), func(p pack.ToolProbe) bool {
+		return slices.Contains([]string{"clang-tidy", "cppcheck", "gcc", "errcheck", "pmd", "spotbugs", "dependency-cruiser", "import-linter"}, p.Tool)
+	}))
 	sc := probes[7]
 	if sc.Executable != "/sc" || !slices.Equal(sc.Analyzers, []string{"go.staticcheck"}) || !slices.Equal(sc.Args, []string{"-version"}) || !slices.Equal(sc.Ecosystems, []string{"go"}) {
 		t.Fatalf("probes %+v", probes)
@@ -145,7 +148,7 @@ func TestToolFlagsAndProbes(t *testing.T) {
 		t.Fatalf("version %q %v", v, ok)
 	}
 	// The Rust pack: cargo and clippy are probed directly, in the rust ecosystem.
-	if c := probes[1]; c.Executable != filepath.Join(tc, "cargo") || !slices.Equal(c.Analyzers, []string{"rust.cargocheck"}) || !slices.Equal(c.Args, []string{"--version"}) || !slices.Equal(c.Ecosystems, []string{"rust"}) || c.Interpreter != "" {
+	if c := probes[1]; c.Executable != filepath.Join(tc, "cargo") || !slices.Equal(c.Analyzers, []string{"rust.cargocheck", "rust.rustdoc"}) || !slices.Equal(c.Args, []string{"--version"}) || !slices.Equal(c.Ecosystems, []string{"rust"}) || c.Interpreter != "" {
 		t.Fatalf("cargo probe %+v", c)
 	}
 	if v, ok := probes[1].ParseVersion([]byte("cargo 1.99.1 (5f94df478 2026-08-27)\n")); !ok || v != "1.99.1 (5f94df478 2026-08-27)" {

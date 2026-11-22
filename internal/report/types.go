@@ -22,7 +22,8 @@ const (
 	BuilderID     = "codeye-report"
 	// Stored revisions keep their original builder and schema. Bump this
 	// version when the same accepted inputs would produce a different report.
-	BuilderVersion             = "18"
+	BuilderVersion             = "19"
+	TestCaseResultsSince       = 19
 	AnalysisEvidenceSince      = 17
 	GoTestFailureEvidenceSince = 18
 	DocumentExcerptSince       = 18
@@ -250,24 +251,25 @@ type Task struct {
 // ID is "<task_key>/<name>"; TaskExecutionID is the server row key
 // "<attempt_id>/<task_id>/<ordinal>".
 type Execution struct {
-	ID               string          `json:"id"`
-	TaskKey          string          `json:"task_key"`
-	TaskExecutionID  string          `json:"task_execution_id"`
-	Name             string          `json:"name"`
-	Status           string          `json:"status"`
-	ExitCode         *int            `json:"exit_code"`
-	Reason           *string         `json:"reason"`
-	Cleanup          string          `json:"cleanup"`
-	Argv             []string        `json:"argv"`
-	Cwd              string          `json:"cwd"`
-	EnvKeys          []string        `json:"env_keys"`
-	StdoutArtifactID *string         `json:"stdout_artifact_id"`
-	StderrArtifactID *string         `json:"stderr_artifact_id"`
-	StdoutTruncated  bool            `json:"stdout_truncated"`
-	StderrTruncated  bool            `json:"stderr_truncated"`
-	StartedAt        *string         `json:"started_at"`
-	EndedAt          *string         `json:"ended_at"`
-	GoTestFailures   []GoTestFailure `json:"go_test_failures,omitempty"`
+	ID               string           `json:"id"`
+	TaskKey          string           `json:"task_key"`
+	TaskExecutionID  string           `json:"task_execution_id"`
+	Name             string           `json:"name"`
+	Status           string           `json:"status"`
+	ExitCode         *int             `json:"exit_code"`
+	Reason           *string          `json:"reason"`
+	Cleanup          string           `json:"cleanup"`
+	Argv             []string         `json:"argv"`
+	Cwd              string           `json:"cwd"`
+	EnvKeys          []string         `json:"env_keys"`
+	StdoutArtifactID *string          `json:"stdout_artifact_id"`
+	StderrArtifactID *string          `json:"stderr_artifact_id"`
+	StdoutTruncated  bool             `json:"stdout_truncated"`
+	StderrTruncated  bool             `json:"stderr_truncated"`
+	StartedAt        *string          `json:"started_at"`
+	EndedAt          *string          `json:"ended_at"`
+	TestCases        *TestCaseResults `json:"test_cases,omitempty"`
+	GoTestFailures   []GoTestFailure  `json:"go_test_failures,omitempty"`
 }
 
 // GoTestFailure points to the source declaration of a named failed Go test

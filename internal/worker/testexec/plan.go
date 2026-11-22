@@ -33,6 +33,7 @@ type testPlan struct {
 	args             []string
 	dependencies     bool
 	unsupportedScope bool
+	runner           string
 }
 
 func task(key, dir, title string, args ...string) testPlan {
@@ -55,6 +56,12 @@ func plans(job analysis.Job) ([]testPlan, error) {
 		}
 	}
 	out = append(out, javascriptPlans(job)...)
+	out = append(out, cmakePlans(job, files)...)
+	java, err := javaPlans(job)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, java...)
 	pyModules, err := (deps.PythonFetcher{}).Plan(job)
 	if err != nil {
 		return nil, err
@@ -66,7 +73,18 @@ func plans(job analysis.Job) ([]testPlan, error) {
 		// unittest's conventional test directory may be a namespace-free
 		// directory, so use it directly when present.
 		if start := pythonTests(mod.Dir, pyModules, files); start != "" {
-			out = append(out, task(pythonKey+mod.Suffix, mod.Dir, "Python 테스트", start))
+			p := task(pythonKey+mod.Suffix, mod.Dir, "Python 테스트", start)
+			p.runner = "unittest"
+			if usesPytest(job, mod.Dir, pyModules, files) {
+				p.runner = "pytest"
+				p.args = nil
+				for _, nested := range pyModules {
+					if nested.Dir != mod.Dir && pack.UnderDir(nested.Dir, mod.Dir) {
+						p.args = append(p.args, "--ignore="+strings.TrimPrefix(nested.Dir, strings.TrimPrefix(mod.Dir+"/", "./")))
+					}
+				}
+			}
+			out = append(out, p)
 		}
 	}
 	rustModules, err := rustpack.PlanModules(manifest, job.Scope)
@@ -75,7 +93,7 @@ func plans(job analysis.Job) ([]testPlan, error) {
 	}
 	for _, mod := range rustModules {
 		if pack.PathInScope(mod.Dir, job.Scope) {
-			out = append(out, task(rustKey+mod.Suffix, mod.Dir, "Rust 테스트"))
+			out = append(out, rustTestPlans(files, mod)...)
 		}
 	}
 	if len(out) == 0 {
@@ -92,7 +110,7 @@ func pythonTests(dir string, modules []deps.Module, files map[string]source.Entr
 	start := ""
 	for file := range files {
 		base := path.Base(file)
-		if !strings.HasPrefix(base, "test") || !strings.HasSuffix(base, ".py") || anypack.UnderDataDir(file) {
+		if !(strings.HasPrefix(base, "test") && strings.HasSuffix(base, ".py") || strings.HasSuffix(base, "_test.py")) || anypack.UnderDataDir(file) {
 			continue
 		}
 		owner, ok := govet.OwningModule(file, moduleDirs)
@@ -106,6 +124,48 @@ func pythonTests(dir string, modules []deps.Module, files map[string]source.Entr
 		start = "."
 	}
 	return start
+}
+
+func usesPytest(job analysis.Job, dir string, modules []deps.Module, files map[string]source.Entry) bool {
+	if _, ok := files[path.Join(dir, "pytest.ini")]; ok {
+		return true
+	}
+	for _, candidate := range []struct{ file, marker string }{
+		{"pyproject.toml", "[tool.pytest"}, {"setup.cfg", "[tool:pytest]"}, {"tox.ini", "[pytest]"},
+	} {
+		entry, ok := files[path.Join(dir, candidate.file)]
+		if !ok || entry.Size == nil || *entry.Size > 1<<20 {
+			continue
+		}
+		body, err := govet.ReadSnapshotFile(job.Snapshot.SnapshotDir, entry.Path)
+		if err == nil && slices.ContainsFunc(strings.Split(string(body), "\n"), func(line string) bool {
+			return strings.HasPrefix(strings.TrimSpace(line), candidate.marker)
+		}) {
+			return true
+		}
+	}
+	var moduleDirs []string
+	for _, mod := range modules {
+		moduleDirs = append(moduleDirs, mod.Dir)
+	}
+	for name, entry := range files {
+		owner, ok := govet.OwningModule(name, moduleDirs)
+		if !ok || owner != dir || entry.Size == nil || *entry.Size > 1<<20 || anypack.UnderDataDir(name) {
+			continue
+		}
+		if path.Base(name) == "conftest.py" || strings.HasPrefix(path.Base(name), "test_") || strings.HasSuffix(name, "_test.py") {
+			if path.Base(name) == "conftest.py" || strings.HasSuffix(name, "_test.py") {
+				return true
+			}
+			body, err := govet.ReadSnapshotFile(job.Snapshot.SnapshotDir, name)
+			if err == nil && slices.ContainsFunc(strings.Split(string(body), "\n"), func(line string) bool {
+				return strings.HasPrefix(line, "import pytest") || strings.HasPrefix(line, "from pytest import ") || strings.HasPrefix(line, "def test_")
+			}) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 type packageScripts struct {
@@ -139,6 +199,7 @@ func javascriptPlans(job analysis.Job) []testPlan {
 			n++
 			suffix = fmt.Sprintf(".m%02d", n)
 		}
+		seenCommands := map[string]bool{}
 		for _, candidate := range []struct {
 			key, title string
 			scripts    []string
@@ -148,11 +209,14 @@ func javascriptPlans(job analysis.Job) []testPlan {
 			{jsE2E, "JavaScript E2E 테스트", []string{"test:e2e", "e2e"}},
 		} {
 			for _, script := range candidate.scripts {
-				if strings.TrimSpace(pkg.Scripts[script]) == "" {
+				command := strings.TrimSpace(pkg.Scripts[script])
+				if command == "" || seenCommands[command] || script == "test" && aggregateScript(command, pkg.Scripts) {
 					continue
 				}
+				seenCommands[command] = true
 				p := task(candidate.key+suffix, dir, candidate.title, script)
 				p.unsupportedScope = !wholeModule
+				p.runner = javascriptRunner(command)
 				if script == "test" {
 					p.spec.Title = "JavaScript 테스트"
 				}
@@ -163,6 +227,40 @@ func javascriptPlans(job analysis.Job) []testPlan {
 		}
 	}
 	return out
+}
+
+func aggregateScript(command string, scripts map[string]string) bool {
+	for _, name := range []string{"test:module", "test:integration", "test:e2e", "e2e"} {
+		if scripts[name] != "" && (strings.Contains(command, "npm run "+name) || strings.Contains(command, "npm run-script "+name)) {
+			return true
+		}
+	}
+	return false
+}
+
+// A simple direct invocation lets us add the framework's reporter arguments
+// without applying them to the wrong command in a compound npm script.
+func javascriptRunner(command string) string {
+	if strings.ContainsAny(command, "\n\r;|&<>$\x60\\#") {
+		return ""
+	}
+	args := strings.Fields(command)
+	if len(args) == 0 {
+		return ""
+	}
+	switch path.Base(args[0]) {
+	case "jest", "vitest":
+		return path.Base(args[0])
+	case "node":
+		if slices.Contains(args[1:], "--test") {
+			return "node-test"
+		}
+	case "playwright":
+		if len(args) > 1 && args[1] == "test" {
+			return "playwright"
+		}
+	}
+	return ""
 }
 
 func declaredDependencies(groups ...json.RawMessage) bool {

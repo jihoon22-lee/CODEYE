@@ -51,6 +51,15 @@
       "tested_series": "1.19.5"
     },
     {
+      "name": "errcheck",
+      "status": "found",
+      "path": "/home/user/.local/share/codeye-tools/go/bin/errcheck",
+      "version": "v1.30.0",
+      "version_tested": true,
+      "source": "codeye-tools/go/bin",
+      "tested_series": "v1.30.0"
+    },
+    {
       "name": "staticcheck",
       "status": "found",
       "path": "/home/user/.local/share/codeye-tools/go/bin/staticcheck",
@@ -134,6 +143,15 @@
       "hint": "`micromamba install -p ~/.local/share/codeye-tools/cpp clang-tools` (or `sudo apt install clang-tidy`) or set `agent.tools.clang-tidy`"
     },
     {
+      "name": "gcc",
+      "status": "found",
+      "path": "/usr/bin/gcc",
+      "version": "15.2.0",
+      "version_tested": true,
+      "source": "PATH",
+      "tested_series": "13.4,15.2"
+    },
+    {
       "name": "eslint",
       "status": "found",
       "path": "/home/user/.local/share/codeye-tools/node/node_modules/eslint/bin/eslint.js",
@@ -150,6 +168,18 @@
       "version_tested": true,
       "source": "codeye-tools/node",
       "tested_series": "6.0"
+    },
+    {
+      "name": "dependency-cruiser",
+      "status": "not_found",
+      "version_tested": false,
+      "hint": "install dependency-cruiser in the operator Node tool directory"
+    },
+    {
+      "name": "import-linter",
+      "status": "not_found",
+      "version_tested": false,
+      "hint": "install Import Linter in an operator Python environment"
     },
     {
       "name": "jscpd",
@@ -177,6 +207,28 @@
       "version_tested": true,
       "source": "rustup default",
       "tested_series": "0.1.99"
+    },
+    {
+      "name": "java",
+      "status": "found",
+      "path": "/opt/jdk/bin/java",
+      "version": "21.0.13.1",
+      "version_tested": true,
+      "source": "configured"
+    },
+    {
+      "name": "pmd",
+      "status": "found",
+      "path": "/opt/pmd/lib/pmd-cli-7.29.0.jar",
+      "version": "7.29.0",
+      "version_tested": true,
+      "source": "configured"
+    },
+    {
+      "name": "spotbugs",
+      "status": "not_found",
+      "version_tested": false,
+      "hint": "extract SpotBugs and set agent.tools.spotbugs to lib/spotbugs.jar"
     },
     {
       "name": "npm",

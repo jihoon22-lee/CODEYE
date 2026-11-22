@@ -150,7 +150,7 @@ func (c sectionContext) environment() *EnvironmentSection {
 	s.Discovery, doc = c.discovery(envdoc.TaskEnvironment)
 	if doc != nil && doc.Environment != nil {
 		for _, m := range doc.Modules {
-			s.Modules = append(s.Modules, EnvModule{ID: m.ID, Ecosystem: m.Ecosystem, Path: m.Path, InScope: m.InScope})
+			s.Modules = append(s.Modules, EnvModule{ID: m.ID, Ecosystem: m.Ecosystem, Path: m.Path, InScope: m.InScope, BuildSystem: m.BuildSystem, BuildRoot: m.BuildRoot})
 		}
 		e := doc.Environment
 		for _, m := range e.Manifests {
@@ -198,6 +198,22 @@ func (c sectionContext) documents() *DocumentsSection {
 		s.Budget = &DocBudget{TotalBytes: d.Budget.TotalBytes, PerDocumentBytes: d.Budget.PerDocumentBytes, MaxDocuments: d.Budget.MaxDocuments, ReadBytes: d.Budget.ReadBytes}
 		for _, x := range d.Items {
 			s.Items = append(s.Items, DocItem{Path: x.Path, Class: x.Class, AppliesTo: x.AppliesTo, Status: x.Status, Reason: x.Reason, SizeBytes: x.SizeBytes, LineCount: x.LineCount})
+		}
+		if len(d.DocumentationGaps) != 0 {
+			byPath := make(map[string]int, len(d.Items))
+			for _, item := range d.Items {
+				if item.LineCount != nil {
+					byPath[item.Path] = *item.LineCount
+				}
+			}
+			for _, gap := range d.DocumentationGaps {
+				x := DocCoverageGap{Kind: gap.Kind, Symbol: gap.Symbol, Default: gap.Default, Scope: gap.Scope,
+					Source: DocCoverageLocation{gap.Source.Path, gap.Source.StartLine, gap.Source.EndLine}}
+				for _, p := range gap.Searched {
+					x.Searched = append(x.Searched, DocCoverageSearch{p, byPath[p]})
+				}
+				s.DocumentationGaps = append(s.DocumentationGaps, x)
+			}
 		}
 		for _, m := range d.Modules {
 			s.Modules = append(s.Modules, DocModule{Module: m.Module, State: m.State, Own: append([]string{}, m.Own...), Inherited: append([]string{}, m.Inherited...)})

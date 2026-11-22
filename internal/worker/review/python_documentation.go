@@ -146,10 +146,9 @@ func pythonDocDeclarations(tokens []callToken) []pythonDocDeclaration {
 	return declarations
 }
 
-func pythonDocRanges(content string, object []string) []pythonDocRange {
-	tokens := callTokens(content, true)
-	if len(tokens) == 0 {
-		return nil
+func pythonObjectDeclaration(tokens []callToken, object []string) (pythonDocDeclaration, bool) {
+	if len(tokens) == 0 || len(object) == 0 {
+		return pythonDocDeclaration{}, false
 	}
 	decls := pythonDocDeclarations(tokens)
 	objectDecl := func(parent *pythonDocDeclaration, name string) *pythonDocDeclaration {
@@ -179,21 +178,34 @@ func pythonDocRanges(content string, object []string) []pythonDocRange {
 		}
 		return found
 	}
+	var decl *pythonDocDeclaration
+	for _, name := range object {
+		decl = objectDecl(decl, name)
+		if decl == nil {
+			return pythonDocDeclaration{}, false
+		}
+	}
+	return *decl, true
+}
+
+func pythonDocRanges(content string, object []string) []pythonDocRange {
+	tokens := documentationTokens(content, true)
+	if len(tokens) == 0 {
+		return nil
+	}
 	read := func(d *pythonDocDeclaration) pythonDocRange {
 		r := pythonDocstring(tokens, d.body)
 		r.declaration = d.line
 		return r
 	}
 	if len(object) != 0 {
-		var decl *pythonDocDeclaration
-		for _, name := range object {
-			decl = objectDecl(decl, name)
-			if decl == nil {
-				return nil
-			}
+		d, ok := pythonObjectDeclaration(tokens, object)
+		if !ok {
+			return nil
 		}
-		return []pythonDocRange{read(decl)}
+		return []pythonDocRange{read(&d)}
 	}
+	decls := pythonDocDeclarations(tokens)
 	docs := []pythonDocRange{pythonDocstring(tokens, 0)}
 	names := map[string]int{}
 	for _, d := range decls {
@@ -291,7 +303,7 @@ func documentedPythonWitness(e source.Entry, content string, q witnessQuery) con
 	if len(cited) == 0 {
 		return contractWitness{}
 	}
-	tokens := callTokens(content, true)
+	tokens := documentationTokens(content, true)
 	lines := strings.Split(content, "\n")
 	var best contractWitness
 	for _, d := range pythonDocDeclarations(tokens) {

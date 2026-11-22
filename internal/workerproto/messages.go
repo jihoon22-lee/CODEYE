@@ -111,9 +111,11 @@ type Hello struct {
 	AnalyzerTools map[string]string `json:"analyzer_tools,omitempty"`
 	// TestPackageManagers carries the operator's npm and Python paths even
 	// when dependency fetching is off.
-	TestPackageManagers map[string]string `json:"test_package_managers,omitempty"`
-	ToolPath            string            `json:"tool_path"`
-	LeaseMarginSeconds  int               `json:"lease_margin_seconds"`
+	TestPackageManagers  map[string]string `json:"test_package_managers,omitempty"`
+	Tests                *TestSettings     `json:"tests,omitempty"`
+	ToolPath             string            `json:"tool_path"`
+	JavaClasspathCatalog string            `json:"java_classpath_catalog,omitempty"`
+	LeaseMarginSeconds   int               `json:"lease_margin_seconds"`
 
 	// AdvertiseWithoutBaseline: advertise the analysis capability even when no
 	// baseline analyzer is usable; its tasks end unsupported (the service).
@@ -131,6 +133,14 @@ type Hello struct {
 	// (--dependency-fetch and its options, docs/ARCHITECTURE.md#의존성-준비);
 	// absent when the operator did not turn fetching on.
 	Dependencies *Dependencies `json:"dependencies,omitempty"`
+}
+
+// TestSettings are node operator settings for the isolated test runners.
+type TestSettings struct {
+	GoRun           string `json:"go_run,omitempty"`
+	GoRace          bool   `json:"go_race,omitempty"`
+	MavenRepository string `json:"maven_repository,omitempty"`
+	GradleHome      string `json:"gradle_home,omitempty"`
 }
 
 // ModelSettings names the trusted host settings a managed worker reloads at the

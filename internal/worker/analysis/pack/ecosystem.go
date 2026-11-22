@@ -29,8 +29,8 @@ var sourceExtensions = map[string]string{
 	".py": "python", ".pyi": "python",
 	".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
 	".ts": "javascript", ".tsx": "javascript", ".mts": "javascript", ".cts": "javascript",
-	".rs": "rust",
-	".c":  "cpp", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp", ".c++": "cpp",
+	".rs": "rust", ".java": "java",
+	".c": "cpp", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp", ".c++": "cpp",
 	".h": "cpp", ".hh": "cpp", ".hpp": "cpp", ".hxx": "cpp", ".h++": "cpp",
 }
 

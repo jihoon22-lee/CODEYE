@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.codeye.invalid/v0.1/test-results.schema.json",
+  "title": "CODEYE test results v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "attempt_id", "snapshot_manifest_digest", "task_key", "runner", "stdout_sha256", "stderr_sha256", "counts"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "run_id": {"$ref": "#/$defs/id"},
+    "attempt_id": {"$ref": "#/$defs/id"},
+    "snapshot_manifest_digest": {"$ref": "#/$defs/digest"},
+    "task_key": {"type": "string", "pattern": "^test\\.[a-z0-9-]+(?:\\.m[0-9]{2,})?$"},
+    "runner": {"enum": ["go", "unittest", "pytest", "jest", "vitest", "node-test", "playwright", "cargo", "nextest", "ctest", "maven", "gradle"]},
+    "stdout_sha256": {"$ref": "#/$defs/digest"},
+    "stderr_sha256": {"$ref": "#/$defs/digest"},
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "failed", "skipped"],
+      "properties": {
+        "passed": {"$ref": "#/$defs/count"},
+        "failed": {"$ref": "#/$defs/count"},
+        "skipped": {"$ref": "#/$defs/count"}
+      },
+      "anyOf": [
+        {"properties": {"passed": {"minimum": 1}}},
+        {"properties": {"failed": {"minimum": 1}}},
+        {"properties": {"skipped": {"minimum": 1}}}
+      ]
+    },
+    "cases": {"type": "array", "maxItems": 128, "items": {"$ref": "#/$defs/case"}}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "count": {"type": "integer", "minimum": 0, "maximum": 1000000},
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status"],
+      "dependentRequired": {"path": ["line"], "line": ["path"]},
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"},
+        "status": {"enum": ["passed", "failed", "skipped"]},
+        "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))[^\\\\:\\r\\n]+$"},
+        "line": {"type": "integer", "minimum": 1, "description": "스냅샷에서 확인한 테스트 위치의 실제 줄 번호."}
+      }
+    }
+  }
+}

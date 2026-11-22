@@ -80,6 +80,14 @@ func bound(kind, c string) (string, []int) {
 		if p, ok := parts(c, 3); ok {
 			return ComparePrefix, p
 		}
+	case "gradle_toolchain_version":
+		if p, ok := parts(strings.TrimPrefix(c, "1."), 1); ok {
+			return ComparePrefix, p
+		}
+	case "maven_compiler_release", "maven_compiler_source", "maven_java_version", "maven_plugin_release", "maven_plugin_source", "gradle_compiler_release", "gradle_source_compatibility":
+		if p, ok := parts(strings.TrimPrefix(c, "1."), 1); ok {
+			return CompareMinimum, p
+		}
 	case "rust_version":
 		if p, ok := parts(c, 3); ok {
 			return CompareMinimum, p

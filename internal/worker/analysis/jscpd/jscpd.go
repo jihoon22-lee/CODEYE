@@ -100,7 +100,7 @@ func Descriptor() pack.Descriptor {
 // each to a format (measured).
 var Extensions = map[string]bool{
 	".go": true, ".py": true, ".pyi": true, ".js": true, ".jsx": true, ".mjs": true, ".cjs": true, ".ts": true, ".tsx": true, ".mts": true, ".cts": true,
-	".rs": true, ".c": true, ".cc": true, ".cpp": true, ".cxx": true, ".c++": true, ".h": true, ".hh": true, ".hpp": true, ".hxx": true, ".h++": true,
+	".rs": true, ".java": true, ".c": true, ".cc": true, ".cpp": true, ".cxx": true, ".c++": true, ".h": true, ".hh": true, ".hpp": true, ".hxx": true, ".h++": true,
 }
 
 // Eligible reports a file jscpd compares.

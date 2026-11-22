@@ -78,7 +78,7 @@ func TestPythonSnapshotWithoutRuff(t *testing.T) {
 	for _, a := range at {
 		tools = append(tools, a.Tool+"="+string(a.Status))
 	}
-	if !slices.Equal(tools, []string{"bandit=not_probed", "gitleaks=not_probed", "jscpd=not_probed", "lizard=not_probed", "mypy=not_probed", "pyright=not_probed", "ruff=not_probed"}) {
+	if !slices.Equal(tools, []string{"bandit=not_probed", "gitleaks=not_probed", "import-linter=not_probed", "jscpd=not_probed", "lizard=not_probed", "mypy=not_probed", "pyright=not_probed", "ruff=not_probed"}) {
 		t.Fatalf("analyzer tools %v", tools)
 	}
 }

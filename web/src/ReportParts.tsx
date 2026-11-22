@@ -224,7 +224,7 @@ export function FindingCard({ f, badge, history, showCategory, detailGroup }: { 
     <div className="card report-card report-finding">
       <details data-finding-id={f.id} name={detailGroup} className="finding-card">
         <summary>
-          <strong>{f.title}</strong>
+          <strong>{f.displayTitle ?? f.title}</strong>
           {detailGroup ? <><span className="report-index-status">{label(t.validation, f.validation)} · {label(t.severity, f.severity)}
             {secondaryReviewFinding(f) && <small className="report-item-category">{t.reading.secondary}</small>}</span>
             <span className="report-index-location">{location ? <code>{location}</code> : '—'}</span></> : <span>
@@ -247,7 +247,7 @@ function FindingDetails({ f, history }: { f: Finding; history?: ReactNode }) {
   const source = f.evidence.find(e => e.kind === 'code' && e.excerpt && e.path && e.lines && !f.counter.includes(e.id));
   return (
     <div className="finding-body">
-      {source?.excerpt && source.path && source.lines && <ReportPreview path={source.path} start={source.lines.start} end={source.lines.end} excerpt={source.excerpt} title={f.title} />}
+      {source?.excerpt && source.path && source.lines && <ReportPreview path={source.path} start={source.lines.start} end={source.lines.end} excerpt={source.excerpt} title={f.displayTitle ?? f.title} />}
       <dl className="key">
         <dt>{t.impact}</dt>
         <dd>{f.impact}</dd>

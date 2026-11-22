@@ -256,6 +256,7 @@ type docInput struct {
 	DirectivePath    string           `json:"directive_path,omitempty"`
 	IncompleteList   bool             `json:"incomplete_list,omitempty"`
 	PackageReference *docPackageInput `json:"package_reference,omitempty"`
+	JavaAPI          string           `json:"public_api,omitempty"`
 }
 
 type docPackageInput struct {
@@ -366,12 +367,15 @@ func (s *roleStage) documents() analysis.TaskResult {
 		for i, e := range list {
 			d := byPath[e.DocumentPath()]
 			class := d.Class
-			if e.DirectivePath != "" {
+			if e.IsRustAPIDocument() {
+				class = "rustdoc"
+			} else if e.DirectivePath != "" {
 				class = "python_docstring"
 			}
 			x.Documents = append(x.Documents, docInput{EvidenceID: fmt.Sprintf("D%d", i+1), Path: e.Path, AppliesTo: d.AppliesTo, Class: class,
 				StartLine: e.Start, EndLine: e.End, Text: e.Text, DirectivePath: e.DirectivePath,
-				IncompleteList: incompleteDocumentList(e, list, evidence.lists[e.Path]), PackageReference: packageInput(e.PackageReference)})
+				IncompleteList: incompleteDocumentList(e, list, evidence.lists[e.Path]), PackageReference: packageInput(e.PackageReference),
+				JavaAPI: evidence.javaAPIs[e.ID]})
 		}
 		return x
 	}
@@ -597,6 +601,7 @@ type investigateScope struct {
 	MemberTest      *memberTestHint         `json:"member_test,omitempty"`
 	WorkflowRoutes  []workflowEvidenceInput `json:"workflow_routes,omitempty"`
 	ContractAnchors []contractAnchorInput   `json:"contract_anchors,omitempty"`
+	RustAPIs        []rustAPILink           `json:"rust_api,omitempty"`
 	Limitations     []string                `json:"limitations"`
 }
 
@@ -614,6 +619,7 @@ func (scope investigateScope) withExcerpts(list []record.Excerpt, links corpusLi
 	}
 	scope.MemberTest = links.member.hint(list)
 	scope.WorkflowRoutes = workflowEvidence(links.workflow, list)
+	scope.RustAPIs = submittedRustAPILinks(links.rustAPILinks, list)
 	return scope
 }
 
@@ -723,7 +729,10 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		// An exact docstring window is documentation even if selected by a
 		// source scan as well. Separate implementation windows remain eligible.
 		docCatalog := catalogOf(docEv)
-		code = slices.DeleteFunc(code, func(x record.Excerpt) bool { return docCatalog[x.ID].DirectivePath != "" })
+		code = slices.DeleteFunc(code, func(x record.Excerpt) bool {
+			e := docCatalog[x.ID]
+			return e.DirectivePath != "" || e.IsJavaAPIDocument()
+		})
 		if len(code) == 0 {
 			return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
 		}
@@ -756,6 +765,9 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	build := func(list []record.Excerpt) ([]byte, error) {
 		x := in
 		x.Scope = in.Scope.withExcerpts(list, links)
+		if s.slice == nil && rustAPIImplementationMissing(x.Documents.Contracts, docEv, x.Scope.RustAPIs) {
+			x.Scope.Limitations = addLim(x.Scope.Limitations, rustAPIContextOmitted)
+		}
 		return marshal(x)
 	}
 	instructions := s.instructions(investigateContract)
@@ -797,10 +809,17 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	in.Scope = in.Scope.withExcerpts(sent, links)
 	if links.claims.keep > 0 {
 		if balanced, ok := s.fitContractAllocation(in, links, docEv); ok {
-			sent = balanced
-			in.Scope = in.Scope.withExcerpts(sent, links)
-			in.Scope.ContractAnchors = links.claims.submitted(sent)
+			balancedScope := in.Scope.withExcerpts(balanced, links)
+			if len(balancedScope.RustAPIs) >= len(in.Scope.RustAPIs) {
+				sent = balanced
+				in.Scope = balancedScope
+				in.Scope.ContractAnchors = links.claims.submitted(sent)
+			}
 		}
+	}
+	if s.slice == nil && rustAPIImplementationMissing(in.Documents.Contracts, docEv, in.Scope.RustAPIs) {
+		s.rec.Limitations = addLim(s.rec.Limitations, rustAPIContextOmitted)
+		in.Scope.Limitations = s.rec.Limitations
 	}
 	contract := investigateContract
 	var navigation []contractNavigationCandidate
@@ -816,6 +835,10 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	}
 	s.setEvidence(append(append([]record.Excerpt{}, sent...), docEv...))
 	catalog := catalogOf(s.rec.Evidence)
+	javaBindings, err := s.javaAPIBindings(docEv)
+	if err != nil {
+		return s.inputFailure(err)
+	}
 	source := catalogOf(sent)
 	var candidates []record.Candidate
 	var strengths []record.Strength
@@ -861,7 +884,9 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		for _, x := range out.ContractComparisons {
 			if record.ForeignInsightProse(x.Reason) {
 				errs = addLim(errs, record.InsightLanguageError)
-			} else if s.slice != nil || seen[x.ContractIndex] || !x.Valid(catalog) || !x.MatchesContract(in.Documents.Contracts) || !s.existingDir(x.AppliesTo) {
+			} else if s.slice != nil || seen[x.ContractIndex] || !x.Valid(catalog) || !x.MatchesContract(in.Documents.Contracts) ||
+				!s.existingDir(x.AppliesTo) || !javaAPIComparisonValid(x, javaBindings, catalog) ||
+				!rustAPIComparisonValid(x, links.rustAPIs, catalog) {
 				errs = addLim(errs, "contract_comparison_invalid")
 			}
 			seen[x.ContractIndex] = true

@@ -149,27 +149,31 @@ func equalParts(a, b []string) bool {
 	return true
 }
 
-// generatedMarkers are the conventional markers of generated source in a
-// file's first lines: Go's "Code generated ... DO NOT EDIT." and the
-// @generated tag many generators write.
-var generatedMarkers = [][]byte{[]byte("@generated")}
-
-// GeneratedHeader reports whether the first lines of a file (at most ten
-// are looked at) say the file is generated. It is a cheap marker check,
-// not a parser: a file without a marker may still be generated.
+// GeneratedHeader reports whether a conventional generated-code marker
+// occurs in the first ten lines. Both Go marker phrases must be on one line.
 func GeneratedHeader(head []byte) bool {
-	for i, line := range bytes.SplitN(head, []byte("\n"), 11) {
-		if i == 10 {
+	end := 0
+	for range 10 {
+		line := bytes.IndexByte(head[end:], '\n')
+		if line < 0 {
+			end = len(head)
 			break
 		}
+		end += line + 1
+	}
+	head = head[:end]
+	if bytes.Contains(head, []byte("@generated")) {
+		return true
+	}
+	if !bytes.Contains(head, []byte("Code generated")) || !bytes.Contains(head, []byte("DO NOT EDIT")) {
+		return false
+	}
+	for len(head) > 0 {
+		line, rest, _ := bytes.Cut(head, []byte("\n"))
 		if bytes.Contains(line, []byte("Code generated")) && bytes.Contains(line, []byte("DO NOT EDIT")) {
 			return true
 		}
-		for _, m := range generatedMarkers {
-			if bytes.Contains(line, m) {
-				return true
-			}
-		}
+		head = rest
 	}
 	return false
 }

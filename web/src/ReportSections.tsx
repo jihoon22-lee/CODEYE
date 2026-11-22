@@ -3,7 +3,7 @@ import { sourceEvidenceURL, type AnalysisReport, type Finding, type GoTestFailur
 import type { Dependency, Ledger, LedgerModule, ModelState, SectionStage, Sections } from './parseReportSections';
 import { ComparisonSection, HIDDEN } from './HistoryView';
 import { ko } from './locales/ko';
-import { reportKo as t } from './locales/report-ko';
+import { reportKo as t, diagnosticDescription } from './locales/report-ko';
 import { inspectionsKo } from './locales/report-inspections-ko';
 import { Citations, FindingList, PinnedSourceLink, ReportCalls, ReportCounts, ReportExports, ReportIdentity, ReportPath, ReportReviewStatus, ReportScope, ReportSourceContext, ReportTasks, TextList, explainReason, label, sourceLocation, type ReportHistory } from './ReportParts';
 import { ReportAction, ReportIcon, ReportLayout } from './ReportLayout';
@@ -140,23 +140,32 @@ function TestRunOverview({ results, id }: { results: NonNullable<AnalysisReport[
   const reasons = new Set(results.tasks.map(task => task.reason));
   const reason = results.status === 'not_run' && reasons.size === 1 ? [...reasons][0] : null;
   const rows = results.tasks.flatMap(task => {
-    const suite = label(t.tests.suites, task.key.split('.')[1]);
+    const suite = task.cases?.runner ?? label(t.tests.suites, task.key.split('.')[1]);
     const directory = task.directory && task.directory !== '.' ? task.directory : null;
     const taskStatus = task.result !== 'unverified' ? label(t.tests.statuses, task.result) :
       task.status === 'succeeded' ? t.tests.unverified : label(s.taskStatus, task.status);
     const exit = task.exit === null ? null : t.tests.commandExit(task.exit);
     const explanation = task.reason && task.reason !== 'test_command_failed' ? explainReason(task.reason) : null;
     const status = (text: string, showCommand = true) => <span key="status">{text}
+      {showCommand && task.cases && <small className="report-test-detail">{t.tests.caseCounts(task.cases.passed, task.cases.failed, task.cases.skipped)}</small>}
       {showCommand && exit && <small className="report-test-detail">{exit}</small>}
       {showCommand && explanation && <small className="report-test-detail">{explanation}</small>}
     </span>;
-    if (task.failures.length) return task.failures.map((failure, index): ReactNode[] => [
+    if (task.failures.length && !task.cases?.cases.some(c => c.status === 'failed' && c.path)) return task.failures.map((failure, index): ReactNode[] => [
       <span key="test">{failure.name ? <code>{failure.name}</code> : t.tests.nameWithheld}
         {index === 0 && <small className="report-test-detail">{suite}{directory && <> · <ReportPath value={directory} /></>}</small>}
       </span>,
       <TestDeclaration key="position" {...failure} />,
       status(t.tests.testFailed, index === 0),
     ]);
+    if (task.cases) {
+      const rows: ReactNode[][] = [[<span key="suite">{suite}{directory && <small className="report-test-detail"><ReportPath value={directory} /></small>}</span>, '—', status(taskStatus)]];
+      for (const c of task.cases.cases.filter(c => c.status === 'failed')) {
+        rows.push([<code key="test">{c.name}</code>,
+          c.path && c.line ? <TestDeclaration key="position" path={c.path} line={c.line} /> : '—', status(t.tests.testFailed, false)]);
+      }
+      return rows;
+    }
     return [[
       <span key="suite">{suite}{directory && <small className="report-test-detail"><ReportPath value={directory} /></small>}
         {task.result === 'failed' && <small className="report-test-detail">{t.tests.unidentified}</small>}
@@ -193,7 +202,7 @@ function ObservationTable({ ids, byID }: { ids: string[]; byID: Map<string, Obse
           <code key="r">{o?.rule}</code>,
           <code key="l">{o?.path ?? o?.state}</code>,
           <>
-            {o?.message ?? t.unknown}
+            {o ? diagnosticDescription(o.tool ?? '', o.rule, o.message) ?? o.message ?? t.unknown : t.unknown}
             {o?.metric && <small> ({t.metricMarker(o.metric.value, o.metric.threshold)})</small>}
           </>,
         ];
@@ -553,7 +562,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const docItems = d.items.filter((x) => !secondaryPath(x.path));
   const docModules = d.modules.filter((x) => !modSecondary(x.module));
   const docSecondary = d.items.length - docItems.length + d.modules.length - docModules.length;
-  const moduleRow = (x: (typeof e.modules)[number]) => [<code key="m">{x.id}</code>, x.ecosystem, <code key="p">{x.path}</code>, label(s.inScope, String(x.inScope))];
+  const moduleRow = (x: (typeof e.modules)[number]) => [<code key="m">{x.id}</code>, x.ecosystem, <span key="p"><code>{x.path}</code>{x.buildSystem && <small className="report-test-detail">{x.buildSystem}{x.buildRoot && x.buildRoot !== x.path && <> · <code>{x.buildRoot}</code></>}</small>}</span>, label(s.inScope, String(x.inScope))];
   const requirementRow = (x: (typeof e.requirements)[number]) => [<code key="m">{x.module}</code>, x.tool, <code key="c">{x.constraint ?? s.withheld}</code>, <code key="s">{x.source}</code>];
   const verdictRow = (x: (typeof e.verdicts)[number]) => [<code key="m">{x.module}</code>, x.tool, label(s.verdictStatus, x.status), or(x.reason)];
   const itemRow = (x: (typeof d.items)[number]) => [<code key="p">{x.path}</code>, x.cls, <code key="a">{x.appliesTo}</code>, label(s.docStatus, x.status), x.reason ? explainReason(x.reason) : '—', x.size ?? '—'];
@@ -609,7 +618,19 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
     ),
     documents: (
       <>
-        <ReportDocumentReading documents={d} includesCode={report.includesCode !== false} id={id} comparisonId={comparisonId} />
+        <ReportDocumentReading results={report.testResults} documents={d} includesCode={report.includesCode !== false} id={id} comparisonId={comparisonId} />
+        {!!d.documentationGaps?.length && <section className="report-reading-group">
+          <h6>{t.documentationGaps.heading}</h6>
+          <p>{t.documentationGaps.note}</p>
+          <Table head={[t.documentationGaps.interface, t.documentationGaps.defaultValue, s.col.source, t.documentationGaps.searched]}
+            rows={d.documentationGaps.map(gap => [
+              <code key="symbol">{gap.symbol ?? t.documentationGaps[gap.kind]}</code>,
+              gap.defaultValue && <code key="default">{gap.defaultValue}</code>,
+              <code key="source">{sourceLocation(gap.source.path, gap.source.line, gap.source.end)}</code>,
+              <ul key="searched" className="report-reading-references">{gap.searched.map(file =>
+                <li key={file.path}><code>{file.lines ? sourceLocation(file.path, 1, file.lines) : file.path}</code></li>)}</ul>,
+            ])} />
+        </section>}
         {!d.model.performed && (d.model.reason === 'documents_not_selected' && d.items.length > 0 &&
           d.items.every(item => item.reason === 'credential_like_content')
           ? <p>{s.noModel(s.modelReasons.documentsWithheld)}</p>

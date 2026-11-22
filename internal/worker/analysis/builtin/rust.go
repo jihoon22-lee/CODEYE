@@ -12,12 +12,20 @@ import (
 // buildCargoCheck configures the Rust baseline analyzer from --cargo (the
 // absolute cargo of a toolchain bin directory; a rustup proxy is refused).
 func buildCargoCheck(ctx context.Context, cfg Config, runner executor.Runner, _ *govet.Handler, _ map[string]pack.Toolchain) built {
+	return buildCargoAnalyzer(ctx, cfg, runner, rustpack.KindCheck, rustpack.CheckName)
+}
+
+func buildRustdoc(ctx context.Context, cfg Config, runner executor.Runner, _ *govet.Handler, _ map[string]pack.Toolchain) built {
+	return buildCargoAnalyzer(ctx, cfg, runner, rustpack.KindDoc, "cargo-doc")
+}
+
+func buildCargoAnalyzer(ctx context.Context, cfg Config, runner executor.Runner, kind rustpack.Kind, name string) built {
 	exe := cfg.Tools[rustpack.CheckTool]
 	if exe == "" {
-		return unavailable(rustpack.CheckName, "not_configured", "", pack.ReasonToolNotConfigured)
+		return unavailable(name, "not_configured", "", pack.ReasonToolNotConfigured)
 	}
-	a, err := rustpack.New(rustpack.KindCheck, rustpack.Config{Cargo: exe, ToolPath: cfg.ToolPath, DependencyCacheRoot: cfg.DependencyCacheRoot})
-	return probeBuilt(ctx, cfg, runner, rustpack.CheckName, a, err)
+	a, err := rustpack.New(kind, rustpack.Config{Cargo: exe, ToolPath: cfg.ToolPath, DependencyCacheRoot: cfg.DependencyCacheRoot})
+	return probeBuilt(ctx, cfg, runner, name, a, err)
 }
 
 // buildClippy configures the Rust extra-depth analyzer from --clippy (the

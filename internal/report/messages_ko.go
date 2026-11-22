@@ -5,18 +5,24 @@ import "strings"
 // Locale holds user-facing strings of the renderers. Codes stay in JSON; only
 // renderers translate them, so another locale is one more table.
 type Locale struct {
-	Labels map[string]string
-	Codes  map[string]string
+	Labels           map[string]string
+	Codes            map[string]string
+	RuleDescriptions map[string]string
 }
 
 // Korean is the default locale.
 var Korean = Locale{
+	RuleDescriptions: koreanRuleDescriptions,
 	Labels: map[string]string{
-		"rule.promise_rejection":  "Promise 거부 사유에 Error 객체의 메시지와 스택이 필요한지 인용된 호출에서 확인한다.",
+		"rule.promise_rejection":  koreanRuleDescriptions["javascript.eslint:prefer-promise-reject-errors"],
 		"call.workflow_selection": "HTTP 경로 보충 선택",
 		"insight.interpretation":  "AI의 문서·코드 검토",
 		"insight.clarity":         "명확성", "insight.completeness": "설명 범위", "insight.actionability": "따라 하기",
 		"insight.consistency": "일관성", "insight.strength": "잘된 점", "insight.weakness": "보완할 점",
+		"docs.gaps.heading":   "검색한 안내 문서에서 찾지 못한 CLI 기능",
+		"docs.gaps.note":      "코드에 공개 선언된 이름을 아래 문서의 전체 본문에서 검색했습니다.",
+		"docs.gaps.interface": "공개 선언", "docs.gaps.default": "코드에 선언된 기본값", "docs.gaps.searched": "검색한 문서와 줄",
+		"docs.gaps.cli_option": "CLI 옵션", "docs.gaps.cli_environment_variable": "CLI 환경 변수",
 		"docs.reading_index": "문서별로 이동", "docs.reading_unlocated": "인용 위치가 없는 문서 검토",
 		"docs.reading_sources": "문서 원문 발췌", "docs.reading_notes": "그 밖의 문서 검토",
 		"docs.reading_line_range":     "%d–%d행",
@@ -136,6 +142,8 @@ var Korean = Locale{
 		LimTestExecutionUnverified:            "테스트 명령의 종료 상태와 프로세스 정리를 확인할 수 없다.",
 		"test_entries_unavailable":            "지원되는 기존 테스트를 찾지 못했다.",
 		"test_command_failed":                 "테스트 명령이 실패 종료했다.",
+		"test_results_unavailable":            "개별 테스트 실행 결과를 확인하지 못했다.",
+		"test_preparation_failed":             "테스트 준비가 실패했다.",
 		"no_tests_executed":                   "테스트 명령이 테스트를 하나도 실행하지 않았다.",
 		"test_tool_unavailable":               "노드에 테스트 실행 도구가 없다.",
 		"test_dependencies_unavailable":       "테스트에 필요한 의존성이 준비되지 않았다.",
@@ -196,25 +204,28 @@ var Korean = Locale{
 		"result_outside_snapshot":            "도구가 선택된 snapshot 파일이 아닌 곳의 결과를 냈다. 그 결과는 버렸고 작업은 실패다.",
 		"model_input_not_secret_screened":    "비밀값 탐지가 실행되지 않아 모델 입력을 비밀값 기준으로 거르지 않았다.",
 		// Model call outcomes (docs/REVIEW.md#실패와-task-결과).
-		"opencode_version_untested":     "시험하지 않은 OpenCode 버전으로 모델을 호출했다(시험한 버전은 docs/REVIEW.md).",
-		"model_not_configured":          "모델이 설정되지 않아 모델 검토를 하지 않았다.",
-		"model_credential_unavailable":  "모델 API 키 파일이 없거나 읽을 수 없어 모델을 호출하지 않았다.",
-		"model_endpoint_not_configured": "오프라인 모드라 공급자의 공개 주소로는 모델을 호출하지 않았다(모델 키 파일의 base_url에 사내 주소를 적는다).",
-		"model_auth_failed":             "모델 공급자가 API 키를 거부했다(인증 실패).",
-		"model_not_found":               "모델 공급자에 그 모델이 없다.",
-		"model_unavailable":             "모델 공급자가 응답하지 않았거나 오류를 냈다.",
-		"model_timeout":                 "모델 호출이 제한시간 안에 끝나지 않았다.",
-		"model_rate_limited":            "모델 공급자의 사용량 제한에 걸렸다.",
-		"opencode_version_unsupported":  "OpenCode 실행 파일이 버전을 알 수 없는 값으로 답했다.",
-		"opencode_version_timeout":      "모델 호출 전 OpenCode 버전 확인이 제한시간을 넘겼다.",
-		"secret_files_withheld":         "비밀값이 탐지된 파일은 모델 입력에서 뺐다.",
-		"credential_like_content":       "자격증명과 비슷한 내용이 있어 문서 검토 입력에서 제외했다",
-		"documents_not_selected":        "탐색에서 검토할 문서가 선택되지 않았다",
-		"secret_screen_failed":          "비밀값 탐지 결과를 쓸 수 없어 모델 검토를 건너뛰었다(코드 미전송).",
-		"review_budget_exhausted":       "attempt의 모델 호출 상한에 닿아 실행하지 않았다(호출 없음).",
-		"no_review_scope":               "이 단계에서 검토할 대상이 선택되지 않았습니다.",
-		"review_call_count_failed":      "모델 호출 수를 기록하지 못해 호출하지 않았다.",
-		"review_slice_limit":            "slice 수 상한 밖의 파일은 모듈 단위 검토를 계획하지 않았다.",
+		"opencode_version_untested":                    "시험하지 않은 OpenCode 버전으로 모델을 호출했다(시험한 버전은 docs/REVIEW.md).",
+		"model_not_configured":                         "모델이 설정되지 않아 모델 검토를 하지 않았다.",
+		"model_credential_unavailable":                 "모델 API 키 파일이 없거나 읽을 수 없어 모델을 호출하지 않았다.",
+		"model_endpoint_not_configured":                "오프라인 모드라 공급자의 공개 주소로는 모델을 호출하지 않았다(모델 키 파일의 base_url에 사내 주소를 적는다).",
+		"model_auth_failed":                            "모델 공급자가 API 키를 거부했다(인증 실패).",
+		"model_not_found":                              "모델 공급자에 그 모델이 없다.",
+		"model_unavailable":                            "모델 공급자가 응답하지 않았거나 오류를 냈다.",
+		"model_timeout":                                "모델 호출이 제한시간 안에 끝나지 않았다.",
+		"model_rate_limited":                           "모델 공급자의 사용량 제한에 걸렸다.",
+		"opencode_version_unsupported":                 "OpenCode 실행 파일이 버전을 알 수 없는 값으로 답했다.",
+		"opencode_version_timeout":                     "모델 호출 전 OpenCode 버전 확인이 제한시간을 넘겼다.",
+		"secret_files_withheld":                        "비밀값이 탐지된 파일은 모델 입력에서 뺐다.",
+		"credential_like_content":                      "자격증명과 비슷한 내용이 있어 문서 검토 입력에서 제외했다",
+		"no_public_api_javadoc":                        "공개 메서드에 연결된 Javadoc을 확인하지 못했다",
+		"rust_api_implementation_outside_review_input": "인용한 Rust 공개 API 중 일부 구현을 검토 입력으로 보내지 못했다.",
+		"rust_public_api_partially_sampled":            "Rust 공개 API 문서는 예산 안에서 일부 재공개만 확인했다.",
+		"documents_not_selected":                       "탐색에서 검토할 문서가 선택되지 않았다",
+		"secret_screen_failed":                         "비밀값 탐지 결과를 쓸 수 없어 모델 검토를 건너뛰었다(코드 미전송).",
+		"review_budget_exhausted":                      "attempt의 모델 호출 상한에 닿아 실행하지 않았다(호출 없음).",
+		"no_review_scope":                              "이 단계에서 검토할 대상이 선택되지 않았습니다.",
+		"review_call_count_failed":                     "모델 호출 수를 기록하지 못해 호출하지 않았다.",
+		"review_slice_limit":                           "slice 수 상한 밖의 파일은 모듈 단위 검토를 계획하지 않았다.",
 		// Discovery limitations and task reasons the sections show
 		// (docs/REPORT.md#분석-종류별-절).
 		"document_budget_exceeded":        "읽기 예산을 넘은 문서가 있어 그 문서는 읽지 않았다.",
@@ -635,6 +646,8 @@ var koSectionLabels = map[string]string{
 	"static.no_findings":            "이 검사의 발견 항목은 0건입니다.",
 	"col.task":                      "작업",
 	"tests.test":                    "테스트",
+	"tests.contract_observation":    "인용한 테스트의 실행 결과",
+	"tests.case_counts":             "통과 %d · 실패 %d · 건너뜀 %d",
 	"tests.declaration":             "테스트 선언 위치",
 	"tests.test_failed":             "테스트 실패",
 	"tests.unidentified":            "개별 테스트 미식별",

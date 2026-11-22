@@ -16,6 +16,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/testexec/faildoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/testexec/resultdoc"
 )
 
 var profiles = map[string]bool{"deep-review": true, "with-tests": true, "focused": true}
@@ -176,11 +177,21 @@ func Build(in Input, reg *Registry) (Report, error) {
 					execution.GoTestFailures = evidence.rows
 					decoderOf[evidence.sidecar] = goTestFailureDecoder
 				}
+				if cases, id := in.testCases(st, execution, artByID, index); cases != nil {
+					execution.TestCases = cases
+					decoderOf[id] = testResultDecoder
+				}
 				r.Executions = append(r.Executions, execution)
 			}
 			for _, ma := range st.manifest.Artifacts {
 				art := artByID[ma.ArtifactID]
 				body := in.Bodies[art.ID]
+				if art.MediaType == resultdoc.MediaType {
+					if decoderOf[art.ID] == "" {
+						lim.add("test_results_rejected:" + k)
+					}
+					continue
+				}
 				if art.MediaType == faildoc.MediaType {
 					continue // The accepted test.run owns this optional evidence.
 				}

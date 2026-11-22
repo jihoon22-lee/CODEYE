@@ -87,7 +87,13 @@ func (s *roleStage) reviewSource(e source.Entry) (string, string, error) {
 	if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 {
 		return "", record.ScopeReasonUnreadable, nil
 	}
-	if record.Sensitive(b) {
+	var sensitive bool
+	if index := s.sourceIndex(); index != nil {
+		sensitive = index.sensitive(e.SHA256, b)
+	} else {
+		sensitive = record.Sensitive(b)
+	}
+	if sensitive {
 		return "", record.ScopeReasonWithheld, nil
 	}
 	return strings.TrimSuffix(string(b), "\n"), "", nil
@@ -248,7 +254,13 @@ type docFacts struct {
 // or none of them selected under the read budget (documents_not_selected).
 func (s *roleStage) documentFacts() (docFacts, string) {
 	if len(discovery.EligibleDocuments(s.j.Snapshot.Manifest, s.j.Scope)) == 0 {
-		return docFacts{}, ReasonNoDocuments
+		hasAPI, err := discovery.HasJavaAPIDocuments(s.ctx, s.j.Snapshot, s.j.Scope, s.j.PullRequest)
+		if err != nil {
+			return docFacts{}, reasonDependency
+		}
+		if !hasAPI {
+			return docFacts{}, ReasonNoDocuments
+		}
 	}
 	d, u := s.discoveryDoc(envdoc.KindDocuments)
 	f := docFacts{doc: d, upstream: u}
@@ -257,6 +269,9 @@ func (s *roleStage) documentFacts() (docFacts, string) {
 	}
 	for _, it := range d.Documents.Items {
 		if it.Status == envdoc.DocSelected && envdoc.IsGuidance(it.Class) && it.SHA256 != nil && it.LineCount != nil && *it.LineCount > 0 {
+			if it.Class == envdoc.ClassJavaAPI && !s.javaAPIScope(it.Path) {
+				continue
+			}
 			f.selected = append(f.selected, it)
 		}
 	}
@@ -412,6 +427,8 @@ func goIgnored(p string) bool {
 }
 
 type corpusLinks struct {
+	rustAPIs      []rustContractWitness
+	rustAPILinks  []rustAPILink
 	directCalls   []directCall
 	member        memberPair
 	witnessSource map[string]string
@@ -559,6 +576,73 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 			keep(window, len(lines))
 		}
 	}
+	if len(selected.rustAPIs) > 0 {
+		links.rustAPIs = selected.rustAPIs
+		addRustWindow := func(w contractWitness) string {
+			if w.line == 0 {
+				return ""
+			}
+			lines := strings.Split(selected.sources[w.entry.Path], "\n")
+			x, ok := s.boundedExcerpt(w.entry, windowKind(w.entry.Path), "context", w.line, lines[w.line-1:w.end], witnessMaxExcerpt)
+			if !ok || x.End != w.end {
+				return ""
+			}
+			windows, ok := wholeTraceWindows(out, []record.Excerpt{x}, remain, roleMaxCodeFiles-2)
+			if !ok {
+				return ""
+			}
+			for _, window := range windows {
+				keep(window, len(lines))
+			}
+			return x.ID
+		}
+		chosen := map[sourceCallLocation]bool{}
+		var deferred []int
+		for i, trace := range selected.rustAPIs {
+			b := trace.binding
+			link := rustAPILink{ContractIndex: trace.contractIndex, DocumentIDs: b.documentIDs, Symbol: b.name}
+			location := sourceCallLocation{b.entry.Path, b.decl.first, b.decl.last}
+			if chosen[location] {
+				deferred = append(deferred, i)
+			} else {
+				link.ImplementationID = addRustWindow(trace.implementation)
+				chosen[location] = true
+			}
+			links.rustAPILinks = append(links.rustAPILinks, link)
+		}
+		// A second contract about an already visited API can reuse the same
+		// window or request its own. Visit other APIs before adding that window.
+		for _, i := range deferred {
+			links.rustAPILinks[i].ImplementationID = addRustWindow(selected.rustAPIs[i].implementation)
+		}
+		// Test windows support their own implementation. Give every contract
+		// its implementation opportunity before spending slots on assertions.
+		for i, trace := range selected.rustAPIs {
+			if links.rustAPILinks[i].ImplementationID != "" {
+				links.rustAPILinks[i].TestID = addRustWindow(trace.test)
+			}
+		}
+	}
+
+	for _, pair := range []bool{true, false} {
+		for _, trace := range selected.jsOptions {
+			if (trace.override.line > 0) != pair {
+				continue
+			}
+			group := trace.windows(s, selected.sources)
+			if windows, ok := wholeTraceWindows(out, group, remain, roleMaxCodeFiles-2); ok && len(windows) > 0 {
+				for _, x := range windows {
+					keep(x, x.End+1)
+				}
+				for _, x := range group[1:] {
+					if x.Kind == "test" {
+						links.directCalls = append(links.directCalls, directCall{CallerEvidenceID: x.ID, CalleeEvidenceID: group[0].ID, Symbol: trace.symbol})
+					}
+				}
+				break
+			}
+		}
+	}
 	// Preserve a slot for a selected test and at least two ordinary files
 	// when exact Go traces consume more than the usual witness allowance.
 	witnessLimit := max(witnessMaxExcerpts, len(out)+1)
@@ -595,9 +679,45 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 			links.addWholeWitness(s.j.Snapshot.Digest, out[before], selected.sources[w.entry.Path])
 		}
 	}
-	for _, call := range selected.calls {
-		caller, callee := offered[call.caller.entry.Path], offered[call.callee.entry.Path]
-		if caller != "" && callee != "" {
+	// Documented Java entry and helper may share a path. Keep separate
+	// source windows under the ordinary per-file and overall budgets.
+	var javaLinked []contractCall
+	for _, call := range selected.javaCalls {
+		caller := sourceCallLocation{call.caller.entry.Path, call.caller.line, call.callerEnd}
+		if !rangesContain(out, caller) {
+			continue
+		}
+		callee := sourceCallLocation{call.callee.entry.Path, call.callee.line, call.calleeEnd}
+		if !rangesContain(out, callee) {
+			lines := strings.Split(selected.sources[callee.path], "\n")
+			x, ok := s.boundedExcerpt(call.callee.entry, "code", "context", callee.start, lines[callee.start-1:callee.end], witnessMaxExcerpt)
+			if !ok || x.End < callee.end {
+				continue
+			}
+			windows, ok := wholeTraceWindows(out, []record.Excerpt{x}, remain, roleMaxCodeFiles-1)
+			if !ok {
+				continue
+			}
+			for _, window := range windows {
+				keep(window, len(lines))
+			}
+		}
+		javaLinked = append(javaLinked, call)
+		if len(javaLinked) >= 2 {
+			break
+		}
+	}
+	for _, call := range append(selected.calls, javaLinked...) {
+		window := func(w contractWitness, end int) string {
+			for _, x := range out {
+				if x.Path == w.entry.Path && x.Start <= w.line && end <= x.End {
+					return x.ID
+				}
+			}
+			return ""
+		}
+		caller, callee := window(call.caller, call.callerEnd), window(call.callee, call.calleeEnd)
+		if caller != "" && callee != "" && caller != callee {
 			links.directCalls = append(links.directCalls, directCall{CallerEvidenceID: caller, CalleeEvidenceID: callee, Symbol: call.symbol})
 		}
 	}
@@ -828,6 +948,7 @@ func (s *roleStage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput,
 type documentEvidence struct {
 	excerpts    []record.Excerpt
 	lists       map[string][]documentRange
+	javaAPIs    map[string]string
 	limitations []string
 }
 
@@ -888,6 +1009,7 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 		docpath.Sort(selected, nil, file)
 	}
 	var manifest map[string]source.Entry
+	var apiSources *documentedAPISources
 	var out []record.Excerpt
 	var lims []string
 	lists := map[string][]documentRange{}
@@ -895,6 +1017,7 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 	apiExcerpts := 0
 	packageExcerpts := 0
 	apiEvidence := map[string]bool{}
+	javaAPIs := map[string]string{}
 	var later [2][]userDocument
 	var productContinuations []userDocument
 	var primary string
@@ -935,6 +1058,19 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 		}
 		if !ok {
 			lims = append(lims, "documents_outside_review_input")
+			continue
+		}
+		if d.Class == envdoc.ClassJavaAPI {
+			if !s.javaAPIScope(d.Path) || len(javaAPIs) >= maxJavaAPIDocs {
+				lims = append(lims, "documents_outside_review_input")
+				continue
+			}
+			api := s.javaAPIExcerpts(e, content, remain, min(roleMaxDocs-len(out), maxJavaAPIDocs-len(javaAPIs)))
+			for _, x := range api {
+				out = append(out, x.excerpt)
+				javaAPIs[x.excerpt.ID] = x.signature
+				remain -= record.JSONLen(x.excerpt.Text)
+			}
 			continue
 		}
 		if selection.WithReadmeLinks(d.Path, content) && constrained {
@@ -985,22 +1121,27 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 				primary = d.Path
 			}
 		}
-		if apiExcerpts < maxAPIDocExcerpts && x.Start == 1 && x.End >= *d.LineCount {
-			if target := pythonDocTarget(d.Path, x.Text); target != "" {
-				if manifest == nil {
-					manifest = make(map[string]source.Entry, len(s.j.Snapshot.Manifest.Entries))
-					for _, e := range s.j.Snapshot.Manifest.Entries {
-						manifest[e.Path] = e
+		appendAPI := example.ID == "" && apiExcerpts < maxAPIDocExcerpts &&
+			(record.SphinxDirectivePath(d.Path) || record.MarkdownDirectivePath(d.Path)) &&
+			len(content) <= maxDocumentAPIBytes
+		if appendAPI {
+			if manifest == nil {
+				manifest = make(map[string]source.Entry, len(s.j.Snapshot.Manifest.Entries))
+				for _, entry := range s.j.Snapshot.Manifest.Entries {
+					manifest[entry.Path] = entry
+				}
+			}
+			if x.Start == 1 && x.End >= *d.LineCount {
+				if target := pythonDocTarget(d.Path, x.Text); target != "" {
+					api, ok, err := s.documentedPythonAPI(manifest, files, d, target, min(roleMaxDocBytes, remain))
+					if err != nil {
+						return documentEvidence{}, err
 					}
-				}
-				api, ok, err := s.documentedPythonAPI(manifest, files, d, target, min(roleMaxDocBytes, remain))
-				if err != nil {
-					return documentEvidence{}, err
-				}
-				if ok && !apiEvidence[api.ID] {
-					apiEvidence[api.ID] = true
-					apiExcerpts++
-					x = api
+					if ok && !apiEvidence[api.ID] {
+						apiEvidence[api.ID] = true
+						apiExcerpts++
+						x, appendAPI = api, false
+					}
 				}
 			}
 		}
@@ -1010,6 +1151,27 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 			out = append(out, example)
 			remain -= record.JSONLen(example.Text)
 			packageExcerpts++
+		}
+		if appendAPI && len(out) < roleMaxDocs && remain >= 128 {
+			if apiSources == nil {
+				apiSources = s.documentedAPISources(manifest)
+			}
+			items, partial, err := apiSources.excerpts(d, content, remain, min(roleMaxDocs-len(out), maxAPIDocExcerpts-apiExcerpts))
+			if err != nil {
+				return documentEvidence{}, err
+			}
+			if partial {
+				lims = append(lims, rustAPISampled)
+			}
+			for _, api := range items {
+				if apiEvidence[api.ID] {
+					continue
+				}
+				out = append(out, api)
+				apiEvidence[api.ID] = true
+				apiExcerpts++
+				remain -= record.JSONLen(api.Text)
+			}
 		}
 		if constrained && fullReview && partial && selection.Primary(d.Path) {
 			// Put concrete product behavior before unlinked documents that
@@ -1061,7 +1223,7 @@ func (s *roleStage) documentExcerpts(selected []envdoc.Doc) (documentEvidence, e
 	if err := packages.attach(out, documentSources); err != nil {
 		return documentEvidence{}, err
 	}
-	return documentEvidence{excerpts: out, lists: lists, limitations: addLim(nil, lims...)}, nil
+	return documentEvidence{excerpts: out, lists: lists, javaAPIs: javaAPIs, limitations: addLim(nil, lims...)}, nil
 }
 
 // Excerpts from a document do not overlap. A Python docstring replaces a

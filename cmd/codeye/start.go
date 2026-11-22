@@ -649,6 +649,23 @@ func agentArgv(cfg *instance.Config, layout instance.Layout, roots []sourceRootM
 	if a.GoModCache != "" {
 		args = append(args, "--go-mod-cache", a.GoModCache)
 	}
+	if a.JavaClasspathCatalog != "" {
+		args = append(args, "--java-classpath-catalog", a.JavaClasspathCatalog)
+	}
+	if t := a.Tests; t != nil {
+		if t.GoRun != "" {
+			args = append(args, "--test-go-run", t.GoRun)
+		}
+		if t.GoRace {
+			args = append(args, "--test-go-race")
+		}
+		if t.MavenRepository != "" {
+			args = append(args, "--test-maven-repository", t.MavenRepository)
+		}
+		if t.GradleHome != "" {
+			args = append(args, "--test-gradle-home", t.GradleHome)
+		}
+	}
 	// Dependencies are fetched unless the configuration turns that off;
 	// each project's own choice still decides for its runs.
 	if a.DependenciesEnabled() {

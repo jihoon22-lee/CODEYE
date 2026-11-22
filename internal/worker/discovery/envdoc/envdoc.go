@@ -43,6 +43,7 @@ const (
 	EcoJavaScript = "javascript"
 	EcoPython     = "python"
 	EcoRust       = "rust"
+	EcoJava       = "java"
 	EcoCpp        = "cpp"
 )
 
@@ -110,6 +111,7 @@ const (
 // overlap grouping; "other" documents are inventoried only.
 const (
 	ClassReadme       = docpath.Readme
+	ClassJavaAPI      = docpath.JavaAPI
 	ClassAgent        = docpath.Agent
 	ClassDesign       = docpath.Design
 	ClassContributing = docpath.Contributing
@@ -146,6 +148,8 @@ type Module struct {
 	Manifests     []string `json:"manifests"`
 	ExcludedPaths []string `json:"excluded_paths"`
 	InScope       bool     `json:"in_scope"`
+	BuildSystem   string   `json:"build_system,omitempty"`
+	BuildRoot     string   `json:"build_root,omitempty"`
 }
 
 // Environment holds declarations, node observations and platform verdicts.
@@ -223,10 +227,11 @@ type Verdict struct {
 
 // Documents is the document inventory under an explicit read budget.
 type Documents struct {
-	Budget              Budget       `json:"budget"`
-	Items               []Doc        `json:"items"`
-	Modules             []ModuleDocs `json:"modules"`
-	OverlappingGuidance []Overlap    `json:"overlapping_guidance"`
+	Budget              Budget             `json:"budget"`
+	Items               []Doc              `json:"items"`
+	Modules             []ModuleDocs       `json:"modules"`
+	OverlappingGuidance []Overlap          `json:"overlapping_guidance"`
+	DocumentationGaps   []DocumentationGap `json:"documentation_gaps,omitempty"`
 }
 
 // Budget bounds the bytes discovery reads. ReadBytes counts the documents
@@ -276,18 +281,20 @@ var ToolOf = map[string]string{
 	"requires_python": "python", "python_requires": "python", "python_version_file": "python",
 	"rust_version": "rust", "rust_toolchain_channel": "rust",
 	"cmake_minimum_required": "cmake",
+	"maven_compiler_release": "java", "maven_compiler_source": "java", "maven_java_version": "java", "maven_plugin_release": "java", "maven_plugin_source": "java",
+	"gradle_compiler_release": "java", "gradle_source_compatibility": "java", "gradle_toolchain_version": "java",
 }
 
 // PrimaryTools are the tools every module of an ecosystem gets a verdict for,
 // declared or not.
 var PrimaryTools = map[string][]string{
-	EcoGo: {"go"}, EcoJavaScript: {"node"}, EcoPython: {"python"}, EcoRust: {"rust"}, EcoCpp: {"c_cpp_compiler"},
+	EcoGo: {"go"}, EcoJavaScript: {"node"}, EcoPython: {"python"}, EcoRust: {"rust"}, EcoCpp: {"c_cpp_compiler"}, EcoJava: {"java"},
 }
 
 var (
-	ecosystems = []string{EcoCpp, EcoGo, EcoJavaScript, EcoPython, EcoRust}
-	tools      = []string{"c_cpp_compiler", "cmake", "go", "node", "python", "rust"}
-	classes    = []string{ClassAgent, ClassContributing, ClassDesign, ClassOther, ClassReadme}
+	ecosystems = []string{EcoCpp, EcoGo, EcoJava, EcoJavaScript, EcoPython, EcoRust}
+	tools      = []string{"c_cpp_compiler", "cmake", "go", "java", "node", "python", "rust"}
+	classes    = []string{ClassAgent, ClassContributing, ClassDesign, ClassOther, ClassReadme, ClassJavaAPI}
 	manifestSt = []string{ManifestParsed, ManifestNoParser, ManifestMalformed, ManifestNotUTF8, ManifestTooLarge}
 	obsStatus  = []string{ObsObserved, ObsNotProbed, ObsNotFound, ObsProbeFailed}
 	hex64      = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -445,8 +452,11 @@ func Validate(d Document, want Expect) error {
 				return invalid("modules are not sorted")
 			}
 		}
-		if !slices.Contains(ecosystems, m.Ecosystem) || !ValidPath(m.Path) || m.ID != ModuleID(m.Ecosystem, m.Path) || len(m.Manifests) == 0 {
+		if !slices.Contains(ecosystems, m.Ecosystem) || !ValidPath(m.Path) || m.ID != ModuleID(m.Ecosystem, m.Path) || (len(m.Manifests) == 0 && m.Ecosystem != EcoJava) {
 			return invalid("module %q", m.ID)
+		}
+		if (m.BuildRoot != "" || m.BuildSystem != "") && (m.Ecosystem != EcoJava || !ValidPath(m.BuildRoot) || !Under(m.Path, m.BuildRoot) || (m.BuildSystem != "" && m.BuildSystem != "maven" && m.BuildSystem != "gradle" && m.BuildSystem != "mixed")) {
+			return invalid("module %q build metadata", m.ID)
 		}
 		if !sortedUnique(m.Manifests, func(s string) bool {
 			_, ok := want.Lookup(s)
@@ -461,6 +471,9 @@ func Validate(d Document, want Expect) error {
 	}
 	if d.Environment != nil {
 		return checkEnvironment(d, *d.Environment, mods, want)
+	}
+	if len(d.Documents.DocumentationGaps) > 0 && slices.Contains(d.Limitations, "document_limit_exceeded") {
+		return invalid("documentation gaps on a truncated inventory")
 	}
 	return checkDocuments(*d.Documents, d.Modules, want)
 }
@@ -586,6 +599,8 @@ func DeclaringTool(base string) string {
 		return "rust"
 	case "CMakeLists.txt":
 		return "cmake"
+	case "pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts":
+		return "java"
 	}
 	return ""
 }
@@ -635,6 +650,14 @@ func utf8Safe(s string) bool {
 // IsGuidance reports whether a class takes part in attachment and overlaps.
 func IsGuidance(class string) bool { return class != ClassOther && slices.Contains(classes, class) }
 
+const ReasonNoJavaAPI = "no_public_api_javadoc"
+
+// IsGuidanceDocument excludes production source candidates that do not
+// contain an inspected API document from module and overlap lists.
+func IsGuidanceDocument(doc Doc) bool {
+	return IsGuidance(doc.Class) && (doc.Class != ClassJavaAPI || doc.Status == DocSelected)
+}
+
 func checkDocuments(ds Documents, modules []Module, want Expect) error {
 	b := ds.Budget
 	if b.TotalBytes <= 0 || b.PerDocumentBytes <= 0 || b.PerDocumentBytes > b.TotalBytes || b.MaxDocuments <= 0 || b.MaxDocuments > MaxDocuments || b.ReadBytes < 0 || b.ReadBytes > b.TotalBytes {
@@ -650,7 +673,8 @@ func checkDocuments(ds Documents, modules []Module, want Expect) error {
 			return invalid("documents are not sorted")
 		}
 		// Historical inventories used the containing directory literally.
-		if domain.ValidateEvidencePath(doc.Path) != nil || (doc.AppliesTo != docpath.Scope(doc.Path) && doc.AppliesTo != Dir(doc.Path)) || !slices.Contains(classes, doc.Class) {
+		if domain.ValidateEvidencePath(doc.Path) != nil || (doc.AppliesTo != docpath.Scope(doc.Path) && doc.AppliesTo != Dir(doc.Path)) ||
+			!slices.Contains(classes, doc.Class) || (doc.Class == ClassJavaAPI && !docpath.JavaAPIPath(doc.Path)) {
 			return invalid("document %q", doc.Path)
 		}
 		sha, included := want.Lookup(doc.Path)
@@ -668,7 +692,8 @@ func checkDocuments(ds Documents, modules []Module, want Expect) error {
 				return invalid("budget_exceeded document %q", doc.Path)
 			}
 		case DocExcluded:
-			if !record.ValidCode(reason) || ((reason == ReasonOutOfScope || reason == ReasonCredentialLike) && doc.SHA256 == nil) {
+			if !record.ValidCode(reason) || ((reason == ReasonOutOfScope || reason == ReasonCredentialLike || reason == ReasonNoJavaAPI) && doc.SHA256 == nil) ||
+				(reason == ReasonNoJavaAPI && doc.Class != ClassJavaAPI) {
 				return invalid("excluded document %q", doc.Path)
 			}
 		case DocUnreadable:
@@ -681,7 +706,7 @@ func checkDocuments(ds Documents, modules []Module, want Expect) error {
 		if doc.LineCount != nil && doc.Status != DocSelected {
 			return invalid("line_count outside selected document %q", doc.Path)
 		}
-		if doc.Status == DocSelected || reason == ReasonNUL || reason == ReasonCredentialLike {
+		if doc.Status == DocSelected || reason == ReasonNUL || reason == ReasonCredentialLike || reason == ReasonNoJavaAPI {
 			read += *doc.SizeBytes
 		}
 		docs[doc.Path] = doc
@@ -689,7 +714,7 @@ func checkDocuments(ds Documents, modules []Module, want Expect) error {
 	if read != b.ReadBytes {
 		return invalid("read_bytes does not match the read documents")
 	}
-	guidance := func(p string) bool { d, ok := docs[p]; return ok && IsGuidance(d.Class) }
+	guidance := func(p string) bool { d, ok := docs[p]; return ok && IsGuidanceDocument(d) }
 	if len(ds.Modules) != len(modules) {
 		return invalid("module documents")
 	}
@@ -730,7 +755,7 @@ func checkDocuments(ds Documents, modules []Module, want Expect) error {
 			}
 		}
 	}
-	return nil
+	return checkDocumentationGaps(ds.DocumentationGaps, docs, modules, want)
 }
 
 func inModule(p string, m Module) bool {

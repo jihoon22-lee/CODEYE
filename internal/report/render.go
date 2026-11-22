@@ -32,6 +32,7 @@ type view struct {
 	Notes         []string
 	Processed     string
 	Message       map[string]string // observation id -> message or omission label
+	FindingTitle  map[string]string
 }
 
 type countRow struct{ Name, Label, Value string }
@@ -76,7 +77,9 @@ func newView(r Report, digest string, l Locale) view {
 	if r.Coverage.ToolProcessedFiles != nil {
 		v.Processed = strconv.Itoa(*r.Coverage.ToolProcessedFiles)
 	}
+	observations := make(map[string]Observation, len(r.Observations))
 	for _, o := range r.Observations {
+		observations[o.ID] = o
 		if o.RawMessage != nil {
 			v.Message[o.ID] = *o.RawMessage
 		} else {
@@ -84,6 +87,14 @@ func newView(r Report, digest string, l Locale) view {
 		}
 		if m := o.Metric; m != nil {
 			v.Message[o.ID] = "[" + l.Label("metric_marker") + ": " + m.Name + " " + strconv.Itoa(m.Value) + " >= " + strconv.Itoa(m.Threshold) + " " + m.Unit + "] " + v.Message[o.ID]
+		}
+	}
+	v.FindingTitle = make(map[string]string, len(r.Findings))
+	for _, f := range r.Findings {
+		if len(f.ObservationIDs) > 0 {
+			v.FindingTitle[f.ID] = diagnosticFindingTitle(l, f, observations[f.ObservationIDs[0]])
+		} else {
+			v.FindingTitle[f.ID] = f.Title
 		}
 	}
 	return v
@@ -141,6 +152,7 @@ func RenderMarkdown(r Report, digest string, l Locale) []byte {
 		p()
 	}
 	for _, f := range r.Findings {
+		f.Title = v.FindingTitle[f.ID]
 		mdFinding(p, f, "### ", false)
 	}
 	p("## ", mdText(l.Label("observations")))
@@ -637,7 +649,7 @@ var htmlTemplate = template.Must(template.New("report").Funcs(htmlFuncs).Parse(`
 <p>{{.L.Label "code_excerpt_none"}}</p>
 {{if not .R.Findings}}<p>{{.L.Label "no_findings"}}</p>{{end}}
 {{range .R.Findings}}<section class="finding" id="{{.ID}}" data-finding="{{.ID}}">
-<h3>{{.Title}}</h3>
+<h3>{{index $.FindingTitle .ID}}</h3>
 <ul>
 <li>category / severity: <code>{{.Category}}</code> / <code>{{.Severity}}</code> — {{.SeverityReason}}</li>
 <li>validation / disposition: <code>{{.Validation}}</code> / <code>{{.Disposition}}</code></li>

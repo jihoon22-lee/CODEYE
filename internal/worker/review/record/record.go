@@ -5,6 +5,7 @@
 package record
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"regexp"
@@ -45,7 +46,7 @@ type Excerpt struct {
 	Kind   string `json:"kind"`
 	Origin string `json:"origin,omitempty"`
 	Symbol string `json:"symbol,omitempty"`
-	// DirectivePath is the Markdown page authoring the Python docstring into
+	// DirectivePath is the authored guide that brought a docstring or rustdoc into
 	// the public docs. Path still identifies the actual .py blob and lines.
 	DirectivePath    string           `json:"directive_path,omitempty"`
 	PackageReference PackageReference `json:"package_reference,omitzero"`
@@ -95,11 +96,62 @@ var sensitive = regexp.MustCompile(`(?i)(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk
 
 // Sensitive reports credential-like content that must not reach a model,
 // record or report.
-func Sensitive(b []byte) bool { return sensitive.Match(b) }
+func Sensitive(b []byte) bool {
+	if len(b) < len("sk-")+12 {
+		return false
+	}
+	// The scanner handles ASCII case pairs. Go's regexp case folding also
+	// admits long s and Kelvin sign for ASCII s and k, respectively.
+	if bytes.Contains(b, []byte("ſ")) || bytes.Contains(b, []byte("K")) {
+		return sensitive.Match(b)
+	}
+	for i, c := range b {
+		switch c {
+		case '-':
+			if i+5 <= len(b) && string(b[i:i+5]) == "-----" ||
+				i >= 2 && b[i-2]|0x20 == 's' && b[i-1]|0x20 == 'k' {
+				return sensitive.Match(b)
+			}
+		case '_':
+			if i >= 3 && b[i-3]|0x20 == 'g' && b[i-2]|0x20 == 'h' {
+				return sensitive.Match(b)
+			}
+		case ':', '=':
+			if credentialName(b[:i]) {
+				return sensitive.Match(b)
+			}
+		}
+	}
+	return false
+}
+
+// The original regexp still decides whether a candidate is a credential.
+// Each recognized assignment form ends in one of these ASCII suffixes.
+func credentialName(name []byte) bool {
+	name = bytes.TrimRight(name, " \t\n\f\r")
+	if len(name) == 0 {
+		return false
+	}
+	switch name[len(name)-1] | 0x20 {
+	case 'n':
+		return credentialNameSuffix(name, "authorization")
+	case 'd':
+		return credentialNameSuffix(name, "password")
+	case 't':
+		return credentialNameSuffix(name, "client_secret")
+	case 'y':
+		return credentialNameSuffix(name, "apikey") || credentialNameSuffix(name, "api_key") || credentialNameSuffix(name, "api-key")
+	}
+	return false
+}
+
+func credentialNameSuffix(name []byte, suffix string) bool {
+	return len(name) >= len(suffix) && bytes.EqualFold(name[len(name)-len(suffix):], []byte(suffix))
+}
 
 // SafeText bounds model prose kept in a record.
 func SafeText(s string) bool {
-	return strings.TrimSpace(s) != "" && len(s) <= 2400 && !sensitive.MatchString(s)
+	return strings.TrimSpace(s) != "" && len(s) <= 2400 && !Sensitive([]byte(s))
 }
 
 var (

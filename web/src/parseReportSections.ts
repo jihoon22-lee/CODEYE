@@ -45,8 +45,11 @@ function citation(v: unknown, includesCode: boolean, expandedDocuments: boolean)
   if (result.excerpt && (!includesCode || !excerptFits(result.excerpt, result.line, result.end, true))) invalid();
   if (x.directive_path === undefined) return result;
   const directivePath = str(x.directive_path);
-  if (result.kind !== 'document' || !result.path.endsWith('.py') || !/\.(?:md|markdown)$/i.test(directivePath)) {
-    throw new Error('invalid Python API documentation citation');
+  const handbook = /\.(?:md|markdown)$/i.test(directivePath);
+  const validDirective = result.path.endsWith('.py') && (handbook || /\.rst$/i.test(directivePath)) ||
+    result.path.endsWith('.rs') && handbook;
+  if (result.kind !== 'document' || !validDirective) {
+    throw new Error('invalid source API documentation citation');
   }
   return { ...result, directivePath };
 }
@@ -129,7 +132,7 @@ export type Sections = {
     citations: Citation[];
     stage: SectionStage;
     discovery: string;
-    modules: { id: string; ecosystem: string; path: string; inScope: boolean }[];
+    modules: { id: string; ecosystem: string; path: string; inScope: boolean; buildSystem?: string; buildRoot?: string }[];
     requirements: { module: string; tool: string; constraint: string | null; source: string }[];
     observed: { tool: string; status: string; version: string | null; detail: string | null }[];
     verdicts: { module: string; tool: string; requirement: string | null; status: string; reason: string | null }[];
@@ -141,6 +144,10 @@ export type Sections = {
   };
   documents: {
     citations: Citation[];
+    documentationGaps?: {
+      kind: 'cli_option' | 'cli_environment_variable'; symbol: string | null; defaultValue: string | null; scope: string;
+      source: { path: string; line: number; end: number }; searched: { path: string; lines: number }[];
+    }[];
     quality: {aspect: string; assessment: string; statement: string; refs: string[]}[];
     comparisons: {statement: string; scope: string; status: string; reason: string; documentRefs: string[]; codeRefs: string[]; followup?: true; additional?: AdditionalObservation; workflow?: RelatedWorkflow}[];
     stage: SectionStage;
@@ -465,7 +472,9 @@ export function parseSections(
       discovery: str(e.discovery),
       modules: array(e.modules, (v) => {
         const x = object(v);
-        return { id: str(x.id), ecosystem: str(x.ecosystem), path: str(x.path), inScope: bool(x.in_scope) };
+        return { id: str(x.id), ecosystem: str(x.ecosystem), path: str(x.path), inScope: bool(x.in_scope),
+          buildSystem: x.build_system === undefined ? undefined : str(x.build_system),
+          buildRoot: x.build_root === undefined ? undefined : str(x.build_root) };
       }),
       requirements: array(e.requirements, (v) => {
         const x = object(v);
@@ -498,6 +507,21 @@ export function parseSections(
     },
     documents: {
       citations: array(d.evidence ?? [], v => citation(v, includesCode, expandedDocuments)),
+      documentationGaps: array(d.documentation_gaps ?? [], v => {
+        const x = object(v);
+        const source = object(x.source);
+        const kind = x.kind === 'cli_option' || x.kind === 'cli_environment_variable' ? x.kind : invalid();
+        const symbol = nullable(x.symbol), defaultValue = nullable(x.default);
+        const line = count(source.start_line), end = count(source.end_line);
+        if (line < 1 || end < line || end - line >= 25 ||
+            (includesCode ? !symbol : symbol !== null || defaultValue !== null)) invalid();
+        const searched = array(x.searched, entry => {
+          const file = object(entry);
+          return { path: str(file.path), lines: count(file.line_count) };
+        });
+        if (!searched.length || searched.length > 24) invalid();
+        return { kind, symbol, defaultValue, scope: str(x.scope), source: { path: str(source.path), line, end }, searched };
+      }),
       quality: array(d.quality ?? [], v => {
         const x = object(v);
         return { aspect: str(x.aspect), assessment: str(x.assessment), statement: str(x.statement), refs: array(x.evidence_ids, str) };

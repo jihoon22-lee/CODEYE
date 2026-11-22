@@ -1,0 +1,261 @@
+{
+  "adapter": {
+    "id": "errcheck",
+    "version": "1"
+  },
+  "analyzer": {
+    "ecosystem": "go",
+    "id": "go.errcheck",
+    "required": false
+  },
+  "coverage": {
+    "files_in_scope": 1,
+    "files_skipped": 0,
+    "files_unlisted": 0,
+    "processed_paths": [
+      "clean.go"
+    ],
+    "unit": "file",
+    "units": {}
+  },
+  "executions": [
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "[REDACTED]",
+          "mod",
+          "edit",
+          "-json"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CGO_ENABLED",
+          "GOCACHE",
+          "GOENV",
+          "GOFLAGS",
+          "GOMODCACHE",
+          "GOPATH",
+          "GOPROXY",
+          "GOSUMDB",
+          "GOTOOLCHAIN",
+          "GOVCS",
+          "GOWORK",
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE",
+          "XDG_CONFIG_HOME"
+        ]
+      },
+      "exit_code": 0,
+      "name": "go.modedit",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 65,
+        "incomplete": false,
+        "sha256": "a38f742b4ee2edcd7039536ef94c4ecff5924a21e441a104ee5e93a06a9e3fbc",
+        "total_bytes": 65,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "[REDACTED]",
+          "list",
+          "-mod=readonly",
+          "-json=Dir,ImportPath,Name,GoFiles,CgoFiles,IgnoredGoFiles,TestGoFiles,XTestGoFiles,Incomplete,Error,DepsErrors",
+          "./..."
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CGO_ENABLED",
+          "GOCACHE",
+          "GOENV",
+          "GOFLAGS",
+          "GOMODCACHE",
+          "GOPATH",
+          "GOPROXY",
+          "GOSUMDB",
+          "GOTOOLCHAIN",
+          "GOVCS",
+          "GOWORK",
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE",
+          "XDG_CONFIG_HOME"
+        ]
+      },
+      "exit_code": 0,
+      "name": "go.list",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 109,
+        "incomplete": false,
+        "sha256": "1186517cbf91ef49588b47e7ced6793d8569329a30f5d6e676d2ddaf6ed753bb",
+        "total_bytes": 184,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "[REDACTED]",
+          "-mod=readonly",
+          "./..."
+        ],
+        "dir": ".",
+        "env_keys": [
+          "CGO_ENABLED",
+          "GOCACHE",
+          "GOENV",
+          "GOFLAGS",
+          "GOMODCACHE",
+          "GOPATH",
+          "GOPROXY",
+          "GOSUMDB",
+          "GOTOOLCHAIN",
+          "GOVCS",
+          "GOWORK",
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE",
+          "XDG_CONFIG_HOME"
+        ]
+      },
+      "exit_code": 1,
+      "name": "errcheck.check",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 77,
+        "incomplete": false,
+        "sha256": "3d569b4b9e7424e39707d4e9f2a3160df94dcbe1f77884da4ac3d8fe4fadefab",
+        "total_bytes": 77,
+        "truncated": false
+      }
+    }
+  ],
+  "kind": "analyzer_observations",
+  "limitations": [
+    "active_go_build_context"
+  ],
+  "module": {
+    "dir": ".",
+    "name": ""
+  },
+  "observations": [
+    {
+      "category": "error_handling",
+      "id": "obs_45bf41ca0316f9d49de9",
+      "location": {
+        "blob_sha256": "fa1c0bd9359dee36c40bcc2929388791e74fd43b0c96fa5feb0864e6a8bef8c7",
+        "column_unit": "byte",
+        "end_col": 42,
+        "end_line": 3,
+        "path": "clean.go",
+        "start_col": 42,
+        "start_line": 3
+      },
+      "location_state": "resolved",
+      "path": "clean.go",
+      "raw_message": "returned error is discarded",
+      "raw_ref": {
+        "byte_end": 77,
+        "byte_start": 0,
+        "execution": "errcheck.check",
+        "json_pointer": "",
+        "record_index": 0,
+        "stream": "stdout",
+        "stream_sha256": "3d569b4b9e7424e39707d4e9f2a3160df94dcbe1f77884da4ac3d8fe4fadefab"
+      },
+      "raw_severity": null,
+      "related": [],
+      "rule_id": "unchecked_error",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "clean.go"
+    }
+  ],
+  "outcome": {
+    "exit_class": "success_with_findings",
+    "partial_parse": false,
+    "reason": null,
+    "task_status": "succeeded"
+  },
+  "parse": {
+    "observations": 1,
+    "ok": true,
+    "records": 1,
+    "shape_errors": 0,
+    "tool_errors": 0,
+    "unparsed_bytes": 0,
+    "unresolved_observations": 0
+  },
+  "parser": {
+    "id": "errcheck",
+    "version": "1"
+  },
+  "patterns": [
+    "./..."
+  ],
+  "rule_pack": {
+    "config_files": [],
+    "id": "codeye-go-errcheck",
+    "repository_config": "none",
+    "selection": [
+      "-mod=readonly"
+    ],
+    "source_suppressions": "none",
+    "unreported_suppression_rules": [],
+    "version": "1"
+  },
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "f0a1adff1c48b8eae6bbb5df7ced09e7435f7938d1530ba904c82c25cbf12b46",
+  "target": {
+    "platform": null,
+    "properties": {}
+  },
+  "task_key": "errcheck",
+  "tool": {
+    "name": "errcheck",
+    "version": "v1.30.0",
+    "version_tested": true
+  },
+  "tool_errors": [],
+  "workspace_drift": []
+}

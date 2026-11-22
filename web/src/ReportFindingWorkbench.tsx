@@ -54,7 +54,7 @@ export function ReportFindingWorkbench({ findings, reveal, detail }: {
                 const current = event.currentTarget.closest('tr');
                 const next = event.key === 'ArrowDown' ? current?.nextElementSibling : current?.previousElementSibling;
                 if (next) { event.preventDefault(); next.querySelector('button')?.focus(); }
-              }}>{finding.title}{secondaryReviewFinding(finding) && <small>{t.reading.secondary}</small>}</button></th>
+              }}>{finding.displayTitle ?? finding.title}{secondaryReviewFinding(finding) && <small>{t.reading.secondary}</small>}</button></th>
             <td className="report-workbench-location"><FindingLocation finding={finding} /></td>
             <td className="report-workbench-status"><span className="report-status-badge" data-tone={finding.validation === 'supported' || finding.validation === 'reproduced' ? 'ready' : 'attention'}>{label(t.validation, finding.validation)}</span></td>
             <td className="report-workbench-severity">{label(t.severity, finding.severity)}</td>
@@ -71,7 +71,7 @@ export function ReportFindingWorkbench({ findings, reveal, detail }: {
           requestAnimationFrame(() => [...root.current?.querySelectorAll<HTMLButtonElement>('button[data-finding-id]') ?? []]
             .find(button => button.dataset.findingId === returnTo)?.focus());
         }}>← {t.codeReading.resultList}</button>
-        <h6 className="report-finding-heading" tabIndex={-1} ref={heading}>{selected.title}</h6>
+        <h6 className="report-finding-heading" tabIndex={-1} ref={heading}>{selected.displayTitle ?? selected.title}</h6>
         <div className="report-workbench-meta">
           <span className="report-status-badge" data-tone={selected.validation === 'supported' || selected.validation === 'reproduced' ? 'ready' : 'attention'}>{label(t.validation, selected.validation)}</span>
           <span className="report-detail-severity">{label(t.severity, selected.severity)}</span>

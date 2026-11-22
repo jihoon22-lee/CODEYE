@@ -11,13 +11,17 @@ package builtin
 import (
 	"context"
 	"errors"
+	"slices"
 	"sort"
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/architecture"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/cpp"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/errcheck"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/gitleaks"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/gofmtcheck"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/javapack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jscpd"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/lizard"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
@@ -53,6 +57,8 @@ type Config struct {
 	// is only searched, once, for the system linker `cc` of the Rust pack
 	// (docs/ANALYZERS.md#rust-환경); it is never given to an analyzer as PATH.
 	ToolPath string
+	// JavaClasspathCatalog pins operator-provided local Java dependencies.
+	JavaClasspathCatalog string
 	// AdvertiseWithoutBaseline makes the deep-review capability available
 	// even when no baseline analyzer probed successfully (the service). The
 	// analyzers that are not usable keep planning their tasks and report them
@@ -98,21 +104,28 @@ func catalog() []entry {
 		{desc: govet.Descriptor(), plan: govet.Plan, build: buildGoVet},
 		{desc: staticcheck.Descriptor(), plan: staticcheck.Plan, build: buildStaticcheck},
 		{desc: gofmtcheck.Descriptor(), plan: gofmtcheck.Plan, build: buildGoFmt},
+		{desc: errcheck.Descriptor(), plan: errcheck.Plan, build: buildErrcheck},
 		// C/C++ (baseline cppcheck, extra depth clang-tidy with the Clang
 		// Static Analyzer).
 		{desc: cpp.CppcheckDescriptor(), plan: cpp.PlanCppcheck, build: buildCppcheck},
 		{desc: cpp.ClangTidyDescriptor(), plan: cpp.PlanClangTidy, build: buildClangTidy},
+		{desc: cpp.GCCAnalyzerDescriptor(), plan: cpp.PlanGCCAnalyzer, build: buildGCCAnalyzer},
 		// Python (baseline ruff; mypy, pyright and bandit extra depth).
 		{desc: python.RuffDescriptor(), plan: python.RuffPlan, build: buildRuff},
 		{desc: python.MypyDescriptor(), plan: python.MypyPlan, build: buildMypy},
 		{desc: python.PyrightDescriptor(), plan: python.PyrightPlan, build: buildPyright},
 		{desc: python.BanditDescriptor(), plan: python.BanditPlan, build: buildBandit},
+		{desc: architecture.Descriptor(architecture.ImportLinter), plan: architecture.PlanImportLinter, build: buildImportLinter},
 		// JavaScript/TypeScript (baseline ESLint, extra depth tsc and
 		// type-aware ESLint; javascript.go, docs/ANALYZERS.md).
 		eslintEntry(), tscEntry(), eslintTypedEntry(),
+		{desc: architecture.Descriptor(architecture.DependencyCruiser), plan: architecture.PlanDependencyCruiser, build: buildDependencyCruiser},
 		// Rust (baseline cargo check, extra depth clippy).
 		{desc: rustpack.CheckDescriptor(), plan: rustpack.CheckPlan, build: buildCargoCheck},
 		{desc: rustpack.ClippyDescriptor(), plan: rustpack.ClippyPlan, build: buildClippy},
+		{desc: rustpack.DocDescriptor(), plan: rustpack.DocPlan, build: buildRustdoc},
+		{desc: javapack.Descriptor(javapack.PMD), plan: javapack.PlanPMD, build: buildPMD},
+		{desc: javapack.Descriptor(javapack.SpotBugs), plan: javapack.PlanSpotBugs, build: buildSpotBugs},
 		// Any ecosystem (extra depth: complexity, duplication, secrets).
 		{desc: lizard.Descriptor(), plan: lizard.Plan, build: buildLizard},
 		{desc: jscpd.Descriptor(), plan: jscpd.Plan, build: buildJscpd},
@@ -196,6 +209,17 @@ func buildStaticcheck(ctx context.Context, cfg Config, runner executor.Runner, g
 	}
 	a, err := staticcheck.New(staticcheck.Config{Executable: exe, Go: goh})
 	return probeBuilt(ctx, cfg, runner, staticcheck.Name, a, err)
+}
+
+func buildErrcheck(ctx context.Context, cfg Config, runner executor.Runner, goTool *govet.Handler, _ map[string]pack.Toolchain) built {
+	if cfg.Tools[errcheck.Name] == "" {
+		return unavailable(errcheck.Name, "not_configured", "", pack.ReasonToolNotConfigured)
+	}
+	if goTool == nil {
+		return unavailable(errcheck.Name, "toolchain_not_configured", "errcheck needs --go", pack.ReasonToolchainNotConfigured)
+	}
+	a, err := errcheck.New(cfg.Tools[errcheck.Name], goTool)
+	return probeBuilt(ctx, cfg, runner, errcheck.Name, a, err)
 }
 
 func buildGoFmt(_ context.Context, cfg Config, _ executor.Runner, goh *govet.Handler, _ map[string]pack.Toolchain) built {
@@ -327,7 +351,9 @@ func compose(ctx context.Context, cfg Config, runner executor.Runner, entries []
 // tools other than the go toolchain (which discovery observes as a
 // runtime): one per tool, not_probed when the operator configured no path.
 // A tool run by an interpreter toolchain carries that toolchain's path.
-func Probes(cfg Config) []pack.ToolProbe { return guardRustProbes(cfg, probesOf(cfg, catalog())) }
+func Probes(cfg Config) []pack.ToolProbe {
+	return javaProbes(cfg, guardRustProbes(cfg, probesOf(cfg, catalog())))
+}
 
 func probesOf(cfg Config, entries []entry) []pack.ToolProbe {
 	byTool := map[string]*pack.ToolProbe{}
@@ -355,6 +381,7 @@ func probesOf(cfg Config, entries []entry) []pack.ToolProbe {
 		p := byTool[t]
 		sort.Strings(p.Analyzers)
 		sort.Strings(p.Ecosystems)
+		p.Ecosystems = slices.Compact(p.Ecosystems)
 		out = append(out, *p)
 	}
 	return out

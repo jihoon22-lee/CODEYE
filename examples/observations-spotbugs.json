@@ -1,0 +1,230 @@
+{
+  "adapter": {
+    "id": "spotbugs",
+    "version": "1"
+  },
+  "analyzer": {
+    "ecosystem": "java",
+    "id": "java.spotbugs",
+    "required": false
+  },
+  "coverage": {
+    "files_in_scope": 1,
+    "files_skipped": 0,
+    "files_unlisted": 0,
+    "processed_paths": [
+      "app/src/main/java/example/Example.java"
+    ],
+    "unit": "file",
+    "units": {
+      "java_compiled_classes": 1
+    }
+  },
+  "executions": [
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "[REDACTED]",
+          "-J-Xmx512m",
+          "-J-Dfile.encoding=UTF-8",
+          "@[REDACTED]/analyzers/spotbugs.m01/javac-arguments.txt"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 0,
+      "name": "spotbugs.javac",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      }
+    },
+    {
+      "cleanup": "confirmed",
+      "command": {
+        "argv": [
+          "[REDACTED]",
+          "-Xmx512m",
+          "-Dfile.encoding=UTF-8",
+          "-Djava.awt.headless=true",
+          "-jar",
+          "[REDACTED]",
+          "-textui",
+          "-xml",
+          "-effort:max",
+          "-low",
+          "-exitcode",
+          "[REDACTED]/analyzers/spotbugs.m01/classes"
+        ],
+        "dir": ".",
+        "env_keys": [
+          "HOME",
+          "LANG",
+          "PATH",
+          "TEMP",
+          "TMP",
+          "TMPDIR",
+          "USERPROFILE"
+        ]
+      },
+      "exit_code": 1,
+      "name": "spotbugs.check",
+      "status": "exited",
+      "stderr": {
+        "captured_bytes": 0,
+        "incomplete": false,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "total_bytes": 0,
+        "truncated": false
+      },
+      "stdout": {
+        "captured_bytes": 5367,
+        "incomplete": false,
+        "sha256": "94486919ed51c4ec2f678d4d53ac992190541bb7c35ec711fb92dfea3b52b80b",
+        "total_bytes": 5413,
+        "truncated": false
+      }
+    }
+  ],
+  "kind": "analyzer_observations",
+  "limitations": [
+    "java_classpath_direct_only",
+    "java_workspace_compilation_only"
+  ],
+  "module": {
+    "dir": "app",
+    "name": ""
+  },
+  "observations": [
+    {
+      "category": "correctness",
+      "id": "obs_ce9386ecd563788a95ef",
+      "location": {
+        "blob_sha256": "8a16dd6d605b5d4dc7902c07d81eb5fd218560cbe5128e40012478c11f4ee091",
+        "column_unit": "byte",
+        "end_col": 0,
+        "end_line": 6,
+        "path": "app/src/main/java/example/Example.java",
+        "start_col": 0,
+        "start_line": 6
+      },
+      "location_state": "resolved",
+      "path": "app/src/main/java/example/Example.java",
+      "raw_message": "spotbugs reported NP_ALWAYS_NULL",
+      "raw_ref": {
+        "byte_end": 1072,
+        "byte_start": 256,
+        "execution": "spotbugs.check",
+        "json_pointer": "",
+        "record_index": 0,
+        "stream": "stdout",
+        "stream_sha256": "94486919ed51c4ec2f678d4d53ac992190541bb7c35ec711fb92dfea3b52b80b"
+      },
+      "raw_severity": null,
+      "related": [],
+      "rule_id": "NP_ALWAYS_NULL",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "app/src/main/java/example/Example.java"
+    },
+    {
+      "category": "maintainability",
+      "id": "obs_c29092956faeef1f395c",
+      "location": {
+        "blob_sha256": "8a16dd6d605b5d4dc7902c07d81eb5fd218560cbe5128e40012478c11f4ee091",
+        "column_unit": "byte",
+        "end_col": 0,
+        "end_line": 6,
+        "path": "app/src/main/java/example/Example.java",
+        "start_col": 0,
+        "start_line": 6
+      },
+      "location_state": "resolved",
+      "path": "app/src/main/java/example/Example.java",
+      "raw_message": "spotbugs reported NP_LOAD_OF_KNOWN_NULL_VALUE",
+      "raw_ref": {
+        "byte_end": 1873,
+        "byte_start": 1075,
+        "execution": "spotbugs.check",
+        "json_pointer": "",
+        "record_index": 1,
+        "stream": "stdout",
+        "stream_sha256": "94486919ed51c4ec2f678d4d53ac992190541bb7c35ec711fb92dfea3b52b80b"
+      },
+      "raw_severity": null,
+      "related": [],
+      "rule_id": "NP_LOAD_OF_KNOWN_NULL_VALUE",
+      "suggested_fix_count": 0,
+      "suppressed": false,
+      "unit": "app/src/main/java/example/Example.java"
+    }
+  ],
+  "outcome": {
+    "exit_class": "success_with_findings",
+    "partial_parse": false,
+    "reason": null,
+    "task_status": "succeeded"
+  },
+  "parse": {
+    "observations": 2,
+    "ok": true,
+    "records": 2,
+    "shape_errors": 0,
+    "tool_errors": 0,
+    "unparsed_bytes": 0,
+    "unresolved_observations": 0
+  },
+  "parser": {
+    "id": "spotbugs",
+    "version": "1"
+  },
+  "patterns": [
+    "app"
+  ],
+  "rule_pack": {
+    "config_files": [],
+    "id": "codeye-java-spotbugs",
+    "repository_config": "overridden",
+    "selection": [
+      "-effort:max",
+      "-low"
+    ],
+    "source_suppressions": "honored",
+    "unreported_suppression_rules": [],
+    "version": "1"
+  },
+  "schema_version": "0.1",
+  "snapshot_manifest_digest": "7ca496f8fb7fd445884462d636a06fa033c424076f30a5a882fc5ee2168cbc00",
+  "target": {
+    "platform": null,
+    "properties": {}
+  },
+  "task_key": "spotbugs.m01",
+  "tool": {
+    "name": "spotbugs",
+    "version": "4.10.5",
+    "version_tested": true
+  },
+  "tool_errors": [],
+  "workspace_drift": []
+}

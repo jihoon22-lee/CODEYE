@@ -185,10 +185,12 @@ type EnvDependencyFailure struct {
 }
 
 type EnvModule struct {
-	ID        string `json:"id"`
-	Ecosystem string `json:"ecosystem"`
-	Path      string `json:"path"`
-	InScope   bool   `json:"in_scope"`
+	ID          string `json:"id"`
+	Ecosystem   string `json:"ecosystem"`
+	Path        string `json:"path"`
+	InScope     bool   `json:"in_scope"`
+	BuildSystem string `json:"build_system,omitempty"`
+	BuildRoot   string `json:"build_root,omitempty"`
 }
 
 type EnvManifest struct {
@@ -250,10 +252,11 @@ type EnvNote struct {
 // --- 문서 분석 -----------------------------------------------------------------
 
 type DocumentsSection struct {
-	Quality     []record.DocumentQuality `json:"quality,omitempty"`
-	Comparisons []DocComparison          `json:"comparisons,omitempty"`
-	Stage       SectionStage             `json:"stage"`
-	Discovery   string                   `json:"discovery"`
+	Quality           []record.DocumentQuality `json:"quality,omitempty"`
+	Comparisons       []DocComparison          `json:"comparisons,omitempty"`
+	DocumentationGaps []DocCoverageGap         `json:"documentation_gaps,omitempty"`
+	Stage             SectionStage             `json:"stage"`
+	Discovery         string                   `json:"discovery"`
 	// Budget is null without an accepted docs.discover document.
 	Budget      *DocBudget   `json:"budget"`
 	Items       []DocItem    `json:"items"`
@@ -268,6 +271,27 @@ type DocumentsSection struct {
 	Questions        []DocQuestion        `json:"questions"`
 	InstructionNotes []DocInstructionNote `json:"instruction_notes"`
 	Evidence         []SectionEvidence    `json:"evidence"`
+}
+
+// DocCoverageGap is a separate discovery observation. It has no model verdict.
+type DocCoverageGap struct {
+	Kind     string              `json:"kind"`
+	Symbol   string              `json:"symbol,omitempty"`
+	Default  string              `json:"default,omitempty"`
+	Scope    string              `json:"scope"`
+	Source   DocCoverageLocation `json:"source"`
+	Searched []DocCoverageSearch `json:"searched"`
+}
+
+type DocCoverageLocation struct {
+	Path      string `json:"path"`
+	StartLine int    `json:"start_line"`
+	EndLine   int    `json:"end_line"`
+}
+
+type DocCoverageSearch struct {
+	Path      string `json:"path"`
+	LineCount int    `json:"line_count"`
 }
 
 type DocBudget struct {

@@ -45,7 +45,7 @@ func guidesOf(files []string) []string {
 
 func TestDefaultPackSelection(t *testing.T) {
 	id, version, err := Identity()
-	if err != nil || id != "review" || version != "2.5.2" {
+	if err != nil || id != "review" || version != "2.6.0" {
 		t.Fatal(id, version, err)
 	}
 	pack, err := os.ReadFile("pack.yaml")
@@ -109,7 +109,7 @@ func TestLanguageGuidesListed(t *testing.T) {
 			t.Fatalf("%s: %d lines, %v", file, lines, err)
 		}
 	}
-	if !slices.Equal(Languages(), []string{"cpp", "go", "javascript", "python", "rust"}) {
+	if !slices.Equal(Languages(), []string{"cpp", "go", "java", "javascript", "python", "rust"}) {
 		t.Fatal(Languages())
 	}
 }
@@ -119,7 +119,7 @@ func TestLanguageGuidesListed(t *testing.T) {
 // without a guide adds nothing and an empty set selects none. The digest
 // covers exactly the selected files.
 func TestLanguageSelection(t *testing.T) {
-	all := []string{"languages/cpp.md", "languages/go.md", "languages/javascript.md", "languages/python.md", "languages/rust.md"}
+	all := []string{"languages/cpp.md", "languages/go.md", "languages/java.md", "languages/javascript.md", "languages/python.md", "languages/rust.md"}
 	cases := []struct {
 		in, want []string
 	}{
@@ -128,7 +128,8 @@ func TestLanguageSelection(t *testing.T) {
 		{[]string{"go"}, []string{"languages/go.md"}},
 		{[]string{"rust", "python", "go", "python"}, []string{"languages/go.md", "languages/python.md", "languages/rust.md"}},
 		{[]string{"javascript", "cpp"}, []string{"languages/cpp.md", "languages/javascript.md"}},
-		{[]string{"any", "java", ""}, nil},
+		{[]string{"any", "ruby", ""}, nil},
+		{[]string{"java"}, []string{"languages/java.md"}},
 		{Languages(), all},
 	}
 	for _, role := range Roles {
@@ -181,12 +182,12 @@ func mustEmbedded(t *testing.T, name string) []byte {
 // changing an instruction byte changes them together.
 func TestGoSelectionDigestsPinned(t *testing.T) {
 	want := map[string]string{
-		"environment": "ee1f462b787ec97b425fda589c73371c18981bc37037f7b72043faf8309c2209",
-		"documents":   "fed289ac5d4b2e35ae127f7935b313fd9adb25afa9936f03db0264bd7494089b",
-		"investigate": "c474486de4bf11ef85796d5f8cc30571c36ff6540fa9d7c61abce2c06f89f686",
-		"interpret":   "637766c310fd80ba13c555e9fb15c95a25d4bbaf33ffae05dec32dd8949cf559",
-		"verify":      "112f05f2fc053185977b37a0d66c4f9c6f47ab81e67d0854be84b5c43f96e59d",
-		"contract":    "1ff4bbdabe5e993b2c60217aebc4d0c1dcd5100332970e557f9551e48f1da120",
+		"environment": "784f9a7340a518204177ac3a5332fd30e12b25dcfc0a4b4f5f0777da13a69dd4",
+		"documents":   "394ccc0a7571197f1b85e120252644532f61d441064995d68ddda30271b69f42",
+		"investigate": "7e60ef3e7e2657ed348724e8b324c5c11f8cead611d2821442e2060280f1f020",
+		"interpret":   "dd8a85c6a94dfd2654bd0b69a6ddfd31b394ebf2e4740f2b5ee25eda89899b56",
+		"verify":      "78b4673c5f40850022379fbc7ae263c9b7f68792b3401bc5e56bab4e84664a05",
+		"contract":    "9b787aed23541567ff8a704d9ca1671c52ffe0a0ef0ed8cbff1e043b2057f26e",
 	}
 	for _, role := range Roles {
 		s, err := For(role, []string{"go"})

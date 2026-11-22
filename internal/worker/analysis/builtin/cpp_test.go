@@ -59,7 +59,7 @@ func TestCppAnalyzersAdvertiseOnlyWithTheBaseline(t *testing.T) {
 			cppIDs = append(cppIDs, d.ID)
 		}
 	}
-	if !slices.Equal(cppIDs, []string{"cpp.cppcheck", "cpp.clang_tidy"}) || slices.Index(ids, "go.staticcheck") > slices.Index(ids, "cpp.cppcheck") ||
+	if !slices.Equal(cppIDs, []string{"cpp.cppcheck", "cpp.clang_tidy", "cpp.gcc_analyzer"}) || slices.Index(ids, "go.staticcheck") > slices.Index(ids, "cpp.cppcheck") ||
 		slices.Index(ids, "cpp.clang_tidy") != slices.Index(ids, "cpp.cppcheck")+1 {
 		t.Fatalf("members %v", ids)
 	}

@@ -1,5 +1,5 @@
 id: review
-version: 2.5.2
+version: 2.6.0
 schema_version: '0.2'
 language: ko
 status: default
@@ -16,6 +16,7 @@ domains: domains.md
 languages:
   cpp: languages/cpp.md
   go: languages/go.md
+  java: languages/java.md
   javascript: languages/javascript.md
   python: languages/python.md
   rust: languages/rust.md

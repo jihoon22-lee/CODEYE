@@ -430,8 +430,11 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 | `observations[].related_locations` | C/C++ 도구가 원래 진단과 연결한 보조 위치·가정. 코드 미포함 응답은 위치와 유형을 남긴다. |
 | `metrics.go_package_dependencies` | Go 모듈의 import 관계와 줄 위치. 목록 조사가 끝나면 `unlisted_files`로 목록에 없던 후보 파일 수를 표시한다. |
 | `documents.quality`, `documents.comparisons`, `code_review.strengths` | 수락된 모델 해석과 근거 ID. 문서 비교의 `code_evidence_ids`를 따라가면 근거가 코드인지 테스트인지 구별할 수 있다. |
+| `documents.documentation_gaps` | 공개 CLI 선언의 `source`와 이름을 검색한 안내 문서 `searched`를 함께 제공한다. 코드 미포함 응답은 `symbol`과 `default`를 생략하고 선언 위치와 검색 범위를 보존한다. |
 | `documents.evidence[].directive_path`, `package_reference` | Python docstring을 가리킨 원래 문서, 또는 사용 예제와 연결된 로컬 npm 패키지의 manifest와 진입 파일. |
 | `executions[].go_test_failures` | 실패한 Go 테스트의 선언 경로와 줄. 코드 포함 응답에는 확인한 테스트 이름도 들어간다. 배열이 없으면 실행 상태·종료 코드와 `coverage.test_status`를 읽는다. [예시](../examples/go-test-failures.json) |
+
+**테스트 케이스.** 생성기 19부터 `executions[].test_cases`는 이번 `test.run`에 연결된 `runner`, `counts.{passed,failed,skipped}`를 제공한다. 코드 포함 응답의 선택 필드 `cases`는 최대 128개이며 검증한 위치만 경로·줄을 갖는다. 전체 개수는 표본 길이와 다를 수 있다. 코드 미포함 응답에서는 `cases`를 생략한다. [보고서 스키마](../schemas/report.schema.json)
 
 **문서와 구현 대조.** 기존 미확인 계약의 판정이 바뀌면 비교에 `followup: true`와 새 근거를 싣는다. 결론을 유지하며 추가로 읽은 구현은 `additional_observation`에 둔다. `related_workflow`는 같은 동작의 조회 코드·변경 코드·테스트를 각각 근거 ID로 연결한다. 테스트 실행 여부는 `coverage.test_status`에서 확인한다. 조사 범위를 벗어나 생략한 항목은 `gaps[]`의 `document_scope_items_omitted`에 기록한다. [연결된 근거 예시](../examples/review/investigate-workflow-reading.json)
 

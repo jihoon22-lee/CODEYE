@@ -51,7 +51,7 @@ function searchEntries(report: AnalysisReport): SearchEntry[] {
     const ruleNames = f.observations.flatMap(id => rules.get(id) ?? []);
     const locations = [...new Set([...f.locations, ...f.evidence.flatMap(e => e.path ?? [])])];
     const placeAndRules = [...locations, ...ruleNames];
-    entries.push(entry({ kind: 'finding', id: f.id, section }, f.title, section === 'findings' ? t.findings : t.sections.titles[section],
+    entries.push(entry({ kind: 'finding', id: f.id, section }, f.displayTitle ?? f.title, section === 'findings' ? t.findings : t.sections.titles[section],
       placeAndRules, includesCode ? [f.impact, f.recommendation, ...f.conditions.map(c => c.statement),
         ...f.claims.map(c => c.assertion), ...f.evidence.map(e => e.excerpt?.text ?? '')] : []));
   }

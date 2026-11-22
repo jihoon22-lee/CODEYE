@@ -480,16 +480,17 @@ def run(base, root, env, *, browser=False):
             data = (directory / "artifacts" / key).read_bytes()
             assert hashlib.sha256(data).hexdigest() == key.split("/")[-1]
             observation_docs.append(json.loads(data))
-        # go vet keeps its v0.1 document. Staticcheck and gofmt use the generic envelope.
+        # go vet keeps its v0.1 document. The optional Go checks share the generic envelope.
         vet_docs = [d for d in observation_docs if d.get("kind") == "go_vet_observations"]
         sc_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["id"] == "go.staticcheck"]
         fmt_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["id"] == "go.gofmt"]
+        err_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["id"] == "go.errcheck"]
         # (docs/ANALYZERS.md): lizard, jscpd and gitleaks are planned for every
         # project; this node has none of their tools, so each is a visible
         # not_run stand-in.
         structure_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["ecosystem"] == "any"]
-        assert len(vet_docs) == len(sc_docs) == len(fmt_docs) == 1 and len(structure_docs) == 3 and len(observation_docs) == 6, [d.get("kind") for d in observation_docs]
-        assert all(d["outcome"]["exit_class"] == "not_run" and d["outcome"]["reason"] == "tool_not_configured" for d in structure_docs), [d["outcome"] for d in structure_docs]
+        assert len(vet_docs) == len(sc_docs) == len(fmt_docs) == len(err_docs) == 1 and len(structure_docs) == 3 and len(observation_docs) == 7, [d.get("kind") for d in observation_docs]
+        assert all(d["outcome"]["exit_class"] == "not_run" and d["outcome"]["reason"] == "tool_not_configured" for d in [*structure_docs, *err_docs]), [d["outcome"] for d in [*structure_docs, *err_docs]]
         doc, sc_doc = vet_docs[0], sc_docs[0]
         fmt_doc = fmt_docs[0]
         assert fmt_doc["outcome"]["exit_class"] == "success_without_findings" and fmt_doc["coverage"]["processed_paths"] == ["example.go"], fmt_doc["outcome"]
@@ -525,16 +526,13 @@ def run(base, root, env, *, browser=False):
         assert env_stage["state"] == "partial" and env_stage["succeeded"] == 1 and env_stage["counts"] == {"skipped_policy": 1}, go_stages
         assert env_stage["reasons"] == ["model_source_not_approved"], go_stages
         static_stage = go_stages["static_analysis"]
-        if staticcheck:
-            # The three tasks without their tools keep the stage partial.
-            assert static_stage["state"] == "partial" and static_stage["counts"] == {"unsupported": 3} and static_stage["succeeded"] == 3, static_stage
-        else:
-            # An analyzer without its tool is visible: go vet succeeded, staticcheck
-            # and the tasks unsupported, so the stage is partial (never succeeded).
-            assert static_stage["state"] == "partial" and static_stage["counts"] == {"unsupported": 4}, static_stage
-            assert static_stage["succeeded"] == 2, static_stage
+        # This worker runs go vet and gofmt, optionally staticcheck. The
+        # unconfigured errcheck and three cross-language tools remain visible.
+        completed_tools = 2 + bool(staticcheck)
+        assert static_stage["state"] == "partial" and static_stage["succeeded"] == completed_tools, static_stage
+        assert static_stage["counts"] == {"unsupported": 7 - completed_tools}, static_stage
         assert static_stage["reasons"] == ["tool_not_configured"], static_stage
-        assert static_stage["planned"] == 6 and go_stages["report"]["state"] == "succeeded", go_stages
+        assert static_stage["planned"] == 7 and go_stages["report"]["state"] == "succeeded", go_stages
         # The model review was not approved for this source: excluded by policy, never success.
         assert go_stages["code_review"]["state"] == "skipped" and go_stages["code_review"]["reasons"] == ["model_source_not_approved"], go_stages
         planned_review = go_stages["code_review"]["planned"]
@@ -549,9 +547,9 @@ def run(base, root, env, *, browser=False):
         assert code_free["summary"] == full["summary"]
         assert full["summary"]["raw_observations"] == len(doc["observations"]) + len(sc_doc["observations"])
         tool_rows = {row["task_key"]: row for row in full["coverage"]["tools"]}
-        assert sorted(tool_rows) == ["gitl" "eaks", "go-vet", "gofmt", "jscpd", "lizard", "staticcheck"], tool_rows
+        assert sorted(tool_rows) == ["errcheck", "gitl" "eaks", "go-vet", "gofmt", "jscpd", "lizard", "staticcheck"], tool_rows
         assert tool_rows["gofmt"]["exit_class"] == "success_without_findings" and tool_rows["gofmt"]["processed_files"] == 1, tool_rows
-        assert all(tool_rows[k]["exit_class"] == "not_run" for k in ("lizard", "jscpd", "gitl" "eaks")), tool_rows
+        assert all(tool_rows[k]["exit_class"] == "not_run" for k in ("errcheck", "lizard", "jscpd", "gitl" "eaks")), tool_rows
         assert tool_rows["staticcheck"]["analyzer"] == "go.staticcheck"
         assert tool_rows["staticcheck"]["exit_class"] == ("success_without_findings" if staticcheck else "not_run"), tool_rows
         decoders = {a["task_key"]: a["decoder"] for a in full["artifacts"] if a["role"] == "observations"}
@@ -568,7 +566,7 @@ def run(base, root, env, *, browser=False):
         assert all(statuses[k] == "skipped_policy" for k in ("review.investigate", "review.interpret", "review.verify", "review.scope")), statuses
         assert statuses["env.discover"] == statuses["docs.discover"] == "succeeded"
         assert statuses["staticcheck"] == ("succeeded" if staticcheck else "unsupported"), statuses
-        assert statuses["lizard"] == statuses["jscpd"] == statuses["gitl" "eaks"] == "unsupported", statuses
+        assert statuses["errcheck"] == statuses["lizard"] == statuses["jscpd"] == statuses["gitl" "eaks"] == "unsupported", statuses
         # Startup codes of the worker (handler_unavailable) reach the agent log.
         agent_log = (directory / "go.log").read_text(errors="replace")
         assert ("staticcheck:not_configured" in agent_log) == (not staticcheck), "startup codes not in the agent log"

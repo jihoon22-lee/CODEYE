@@ -1,4 +1,31 @@
-const promiseRejectionDescription = 'Promise 거부 사유에 Error 객체의 메시지와 스택이 필요한지 인용된 호출에서 확인합니다.';
+import ruleDescriptions from '../../../internal/report/reportui/rule_descriptions_ko.json';
+
+const descriptions: Partial<Record<string, string>> = ruleDescriptions;
+
+export function genericDiagnosticMessage(analyzer: string, rule: string, message: string) {
+  switch (analyzer) {
+    case 'java.pmd': return message === 'pmd reported ' + rule;
+    case 'java.spotbugs': return message === 'spotbugs reported ' + rule;
+    case 'javascript.dependency_cruiser':
+    case 'python.import_linter': return message === 'Dependency rule violated: ' + rule;
+    default: return false;
+  }
+}
+
+export function diagnosticDescription(analyzer: string, rule: string, raw?: string | null) {
+  const known = descriptions[analyzer + ':' + rule];
+  if (known) return known;
+  if (!raw || genericDiagnosticMessage(analyzer, rule, raw)) return descriptions[analyzer + ':*'];
+}
+
+export function diagnosticFindingTitle(title: string, analyzer: string, rule: string, raw: string | null) {
+  if (!analyzer || !rule) return;
+  const prefix = analyzer + ' ' + rule;
+  if (!title.startsWith(prefix + ': ') && !title.startsWith(prefix + ' 진단')) return;
+  const explanation = diagnosticDescription(analyzer, rule, raw);
+  if (explanation) return prefix + ' · ' + explanation;
+  if (raw && genericDiagnosticMessage(analyzer, rule, raw)) return prefix;
+}
 const summaryNumber = new Intl.NumberFormat('ko-KR');
 const n = (value: number) => summaryNumber.format(value);
 
@@ -23,13 +50,12 @@ export const reportKo = {
   viewTestCode: '테스트 코드 보기',
   sourceActionAt: (action: string, location: string) => `${action} (${location})`,
   qualityTitle: '문서 품질', comparisonsTitle: '문서와 구현', modelReading: 'AI 해석',
-  ruleDescriptions: {
-    'javascript.eslint:prefer-promise-reject-errors': promiseRejectionDescription,
-    'javascript.eslint_typed:@typescript-eslint/prefer-promise-reject-errors': promiseRejectionDescription,
-  } as Partial<Record<string, string>>,
+  ruleDescriptions: descriptions,
   strengthsTitle: '코드에서 관찰한 동작', scopeTitle: '적용 범위',
   tests: {
     heading: '기존 테스트 실행 결과', test: '테스트', declaration: '테스트 선언 위치', unverified: '실행 결과 미확인',
+    contractObservation: '인용한 테스트의 실행 결과',
+    caseCounts: (passed: number, failed: number, skipped: number) => `통과 ${passed} · 실패 ${failed} · 건너뜀 ${skipped}`,
     testFailed: '테스트 실패', unidentified: '개별 테스트 미식별', nameWithheld: '테스트 이름 생략',
     commandExit: (code: number) => `명령 종료 코드 ${code}`,
     notStarted: '테스트 미실행',
@@ -40,6 +66,11 @@ export const reportKo = {
     } as Record<string, string>,
     suites: { go: 'Go 테스트', 'javascript-unit': 'JavaScript 단위 테스트', 'javascript-module': 'JavaScript 모듈 테스트',
       'javascript-e2e': 'JavaScript 브라우저 테스트', python: 'Python unittest', rust: 'Rust Cargo 테스트', unavailable: '테스트 탐색' } as Record<string, string>,
+  },
+  documentationGaps: {
+    heading: '검색한 안내 문서에서 찾지 못한 CLI 기능', note: '코드에 공개 선언된 이름을 아래 문서의 전체 본문에서 검색했습니다.',
+    interface: '공개 선언', defaultValue: '코드에 선언된 기본값', searched: '검색한 문서와 줄',
+    cli_option: 'CLI 옵션', cli_environment_variable: 'CLI 환경 변수',
   },
   documentReading: {
     lineRange: (start: number, end: number) => start === end ? `${start}행` : `${start}–${end}행`,
@@ -156,6 +187,7 @@ export const reportKo = {
     'go vet': 'Go 코드에서 잘못된 서식 문자열이나 잠금 복사처럼 실행 전에 확인할 수 있는 실수를 찾습니다.',
     staticcheck: 'Go 코드의 호출과 값의 흐름을 살펴 잘못된 사용이나 효과가 없는 코드를 찾습니다.',
     cppcheck: 'C와 C++ 코드에서 메모리 사용과 조건 분기 문제를 찾습니다.',
+    'gcc-analyzer': 'C 코드에서 파일 디스크립터를 열고 사용하는 경로를 검사합니다.',
     'clang-tidy': '컴파일 설정을 바탕으로 C와 C++ 코드의 사용 규칙과 오류 가능성을 검사합니다.',
     ruff: 'Python 코드에서 사용하지 않는 이름과 의심스러운 구문을 찾습니다.',
     mypy: 'Python 함수에 전달하거나 돌려주는 값이 선언한 타입과 맞는지 검사합니다.',
@@ -172,6 +204,9 @@ export const reportKo = {
   reasons: {
     imports_unresolved: '가져온 라이브러리를 찾지 못함',
     credential_like_content: '자격증명과 비슷한 내용이 있어 문서 검토 입력에서 제외했습니다.',
+    no_public_api_javadoc: '공개 메서드에 연결된 Javadoc을 확인하지 못했습니다.',
+    rust_api_implementation_outside_review_input: '인용한 Rust 공개 API 중 일부 구현을 검토 입력으로 보내지 못했습니다.',
+    rust_public_api_partially_sampled: 'Rust 공개 API 문서는 예산 안에서 일부 재공개만 확인했습니다.',
     documents_not_selected: '탐색에서 검토할 문서가 선택되지 않았습니다.',
     excerpt_only: '검토는 선택된 코드 발췌 범위에 한정됩니다.',
     no_document_in_selected_context:
@@ -189,6 +224,8 @@ export const reportKo = {
     test_execution_unverified: '테스트 명령의 종료 상태와 프로세스 정리를 확인할 수 없습니다.',
     test_entries_unavailable: '지원되는 기존 테스트를 찾지 못했습니다.',
     test_command_failed: '테스트 명령이 실패 종료했습니다.',
+    test_results_unavailable: '개별 테스트 결과를 확인할 수 없습니다.',
+    test_preparation_failed: '테스트 준비 명령이 실패했습니다.',
     no_tests_executed: '테스트 명령이 테스트를 하나도 실행하지 않았습니다.',
     test_tool_unavailable: '노드에 테스트 실행 도구가 없습니다.',
     test_dependencies_unavailable: '테스트에 필요한 의존성이 준비되지 않았습니다.',
