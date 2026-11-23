@@ -294,3 +294,27 @@ func TestRealClangTidyReadsGeneratedCompileDB(t *testing.T) {
 		t.Fatalf("outcome %+v properties %v limitations %v", doc.Outcome, doc.Target.Properties, doc.Limitations)
 	}
 }
+
+func TestRealGCCAnalyzerReadsGeneratedCompileDB(t *testing.T) {
+	exe := testTool(t, "CODEYE_TEST_GCC", "GCC 13 or newer")
+	a, err := NewGCCAnalyzer(Config{Executable: exe})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fx, res, _ := realGeneration(t)
+	if res.Status != domain.TaskSucceeded {
+		t.Fatalf("generation %+v", res)
+	}
+	runner := &recordingRunner{inner: &executor.Executor{}}
+	if _, err := a.Probe(t.Context(), runner, fx.Job.Scratch); err != nil {
+		t.Fatal(err)
+	}
+	r := runTask(t, a, fx.Job, runner)
+	doc, _ := readEnvelope(t, fx.Job, r)
+	// The C unit of the fixture's CMake targets (src/ring.c) is analyzed
+	// with the generated flags and its configured header.
+	if r.Status != domain.TaskSucceeded || doc.Target.Properties["compile_db_source"] != "generated" || !slices.Contains(doc.Limitations, LimGenerated) ||
+		!slices.Contains(doc.Coverage.ProcessedPaths, "src/ring.c") {
+		t.Fatalf("result %+v properties %v limitations %v coverage %+v", r, doc.Target.Properties, doc.Limitations, doc.Coverage)
+	}
+}
