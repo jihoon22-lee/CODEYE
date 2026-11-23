@@ -255,14 +255,16 @@ func worstCaseObservations(j analysis.Job) []govet.Observation {
 }
 
 // The synthetic worst case with many observations and maximal role
-// outputs, at the smallest, the default and the largest budget. Every
-// request still fits the budget because each role trims its excerpts first
-// and records it. At the smallest budget the verifier may carry fewer than
-// all maximal candidates (each carries a mechanism): the rest stay
-// unreviewed with verification_budget_exceeded and verify fails with
+// outputs, at the smallest, the default and the largest budget, and at the
+// smallest request with the default output. Every request still fits the
+// budget because each role trims its excerpts first and records it. At the
+// smallest request the verifier may carry fewer than all maximal
+// candidates (each carries a mechanism, and the default output allows
+// longer prose than the minimum): the rest stay unreviewed with
+// verification_budget_exceeded and verify fails with
 // review_input_incomplete.
 func TestReviewRequestSizeWorstCase(t *testing.T) {
-	for _, b := range []Budget{smallBudget, {}, {RequestBytes: MaxRequestBytes, OutputTokens: MaxOutputTokens}} {
+	for _, b := range []Budget{smallBudget, {RequestBytes: MinRequestBytes}, {}, {RequestBytes: MaxRequestBytes, OutputTokens: MaxOutputTokens}} {
 		t.Run(fmt.Sprintf("%d-%d", b.limits().request, b.OutputTokens), func(t *testing.T) {
 			j := worstCaseJob(t, nil)
 			obs := worstCaseObservations
@@ -270,7 +272,8 @@ func TestReviewRequestSizeWorstCase(t *testing.T) {
 			plan, res := runRoleWith(t, j, Handler{Static: vetStub{obs: obs}, Caller: f, Budget: b}, "1.27.4")
 			for _, p := range plan {
 				r := res[p.Key]
-				dropped := p.Key == "review.verify" && b == smallBudget && r.Status == domain.TaskFailed && r.Reason == "review_input_incomplete"
+				small := b.RequestBytes == MinRequestBytes
+				dropped := p.Key == "review.verify" && small && r.Status == domain.TaskFailed && r.Reason == "review_input_incomplete"
 				if wholeRunRole(p.Key) && r.Status != domain.TaskSucceeded && !dropped {
 					t.Fatalf("%s %+v", p.Key, r)
 				}
@@ -290,7 +293,7 @@ func TestReviewRequestSizeWorstCase(t *testing.T) {
 			for _, x := range v.Verifications {
 				if slices.Contains(x.Limitations, limVerifyBudget) {
 					unsent++
-					if x.Verdict != record.VerdictUnreviewed || b != smallBudget {
+					if x.Verdict != record.VerdictUnreviewed || b.RequestBytes != MinRequestBytes {
 						t.Fatalf("budget-dropped candidate %s verdict %s", x.CandidateID, x.Verdict)
 					}
 				}

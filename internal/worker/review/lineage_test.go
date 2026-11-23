@@ -481,3 +481,59 @@ func TestSliceHeaderThatIsTheFirstUnit(t *testing.T) {
 	}
 	requireReviewCounted(t, r)
 }
+
+// packageDocFile is a Go file with a package doc comment, no imports and
+// one function of about 2,700 bytes: at the minimum budget its header
+// (the comment and package clause) is its own first unit and the function
+// is split into later units.
+func packageDocFile(i int) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "// Package billing adjusts amounts.\npackage billing\n\nfunc Fill%d(n int) int {\n", i)
+	for k := range 70 {
+		fmt.Fprintf(&b, "\tn = clamp(n*%d + %d) // filler line that carries bytes\n", k+2, k)
+	}
+	b.WriteString("\treturn n\n}\n")
+	return b.String()
+}
+
+// A slice candidate cites the package clause inside the header sent with a
+// later unit. The declaration enclosing that line runs from line 1 to the
+// line before the function, which is exactly the header: verify sends and
+// records it as the slice investigator's header entry.
+func TestSliceVerifyDeclarationThatIsTheHeader(t *testing.T) {
+	tree := map[string]string{"go.mod": "module example.org/billing\n\ngo 1.23\n"}
+	for i := range 8 {
+		tree[fmt.Sprintf("doc%d.go", i)] = packageDocFile(i)
+	}
+	j := treeJob(t, tree)
+	script := coverageScript(t)
+	script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[investigateInput](t, q)
+		i := slices.IndexFunc(in.Scope.Excerpts, func(e record.Excerpt) bool { return e.Origin == record.OriginHeader && e.End == 2 })
+		if i < 0 {
+			return asJSON(map[string]any{"candidates": []any{}})
+		}
+		h := in.Scope.Excerpts[i]
+		return asJSON(map[string]any{"candidates": []record.CandidateText{billingCandidate("패키지 설명", h.ID+":2-2")}})
+	}
+	headers := 0
+	script["verify"] = func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[verifyInput](t, q)
+		if len(in.Scope.Excerpts) > 1 && in.Scope.Excerpts[1].Origin == record.OriginHeader {
+			headers++ // the enclosing declaration is the header, sent right after the cited line
+		}
+		return answerAll(in, func(c record.Candidate) []string { return []string{c.Evidence[0]} })
+	}
+	r, res := reportAt(t, &j, secretsStub{}, &scriptedCaller{script: script}, Budget{RequestBytes: MinRequestBytes}, &exampleIDs{n: 0x907})
+	for key, s := range res {
+		if _, slice, ok := record.SliceTask(key); ok && strings.HasPrefix(key, "review.verify.") && s.Status == "succeeded" {
+			requireUpstreamEntries(t, j, record.StageVerify+"."+slice, record.StageInvestigate+"."+slice)
+		} else if strings.HasPrefix(key, "review.") && s.Status != "succeeded" && s.Status != "skipped_policy" {
+			t.Errorf("%s %+v", key, s)
+		}
+	}
+	if headers == 0 {
+		t.Fatal("no slice verify got the header as the enclosing declaration")
+	}
+	requireReviewCounted(t, r)
+}
