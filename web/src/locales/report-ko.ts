@@ -677,6 +677,7 @@ export const reportKo = {
       review_scope_result_missing: '검토 범위 산출물 없음',
       review_scope_result_rejected: '검토 범위 산출물 거부',
       dependencies_not_prepared: '의존성을 받지 못함',
+      compile_db_not_generated: 'C/C++ compile DB를 만들지 못함',
       dependencies_not_fetched: '의존성 받기를 하지 않아 분석기가 외부 라이브러리를 찾지 못함',
       dependency_versions_not_pinned: '의존성 버전이 lockfile로 고정되지 않음',
       discovery_not_planned: '탐색 작업이 계획되지 않음',

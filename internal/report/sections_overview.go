@@ -110,6 +110,7 @@ func (c sectionContext) gaps() []Gap {
 		if tools == 0 {
 			add(SectionStaticAnalysis, "not_planned", nil, nil)
 		}
+		c.buildContextGap(add)
 	}
 	if m := r.Metrics; m != nil && len(m.TaskKeys) == 0 && len(m.Metrics) == 0 {
 		add(SectionMetrics, "not_planned", nil, nil)
