@@ -1,0 +1,160 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-RS-02",
+ "split": "dev",
+ "language": "rust",
+ "kind": "real_fix",
+ "category": "boundary_correctness",
+ "family": "status-line-lf-without-token-reset",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/seanmonstar/httparse",
+  "license": "MIT OR Apache-2.0",
+  "license_file": "LICENSE-MIT"
+ },
+ "scope": "src",
+ "before": {
+  "commit": "5c385a9b1751f0734db24af731d1926e1d2bc731"
+ },
+ "after": {
+  "commit": "c0631f26e86157a8110a202c112b0ea7a051025b"
+ },
+ "fix_diff": "diffs/PD-RS-02.diff",
+ "fix_commit_url": "https://github.com/seanmonstar/httparse/commit/c0631f26e86157a8110a202c112b0ea7a051025b",
+ "trees": {
+  "before": {
+   "digest": "ce56993cf70d3c331c89fbf658d149567067359ce7328a1760e85aaf2d3c4eab",
+   "scope_lines": 2132,
+   "scope_files": 7,
+   "files": 21
+  },
+  "after": {
+   "digest": "03dfbd1e4a788e807c6abf17f680a0b63d47f1bef1fae38d76414a0ca293a75d",
+   "scope_lines": 2148,
+   "scope_files": 7,
+   "files": 21
+  }
+ },
+ "label": {
+  "trigger": "Response::parse receives a status line that carries a three-digit code and then ends with a lone LF (no reason phrase, no CR) and at least one header follows, for example HTTP/1.1 404, a line feed, then Server: demo.",
+  "expected_impact": "The lone-LF branch stores an empty reason but leaves the start mark of the Bytes cursor at the status code, so the first header name is cut from that old mark: it comes back as the digits, the newline and the real name together (observed \"404\\nServer\" instead of \"Server\"). Lookups of that header by name fail and callers get a name that is not a valid header token.",
+  "positive_locations": [
+   {
+    "path": "src/lib.rs",
+    "symbol": "Response::parse_with_config",
+    "anchors": {
+     "start": "b'\\n' => self.reason = Some(\"\"),"
+    },
+    "start_line": 435,
+    "end_line": 435
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "src/iter.rs",
+    "symbol": "Bytes::slice_skip",
+    "anchors": {
+     "start": "pub fn slice(&mut self) -> &'a [u8] {",
+     "end": "}"
+    },
+    "start_line": 46,
+    "end_line": 63,
+    "note": "Bytes keeps an implicit start mark; slice and slice_skip return everything since that mark and move it, so any branch that consumes a line without calling one of them leaves old bytes in front of the next token."
+   },
+   {
+    "path": "src/lib.rs",
+    "symbol": "parse_headers_iter",
+    "anchors": {
+     "start": "if b == b':' {",
+     "end": "};"
+    },
+    "start_line": 658,
+    "end_line": 662,
+    "note": "The header name is produced by slice_skip(1) at the colon, so its text begins wherever the start mark was left by the status-line parser."
+   },
+   {
+    "path": "src/macros.rs",
+    "symbol": "newline",
+    "anchors": {
+     "start": "b'\\n' => {",
+     "end": "},"
+    },
+    "start_line": 53,
+    "end_line": 55,
+    "note": "The shared line-ending macro used for requests resets the mark on a lone LF as well, which shows the convention the response branch is expected to follow."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "src/lib.rs",
+    "symbol": "Response::parse_with_config",
+    "anchors": {
+     "start": "b'\\r' => {",
+     "end": "},"
+    },
+    "start_line": 430,
+    "end_line": 434,
+    "note": "The CR LF branch right above does reset the mark, so responses with a normal line ending and no reason phrase parse correctly; a finding about that branch does not match this case."
+   }
+  ],
+  "fix_summary": "Make the lone-LF arm call bytes.slice() before storing the empty reason, exactly like the CR LF arm, so the header parser starts the first name right after the status line.",
+  "distinctive_tokens": [
+   "lone-LF branch",
+   "start mark"
+  ]
+ },
+ "check": {
+  "summary": "Own integration test copied into tests/: parses a response whose code is followed by a bare line feed and checks the header names and count, plus a CR LF control; the library is built with rustc as an rlib and the test with rustc --test against it.",
+  "argv": [
+   "{home}/check"
+  ],
+  "cwd": ".",
+  "setup": [
+   [
+    "{rustc}",
+    "--edition",
+    "2015",
+    "--crate-type",
+    "rlib",
+    "--crate-name",
+    "httparse",
+    "--cfg",
+    "feature=\"std\"",
+    "-C",
+    "linker={cc}",
+    "--out-dir",
+    "{home}",
+    "src/lib.rs"
+   ],
+   [
+    "{rustc}",
+    "--edition",
+    "2018",
+    "--test",
+    "tests/status_line_lf.rs",
+    "--extern",
+    "httparse={home}/libhttparse.rlib",
+    "-C",
+    "linker={cc}",
+    "-o",
+    "{home}/check"
+   ]
+  ],
+  "env": {},
+  "files": [
+   {
+    "path": "tests/status_line_lf.rs",
+    "source": "checks/PD-RS-02/status_line_lf.rs"
+   }
+  ],
+  "failure_signature": "test status_without_phrase_ended_by_lf \\.\\.\\. FAILED",
+  "timeout_seconds": 600
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with rustc 1.99.1 (linker gcc 15.2.0): status_without_phrase_ended_by_lf fails on before (the first header name comes back as the status code, a newline and the name) and both tests pass on after. The library is compiled directly with rustc (edition 2015, feature std) instead of cargo, so build.rs is not run and the SIMD cfgs it would set stay off (only the scalar paths are exercised); the dev-dependency pico-sys is not built and nothing is downloaded.",
+  "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "before": "violation",
+  "after": "pass"
+ }
+}

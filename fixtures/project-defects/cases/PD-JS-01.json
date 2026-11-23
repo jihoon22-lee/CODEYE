@@ -1,0 +1,129 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-JS-01",
+ "split": "dev",
+ "language": "javascript",
+ "kind": "seeded",
+ "category": "boundary_correctness",
+ "family": "strict-bound-compared-with-strict-helper",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/npm/node-semver",
+  "license": "ISC",
+  "license_file": "LICENSE"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "b37b033b585ad5e575afeccadb426ea41bc6cea4",
+  "patch": "patches/PD-JS-01.patch"
+ },
+ "after": {
+  "commit": "b37b033b585ad5e575afeccadb426ea41bc6cea4"
+ },
+ "trees": {
+  "before": {
+   "digest": "3cfdf4bbcc2aa05c4c47587ad2c8ada14918aaa5c037c56fd06cf8d71db46fe4",
+   "scope_lines": 3170,
+   "scope_files": 54,
+   "files": 158
+  },
+  "after": {
+   "digest": "10d594f6587520c9822c67f18ae7df84bfe7dcca5ce57508b7215724178e0b78",
+   "scope_lines": 3170,
+   "scope_files": 54,
+   "files": 158
+  }
+ },
+ "label": {
+  "trigger": "Calling gtr or ltr with a version that sits exactly on an exclusive bound of a two-sided range, for example gtr(L, '>L <H') or ltr(H, '>L <H') with any two versions L below H, so the bound is the near-side comparator and the far side carries the other operator.",
+  "expected_impact": "A version equal to the strict lower bound lies below the range, yet gtr says it is above every allowed version; symmetrically ltr says a version equal to the strict upper bound is below the range. Callers that use these helpers to decide whether a version is newer or older than anything a range permits reach the opposite answer exactly at the bound.",
+  "positive_locations": [
+   {
+    "path": "ranges/outside.js",
+    "symbol": "outside",
+    "anchors": {
+     "start": "if ((!low.operator || low.operator === comp) &&",
+     "end": "ltfn(version, low.semver)) {"
+    },
+    "start_line": 72,
+    "end_line": 73
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "ranges/gtr.js",
+    "symbol": "gtr",
+    "anchors": {
+     "start": "const gtr = (version, range, options) => outside(version, range, '>', options)"
+    },
+    "start_line": 5,
+    "end_line": 5,
+    "note": "Public entry whose contract is 'above every version the range allows'; it passes '>' so the shared routine binds lte and lt, which is what makes a strict lower bound need the inclusive helper."
+   },
+   {
+    "path": "ranges/ltr.js",
+    "symbol": "ltr",
+    "anchors": {
+     "start": "const ltr = (version, range, options) => outside(version, range, '<', options)"
+    },
+    "start_line": 5,
+    "end_line": 5,
+    "note": "Mirror entry passing '<', which swaps the helpers to gte and gt, so the same line also mishandles a version equal to a strict upper bound."
+   },
+   {
+    "path": "ranges/outside.js",
+    "symbol": "outside",
+    "anchors": {
+     "start": "case '>':",
+     "end": "ecomp = '>='"
+    },
+    "start_line": 19,
+    "end_line": 24,
+    "note": "The direction switch decides which helper each local name holds; the comparison on the faulty line is only readable once ltefn is known to be the inclusive one."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "ranges/outside.js",
+    "symbol": "outside",
+    "anchors": {
+     "start": "} else if (low.operator === ecomp && ltfn(version, low.semver)) {"
+    },
+    "start_line": 75,
+    "end_line": 75,
+    "note": "For an inclusive near-side comparator the strict helper is right, since a version equal to that bound satisfies the range and has already returned; a finding about this branch does not match."
+   },
+   {
+    "note": "Single-sided ranges such as '>1.0.0' alone still answer correctly, because the high-edge test above returns first when the only comparator points in the queried direction."
+   }
+  ],
+  "fix_summary": "For a strict or operator-less near-side comparator, treat a version at or beyond that bound in the near direction as not outside by using the inclusive helper ltefn (lte for gtr, gte for ltr) chosen in the switch, leaving the strict helper for the inclusive comparator branch.",
+  "distinctive_tokens": [
+   "strict near-side bound",
+   "near-side comparator"
+  ]
+ },
+ "check": {
+  "summary": "Standalone node script copied into the work copy; it calls gtr and ltr from the ranges directory for ten versions placed on or next to strict and inclusive bounds and prints a MISMATCH line for every wrong answer.",
+  "argv": [
+   "{node}",
+   "check/outside-endpoints.js"
+  ],
+  "cwd": ".",
+  "failure_signature": "MISMATCH (gtr|ltr)\\(",
+  "timeout_seconds": 120,
+  "files": [
+   {
+    "path": "check/outside-endpoints.js",
+    "source": "checks/PD-JS-01/outside-endpoints.js"
+   }
+  ]
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with node v24.18.0: the standalone script prints four MISMATCH lines (gtr at a strict lower bound and ltr at a strict upper bound, two ranges each) and exits 1 on before; all ten cases agree and it exits 0 on after. The package has no runtime dependencies. The project's own gtr/ltr fixture tables (test/fixtures/version-*-range.js) were also run by hand through a node loop on scratch copies of the pinned commit with and without the patch: no entry fails in either, so they do not catch the change. tap itself was not installed or run.",
+  "toolchain": "node v24.18.0 linux-x64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

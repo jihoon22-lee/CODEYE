@@ -1,0 +1,162 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-PY-01",
+ "split": "dev",
+ "language": "python",
+ "kind": "real_fix",
+ "category": "error_handling",
+ "family": "narrow-except-around-claim-int-coercion",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/jpadilla/pyjwt",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": "jwt",
+ "before": {
+  "commit": "293d9972ce52b192b863480c56876621e380abf5"
+ },
+ "after": {
+  "commit": "793a30279584fcf2db889363b0db1f6d38d74e97"
+ },
+ "fix_diff": "diffs/PD-PY-01.diff",
+ "fix_commit_url": "https://github.com/jpadilla/pyjwt/commit/793a30279584fcf2db889363b0db1f6d38d74e97",
+ "trees": {
+  "before": {
+   "digest": "82d363901aa9c3c6ce61f355fe3a11040810a626afa4af26ce462903c3418d9a",
+   "scope_lines": 3197,
+   "scope_files": 12,
+   "files": 92
+  },
+  "after": {
+   "digest": "958c06304c1f6b293b7331259c0f0a04c18857370e0cb0fbb8a44826c862d086",
+   "scope_lines": 3197,
+   "scope_files": 12,
+   "files": 92
+  }
+ },
+ "label": {
+  "trigger": "A correctly signed token whose payload carries a time claim that JSON decodes to something int() cannot take as a string, such as {\"exp\": [1]}, {\"nbf\": {\"a\": 1}}, {\"iat\": null} or a JSON Infinity, is passed to jwt.decode with the matching key.",
+  "expected_impact": "The int() call inside the iat, nbf and exp validators raises TypeError (or OverflowError for infinity), and only ValueError is caught. The raw builtin exception propagates out of decode, so applications that guard decoding with the package's own base exception crash or return a server error for an attacker-shaped token instead of rejecting it.",
+  "positive_locations": [
+   {
+    "path": "jwt/api_jwt.py",
+    "symbol": "PyJWT._validate_iat",
+    "anchors": {
+     "start": "iat = int(payload[\"iat\"])",
+     "end": "except ValueError:"
+    },
+    "start_line": 477,
+    "end_line": 478
+   },
+   {
+    "path": "jwt/api_jwt.py",
+    "symbol": "PyJWT._validate_nbf",
+    "anchors": {
+     "start": "nbf = int(payload[\"nbf\"])",
+     "end": "except ValueError:"
+    },
+    "start_line": 492,
+    "end_line": 493
+   },
+   {
+    "path": "jwt/api_jwt.py",
+    "symbol": "PyJWT._validate_exp",
+    "anchors": {
+     "start": "exp = int(payload[\"exp\"])",
+     "end": "except ValueError:"
+    },
+    "start_line": 506,
+    "end_line": 507
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "jwt/exceptions.py",
+    "symbol": "PyJWTError",
+    "anchors": {
+     "start": "class PyJWTError(Exception):",
+     "end": "class InvalidIssuedAtError(InvalidTokenError):"
+    },
+    "start_line": 1,
+    "end_line": 47,
+    "note": "Defines the hierarchy callers rely on: every decode failure is meant to be a subclass of the base error here, and the validators translate bad claim values into DecodeError or InvalidIssuedAtError from this file."
+   },
+   {
+    "path": "jwt/api_jwt.py",
+    "symbol": "PyJWT._decode_payload",
+    "anchors": {
+     "start": "payload: dict[str, Any] = json.loads(decoded[\"payload\"])",
+     "end": "raise DecodeError(\"Invalid payload string: must be a json object\")"
+    },
+    "start_line": 298,
+    "end_line": 302,
+    "note": "The payload is plain json.loads output and only its top level is required to be an object, so claim values can be lists, objects, null or infinite floats when they reach the validators."
+   },
+   {
+    "path": "jwt/api_jwt.py",
+    "symbol": "PyJWT._validate_claims",
+    "anchors": {
+     "start": "if \"iat\" in payload and options[\"verify_iat\"]:",
+     "end": "self._validate_exp(payload, now, leeway)"
+    },
+    "start_line": 403,
+    "end_line": 410,
+    "note": "The dispatcher checks only that the claim key is present before calling each time validator; no value type check happens on the way."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "note": "Non-numeric text such as \"abc\" in a time claim is already rejected properly, because int() raises ValueError for strings; a finding limited to string inputs does not describe this defect."
+   },
+   {
+    "path": "jwt/api_jwt.py",
+    "symbol": "PyJWT._validate_iss",
+    "anchors": {
+     "start": "if not isinstance(iss, str):"
+    },
+    "start_line": 575,
+    "end_line": 575,
+    "note": "The issuer validator tests the value type before using it, so the issuer path is not affected."
+   }
+  ],
+  "fix_summary": "Widen each of the three handlers so that TypeError and OverflowError from the int() conversion are mapped to the same package exceptions already used for ValueError, keeping every malformed time claim inside the library's documented error types.",
+  "distinctive_tokens": [
+   "attacker-shaped token",
+   "builtin exception propagates"
+  ]
+ },
+ "check": {
+  "summary": "Runs the parametrised test the fix commit added to the JWT API tests: it signs tokens whose time claims hold a list, an object, null or infinity and expects the package exception naming the claim.",
+  "argv": [
+   "{python}",
+   "-m",
+   "pytest",
+   "-p",
+   "no:cacheprovider",
+   "-q",
+   "tests/test_api_jwt.py",
+   "-k",
+   "test_decode_raises_clean_error_if_claim_is_non_numeric_type"
+  ],
+  "cwd": ".",
+  "env": {
+   "PYTHONPATH": "{work}"
+  },
+  "files": [
+   {
+    "path": "tests/test_api_jwt.py",
+    "source": "checks/PD-PY-01/tests/test_api_jwt.py"
+   }
+  ],
+  "failure_signature": "FAILED tests/test_api_jwt\\.py::TestJWT::test_decode_raises_clean_error_if_claim_is_non_numeric_type",
+  "timeout_seconds": 600
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with system Python 3.14.4 and pytest 9.0.2: on before all 12 parametrised cases fail (TypeError for list, object and null values, OverflowError for infinity escaping decode); on after all 12 pass. The fix commit's version of tests/test_api_jwt.py is copied into both work copies; it differs from the parent's only by the added test. PYTHONPATH points at the work copy so the system-wide PyJWT 2.10.1 is not imported; the system site-packages (including cryptography 46) stay importable during the run.",
+  "toolchain": "Python 3.14.4, pytest 9.0.2",
+  "before": "violation",
+  "after": "pass"
+ }
+}

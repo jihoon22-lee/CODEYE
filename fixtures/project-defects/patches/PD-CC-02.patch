@@ -1,0 +1,11 @@
+--- a/src/cwalk.c
++++ b/src/cwalk.c
+@@ -113,7 +113,7 @@
+   size_t pos)
+ {
+   if (buffer_size > 0) {
+-    if (pos >= buffer_size) {
++    if (pos > buffer_size) {
+       buffer[buffer_size - 1] = '\0';
+     } else {
+       buffer[pos] = '\0';

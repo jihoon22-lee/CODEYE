@@ -49,7 +49,7 @@
 ## 분석 지침 변경
 
 - 검토 지침 개정은 `prompts/review/` 하나에 하고, 합성 회귀 집합의 실행 한 번으로 검증한다([품질 평가](docs/EVALUATION.md)).
-- 검토 지침을 고치는 작성자는 [보류 평가 결과](docs/EVALUATION-RESULTS.md)와 `fixtures/quality-holdout/`을 읽지 않는다. 그 내용을 다른 문서에 요약해 옮기지도 않는다.
+- 검토 지침을 고치는 작성자는 [보류 평가 결과](docs/EVALUATION-RESULTS.md), `fixtures/quality-holdout/`, `fixtures/project-defects/`(dev 분할 포함)를 읽지 않는다. 그 내용을 다른 문서에 요약해 옮기지도 않는다.
 - 실제 모델 호출은 소유자가 정한 예산의 장부를 거친다. 예산이 부족하면 멈추고 보고한다.
 
 ## 완료 정의

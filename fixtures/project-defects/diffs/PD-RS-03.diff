@@ -1,0 +1,12 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index 882a880..42c04c3 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1520,6 +1520,7 @@ impl<T, const N: usize> SmallVec<T, N> {
+                 // At this point we either consumed all capacity or the iterator is exhausted (fused)
+                 if let Some(item) = iter.next() {
+                     self.push(item);
++                    len += 1;
+                 } else {
+                     return;
+                 }

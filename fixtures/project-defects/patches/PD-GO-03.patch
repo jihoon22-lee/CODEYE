@@ -1,0 +1,14 @@
+--- a/middleware/throttle.go
++++ b/middleware/throttle.go
+@@ -93,10 +93,8 @@
+ 				// Try to get a processing token immediately first
+ 				select {
+ 				case tok := <-t.tokens:
+-					defer func() {
+-						t.tokens <- tok
+-					}()
+ 					next.ServeHTTP(w, r)
++					t.tokens <- tok
+ 					return
+ 				default:
+ 					// No immediate token available, need to wait with timer

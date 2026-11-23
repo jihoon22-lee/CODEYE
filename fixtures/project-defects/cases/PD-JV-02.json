@@ -1,0 +1,139 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-JV-02",
+ "split": "holdout",
+ "language": "java",
+ "kind": "seeded",
+ "category": "error_handling",
+ "family": "read-failure-reported-as-end-of-records",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/osiegmar/FastCSV",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": "lib/src/main/java/de/siegmar/fastcsv/reader",
+ "before": {
+  "commit": "1e6c28fc9f16a12aa1092bbe213d8f050a55fab8",
+  "patch": "patches/PD-JV-02.patch"
+ },
+ "after": {
+  "commit": "1e6c28fc9f16a12aa1092bbe213d8f050a55fab8"
+ },
+ "trees": {
+  "before": {
+   "digest": "28f5bdf388c6e5d678d218b6d78e863efa8c3b1fbcc2cee87e41e933376d334b",
+   "scope_lines": 5408,
+   "scope_files": 33,
+   "files": 299
+  },
+  "after": {
+   "digest": "49c28d63d38bacd2328f90eda8e0f73e7994f6aeb079469bb65f2e5a2b484b23",
+   "scope_lines": 5408,
+   "scope_files": 33,
+   "files": 299
+  }
+ },
+ "label": {
+  "trigger": "The Reader or InputStream behind a CsvReader throws an IOException part way through the data (network stream dropped, disk or decompression error) while the caller iterates records with for-each, iterator() or stream().",
+  "expected_impact": "fetch() turns the I/O failure into a null record, and both the iterator and the spliterator treat null as the regular end of input. Iteration finishes normally after the last complete record, the partly read record and everything after it vanish, and the caller processes a truncated data set believing the whole source was consumed; the original exception is discarded.",
+  "positive_locations": [
+   {
+    "path": "lib/src/main/java/de/siegmar/fastcsv/reader/CsvReader.java",
+    "symbol": "CsvReader.fetch",
+    "anchors": {
+     "start": "} catch (final IOException e) {",
+     "end": "return null;"
+    },
+    "start_line": 344,
+    "end_line": 345
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "lib/src/main/java/de/siegmar/fastcsv/reader/StrictCsvParser.java",
+    "symbol": "StrictCsvParser.CsvBuffer.fetchData",
+    "anchors": {
+     "start": "final int cnt = reader.read(buf, len, readSize);",
+     "end": "return false;"
+    },
+    "start_line": 511,
+    "end_line": 513,
+    "note": "The parser already reports exhausted input through the -1 count and a false return; an IOException coming out of this read therefore always means a failed source, never the normal end."
+   },
+   {
+    "path": "lib/src/main/java/de/siegmar/fastcsv/reader/CsvReader.java",
+    "symbol": "CsvReader.CsvRecordIterator.hasNext",
+    "anchors": {
+     "start": "public boolean hasNext() {",
+     "end": "return fetchedRecord != null;"
+    },
+    "start_line": 397,
+    "end_line": 402,
+    "note": "A null from fetch() is how the iterator (and tryAdvance in the spliterator above it) learns that no records remain, so a null produced by the catch block is indistinguishable from end of file."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "lib/src/main/java/de/siegmar/fastcsv/reader/CsvReader.java",
+    "symbol": "CsvReader.skipLines",
+    "anchors": {
+     "start": "} catch (final IOException e) {",
+     "end": "throw new UncheckedIOException(e);"
+    },
+    "start_line": 131,
+    "end_line": 132,
+    "note": "Skipping leading lines still propagates read failures wrapped in an unchecked exception; a finding placed on skipLines does not match this defect."
+   },
+   {
+    "note": "Data sources that end cleanly, including input that stops in the middle of a line, are unaffected: those return -1 from read, and the reader correctly emits the trailing partial record."
+   }
+  ],
+  "fix_summary": "Rethrow the caught IOException as an UncheckedIOException carrying the line-number message, as the other read paths do, so iteration and streaming stop with an error instead of reporting a normal end of data.",
+  "distinctive_tokens": [
+   "truncated data set",
+   "indistinguishable from end of file"
+  ]
+ },
+ "check": {
+  "summary": "A main program compiled together with all library sources (module-info excluded) iterates a CsvReader over a Reader that hands out two full lines and a partial third and then throws; it passes only when the iteration ends with an unchecked I/O exception wrapping that failure.",
+  "setup": [
+   [
+    "/bin/sh",
+    "-c",
+    "find lib/src/main/java -name '*.java' ! -name module-info.java > {work}/sources.txt"
+   ],
+   [
+    "{javac}",
+    "-nowarn",
+    "-d",
+    "{work}/out",
+    "@{work}/sources.txt",
+    "pdcheck/CheckReadFailure.java"
+   ]
+  ],
+  "argv": [
+   "{java}",
+   "-cp",
+   "{work}/out",
+   "CheckReadFailure"
+  ],
+  "cwd": ".",
+  "env": {},
+  "files": [
+   {
+    "path": "pdcheck/CheckReadFailure.java",
+    "source": "checks/PD-JV-02/CheckReadFailure.java"
+   }
+  ],
+  "failure_signature": "CHECK-VIOLATION: iteration ended normally although the source failed",
+  "timeout_seconds": 600
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with OpenJDK 21: the library sources (47 files, module-info.java left out so the unnamed-package check compiles on the class path) and the check compile on both variants. On before the loop ends after the records id|name and 1|alpha with no exception (exit 1, CHECK-VIOLATION); on after it stops with UncheckedIOException whose cause is the simulated IOException (exit 0). The library has no third-party dependencies.",
+  "toolchain": "openjdk 21.0.13.1 (javac 21.0.13.1)",
+  "before": "violation",
+  "after": "pass"
+ }
+}

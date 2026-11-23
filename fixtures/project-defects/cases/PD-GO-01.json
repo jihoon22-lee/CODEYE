@@ -1,0 +1,111 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-GO-01",
+ "split": "dev",
+ "language": "go",
+ "kind": "seeded",
+ "category": "data_integrity",
+ "family": "shallow-copy-of-appendable-slice",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/gorilla/mux",
+  "license": "BSD-3-Clause",
+  "license_file": "LICENSE"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "db9d1d0073d27a0a2d9a8c1bc52aa0af4374d265",
+  "patch": "patches/PD-GO-01.patch"
+ },
+ "after": {
+  "commit": "db9d1d0073d27a0a2d9a8c1bc52aa0af4374d265"
+ },
+ "trees": {
+  "before": {
+   "digest": "e49ae87e5477dad4ae47cc89dc4849cf86b27e3b9b0df08f3ffc1f52820d4997",
+   "scope_lines": 2331,
+   "scope_files": 6,
+   "files": 27
+  },
+  "after": {
+   "digest": "57153a34936286711230cf0523f8ab7aa9ac4b92690eeaff5d0cf64d4db86d6a",
+   "scope_lines": 2332,
+   "scope_files": 6,
+   "files": 27
+  }
+ },
+ "label": {
+  "trigger": "A route or subrouter is created from a route configuration whose matcher slice has spare capacity, for example a PathPrefix route with two Headers matchers followed by Subrouter() and two HandleFunc(...).Methods(...) routes under it.",
+  "expected_impact": "copyRouteConf returns a matcher slice that shares its backing array with the source configuration. Later appends in Route.addMatcher by sibling routes and by the parent overwrite each other's matchers, so requests reach the wrong handler or get 404/405 although a route matches.",
+  "positive_locations": [
+   {
+    "path": "mux.go",
+    "symbol": "copyRouteConf",
+    "anchors": {
+     "start": "c.matchers = r.matchers[:len(r.matchers)]"
+    },
+    "start_line": 129,
+    "end_line": 129
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "route.go",
+    "symbol": "Route.addMatcher",
+    "anchors": {
+     "start": "r.matchers = append(r.matchers, m)"
+    },
+    "start_line": 241,
+    "end_line": 241,
+    "note": "Every matcher is appended in place to the route's own slice; this is what writes into the shared backing array."
+   },
+   {
+    "path": "route.go",
+    "symbol": "Route.Subrouter",
+    "anchors": {
+     "start": "router := &Router{routeConf: copyRouteConf(r.routeConf), namedRoutes: r.namedRoutes}"
+    },
+    "start_line": 559,
+    "end_line": 559,
+    "note": "A subrouter and each route under it start from copyRouteConf of the parent configuration."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "mux.go",
+    "symbol": "copyRouteConf",
+    "anchors": {
+     "start": "c.regexp.queries = make([]*routeRegexp, 0, len(r.regexp.queries))"
+    },
+    "start_line": 124,
+    "end_line": 124,
+    "note": "The query regexp list right above is rebuilt into a fresh slice, so only the matcher list is shared; a finding about the query list does not match this defect."
+   }
+  ],
+  "fix_summary": "Allocate a new matcher slice of the same length and copy the elements (make plus copy), so appends on one route configuration never write into another's backing array.",
+  "distinctive_tokens": [
+   "shared backing array"
+  ]
+ },
+ "check": {
+  "summary": "Existing project tests TestMethodsSubrouterStrictSlash and TestWalkNested build subrouters with several matchers and request each route.",
+  "argv": [
+   "{go}",
+   "test",
+   "-count=1",
+   "-run",
+   "^(TestMethodsSubrouterStrictSlash|TestWalkNested)$",
+   "."
+  ],
+  "cwd": ".",
+  "failure_signature": "--- FAIL: (TestMethodsSubrouterStrictSlash|TestWalkNested)",
+  "timeout_seconds": 600
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "go test with go1.27.4: both tests fail on before (handler not called, 404) and pass on after. The module has no dependencies.",
+  "toolchain": "go1.27.4 linux/amd64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

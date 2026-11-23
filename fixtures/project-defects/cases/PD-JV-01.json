@@ -1,0 +1,141 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-JV-01",
+ "split": "dev",
+ "language": "java",
+ "kind": "seeded",
+ "category": "concurrency",
+ "family": "state-compared-outside-transition-lock",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/failsafe-lib/failsafe",
+  "license": "Apache-2.0",
+  "license_file": "LICENSE"
+ },
+ "scope": "core/src/main/java/dev/failsafe/internal",
+ "before": {
+  "commit": "ed3f92739669769274cf5c9567fd422929c20ad2",
+  "patch": "patches/PD-JV-01.patch"
+ },
+ "after": {
+  "commit": "ed3f92739669769274cf5c9567fd422929c20ad2"
+ },
+ "trees": {
+  "before": {
+   "digest": "4ba665c0d8f782dde489c48bd08edaadf7bf4fef08571a17783c67f7cc36123c",
+   "scope_lines": 2998,
+   "scope_files": 31,
+   "files": 220
+  },
+  "after": {
+   "digest": "9ef1780799035fd7928f6e855f35952643b37005e8c3cf9588956ced6cff9b96",
+   "scope_lines": 2998,
+   "scope_files": 31,
+   "files": 220
+  }
+ },
+ "label": {
+  "trigger": "Two callers request the same circuit state change at nearly the same moment through paths that do not share a state monitor, e.g. several executions reaching OpenState.tryAcquirePermit right after the open delay ran out, or a failing execution opening the breaker (with a delay function) while another thread calls open() directly.",
+  "expected_impact": "transitionTo compares the current state with the requested one before it enters synchronized (this), so a second caller that saw the old state still installs another state object once the first caller leaves the monitor. The breaker reports duplicate onOpen/onHalfOpen events, restarts the open delay, and every extra HalfOpenState comes with a full permit count, so more trial executions run than the configured capacity allows.",
+  "positive_locations": [
+   {
+    "path": "core/src/main/java/dev/failsafe/internal/CircuitBreakerImpl.java",
+    "symbol": "CircuitBreakerImpl.transitionTo",
+    "anchors": {
+     "start": "currentState = getState();",
+     "end": "synchronized (this) {"
+    },
+    "start_line": 162,
+    "end_line": 164
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "core/src/main/java/dev/failsafe/internal/OpenState.java",
+    "symbol": "OpenState.tryAcquirePermit",
+    "anchors": {
+     "start": "breaker.halfOpen();"
+    },
+    "start_line": 34,
+    "end_line": 34,
+    "note": "Each execution that finds the open delay elapsed calls halfOpen() while holding no shared lock, so concurrent callers arrive in transitionTo together."
+   },
+   {
+    "path": "core/src/main/java/dev/failsafe/internal/HalfOpenState.java",
+    "symbol": "HalfOpenState",
+    "anchors": {
+     "start": "permittedExecutions.set(capacityFor(breaker));"
+    },
+    "start_line": 29,
+    "end_line": 29,
+    "note": "A newly built half-open state resets its trial permit counter to the whole capacity, which is why a repeated transition hands out additional trial executions."
+   },
+   {
+    "path": "core/src/main/java/dev/failsafe/internal/CircuitBreakerImpl.java",
+    "symbol": "CircuitBreakerImpl.state",
+    "anchors": {
+     "start": "/** Writes guarded by \"this\" */"
+    },
+    "start_line": 39,
+    "end_line": 39,
+    "note": "The field comment states that replacing the state reference happens only under the breaker's own monitor, so the comparison that decides whether to replace it belongs there too."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "core/src/main/java/dev/failsafe/internal/CircuitState.java",
+    "symbol": "CircuitState.recordFailure",
+    "anchors": {
+     "start": "public synchronized void recordFailure(ExecutionContext<R> context) {"
+    },
+    "start_line": 52,
+    "end_line": 52,
+    "note": "Recording a failure or success is synchronized on the current state object, so two failures counted on one ClosedState are already serialized; the gap concerns callers entering the transition without that monitor (public open/close/halfOpen and OpenState)."
+   },
+   {
+    "note": "Invoking the state change listener after leaving the synchronized block is deliberate in this design and is not the problem; a finding about listener calls outside the lock does not match."
+   }
+  ],
+  "fix_summary": "Read the current state and test it against the requested state inside the synchronized (this) block, so the comparison and the replacement of the state reference happen as one atomic step and only the first of several concurrent callers performs the transition.",
+  "distinctive_tokens": [
+   "unguarded state comparison",
+   "extra trial executions"
+  ]
+ },
+ "check": {
+  "summary": "A main program compiled with the core sources parks a failing execution inside its delay function while that thread owns the breaker monitor, waits until a direct open() call is blocked on the same monitor, releases the delay and counts open events, which must be exactly one.",
+  "setup": [
+   [
+    "{javac}",
+    "-d",
+    "{work}/out",
+    "--source-path",
+    "core/src/main/java",
+    "pdcheck/CheckOpenTransition.java"
+   ]
+  ],
+  "argv": [
+   "{java}",
+   "-cp",
+   "{work}/out",
+   "CheckOpenTransition"
+  ],
+  "cwd": ".",
+  "env": {},
+  "files": [
+   {
+    "path": "pdcheck/CheckOpenTransition.java",
+    "source": "checks/PD-JV-01/CheckOpenTransition.java"
+   }
+  ],
+  "failure_signature": "CHECK-VIOLATION: one CLOSED->OPEN change produced \\d+ open transitions",
+  "timeout_seconds": 300
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with OpenJDK 21: the check program compiles against core/src/main/java on both variants. On before the direct open() call reads the old state, blocks on the breaker monitor and transitions again after release, so the open listener runs twice (exit 1, CHECK-VIOLATION); on after it runs once (exit 0). The interleaving is fixed by a latch and a ThreadMXBean wait for the monitor, not by sleeps. The core module has no third-party dependencies.",
+  "toolchain": "openjdk 21.0.13.1 (javac 21.0.13.1)",
+  "before": "violation",
+  "after": "pass"
+ }
+}

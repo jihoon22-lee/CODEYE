@@ -70,7 +70,7 @@ def child_env(env):
 
 
 def build_product(base, root, env):
-    """Build the codeye binary from this checkout and migrate the temp database."""
+    """Build the codeye binary from the checkout at root and migrate the temp database."""
     binary = base / "codeye"
     subprocess.run(["go", "build", "-o", str(binary), "./cmd/codeye"], cwd=root, env=env, check=True, timeout=900)
     subprocess.run([str(binary), "migrate"], cwd=base, env=env, check=True, capture_output=True, timeout=120)
@@ -82,13 +82,16 @@ class Cluster:
 
     agent_args(root_id) returns the extra agent arguments (tools, grants, model
     relay); every agent gets the same ones. Agents run with PATH and LANG only.
+    With admin the runs' user is an administrator, so the service offers its
+    runs everything (build scripts included) and the node grants decide.
     """
 
     def __init__(self, base, binary, env, source, *, agent_args, agents=1, max_workers=2,
-                 label="evaluation inputs", agent_path=None, web_dir=None, pool_max=None):
+                 label="evaluation inputs", agent_path=None, web_dir=None, pool_max=None, admin=False):
         self.base, self.binary, self.env, self.source = base, binary, child_env(env), source
         self.agent_args, self.agents, self.max_workers, self.label = agent_args, agents, max_workers, label
         self.web_dir, self.pool_max = web_dir, pool_max or agents * max_workers
+        self.admin = admin
         self.agent_path = agent_path or self.env.get("PATH", "/usr/bin:/bin")
         self.work = base / "cluster"
         self.stack = ExitStack()
@@ -113,7 +116,7 @@ class Cluster:
         return self
 
     def _start(self):
-        self.user = json.loads(self.cli("user", "create", "--name", "evaluator"))["id"]
+        self.user = json.loads(self.cli("user", "create", "--name", "evaluator", *(["--admin"] if self.admin else [])))["id"]
         self.root_id = json.loads(self.cli("source-root", "add", "--label", self.label, "--path", self.source))["id"]
         self.cli("source-root", "grant", "--root", self.root_id, "--user", self.user)
         with socket.socket() as s:
@@ -159,10 +162,10 @@ class Cluster:
     def alive(self):
         return all(p.poll() is None for p in self.children)
 
-    def submit(self, name, rel):
+    def submit(self, name, rel, scope_paths=None):
         project = self.api.request("POST", "projects", {
             "name": name, "source": {"kind": "local", "source_root_id": self.root_id, "relative_path": rel}})
-        return self.api.enqueue(project["id"])
+        return self.api.enqueue(project["id"], scope_paths)
 
     def run(self, run_id):
         return self.api.request("GET", "runs/" + run_id)

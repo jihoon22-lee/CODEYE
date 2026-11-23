@@ -33,8 +33,10 @@ class Session:
         with self.client.open(req, timeout=5) as response:
             return json.load(response)
 
-    def enqueue(self, project_id):
-        body = {"profile": "deep-review", "source_policy": "latest_at_acquire", "scope": {"kind": "full"}}
+    def enqueue(self, project_id, scope_paths=None):
+        """Queue a deep-review run; scope_paths limits it to those directories (scope kind paths)."""
+        scope = {"kind": "paths", "paths": list(scope_paths)} if scope_paths else {"kind": "full"}
+        body = {"profile": "deep-review", "source_policy": "latest_at_acquire", "scope": scope}
         ack = self.request("POST", f"projects/{project_id}/runs", body, {"Idempotency-Key": str(uuid4())})
         assert ack["status"] == "queued"
         return str(UUID(ack["id"]))

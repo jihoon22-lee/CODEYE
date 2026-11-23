@@ -1,0 +1,132 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-PY-04",
+ "split": "holdout",
+ "language": "python",
+ "kind": "seeded",
+ "category": "api_contract",
+ "family": "optional-hook-kwarg-passed-unconditionally",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/jsonpickle/jsonpickle",
+  "license": "BSD-3-Clause",
+  "license_file": "LICENSE"
+ },
+ "scope": "jsonpickle",
+ "before": {
+  "commit": "16f4e6f27b0ad0282e98e1ef4edae097dfd65e4c",
+  "patch": "patches/PD-PY-04.patch"
+ },
+ "after": {
+  "commit": "16f4e6f27b0ad0282e98e1ef4edae097dfd65e4c"
+ },
+ "trees": {
+  "before": {
+   "digest": "bca7f2b630b474a63f334a196f417832d8852fd73f9b66a10550687f4e93c42c",
+   "scope_lines": 4854,
+   "scope_files": 16,
+   "files": 98
+  },
+  "after": {
+   "digest": "15abab1d5596109dca4a6e75d2c6a8db077b0e3c7191f53afa6f2f0dad10a381",
+   "scope_lines": 4857,
+   "scope_files": 16,
+   "files": 98
+  }
+ },
+ "label": {
+  "trigger": "jsonpickle.encode(...) is called with any non-None handler_context while the value being encoded is handled by a registered handler whose flatten method keeps the classic two-argument form, for example a datetime, a UUID, a compiled regex or a user handler written against BaseHandler.",
+  "expected_impact": "The pickler always adds handler_context as a keyword when calling flatten, so every such handler fails with TypeError about an unexpected keyword. Encoding with a context then breaks for built-in types and for older third-party handlers, although the hook was meant to be opt-in and decoding of the same data keeps working.",
+  "positive_locations": [
+   {
+    "path": "jsonpickle/pickler.py",
+    "symbol": "Pickler._call_handler_flatten",
+    "anchors": {
+     "start": "kwargs: dict[str, Any] = {}",
+     "end": "return handler.flatten(obj, data, **kwargs)"
+    },
+    "start_line": 463,
+    "end_line": 466
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "jsonpickle/handlers.py",
+    "symbol": "handler_accepts_handler_context",
+    "anchors": {
+     "start": "def handler_accepts_handler_context(fn: Callable[..., Any]) -> bool:",
+     "end": "inspect.Parameter.VAR_KEYWORD,"
+    },
+    "start_line": 109,
+    "end_line": 125,
+    "note": "The registry module provides a signature probe for exactly this decision; the encoding path no longer consults it."
+   },
+   {
+    "path": "jsonpickle/handlers.py",
+    "symbol": "BaseHandler.flatten",
+    "anchors": {
+     "start": "def flatten(self, obj: Any, data: dict[str, Any]) -> HandlerReturn:"
+    },
+    "start_line": 140,
+    "end_line": 140,
+    "note": "The documented handler interface takes only obj and data, and the built-in handlers such as DatetimeHandler in this module implement that form, so the context keyword is an optional extension."
+   },
+   {
+    "path": "jsonpickle/unpickler.py",
+    "symbol": "Unpickler._call_handler_restore",
+    "anchors": {
+     "start": "def _call_handler_restore(",
+     "end": "return handler.restore(obj, **kwargs)"
+    },
+    "start_line": 952,
+    "end_line": 961,
+    "note": "The decoding twin still passes the context only to restore methods that declare it, which shows the intended contract and makes the encoder asymmetric."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "note": "Without a handler_context argument (the default None) nothing is added and every handler works, so the ordinary encode path and most of the test suite pass."
+   },
+   {
+    "path": "jsonpickle/pickler.py",
+    "symbol": "Pickler._flatten_obj_instance",
+    "anchors": {
+     "start": "result = self._call_handler_flatten(handler_instance, obj, data)"
+    },
+    "start_line": 601,
+    "end_line": 601,
+    "note": "The call site that looks up and instantiates the handler is correct; the problem is only in how the helper builds the keyword arguments."
+   }
+  ],
+  "fix_summary": "Ask the registry's signature probe about the flatten method first and add the context keyword only when that method declares it, mirroring the restore side, so two-argument handlers keep working when a context is supplied.",
+  "distinctive_tokens": [
+   "classic two-argument form",
+   "encoder asymmetric"
+  ]
+ },
+ "check": {
+  "summary": "Existing project module tests/handler_test.py: its case for a handler without the context parameter encodes with a context and must still round-trip; the module's other handler tests act as controls.",
+  "argv": [
+   "{python}",
+   "-m",
+   "pytest",
+   "-p",
+   "no:cacheprovider",
+   "-q",
+   "tests/handler_test.py"
+  ],
+  "cwd": ".",
+  "env": {
+   "PYTHONPATH": "{work}"
+  },
+  "failure_signature": "FAILED tests/handler_test\\.py::HandlerTestCase::test_custom_handler_without_context",
+  "timeout_seconds": 600
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with system Python 3.14.4 and pytest 9.0.2: on before tests/handler_test.py fails only in test_custom_handler_without_context (TypeError: unexpected keyword argument handler_context) and the other 7 tests pass; on after all 8 pass. PYTHONPATH points at the work copy. The full project suite has two failures unrelated to the seed in this environment (test_load_backend and test_decimal_passthrough_handler fail on the unmodified pin too), so the check runs only the handler module. A manual run also showed that with the patch, encoding a datetime, UUID or compiled regex with a handler_context raises the same TypeError, while the pin round-trips them.",
+  "toolchain": "Python 3.14.4, pytest 9.0.2",
+  "before": "violation",
+  "after": "pass"
+ }
+}

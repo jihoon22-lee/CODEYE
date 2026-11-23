@@ -26,6 +26,28 @@ def check_holdout_corpus() -> None:
     print(f"PASS: holdout corpus (structure, locations, digests, leakage scan; sealed digest {sealed[:12]})")
 
 
+# Sealed digest of the project-defects holdout split (docs/EVALUATION.md, 봉인 표).
+PROJECT_HOLDOUT_SEAL = "d4cec596f2f7b17619113848663d7031f55102b244a9b77294e90ec71875107f"
+
+
+def check_project_defect_corpus() -> None:
+    """Project-defects corpus offline: metadata, patches and label locations of every case, and the
+    holdout split's digest against its seal. Repositories are not fetched (verify does that)."""
+    import subprocess
+
+    corpus = ROOT / "fixtures/project-defects/corpus.py"
+    env = {"PATH": os.environ.get("PATH", ""), "LANG": "C.UTF-8"}
+    result = subprocess.run([sys.executable, "-I", str(corpus), "validate"], capture_output=True, text=True, timeout=300, env=env)
+    tail = " | ".join((result.stdout + result.stderr).strip().splitlines()[-5:])
+    ensure(result.returncode == 0, "project-defects corpus validate failed: " + tail)
+    out = subprocess.run([sys.executable, "-I", str(corpus), "digest", "--split", "holdout"], capture_output=True, text=True,
+                         timeout=300, env=env)
+    ensure(out.returncode == 0 and out.stdout.split(), "project-defects holdout digest failed")
+    ensure(out.stdout.split()[-1] == PROJECT_HOLDOUT_SEAL, "project-defects holdout digest differs from its seal; a changed "
+           "holdout split needs a new seal recorded in docs/EVALUATION.md")
+    print(f"PASS: project-defects corpus (offline structure, patches, label locations; holdout seal {PROJECT_HOLDOUT_SEAL[:12]})")
+
+
 def heading_anchors(text: str) -> set:
     """Collect heading anchors and standalone, attribute-free ID targets."""
     seen = {}

@@ -1,0 +1,13 @@
+diff --git a/lib/command.js b/lib/command.js
+index 8ed77a2..c57ea3a 100644
+--- a/lib/command.js
++++ b/lib/command.js
+@@ -975,7 +975,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
+     // global overwrites local, like optsWithGlobals
+     let source;
+     this._getCommandAndAncestors().forEach((cmd) => {
+-      if (cmd.getOptionValueSource(key) !== undefined) {
++      if (Object.hasOwn(cmd._optionValueSources, key)) {
+         source = cmd.getOptionValueSource(key);
+       }
+     });

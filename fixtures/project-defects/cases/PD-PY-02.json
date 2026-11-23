@@ -1,0 +1,147 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-PY-02",
+ "split": "dev",
+ "language": "python",
+ "kind": "seeded",
+ "category": "input_to_sink_security",
+ "family": "string-prefix-directory-containment",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/pypa/installer",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": "src/installer",
+ "before": {
+  "commit": "d8b9c446604811a3e3e3b2eec6d0223f51cd867a",
+  "patch": "patches/PD-PY-02.patch"
+ },
+ "after": {
+  "commit": "d8b9c446604811a3e3e3b2eec6d0223f51cd867a"
+ },
+ "trees": {
+  "before": {
+   "digest": "484e19eb789b34aa4c66c28c302a14802612582a8d54e2ed8794e381aa7832ed",
+   "scope_lines": 1585,
+   "scope_files": 10,
+   "files": 57
+  },
+  "after": {
+   "digest": "81c610ff5010123f3ab3659aea881856c4a036ea3a888507ca3eb6ad4e0793b6",
+   "scope_lines": 1585,
+   "scope_files": 10,
+   "files": 57
+  }
+ },
+ "label": {
+  "trigger": "A wheel contains a member whose name climbs one level and re-enters a sibling folder that starts with the same characters as the scheme folder, e.g. ../purelib-extra/planted.py while purelib maps to /prefix/purelib, and it is installed through SchemeDictionaryDestination.",
+  "expected_impact": "After normalisation the member resolves to /prefix/purelib-extra/planted.py. The containment test compares the two paths as plain strings, and that string begins with /prefix/purelib, so the escape is accepted and write_to_fs creates a file in a neighbouring directory chosen by the archive author (and replaces an existing one there when overwrite_existing is enabled).",
+  "positive_locations": [
+   {
+    "path": "src/installer/destinations.py",
+    "symbol": "SchemeDictionaryDestination._path_with_destdir",
+    "anchors": {
+     "start": "file = Path(os.path.abspath(target_dir / path))",
+     "end": "f\"Attempting to write {path} outside of the target directory\""
+    },
+    "start_line": 150,
+    "end_line": 154
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "src/installer/_core.py",
+    "symbol": "install",
+    "anchors": {
+     "start": "path = source_record.path",
+     "end": "path=destination_path,"
+    },
+    "start_line": 99,
+    "end_line": 125,
+    "note": "The install loop takes each name straight from the wheel's record entries and hands it, possibly unchanged for root-scheme files, to destination.write_file, so the name is attacker data when it reaches the guard."
+   },
+   {
+    "path": "src/installer/sources.py",
+    "symbol": "WheelFile.get_contents",
+    "anchors": {
+     "start": "for item in self._zipfile.infolist():",
+     "end": "record = record_mapping.pop(item.filename, (item.filename, \"\", \"\"))"
+    },
+    "start_line": 324,
+    "end_line": 329,
+    "note": "Member names come from the zip directory itself and are not normalised or screened for parent segments here."
+   },
+   {
+    "path": "src/installer/destinations.py",
+    "symbol": "SchemeDictionaryDestination.write_to_fs",
+    "anchors": {
+     "start": "target_path = self._path_with_destdir(scheme, path)",
+     "end": "with target_path.open(\"wb\") as f:"
+    },
+    "start_line": 179,
+    "end_line": 188,
+    "note": "The sink: whatever path the guard lets through has its parents created and is opened for writing."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "tests/test_destinations.py",
+    "symbol": "test_blocking_path_traversal",
+    "anchors": {
+     "start": "destination._path_with_destdir(\"purelib\", \"subdir/../../outside.txt\")"
+    },
+    "start_line": 199,
+    "end_line": 199,
+    "note": "Escapes that land somewhere not sharing the scheme folder's name prefix are still refused, so the project test passes; only sibling names that extend the folder name get through."
+   },
+   {
+    "path": "src/installer/_core.py",
+    "symbol": "_determine_scheme",
+    "anchors": {
+     "start": "if posixpath.commonpath([data_dir, path]) != data_dir:"
+    },
+    "start_line": 44,
+    "end_line": 44,
+    "note": "This commonpath comparison only routes members into the right scheme; it is component based and is not the place of the defect."
+   }
+  ],
+  "fix_summary": "Compare path components instead of characters, for example by going back to the pathlib is_relative_to method or by using os.path.commonpath, so that a neighbour such as purelib-extra no longer counts as being inside purelib.",
+  "distinctive_tokens": [
+   "neighbouring directory chosen",
+   "sibling names that extend"
+  ]
+ },
+ "check": {
+  "summary": "Independent pytest module copied into the work copy: it builds a SchemeDictionaryDestination under a temporary prefix and asks write_file to store members that climb into purelib-extra, purelibs and purelib2, expecting ValueError and no planted file; two control tests cover a normal member and a plain parent escape.",
+  "argv": [
+   "{python}",
+   "-m",
+   "pytest",
+   "-p",
+   "no:cacheprovider",
+   "-q",
+   "tests/test_scheme_sibling_paths.py",
+   "tests/test_destinations.py"
+  ],
+  "cwd": ".",
+  "env": {
+   "PYTHONPATH": "{work}/src"
+  },
+  "files": [
+   {
+    "path": "tests/test_scheme_sibling_paths.py",
+    "source": "checks/PD-PY-02/tests/test_scheme_sibling_paths.py"
+   }
+  ],
+  "failure_signature": "FAILED tests/test_scheme_sibling_paths\\.py::test_sibling_directory_sharing_the_name_prefix_is_rejected",
+  "timeout_seconds": 600
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with system Python 3.14.4 and pytest 9.0.2: on before the three sibling-prefix cases of the added module fail (no ValueError is raised and the member is written) while the controls and the project's tests/test_destinations.py pass; on after all 16 tests pass. PYTHONPATH is the work copy's src directory; the project has no runtime dependencies. The existing project test alone does not detect the seeded change, which is why the independent module is used.",
+  "toolchain": "Python 3.14.4, pytest 9.0.2",
+  "before": "violation",
+  "after": "pass"
+ }
+}

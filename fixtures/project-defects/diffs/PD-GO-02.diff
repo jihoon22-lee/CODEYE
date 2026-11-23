@@ -1,0 +1,14 @@
+diff --git a/pool.go b/pool.go
+index 26b2045..e3b7798 100644
+--- a/pool.go
++++ b/pool.go
+@@ -220,6 +220,9 @@ func (p *pool) SubmittedTasks() uint64 {
+ }
+ 
+ func (p *pool) WaitingTasks() uint64 {
++	p.mutex.Lock()
++	defer p.mutex.Unlock()
++
+ 	return p.tasks.Len()
+ }
+ 

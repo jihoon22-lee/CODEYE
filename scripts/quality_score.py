@@ -68,7 +68,8 @@ def finding_view(f):
             "severity": f.get("severity"), "category": f.get("category"), "producer": producer,
             "disposition": f.get("disposition"), "fingerprint": f.get("fingerprint"),
             "actionable": f["validation"] in ACTIONABLE and f.get("disposition") in ("open", "acknowledged"),
-            "locations": [list(x) for x in dict.fromkeys(locs)]}
+            "locations": [list(x) for x in dict.fromkeys(locs)],
+            "primary_locations": [[l["path"], l["start_line"], l["end_line"]] for l in f.get("locations", [])]}
 
 
 def map_range(before, after, start, end):
@@ -92,6 +93,9 @@ def map_range(before, after, start, end):
 
 def targets(corpus, case, variant, documented=False):
     """Label locations a finding is compared with (pre-fill only)."""
+    own = corpus.targets(case, variant) if hasattr(corpus, "targets") else None
+    if own is not None:  # project cases carry their after ranges over the stored diff, without the network
+        return own
     label = case["label"]
     if case["kind"] == "tricky_normal":
         return [{"kind": "suspect", "path": l["path"], "start_line": l["start_line"], "end_line": l["end_line"],
@@ -194,7 +198,8 @@ def judgment_template(batch, corpus, slack=2):
         label = case["label"]
         items.append({"key": row["key"], "case": row["case"], "variant": row["variant"], "kind": case["kind"],
                       "label": {"trigger": label["trigger"], "expected_impact": label["expected_impact"],
-                                "locations": tg, "contract": case["contract"]},
+                                "locations": tg, "contract": case.get("contract"),
+                                "fix_summary": label.get("fix_summary")},
                       "findings": findings})
     return {"schema": JUDGMENT_SCHEMA, "version": 1, "batch": manifest["batch"],
             "corpus_digest": manifest["corpus"]["digest"], "judge": None, "verdicts": list(VERDICTS),
@@ -301,7 +306,12 @@ def batch_metrics(manifest, rows, reports, judgments, corpus, slack=2, batch_dir
             v["auto"] = auto_match(v, tg, slack)
         judged = {fid: j for (b, key, fid), j in judgments.items() if b == name and key == row["key"]}
         exposure = model_exposure(records_of(batch_dir, row["key"])) if batch_dir else {"kinds": {}, "stages": {}}
-        units.append({"row": row, "case": case, "views": views, "judged": judged, "targets": tg, "exposure": exposure})
+        diagnostics = [(o["location"]["path"], o["location"]["start_line"], o["location"]["end_line"])
+                       for o in reports[row["key"]].get("observations", [])
+                       if isinstance(o.get("location"), dict) and o["location"].get("path")
+                       and isinstance(o["location"].get("start_line"), int)]
+        units.append({"row": row, "case": case, "views": views, "judged": judged, "targets": tg, "exposure": exposure,
+                      "diagnostics": diagnostics})
 
     def group(pred):
         return [u for u in units if pred(u)]
@@ -312,7 +322,7 @@ def batch_metrics(manifest, rows, reports, judgments, corpus, slack=2, batch_dir
         n = sum(r is not None for r in results)
         return proportion(k, n, unjudged=sum(r is None for r in results))
 
-    before = lambda u: u["case"]["kind"] == "defect_pair" and u["row"]["variant"] == "before"
+    before = lambda u: u["case"]["kind"] != "tricky_normal" and u["row"]["variant"] == "before"
     after = lambda u: u["row"]["variant"] == "after"
     normal = lambda u: u["case"]["kind"] == "tricky_normal"
     any_finding = lambda v: True
@@ -378,6 +388,7 @@ def batch_metrics(manifest, rows, reports, judgments, corpus, slack=2, batch_dir
             {t["path"] for t in u["targets"]} & set(u["exposure"]["stages"].get("investigate", [])))),
     }
     # review condition: valid variants where no code excerpt reached any review role
+    structural["location_lines"] = location_lines(units, group(before), group(after), slack)
     structural["no_code_variants"] = sorted(u["row"]["key"] for u in units if not u["exposure"]["kinds"].get("code"))         if manifest.get("condition") == "review" else []
     reproduced = sum(v["validation"] == "reproduced" for u in units for v in u["views"])
     errors, stats_bad, rejected, markers = Counter(), 0, 0, Counter()
@@ -418,8 +429,8 @@ def batch_metrics(manifest, rows, reports, judgments, corpus, slack=2, batch_dir
 
     def breakdown(field):
         out = {}
-        for value in sorted({u["case"][field] for u in units}):
-            sub = [u for u in units if u["case"][field] == value]
+        for value in sorted({str(u["case"].get(field)) for u in units}):
+            sub = [u for u in units if str(u["case"].get(field)) == value]
             b = [u for u in sub if before(u)]
             fa = [u for u in sub if normal(u) or after(u)]
             out[value] = {"known_defect_recall": rate(b, recall(any_finding)),
@@ -447,6 +458,43 @@ def batch_metrics(manifest, rows, reports, judgments, corpus, slack=2, batch_dir
             "breakdown": {"language": breakdown("language"), "category": breakdown("category"),
                           "detection": breakdown("detection")},
             "variance": variance(units)}
+
+
+def overlaps(path, start, end, targets, slack):
+    """Lines-only rule: same path and line ranges that overlap within +-slack (no symbol or title fallback)."""
+    return any(path == t["path"] and start <= t["end_line"] + slack and t["start_line"] <= end + slack for t in targets)
+
+
+def location_lines(units, before_units, after_units, slack):
+    """Structural location rates with the label line ranges, separately for model findings (their own
+    locations; cited excerpts are not counted) and tool diagnostics (report observations), for before
+    variants (positive_locations) and after variants (the same ranges carried over the diff). Also the
+    counts behind them: a large scope gives many diagnostics, so chance overlap must be read with them."""
+    def sources(u):
+        return {"model_findings": [loc for v in u["views"] if v["producer"] == "model" for loc in v["primary_locations"]],
+                "tool_diagnostics": u["diagnostics"]}
+
+    def side(us):
+        rates, counts = {}, {}
+        for name in ("model_findings", "tool_diagnostics", "any"):
+            hits, total, in_file, overlapping = 0, 0, 0, 0
+            for u in us:
+                src = sources(u)
+                locs = src["model_findings"] + src["tool_diagnostics"] if name == "any" else src[name]
+                files = {t["path"] for t in u["targets"]}
+                hit = [loc for loc in locs if overlaps(loc[0], loc[1], loc[2], u["targets"], slack)]
+                hits += bool(hit)
+                total += len(locs)
+                in_file += sum(loc[0] in files for loc in locs)
+                overlapping += len(hit)
+            rates[name] = proportion(hits, len(us))
+            counts[name] = {"locations": total, "in_labelled_file": in_file, "overlapping": overlapping}
+        return rates, counts
+
+    b_rates, b_counts = side(before_units)
+    a_rates, a_counts = side(after_units)
+    return {"line_slack": slack, "rule": "same path, line ranges overlap within +-line_slack; finding locations only",
+            "before": b_rates, "after": a_rates, "counts": {"before": b_counts, "after": a_counts}}
 
 
 def variance(units):
@@ -548,6 +596,10 @@ def render_table(result):
             ("evidence validity (report check)", lambda b: fmt((b.get("evidence_validity") or {}).get("rate"))),
             ("auto: location hit on before", lambda b: fmt(b["structural"]["auto_location_hit_before"])),
             ("auto: location re-flag on after", lambda b: fmt(b["structural"]["auto_location_reflag_after"])),
+            ("lines: model finding hits label, before", lambda b: fmt(b["structural"]["location_lines"]["before"]["model_findings"])),
+            ("lines: tool diagnostic hits label, before", lambda b: fmt(b["structural"]["location_lines"]["before"]["tool_diagnostics"])),
+            ("lines: model finding on mapped lines, after", lambda b: fmt(b["structural"]["location_lines"]["after"]["model_findings"])),
+            ("lines: tool diagnostic on mapped lines, after", lambda b: fmt(b["structural"]["location_lines"]["after"]["tool_diagnostics"])),
             ("auto: suspect flagged on normals", lambda b: fmt(b["structural"]["auto_suspect_flag_normal"])),
             ("auto: any actionable on after/normal", lambda b: fmt(b["structural"]["auto_any_actionable_on_after_or_normal"])),
             ("ai review performed", lambda b: fmt(b["structural"]["ai_review_performed"])),
@@ -632,10 +684,12 @@ def reader_sheets(batch, corpus, sample, seed, output):
         label = case["label"]
         entry = {"sheet_id": sheet_id, "key": row["key"], "case": row["case"], "variant": row["variant"],
                  "kind": case["kind"], "unanalysed_scope": report_gaps(report)}
-        if case["kind"] == "defect_pair" and row["variant"] == "before":
+        if case["kind"] != "tricky_normal" and row["variant"] == "before":
             entry.update(expected="labelled_defect", condition=label["trigger"], impact=label["expected_impact"],
                          locations=targets(corpus, case, "before", row.get("documented", False)),
-                         next_action_reference="change " + ", ".join(label["corrected_variant"]["changed_files"])
+                         next_action_reference="change " + ", ".join(
+                             label["corrected_variant"]["changed_files"] if label.get("corrected_variant")
+                             else sorted({l["path"] for l in label["positive_locations"]}))
                          + " so the documented contract holds")
         else:
             entry.update(expected="no_labelled_defect",
@@ -699,3 +753,119 @@ def reader_score(key_file, answer_files, slack=2):
             "next_action_correct_graded": proportion(next_ok, graded_next),
             "seconds_median": statistics.median(seconds) if seconds else None,
             "questions_mean": round(sum(questions) / len(questions), 2) if questions else None}
+
+
+# ---------------------------------------------------------------- blind judging (docs/EVALUATION.md#블라인드-판정)
+
+BLIND_SCHEMA = "codeye-quality-blind-packet"
+BLIND_KEY_SCHEMA = "codeye-quality-blind-key"
+
+
+def blind_finding(f):
+    """What a judge needs to decide one finding, without run, snapshot, project or fingerprint ids."""
+    excerpts = []
+    for e in f.get("evidence", []):
+        x, loc = e.get("excerpt"), e.get("location") or {}
+        if isinstance(x, dict) and x.get("text") and loc.get("path"):
+            excerpts.append({"kind": e.get("kind"), "path": loc["path"], "start_line": x.get("start_line"),
+                             "end_line": x.get("end_line"), "text": x["text"]})
+    basis = f.get("fingerprint_basis") or {}
+    return {"title": f.get("title", ""), "category": f.get("category"), "severity": f.get("severity"),
+            "validation": f.get("validation"),
+            "producer": basis.get("producer") or ("tool" if f.get("observation_ids") else "model"),
+            "conditions": [c.get("statement") for c in f.get("conditions", []) if c.get("statement")],
+            "impact": f.get("impact"), "claims": [c.get("assertion") for c in f.get("claims", []) if c.get("assertion")],
+            "locations": [{"path": l["path"], "start_line": l["start_line"], "end_line": l["end_line"]}
+                          for l in f.get("locations", [])],
+            "cited_excerpts": excerpts}
+
+
+def blind_packet(batch, corpus, seed, output):
+    """packet.json: every finding of one batch's valid variants under opaque unit and finding ids, in a
+    seeded random order, with empty verdict fields. Variant, case id, key and label are not in it.
+    references.json: the labelled defect of each case (cause, condition, impact, files; no line ranges)
+    under opaque reference ids, opened only for the second pass (matches_label) after every verdict is
+    set. answer-key.json: the mapping back to batch rows and finding ids (evaluator only)."""
+    manifest, rows, reports = load_batch(batch)
+    output = Path(output)
+    output.mkdir(mode=0o700, parents=True, exist_ok=False)
+    rng = random.Random(seed)
+    pool = [r for r in rows if not r.get("invalid") and r["key"] in reports]
+    rng.shuffle(pool)
+    cases = sorted({r["case"] for r in pool})
+    rng.shuffle(cases)
+    ref_ids = {c: f"R{i:02d}" for i, c in enumerate(cases, 1)}
+    references = []
+    for case_id in sorted(ref_ids, key=ref_ids.get):
+        case = corpus.by_id[case_id]
+        label = case["label"]
+        references.append({"reference_id": ref_ids[case_id], "language": case["language"],
+                           "trigger": label["trigger"], "expected_impact": label["expected_impact"],
+                           "files": sorted({l["path"] for l in label["positive_locations"]})})
+    units, key_units, n = [], [], 0
+    for i, row in enumerate(pool, 1):
+        unit_id = f"U{i:03d}"
+        findings = list(reports[row["key"]]["findings"])
+        rng.shuffle(findings)
+        out, mapping = [], {}
+        for f in findings:
+            n += 1
+            fid = f"F{n:04d}"
+            mapping[fid] = f["id"]
+            out.append({"id": fid, **blind_finding(f), "verdict": None, "matches_label": None, "duplicate_of": None,
+                        "notes": ""})
+        units.append({"unit_id": unit_id, "reference_id": ref_ids[row["case"]], "language": row.get("language"),
+                      "findings": out})
+        key_units.append({"unit_id": unit_id, "key": row["key"], "case": row["case"], "variant": row["variant"],
+                          "repeat": row.get("repeat", 1), "findings": mapping})
+    packet = {"schema": BLIND_SCHEMA, "version": 1, "judge": None, "verdicts": list(VERDICTS),
+              "instructions": ("Pass 1, without references.json: set verdict per finding from its conditions, impact, "
+                               "locations and cited excerpts (valid_actionable, valid_informational, false_positive, "
+                               "duplicate, insufficient_evidence, out_of_scope); duplicate_of names another finding id "
+                               "of the same unit. Pass 2: open references.json and set matches_label to true when the "
+                               "finding states the reference defect's cause and condition (wording may differ), false "
+                               "otherwise. A unit may be the defective or the corrected code; nothing here says which. "
+                               "Leave null when not judged."),
+              "units": units}
+    key = {"schema": BLIND_KEY_SCHEMA, "version": 1, "batch": manifest["batch"],
+           "corpus_digest": (manifest.get("corpus") or {}).get("digest"), "seed": seed,
+           "references": {r: c for c, r in ref_ids.items()}, "units": key_units}
+    (output / "packet.json").write_text(json.dumps(packet, ensure_ascii=False, indent=1) + "\n")
+    (output / "references.json").write_text(json.dumps({"schema": BLIND_SCHEMA + "-references", "version": 1,
+                                                        "references": references}, ensure_ascii=False, indent=1) + "\n")
+    (output / "answer-key.json").write_text(json.dumps(key, ensure_ascii=False, indent=1) + "\n")
+    print(f"{len(units)} units, {n} findings in {output / 'packet.json'}; references {output / 'references.json'}; "
+          f"answer key {output / 'answer-key.json'} (evaluator only)")
+
+
+def blind_merge(packet_file, key_file, output):
+    """Map a judged packet back to the batch's judgment format (schema codeye-quality-judgments)."""
+    packet = json.loads(Path(packet_file).read_text())
+    key = json.loads(Path(key_file).read_text())
+    if packet.get("schema") != BLIND_SCHEMA or key.get("schema") != BLIND_KEY_SCHEMA:
+        raise SystemExit("not a blind packet and answer key")
+    by_unit = {u["unit_id"]: u for u in key["units"]}
+    items = []
+    for unit in packet["units"]:
+        k = by_unit.get(unit["unit_id"])
+        if k is None:
+            raise SystemExit(f"unit {unit['unit_id']} is not in the answer key")
+        findings = []
+        for f in unit["findings"]:
+            if f["id"] not in k["findings"]:
+                raise SystemExit(f"finding {f['id']} is not in unit {unit['unit_id']} of the answer key")
+            if f.get("verdict") is not None and f["verdict"] not in VERDICTS:
+                raise SystemExit(f"{f['id']}: unknown verdict {f['verdict']}")
+            dup = f.get("duplicate_of")
+            if dup is not None and dup not in k["findings"]:
+                raise SystemExit(f"{f['id']}: duplicate_of {dup} is not a finding of the same unit")
+            findings.append({"finding_id": k["findings"][f["id"]], "verdict": f.get("verdict"),
+                             "matches_label": f.get("matches_label"),
+                             "duplicate_of": k["findings"][dup] if dup else None, "notes": f.get("notes", "")})
+        items.append({"key": k["key"], "case": k["case"], "variant": k["variant"], "findings": findings})
+    doc = {"schema": JUDGMENT_SCHEMA, "version": 1, "batch": key["batch"], "corpus_digest": key.get("corpus_digest"),
+           "judge": packet.get("judge"), "verdicts": list(VERDICTS), "blind": True, "items": items}
+    with open(Path(output), "x", encoding="utf-8") as handle:
+        handle.write(json.dumps(doc, ensure_ascii=False, indent=1) + "\n")
+    judged = sum(f["verdict"] is not None for i in items for f in i["findings"])
+    print(f"{judged} judged findings over {len(items)} variants -> {output}")
