@@ -12,10 +12,11 @@ import (
 // of its request as "<evidence id>:<start>-<end>". The worker checks that
 // the range lies inside that excerpt and replaces the citation with the
 // evidence ID of the range itself (record.Narrow): the same blob, kind and
-// a deterministic ID, origin cited. Findings and report excerpts then point
-// at the cited lines, not at a whole file. A range outside the excerpt, a
-// malformed range or a long excerpt cited without one is an output error
-// the repair request names.
+// a deterministic ID, origin cited (a range that is exactly an excerpt
+// already sent, or one an earlier record holds, is that excerpt). Findings
+// and report excerpts then point at the cited lines, not at a whole file.
+// A range outside the excerpt, a malformed range or a long excerpt cited
+// without one is an output error the repair request names.
 
 // Output error codes of citations.
 const (
@@ -41,6 +42,10 @@ const (
 type citer struct {
 	snapshot string
 	sent     map[string]record.Excerpt
+	// known are excerpts an earlier record holds that the request did not
+	// resend: a range that narrows to one of their IDs resolves to that
+	// entry unchanged (record.CarriesUpstreamEvidence).
+	known    map[string]record.Excerpt
 	narrowed map[string]record.Excerpt
 	order    []string
 }
@@ -98,6 +103,9 @@ func (c *citer) resolve(list []string, mode citationMode) (ids, base, errs []str
 		n := record.Narrow(e, c.snapshot, cit.Start, cit.End)
 		if _, sent := c.sent[n.ID]; !sent {
 			if _, seen := c.narrowed[n.ID]; !seen {
+				if k, ok := c.known[n.ID]; ok {
+					n = k
+				}
 				c.narrowed[n.ID] = n
 				c.order = append(c.order, n.ID)
 			}

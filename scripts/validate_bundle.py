@@ -26,7 +26,7 @@ except ImportError as exc:
 from bundle_checks.common import ROOT, ensure, expect_invalid, json_file, make_validators, within_root, yaml_file
 from bundle_checks.report import check_analyzer, check_analyzer_observations, check_document_comparisons, check_document_excerpt_contracts, check_go_test_failure_contracts, check_observations, check_plan, check_report
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
-from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_slice_examples, check_workflow_example, pack_selection, slice_examples
+from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_slice_examples, check_workflow_example, pack_selection, shared_excerpt, slice_examples
 from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_shared_service_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
 from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_project_defect_corpus, check_markdown_anchors, check_mode_names, check_stage_labels, heading_anchors
 
@@ -536,6 +536,7 @@ def main() -> None:
         ("review pack digest drift", "verify", set_key("calls", "0" * 64, 0, "pack_sha256"), None),
         ("review language guide outside the selection", "investigate", lambda d: d["calls"][0]["pack_files"].insert(3, "languages/python.md"), None),
         ("review altered upstream candidate", "verify", lambda d: d["candidates"][0].update(title=d["candidates"][0]["title"] + "!"), None),
+        ("review verify relabels an upstream excerpt", "verify", lambda d: shared_excerpt(d, role_docs["investigate"]).update(origin="declaration"), None),
         ("review model reproduction verdict", "verify", set_key("verifications", "reproduced", 0, "verdict"), review_validator.validate),
         ("review source text", "investigate", lambda d: d["evidence"][0].update(text="raw source"), review_validator.validate),
         ("review platform verdict in environment output", "environment", lambda d: d["environment_notes"][0].update(status="satisfied"), review_validator.validate),

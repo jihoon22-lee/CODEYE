@@ -73,6 +73,10 @@ type verifyInput struct {
 // limVerifyBudget marks candidates left unreviewed because the verifier
 // request could not carry them within the request budget.
 const limVerifyBudget = "verification_budget_exceeded"
+
+// reasonLineageMismatch fails a verify record that would carry an excerpt
+// of an upstream record changed; the report builder names the same check.
+const reasonLineageMismatch = "review_lineage_mismatch"
 const limVerifyHashesOmitted = "verification_excerpt_hashes_omitted"
 
 func marshalVerifyInput(in verifyInput, omitHashes bool) ([]byte, error) {
@@ -213,13 +217,15 @@ func (s *roleStage) verify() analysis.TaskResult {
 		})
 	}
 	s.rec.Limitations = addLim(s.rec.Limitations, lims...)
-	if len(extra) > 0 {
-		upstreamEvidence := catalogOf(withText)
-		for i := range extra {
-			// Prioritize matching context without changing the provenance
-			// of an excerpt already bound to an upstream record.
-			if original, ok := upstreamEvidence[extra[i].ID]; ok {
-				extra[i] = original
+	// A derived range with the ID of an excerpt an upstream record holds
+	// (a declaration that is exactly a sent unit, a caller window that is
+	// an upstream window) travels and is recorded as that upstream entry
+	// (record.CarriesUpstreamEvidence).
+	upstreamEvidence := catalogOf(withText)
+	for _, list := range [][]record.Excerpt{extra, declarations} {
+		for i := range list {
+			if original, ok := upstreamEvidence[list[i].ID]; ok {
+				list[i] = original
 			}
 		}
 	}
@@ -283,6 +289,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 				add(e)
 			}
 		}
+		ordered = containedRanges(ordered, cited)
 		if len(ordered) > s.limit().verifyExcerpts {
 			ordered = ordered[:max(keep, s.limit().verifyExcerpts)]
 		}
@@ -311,6 +318,8 @@ func (s *roleStage) verify() analysis.TaskResult {
 				s.setEvidence(context)
 				return s.inputFailure(err)
 			}
+			// The budget may have cut the unit a cited range lies in.
+			list = containedRanges(list, cited)
 			if trimmed {
 				s.rec.Limitations = addLim(s.rec.Limitations, limInputTrimmed, limCallersOutside)
 			}
@@ -342,6 +351,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 	}
 	s.setEvidence(recorded)
 	cite := newCiter(s.j.Snapshot.Digest, sent)
+	cite.known = upstreamEvidence
 	ids := make([]string, 0, len(sent))
 	for _, e := range sent {
 		ids = append(ids, e.ID)
@@ -514,6 +524,17 @@ func (s *roleStage) verify() analysis.TaskResult {
 		}
 		s.rec.Verifications[i] = v
 	}
+	var priors []record.Record
+	if uInv.State == record.UpstreamAccepted {
+		priors = append(priors, invRec)
+	}
+	if uInt.State == record.UpstreamAccepted {
+		priors = append(priors, intRec)
+	}
+	if !record.CarriesUpstreamEvidence(s.rec, priors...) {
+		// The report would set this record aside; fail it here instead.
+		return *s.fail(result(domain.TaskFailed, reasonLineageMismatch))
+	}
 	res := s.finish()
 	switch {
 	case res.Status != domain.TaskSucceeded:
@@ -523,4 +544,17 @@ func (s *roleStage) verify() analysis.TaskResult {
 		res.Status, res.Reason = domain.TaskFailed, "review_input_incomplete"
 	}
 	return res
+}
+
+// containedRanges drops from list each cited range no candidate cites
+// (exempt) whose enclosing excerpt list does not carry: an upstream
+// strength's range inside a unit of a file no candidate cites, or one the
+// budget cut the unit of. The record keeps a cited range only beside an
+// excerpt it lies in (record checkCitedRanges).
+func containedRanges(list []record.Excerpt, exempt map[string]bool) []record.Excerpt {
+	return slices.DeleteFunc(slices.Clone(list), func(e record.Excerpt) bool {
+		return e.Origin == record.OriginCited && !exempt[e.ID] && !slices.ContainsFunc(list, func(x record.Excerpt) bool {
+			return (x.Origin != record.OriginCited || exempt[x.ID]) && x.ID != e.ID && x.Path == e.Path && x.SHA256 == e.SHA256 && x.Start <= e.Start && e.End <= x.End
+		})
+	})
 }

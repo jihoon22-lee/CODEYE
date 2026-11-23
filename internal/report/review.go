@@ -217,7 +217,7 @@ func reviewLineage(rec *record.Record, states map[string]*taskState, obs map[str
 	// One excerpt ID (bound to path, blob and range) may reach verify from
 	// both stages with a different origin label (context vs observation);
 	// verify must carry one of the upstream variants unchanged.
-	evidence := map[string][]record.Excerpt{}
+	var priors []record.Record
 	// A slice verify checks its own slice's investigate candidates.
 	sources := []string{"review." + record.StageInvestigate, "review." + record.StageInterpret}
 	if rec.Slice != nil {
@@ -230,19 +230,12 @@ func reviewLineage(rec *record.Record, states map[string]*taskState, obs map[str
 		}
 		prior := states[source].reviewResult.Record
 		want = append(want, prior.Candidates...)
-		for _, e := range prior.Evidence {
-			evidence[e.ID] = append(evidence[e.ID], e)
-		}
+		priors = append(priors, *prior)
 	}
 	if !reflect.DeepEqual(nonNilCandidates(want), nonNilCandidates(rec.Candidates)) {
 		return false
 	}
-	for _, e := range rec.Evidence {
-		if variants, ok := evidence[e.ID]; ok && !slices.Contains(variants, e) {
-			return false
-		}
-	}
-	return true
+	return record.CarriesUpstreamEvidence(*rec, priors...)
 }
 
 // The optional follow-up can use a later slot only when one of its named,

@@ -381,6 +381,8 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - 범위 형식이 틀리거나, 발췌 밖이거나, 80줄을 넘거나, 문서 근거에 범위를 붙이면 `citation_range_invalid`다. 보내지 않은 ID는 기존처럼 `evidence_id_unknown`이다. 두 오류 모두 형식 복구 요청에 오류 코드로 간다.
 - 문서 계약 대조와 계약 후속 검토의 코드 근거는 범위를 확인한 뒤 발췌의 원래 ID를 저장한다. 대조가 묶이는 계약·위치 선택 규칙이 발췌 ID를 기준으로 하기 때문이다.
 - verify는 앞 역할이 좁힌 범위를 인용 발췌로 받고, 그 범위를 다시 좁혀 인용할 수 있다.
+- 근거 ID는 위치(경로·blob·행 범위)에 묶이므로 verify가 만든 범위가 앞 역할의 발췌와 정확히 같을 수 있다. 감싸는 선언이 앞 역할이 보낸 단위 전체이거나, 확장 창이 앞 역할의 창이거나, 검증자가 다시 보내지 않은 앞 역할의 창과 같은 줄을 좁혀 인용하는 경우다. 그때 verify는 그 발췌를 앞 역할의 항목 그대로(출처 표시·심볼 포함) 보내고 기록한다. 워커는 기록을 쓰기 전에 이를 확인하고, 어긋나면 그 task를 `failed`(`review_lineage_mismatch`)로 끝낸다. 보고서도 같은 규칙으로 다시 확인한다([`record/lineage.go`](../internal/worker/review/record/lineage.go)).
+- 기록에 남는 좁힌 범위(`cited`)는 그것을 담은 발췌가 같은 기록에 있어야 한다. verify는 후보가 인용하지 않은 앞 역할의 좁힌 범위(강점의 범위 등)를 그 범위를 담은 발췌가 요청에 함께 남을 때만 보낸다. 담은 단위를 다시 보내지 않는 파일(후보가 인용하지 않은 긴 파일)이나 예산에서 잘린 단위의 범위는 보내지 않는다.
 
 ## 출력 검사
 
@@ -444,6 +446,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 | 보내지 못한 verify 후보 | `failed`(`review_input_incomplete`) |
 | 출력 무효(복구 뒤에도) | `failed`(`review_output_invalid`) |
 | verify 일부 판정만 유효 | `failed`(`review_output_incomplete`) |
+| verify 근거가 앞 역할의 같은 ID 발췌와 다름 | `failed`(`review_lineage_mismatch`) |
 | 지침 팩을 읽지 못함 | `failed`(`review_instructions_invalid`) |
 | 기록을 쓰지 못함 | `failed`(`review_record_failed`) |
 
@@ -557,7 +560,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 
 - 필수 검토 역할은 계획된 `review.*` task의 `required_for_verdict`로 정한다. 하나 이상이고 모두 수락됐을 때만 `ai_review: performed`, 하나도 없으면 `not_performed`다. 필수가 아닌 역할은 `coverage.ai_review.optional_tasks`에 결과와 사유를 적고 수행으로 세지 않는다. 검토 task가 없는 계획은 필수 역할이 없다.
 - `coverage.review_calls`는 호출마다 `pack_id`·`pack_version`과 호출이 든 task(`task_key`)를 싣는다. 최대 2,013개다. `llm_exposed_files`는 slice 기록이 보낸 경로도 센다.
-- 앞 단계·탐색·도구 산출물의 SHA-256, 관찰 ID, verify 후보와 앞 단계 후보가 맞지 않으면 그 단계를 `review_lineage_mismatch:<task>`로 제외한다. 같은 발췌가 앞 단계마다 다른 출처 표시(`context`·`observation`)로 올 수 있으므로 어느 한 표시와 같으면 받는다.
+- 앞 단계·탐색·도구 산출물의 SHA-256, 관찰 ID, verify 후보와 앞 단계 후보가 맞지 않으면 그 단계를 `review_lineage_mismatch:<task>`로 제외한다. verify 근거 중 앞 단계와 ID가 같은 발췌는 앞 단계 항목 그대로여야 한다([인용](#인용)). 같은 발췌가 앞 단계마다 다른 출처 표시(`context`·`observation`)로 올 수 있으므로 어느 한 항목과 같으면 받는다.
 - 모델이 서술한 숫자를 run 상태나 통계로 쓰지 않는다. 도구 관찰과 모델 후보는 서로 다른 산출물이다.
 
 ## 시험
