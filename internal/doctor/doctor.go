@@ -88,7 +88,7 @@ func explicitTools(cfg *instance.Config) toolfind.Explicit {
 		return toolfind.Explicit{}
 	}
 	a := cfg.Agent
-	ex := toolfind.Explicit{Go: a.Go, GoModCache: a.GoModCache, Tools: a.Tools}
+	ex := toolfind.Explicit{Go: a.Go, GoModCache: a.GoModCache, Tools: a.Tools, ToolchainPath: a.ToolchainPath}
 	if a.Model != nil {
 		ex.OpenCode = a.Model.OpenCode
 	}
@@ -128,7 +128,7 @@ func Collect(ctx context.Context, opts Options, runner Runner) Report {
 	} else if client.Version == "" {
 		client.Status, client.Reason = "unverified", "version_unrecognized"
 	}
-	report.Checks = append(report.Checks, client, analyzers(res), configuredTools(res))
+	report.Checks = append(report.Checks, client, analyzers(res), configuredTools(res), buildTools(res))
 	db := database(ctx, opts, runner)
 	if db.Status == "not_configured" {
 		// Without a URL the database is required only by the external mode;
@@ -187,6 +187,16 @@ func configuredTools(res toolfind.Result) Check {
 		}
 	}
 	return Check{ID: "configured_tools", Status: "available", Reason: "configured_tools_usable"}
+}
+
+// buildTools reports whether the toolchain path has what the C/C++ compile
+// DB generation needs (cmake, make or ninja, a C or C++ compiler). It never
+// blocks: without them C/C++ analysis keeps its reduced mode.
+func buildTools(res toolfind.Result) Check {
+	if res.ToolchainPath.CompileDBGenerationReady() {
+		return Check{ID: "build_tools", Status: "available", Reason: "compile_db_generation_ready"}
+	}
+	return Check{ID: "build_tools", Status: "unavailable", Reason: "build_tools_missing"}
 }
 
 func workDisk(path string) Check {

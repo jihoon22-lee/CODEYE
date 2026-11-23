@@ -307,7 +307,9 @@ deep-review capability는 시작 probe에 성공한 기준 분석기가 하나 �
 ### 도구 경로
 
 - 도구가 언어 toolchain을 써야 하면 그 toolchain 설정을 공유한다(Staticcheck는 `--go`의 `go list`를 쓴다).
-- 도구가 실행 중 보조 프로그램을 PATH에서 찾아야 하면 자식 PATH를 넓히지 않는다. 분석기 생성 시 **한 번** `--toolchain-path`(`builtin.Config.ToolPath`, hello `tool_path`)의 절대 디렉터리에서 찾아 그 절대 경로만 도구 고유 설정으로 준다. 찾지 못하면 그 프로그램이 필요한 작업만 구성 오류로 끝나고, 사용했으면 제약을 남긴다. 보조 프로그램의 버전은 식별하지 않는다. 현재 사용처는 Rust 링커 `cc` 하나다.
+- 도구가 실행 중 보조 프로그램을 PATH에서 찾아야 하면, 분석기 생성 시 **한 번** `--toolchain-path`(`builtin.Config.ToolPath`, hello `tool_path`)의 절대 디렉터리에서 찾아 그 절대 경로를 도구 고유 설정으로 준다(Rust 링커 `cc`). 찾지 못하면 그 프로그램이 필요한 작업만 구성 오류로 끝나고, 사용했으면 제약을 남긴다. 보조 프로그램의 버전은 식별하지 않는다.
+- 저장소가 정한 build 코드가 프로그램 이름으로 시스템 도구를 찾는 작업은 절대 경로를 하나씩 넘길 수 없다(`cc` crate의 build script가 `cc`·`ar`를, CMake configure가 컴파일러를 찾는다). 이 작업은 [저장소 코드 실행 허가](#저장소-코드-실행-허가)를 받은 작업에 한해 자식 PATH를 toolchain 디렉터리 뒤에 `--toolchain-path`의 절대 디렉터리로 넓힌다. 사용처는 [Rust 환경](#rust-환경)의 cargo check·clippy·rustdoc과 [compile DB 생성](#compile-db-생성)이다. 넓혔으면 Rust 작업은 `build_scripts_used_toolchain_path`를 남긴다. 의존성 받기(`cargo fetch`)는 build script를 실행하지 않으므로 toolchain 디렉터리 하나만 쓴다.
+- `codeye tools`와 `tools.json`의 `toolchain_path`는 이 경로에서 `cmake`·`make`·`ninja`·`cc`·`c++`·`ar`이 있는지만 확인해 보여 준다(실행하지 않는다). `codeye doctor`의 `build_tools` 검사는 compile DB 생성에 필요한 cmake, make 또는 ninja, C/C++ 컴파일러가 모두 있으면 `available`이고, 없으면 막지 않는 `unavailable`(`build_tools_missing`)이다.
 
 ### 공유 interpreter toolchain
 
@@ -350,7 +352,7 @@ deep-review capability는 시작 probe에 성공한 기준 분석기가 하나 �
 - **집행**: `Composite.Run`이 분석기의 계획에서 선언을 읽고 도구 상태보다 먼저 허가를 검사한다. 허가가 없으면 실행 없이 `unsupported`와 not-run envelope를 기록한다. 사유는 `repository_code_not_allowed` 또는 `repository_code_not_offered`이며 도구 상태는 제약으로 남긴다. 허가가 있어 프로세스를 실행하면 `repository_code_executed`를 기록한다.
 - **필수 여부와 무관**: 허가가 없는 기준 분석기 작업은 필수 작업 미완료이며 보고서는 `partial`이다.
 
-현재 분석기 팩 중 Rust의 cargo check와 clippy에 이 권한을 적용한다. 기존 테스트 실행은 별도 작업이며 같은 허가를 받는다. 저장소 ESLint 설정 실행과 compile DB 생성(configure·cmake·bear)은 후속 작업이다. [기존 테스트 실행](EXECUTION.md#기존-테스트-실행)
+현재 분석기 팩 중 Rust의 cargo check와 clippy에 이 권한을 적용한다. C/C++ [compile DB 생성](#compile-db-생성) 작업과 기존 테스트 실행은 분석기 팩 밖의 별도 작업이며 같은 허가를 같은 방식으로 검사한다. 저장소 ESLint 설정 실행과 CMake 밖의 build 설명(Meson, autotools `configure`, `bear`로 감싼 make)으로 compile DB를 만드는 일은 후속 작업이다. [기존 테스트 실행](EXECUTION.md#기존-테스트-실행)
 
 ### 범위에 없는 생태계와 팩 공백
 
@@ -711,7 +713,7 @@ SA4000(동일 피연산자)은 go vet `bools`보다 넓어 유지한다.
 
 ## C/C++ 팩
 
-cppcheck가 기준 분석기이고 clang-tidy와 GCC가 추가 검사를 수행한다. Clang Static Analyzer(CSA)는 clang-tidy의 `clang-analyzer-*`로 실행한다. 세 작업 모두 `RepositoryCode=false`다.
+cppcheck가 기준 분석기이고 clang-tidy와 GCC가 추가 검사를 수행한다. Clang Static Analyzer(CSA)는 clang-tidy의 `clang-analyzer-*`로 실행한다. 세 작업 모두 `RepositoryCode=false`다. compile DB가 없는 CMake 프로젝트의 configure는 분석기 작업이 아니라 그 앞의 [compile DB 생성](#compile-db-생성) 작업이다.
 
 - **기준이 cppcheck인 이유.** cppcheck는 compiler가 아니어서 모르는 헤더·매크로를 견디며 compile DB가 없어도 실행할 수 있는 유일한 C/C++ 도구다. 단일 실행 파일과 자체 library 설정으로 동작해 대상 system header와 맞출 필요가 없다. clang-tidy는 build flag가 필요한데 C/C++ 저장소는 대개 compile DB를 커밋하지 않는다. `--clang-tidy`만 있는 노드는 deep-review를 광고하지 않는다.
 - **계획.** 범위에 C/C++ 파일이 하나라도 있으면 분석기마다 작업 하나(`cppcheck`, `clang-tidy`)를 계획한다. 헤더만 있으면 그 작업은 `unsupported`(`no_translation_units`)다. GCC는 범위에 `.c` 번역 단위가 있을 때 계획한다.
@@ -770,11 +772,32 @@ cppcheck가 기준 분석기이고 clang-tidy와 GCC가 추가 검사를 수행�
 | 저장소 `.clang-tidy`(`Checks`, `WarningsAsErrors`, `HeaderFilterRegex`, `ExtraArgs`, `CheckOptions`) | inline `--config`로 모든 키 고정 |
 | `CPATH`·`C_INCLUDE_PATH`·`CCC_OVERRIDE_OPTIONS` 등 환경변수 | `PATH`(도구 디렉터리)·`LANG=C.UTF-8`만 전달 |
 
+### compile DB 생성
+
+스냅샷에 `compile_commands.json`이 없고 CMake 프로젝트가 있으면, C/C++ 분석기 앞에 생성 작업 `compile-db`(단계 `build`, 판정 필수 아님) 하나를 계획한다(`cpp.WrapGeneration`). 순서는 탐색 → 의존성 받기 → `compile-db` → 분석기다. configure는 저장소의 `CMakeLists.txt`와 그 안의 `try_compile`·`try_run`·`execute_process`를 실행하므로 [저장소 코드 실행 허가](#저장소-코드-실행-허가)가 있어야 실행한다.
+
+- **계획 조건.** 쓸 수 있는 C/C++ 분석기(cppcheck, clang-tidy, GCC 중 하나)가 있고, 정적 계획에 그 작업이 있고, 범위에 번역 단위가 있고, 스냅샷에 compile DB가 없어야 한다. 프로젝트는 상위 디렉터리에 `CMakeLists.txt`가 없는 가장 바깥 `CMakeLists.txt` 디렉터리 중 범위 안 번역 단위를 가진 것이다. 데이터 디렉터리(숨은·`testdata`·`vendor`·`node_modules`) 아래는 프로젝트가 아니다. 얕은 경로부터 최대 8개다. manifest와 범위만으로 정한다.
+- **허가가 없을 때.** 작업은 계획되어 빈틈이 보이고, 프로세스 없이 `unsupported`(`repository_code_not_allowed` 또는 `repository_code_not_offered`, 제약 `compile_db_generation_not_allowed`)로 끝난다.
+- **도구.** cmake, 그리고 make(없으면 ninja)를 운영자의 `--toolchain-path`에서 찾는다. cmake가 없으면 `unsupported`(`build_tool_not_configured`, 제약 `cmake_not_found`), make와 ninja가 모두 없으면 같은 사유에 `cmake_generator_not_found`다. 다운로드하지 않는다. 자식 환경은 `PATH=<--toolchain-path의 절대 디렉터리>`, `LANG=C.UTF-8`(executor가 HOME·TMP를 task 전용으로 더함)뿐이며, configure가 찾는 C/C++ 컴파일러도 이 PATH에서 찾는다. 먼저 `cmake --version`을 빈 probe 디렉터리에서 실행한다. 시험한 계열은 4.2이며 밖이면 `tool_version_untested`를 남긴다.
+- **실행.** 프로젝트마다 `cmake -S <작업 사본>/<프로젝트> -B <작업 사본>/.codeye/compile-db/<n> -G "Unix Makefiles"|Ninja -DCMAKE_MAKE_PROGRAM=<절대 경로> -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DFETCHCONTENT_FULLY_DISCONNECTED=ON -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF -DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF -Wno-dev --no-warn-unused-cli`를 cwd=build 디렉터리, 제한시간 5분, 출력 1 MiB로 실행한다. configure만 하며 target을 build하지 않는다. 원본 사용자 경로와 스냅샷에서는 실행하지 않는다(스냅샷은 보호 경로). 실행 전에 각 `CMakeLists.txt`를 manifest 해시와 대조한다(`snapshot_integrity_failed`).
+- **build 디렉터리 위치.** 작업 사본의 `.codeye/compile-db/<n>`이다. 스냅샷은 어떤 깊이의 `.codeye`도 담지 않고, task 사이 작업 사본 복원은 숨은 디렉터리를 남기며, 분석기는 이를 소스로 보지 않는다. configure가 쓴 헤더(`configure_file`)가 작업 사본 안에 있어 분석기가 include 경로로 읽을 수 있다. 다음 attempt는 새 작업 사본에서 다시 만든다.
+- **결과.** 모든 프로젝트가 읽을 수 있는 `compile_commands.json`을 쓰면 `succeeded`(제약 `compile_db_generated`, `compile_db_generator_cmake`)다. 일부만 성공하면 `failed`(`compile_db_generation_failed`, 제약 `compile_db_generation_partial`)이고 분석기는 성공한 것을 쓴다. 모두 실패하면 `failed`이며, configure가 모두 0으로 끝났는데 DB가 없으면 `compile_db_not_written`, 아니면 `compile_db_generation_failed`다. 취소·timeout·정리 불확실은 각각의 사유로 끝난다. 프로세스를 실행했으면 `repository_code_executed`를 남긴다.
+- **분석기에 넘기는 방법.** 작업은 attempt scratch에 기록(`<scratch>/compile-db/record.json`: snapshot digest, attempt, 프로젝트별 build 디렉터리·DB SHA-256·항목 수, CMake 입력 파일)을 남긴다. 업로드하지 않는다. 분석기는 기록의 snapshot·attempt가 맞을 때만 DB를 읽고, 파일 해시가 기록과 다르면 `snapshot_integrity_failed`로 실패한다(조용히 축소 모드로 바꾸지 않는다). 읽은 DB는 스냅샷 DB와 같은 [매핑](#compile-db-매핑)과 flag 허용 목록을 지난다. 항목 compiler는 실행하지 않는다. 생성 build 디렉터리 아래 include 경로는 스냅샷에 없어도 없는 경로로 세지 않고 제약 `generated_include_dirs_used`를 남긴다.
+- **envelope 기록.** `target.properties.compile_db_source=generated`, `compile_db_generator=cmake`, `compile_db_generator_version`, `rule_pack.selection`의 `compile-db=cmake-<버전>`, 제약 `compile_db_generated`·`compile_db_generator_cmake`(일부 실패면 `compile_db_generation_partial`). `rule_pack.config_files`는 스냅샷의 `CMakeLists.txt`·`*.cmake`와 SHA-256이다. 256개를 넘으면 목록 없이 `cmake_inputs_not_enumerated`다.
+- **한계.** 외부 패키지(`find_package`)가 노드에 없으면 configure가 실패할 수 있다. 이때는 실패로 남고 분석기는 축소 모드다. configure 결과는 노드의 컴파일러·system header에 따라 달라진다. CMake 밖의 build 설명(Meson, autotools `configure`, Makefile만 있는 프로젝트)은 생성하지 않는다(분석기 제약 `compile_db_build_description_unsupported`).
+
 ### compile DB가 없을 때
 
-compile DB 생성(configure·cmake·bear)은 저장소 build 설정 실행이라 구현하지 않았다.
+스냅샷 DB도 생성한 DB도 없을 때다. 분석기 제약이 이유를 말한다.
 
-- clang-tidy는 프로세스를 시작하지 않고 `unsupported`(`compile_db_missing`, 제약 `compile_db_generation_not_implemented`)로 끝난다.
+| 제약 | 경우 |
+|---|---|
+| `compile_db_build_description_unsupported` | CMake 프로젝트가 없다 |
+| `compile_db_generation_not_allowed` | 저장소 코드 실행 허가가 없다 |
+| `compile_db_generation_unavailable` | 생성 작업이 계획되지 않았거나(쓸 수 있는 C/C++ 분석기 없음) cmake·make·ninja가 toolchain 경로에 없거나 취소·timeout으로 끝났다 |
+| `compile_db_generation_failed` | configure가 실패했거나 DB를 쓰지 않았다 |
+
+- clang-tidy와 GCC는 프로세스를 시작하지 않고 `unsupported`(`compile_db_missing`)로 끝난다.
 - cppcheck는 **축소 모드**다. 범위 안 번역 단위를 `--file-list`로 주고 include 경로·매크로를 주지 않는다. 제약 `compile_db_missing`·`reduced_mode_no_build_flags`, `target.properties.mode=reduced`, 단위 상태 `analyzed_*_without_build_flags`로 남긴다. 이 결과는 정밀 분석 완료가 아니다. include 디렉터리가 여러 개인 프로젝트는 사용자 헤더를 찾지 못해 `missing_include_files`로 실패한다. include 경로는 추측하지 않는다.
 
 ### cppcheck
@@ -859,7 +882,7 @@ Cppcheck 2.22.0은 개별 규칙 이름으로 `redundantAssignment`를 켤 수 �
 | `not_processed`, `unknown` | 출력이 처리를 보여 주지 않음, 실행이 끝나지 않음 | 아니오 |
 | `not_in_compile_db`, `compile_db_entry_excluded` | compile DB에 없음, 모든 항목 제외 | 아니오 |
 
-configure가 build 디렉터리에 만드는 생성 헤더(`config.h` 등)가 스냅샷에 없으면 두 도구 모두 그 단위에서 `missing_include_files`(configuration_error)로 실패한다. 찾지 못한 헤더는 도구 오류이며 결함이 아니다. 다른 단위의 관찰은 남지만 처리 파일은 주장하지 않는다. 같은 헤더가 compile DB의 `-I`가 가리키는 위치에 스냅샷으로 있으면 성공한다. 헤더 안 위치의 관찰은 남지만 헤더를 처리 파일로 주장하지 않는다. 생성 소스·생성 헤더가 없는 것은 범위 공백이다. 같은 파일을 다른 매크로로 compile하는 두 번째 이후 항목은 분석하지 않는다. MSVC·nvcc 항목은 분석하지 않는다.
+스냅샷 compile DB가 가리키는, configure가 build 디렉터리에 만드는 생성 헤더(`config.h` 등)가 스냅샷에 없으면 두 도구 모두 그 단위에서 `missing_include_files`(configuration_error)로 실패한다. 찾지 못한 헤더는 도구 오류이며 결함이 아니다. 다른 단위의 관찰은 남지만 처리 파일은 주장하지 않는다. 같은 헤더가 compile DB의 `-I`가 가리키는 위치에 스냅샷으로 있으면 성공한다. 헤더 안 위치의 관찰은 남지만 헤더를 처리 파일로 주장하지 않는다. 생성 소스·생성 헤더가 없는 것은 범위 공백이다. [compile DB 생성](#compile-db-생성)으로 만든 DB는 configure가 작업 사본 build 디렉터리에 쓴 헤더를 읽으므로 이 공백이 없다(`generated_include_dirs_used`). 같은 파일을 다른 매크로로 compile하는 두 번째 이후 항목은 분석하지 않는다. MSVC·nvcc 항목은 분석하지 않는다.
 
 ### C/C++ 엔진 중복
 
@@ -1110,7 +1133,12 @@ tsc와 type-aware 작업은 실행 전에 tsconfig 체인 전체(루트, 로컬 
 
 [dependency-cruiser](https://github.com/sverweij/dependency-cruiser/blob/main/doc/cli.md)는 전체 소스 범위에서 모듈 의존과 순환을 확인한다. 루트에 `.dependency-cruiser.json`이 있으면 선언된 JSON 규칙을 읽는다. 파일이 없으면 관리되는 순환 규칙을 사용한다. JavaScript·TypeScript 형식의 실행 가능한 설정과 webpack·resolver 등 프로젝트 모듈을 불러오는 옵션은 지원하지 않는다. 독립된 Node 도구 설치에 TypeScript가 있으면 TS 모듈도 읽을 수 있다.
 
-Node 권한 모드가 사본 디렉터리와 운영자 도구 설치만 읽게 한다. 별도 프로젝트 구성이나 설치된 프로젝트 의존성을 사용하지 않고, 일반적인 소스 상대 import를 해석한다. 해석하지 못한 의존성과 도구가 다루지 않은 파일은 별도로 센다. JS/TS 입력 중 특정 파일·폴더만 고른 경우 전체 그래프에 대한 판정을 생략한다. 규칙 결과는 도구의 JSON으로 읽으며 선택 소스에서 유일한 import 위치를 확인할 때 근거로 연결한다. 실제 18.8.0으로 정상·순환·실행 가능한 설정 제외를 확인했다. [분석기 계약](../examples/analyzer-dependency-cruiser.yaml) · [관찰 예시](../examples/observations-dependency-cruiser.json)
+Node 권한 모드가 사본 디렉터리와 운영자 도구 설치만 읽게 한다. 별도 프로젝트 구성이나 설치된 프로젝트 의존성을 사용하지 않고, 일반적인 소스 상대 import를 해석한다. 해석하지 못한 의존성과 도구가 다루지 않은 파일은 별도로 센다. JS/TS 입력 중 특정 파일·폴더만 고른 경우 전체 그래프에 대한 판정을 생략한다. 규칙 결과는 도구의 JSON으로 읽으며 선택 소스에서 유일한 import 위치를 확인할 때 근거로 연결한다.
+
+- **따르지 않은 대상.** 출력 `modules`에는 분석한 소스 말고도 따라가지 않은 import 대상(Node core 모듈, 해석하지 못한 이름, `doNotFollow`에 걸린 `node_modules` 패키지)이 항목으로 들어 있다. 이 항목은 소스가 아니므로 분석 소스로 세지 않고 `target.properties.dependency_targets_not_followed`로 센다. 이런 대상을 금지한 규칙(`dependencyTypes: ["core"]`, `couldNotResolve` 등)의 위반은 해당 import 줄의 관찰로 남긴다. 이 항목을 소스로 읽어 출력 전체를 `output_unparsed`로 버리던 결함을 고쳤다.
+- 같은 소스가 두 번 나오거나 형식이 맞지 않는 항목은 여전히 `output_unparsed`다. 분석한 소스가 하나도 없으면 `unsupported`(`dependency_cruiser_no_parsed_sources`)다. 어느 import에도 연결하지 못한 위반은 `target.properties.dependency_violation_unmapped`로 세고 제약 `dependency_violations_not_represented`를 남긴다(조용히 버리지 않는다).
+
+실제 18.8.0으로 정상·순환·실행 가능한 설정 제외, 외부 패키지 import, core·미해석 대상 금지 규칙을 확인했다. [분석기 계약](../examples/analyzer-dependency-cruiser.yaml) · [관찰 예시](../examples/observations-dependency-cruiser.json)
 
 ## Rust 팩
 
@@ -1131,7 +1159,7 @@ README 예제를 rustdoc, 공개 함수 구현과 테스트 소스로 잇는 [�
 
 | 변수 | 값 |
 |---|---|
-| `PATH` | toolchain bin 디렉터리 하나 |
+| `PATH` | toolchain bin 디렉터리, 이어서 `--toolchain-path`의 실제 절대 디렉터리(toolchain 디렉터리와 같은 것은 뺀다). 의존성 받기(`cargo fetch`)는 toolchain bin 디렉터리 하나 |
 | `RUSTC` | 그 디렉터리의 rustc 절대 경로 |
 | `CARGO` | 운영자가 지정한 cargo(cargo-clippy가 부름) |
 | `CARGO_HOME`, `CARGO_TARGET_DIR` | task scratch의 빈 디렉터리 |
@@ -1153,7 +1181,7 @@ cargo는 작업 디렉터리의 조상마다 `.cargo/config.toml`(옛 이름 `.c
 
 ### 링커와 `--toolchain-path`
 
-rustc는 build script와 proc macro를 링크하려고 `cc`를 PATH에서 찾는다. 분석기 생성 시 한 번 `--toolchain-path`의 절대 디렉터리에서 실행 가능한 `cc`를 찾아 그 절대 경로만 host linker 변수로 준다. 목록을 자식 PATH로 주지 않는다. 찾지 못하면 링크가 필요한 작업만 `failed`/`linker_unavailable`(configuration_error)이고 build script·proc macro가 없는 crate는 그대로 분석된다. 사용하면 `linker_from_toolchain_path`를 남긴다. 이 `cc`는 버전을 식별하지 않는다. Windows는 이 조회를 하지 않으므로 build script가 있는 crate는 `linker_unavailable`일 수 있다.
+rustc는 build script와 proc macro를 링크하려고 `cc`를 PATH에서 찾는다. 분석기 생성 시 한 번 `--toolchain-path`의 절대 디렉터리에서 실행 가능한 `cc`를 찾아 그 절대 경로를 host linker 변수로 준다. build script는 링크된 뒤 실행되면서 다시 C 도구를 이름으로 찾는다(`cc` crate는 `cc`·`ar`를, 어셈블러가 필요하면 `as`를 부른다). 그래서 cargo check·clippy·rustdoc의 자식 PATH는 toolchain 디렉터리 뒤에 `--toolchain-path`의 디렉터리를 붙이고 `build_scripts_used_toolchain_path`를 남긴다([도구 경로](#도구-경로)). 이 PATH가 없으면 C 코드를 빌드하는 build script가 있는 crate가 모두 `build_script_failed`였다. 찾지 못하면 링크가 필요한 작업만 `failed`/`linker_unavailable`(configuration_error)이고 build script·proc macro가 없는 crate는 그대로 분석된다. 사용하면 `linker_from_toolchain_path`를 남긴다. 이 `cc`는 버전을 식별하지 않는다. Windows는 이 조회를 하지 않으므로 build script가 있는 crate는 `linker_unavailable`일 수 있다.
 
 ### 오프라인 의존성
 
@@ -1224,6 +1252,7 @@ clippy 작업은 allow-by-default인 여섯 lint를 `-W`로 켠다. 소스의 `#
 | Cargo.toml 파싱 실패 | failed / `manifest_invalid`(configuration_error) |
 | `rust-version`이 rustc보다 높음 | failed / `toolchain_unavailable`(configuration_error) |
 | `failed to run custom build command` | failed / `build_script_failed` |
+| rustdoc의 `document output filename collision`(같은 이름의 crate 둘을 문서화) | failed / `doc_output_collision`(configuration_error) |
 | 그 밖의 종료 코드, 101인데 설명 없음 | failed / `cargo_failed` |
 | 버전 출력 미인식 | failed / `tool_version_unrecognized` |
 | stdout 잘림·손상·알 수 없는 레코드 | failed / `output_truncated`·`output_unparsed` |

@@ -119,7 +119,10 @@ codeye tools [--config PATH] [--json | --checklist]
 TOOL         STATUS  VERSION   WHERE / HOW TO ADD
 go           found   1.27.4    ~/.local/bin/go
 cppcheck     missing -         not found - `micromamba install -p ~/.local/share/codeye-tools/cpp cppcheck` (or ...) or set `agent.tools.cppcheck`
+toolchain path /usr/bin:/bin: cmake, make, cc, c++, ar found; ninja missing
 ```
+
+표 아래 줄은 `agent.toolchain_path`에서 찾은 시스템 build 도구다(`tools.json`의 `toolchain_path`). 실행하지 않고 있는지만 본다. C/C++ [compile DB 생성](ANALYZERS.md#compile-db-생성)에는 cmake, make 또는 ninja, C/C++ 컴파일러가 이 경로에 있어야 하고, 없으면 줄 끝에 필요한 것을 적는다. C 코드를 빌드하는 Rust build script도 이 경로의 `cc`·`ar`를 쓴다.
 
 관리자는 **관리 > 언어 도구 경로**에서 로컬 분석에 사용할 Python, JDK, Go, Cargo, Node.js를 변경할 수 있다. 시작 시 기록한 자동 탐색 경로가 각 입력란 아래 표시된다. 서비스 계정으로 실행할 수 있는 도구를 지정한다. [지원 경로와 설정 파일 키](GUIDE.md#언어-도구-경로)
 
@@ -133,7 +136,7 @@ codeye doctor [--format text|json] [--work-dir .codeye/work] [--timeout 5s] [--c
 
 호스트·도구·디스크·DB를 검사한다. 실제 모델 요청은 하지 않는다. 모델 연결은 `codeye model probe`(실제 추론을 요청하므로 비용이 들 수 있다)로 확인한다. [schema](../schemas/doctor.schema.json)와 [합성 예시](../examples/doctor.json)가 있다. 예시는 현재 머신의 실측 결과가 아니다.
 
-**검사 항목(11개).** `host`, `work_disk`, 도구 검사 다섯 개(`git`, `go`, `node`, `rust`(cargo), `opencode_cli`), `postgres_client`(`psql`), `analyzers`, `configured_tools`, `database`. 도구는 PATH만 보지 않고 [도구 찾기](ANALYZERS.md#도구-찾기)와 같은 탐색으로 찾으므로 doctor가 보는 도구가 에이전트가 쓸 도구다. 보고서의 `tools` 배열에 이 탐색의 도구별 결과(경로 없이 상태·버전·시험한 계열 여부)를 싣고, 텍스트 출력은 `codeye tools`와 같은 표를 더한다. `schema_version`은 `0.1`이다. host에는 OS·arch·논리 CPU와, Linux에서는 RAM·디스크 관측치를 기록한다. Linux 외의 RAM·디스크 관측은 구현하지 않아 null이며 자원 한도를 적용한다는 뜻이 아니다.
+**검사 항목(12개).** `host`, `work_disk`, 도구 검사 다섯 개(`git`, `go`, `node`, `rust`(cargo), `opencode_cli`), `postgres_client`(`psql`), `analyzers`, `configured_tools`, `build_tools`, `database`. `build_tools`는 `agent.toolchain_path`에 compile DB 생성 도구(cmake, make 또는 ninja, C/C++ 컴파일러)가 있으면 `available`(`compile_db_generation_ready`), 없으면 `unavailable`(`build_tools_missing`)이며 막지 않는다. 도구는 PATH만 보지 않고 [도구 찾기](ANALYZERS.md#도구-찾기)와 같은 탐색으로 찾으므로 doctor가 보는 도구가 에이전트가 쓸 도구다. 보고서의 `tools` 배열에 이 탐색의 도구별 결과(경로 없이 상태·버전·시험한 계열 여부)를 싣고, 텍스트 출력은 `codeye tools`와 같은 표를 더한다. `schema_version`은 `0.1`이다. host에는 OS·arch·논리 CPU와, Linux에서는 RAM·디스크 관측치를 기록한다. Linux 외의 RAM·디스크 관측은 구현하지 않아 null이며 자원 한도를 적용한다는 뜻이 아니다.
 
 | 상태 | 뜻 |
 |---|---|
@@ -183,7 +186,7 @@ schema는 선택 속성 하나만 더했다. 상태와 필드의 조합(`unmeasu
 | `github.enabled`, `github.token_env` | `true`, 없음 | `token_env`의 키는 `git_hosts`의 호스트, 값은 토큰을 받을 환경변수 이름이다. [플랫폼 GitHub 계정](GITHUB.md#플랫폼-github-계정) |
 | `agent.name` | `local` | 100자 이하 |
 | `agent.max_workers` | min(4, 논리 CPU 수/2), 최소 1 | 1~16. 에이전트는 `--autoscale --max-workers N`으로 시작하고, `up`·`start`가 `default` 풀의 최대 워커 수를 같은 값으로 둔다 |
-| `agent.toolchain_path` | `/usr/bin:/bin`(Linux) | 절대 경로 목록 |
+| `agent.toolchain_path` | `/usr/bin:/bin`(Linux) | 절대 경로 목록. 워커 `PATH`이며, 저장소 코드 실행 허가를 받은 작업(Rust build script, C/C++ compile DB 생성)이 cmake·make·ninja·`cc`·`ar` 같은 시스템 build 도구를 여기서 찾는다 |
 | `agent.java_classpath_catalog` | 비어 있음 | SpotBugs가 사용할 로컬 JAR 카탈로그의 절대 경로. [형식과 사용법](ANALYZERS.md#java-로컬-클래스패스) |
 | `agent.go`, `agent.go_mod_cache` | 빈 값 | 절대 경로. 비우면 [탐색](ANALYZERS.md#도구-찾기)이 찾은 go와 그 모듈 캐시를 쓴다 |
 | `agent.tools` | 빈 값 | 이 빌드의 분석기·toolchain 플래그 이름(`staticcheck`, `node`, `ruff` 등)을 키로, 실행 파일의 절대 경로를 값으로. 모르는 이름은 거부한다. 적지 않은 도구는 탐색이 찾은 것을 쓰고, 적은 값은 항상 우선한다 |

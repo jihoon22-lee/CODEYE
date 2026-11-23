@@ -271,5 +271,63 @@
       "source": "PATH",
       "tested_series": "3.11+"
     }
-  ]
+  ],
+  "toolchain_path": {
+    "path": "/usr/bin:/bin",
+    "programs": [
+      {
+        "name": "cmake",
+        "status": "found",
+        "path": "/usr/bin/cmake",
+        "used_for": [
+          "compile_db_generation",
+          "cmake_tests"
+        ]
+      },
+      {
+        "name": "make",
+        "status": "found",
+        "path": "/usr/bin/make",
+        "used_for": [
+          "compile_db_generation",
+          "cmake_tests"
+        ]
+      },
+      {
+        "name": "ninja",
+        "status": "not_found",
+        "used_for": [
+          "compile_db_generation",
+          "cmake_tests"
+        ]
+      },
+      {
+        "name": "cc",
+        "status": "found",
+        "path": "/usr/bin/cc",
+        "used_for": [
+          "compile_db_generation",
+          "cmake_tests",
+          "rust_build_scripts"
+        ]
+      },
+      {
+        "name": "c++",
+        "status": "found",
+        "path": "/usr/bin/c++",
+        "used_for": [
+          "compile_db_generation",
+          "cmake_tests"
+        ]
+      },
+      {
+        "name": "ar",
+        "status": "found",
+        "path": "/usr/bin/ar",
+        "used_for": [
+          "rust_build_scripts"
+        ]
+      }
+    ]
+  }
 }

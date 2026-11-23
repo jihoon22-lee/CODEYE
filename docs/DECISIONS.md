@@ -189,7 +189,7 @@
 1. 기준 분석기는 cppcheck(`cpp.cppcheck`, 필수), 추가 깊이는 clang-tidy(`cpp.clang_tidy`)다. cppcheck는 build flag 없이 번역 단위를 읽으므로 compile DB가 없는 스냅샷에서도 실행된다. clang-tidy는 clang frontend로 compile하므로 flag가 필요하다. clang-tidy를 기준으로 두는 안은 compile DB를 커밋하지 않은 대부분의 저장소에서 보고서를 그것만으로 `partial`로 만들므로 채택하지 않았다.
 2. Clang Static Analyzer는 clang-tidy의 `clang-analyzer-*` 검사로만 실행하고 `clang --analyze`는 실행하지 않는다.
 3. 스냅샷의 compile DB는 데이터다. 경로를 추정한 원래 루트 기준으로 작업 사본에 매핑하고, flag는 허용 목록과 값 형식 검사를 거쳐 CODEYE가 scratch에 다시 쓴다. 항목의 compiler·wrapper·plugin·응답 파일·driver 설정은 실행하거나 읽지 않는다. 두 작업 모두 `RepositoryCode=false`다.
-4. compile DB 생성(configure·cmake·bear)은 저장소 코드를 실행하므로 구현하지 않았다. compile DB가 없으면 clang-tidy는 `unsupported`(`compile_db_missing`), cppcheck는 include 경로 없는 축소 모드이며 제약으로 표시한다. 축소 모드에서 include 경로를 추측하는 안은 근거 없는 범위 주장이 되므로 채택하지 않았다.
+4. compile DB 생성(configure·cmake·bear)은 저장소 코드를 실행하므로 구현하지 않았다. (A57이 CMake 프로젝트에 한해 바꾼다.) compile DB가 없으면 clang-tidy는 `unsupported`(`compile_db_missing`), cppcheck는 include 경로 없는 축소 모드이며 제약으로 표시한다. 축소 모드에서 include 경로를 추측하는 안은 근거 없는 범위 주장이 되므로 채택하지 않았다.
 5. 찾지 못한 헤더는 결함이 아니라 범위 공백이다(`missing_include_files`, 단위 `partial_missing_include`·`failed_missing_include`). 처리 파일은 성공한 작업의 번역 단위만이다.
 6. 저장소 `.clang-tidy`는 inline `--config`가 대체한다. compile DB는 `honored` 설정 파일로 digest를 기록한다. cppcheck는 `--inline-suppr` 없이 실행하므로 억제가 `disabled`다. clang-tidy NOLINT는 보고하거나 끌 수 없어 `honored`다.
 7. 기준 분석기가 같은 줄에서 함께 보고한 것만 보고한 clang-tidy 검사와, bugprone 검사와 겹치기만 한 Analyzer 검사는 측정 후 선택에서 뺐다. 남긴 검사는 clang-tidy만 보고한 변형이 있다.
@@ -225,7 +225,7 @@
 1. 기준 분석기는 cargo check(`rust.cargocheck`, 필수), 추가 깊이는 clippy(`rust.clippy`)다. cargo는 Rust 프로젝트가 있는 노드에 항상 있고 rustc 진단이 빌드가 말하는 사실이며, clippy는 rustup 구성요소라 없을 수 있다.
 2. 두 작업 모두 build script·proc macro·저장소의 Cargo 설정을 실행하므로 `RepositoryCode=true`다. 노드 허가가 없으면 기준 분석도 `unsupported`(`repository_code_not_allowed`)이고 version probe 밖의 프로세스를 시작하지 않는다. 허가가 있는 작업은 계획에서 정한 것보다 더 실행하지 않는다.
 3. 도구는 toolchain bin 디렉터리의 실제 `cargo`(`--cargo`)와 같은 디렉터리의 `cargo-clippy`(`--clippy`)다. rustup proxy는 저장소의 `rust-toolchain`이 toolchain을 고르고 내려받게 하므로 거부한다(resolve 결과가 cargo가 아니거나 같은 디렉터리에 `rustup`이 있음). PATH는 그 디렉터리 하나, `RUSTC`는 옆의 rustc다.
-4. 링커: rustc가 build script를 링크하려면 `cc`가 필요한데 toolchain 디렉터리 PATH에는 없다(실측: `linker cc not found`). 새 도구 플래그를 만들지 않고 기존 운영자 설정 `--toolchain-path`를 hello `tool_path`로 builtin에 넘겨(`builtin.Config.ToolPath`, 추가 필드) 시작 시 `cc`를 한 번 찾고 그 절대 경로만 host target의 linker로 준다. 목록 자체를 자식의 PATH로 주지 않는다. `cc`가 없으면 링크가 필요한 작업만 `linker_unavailable`로 실패한다.
+4. 링커: rustc가 build script를 링크하려면 `cc`가 필요한데 toolchain 디렉터리 PATH에는 없다(실측: `linker cc not found`). 새 도구 플래그를 만들지 않고 기존 운영자 설정 `--toolchain-path`를 hello `tool_path`로 builtin에 넘겨(`builtin.Config.ToolPath`, 추가 필드) 시작 시 `cc`를 한 번 찾고 그 절대 경로만 host target의 linker로 준다. 목록 자체를 자식의 PATH로 주지 않는다(A57이 바꾼다). `cc`가 없으면 링크가 필요한 작업만 `linker_unavailable`로 실패한다.
 5. `--offline --locked`, `CARGO_NET_OFFLINE=true`, `CARGO_HOME`과 target은 task scratch다. 운영자 레지스트리 캐시 플래그는 만들지 않았다(cargo는 오프라인에서도 CARGO_HOME에 쓰므로 읽기 전용 캐시를 줄 수 없다). 의존성은 경로 의존성이나 저장소가 vendor한 소스뿐이며, 없으면 `dependency_unavailable`이다.
 6. build target은 host로, rustc wrapper는 비움으로 환경에서 고정한다(저장소 `.cargo/config.toml`의 `build.target`·`rustc-wrapper`보다 환경이 앞선다는 것을 실측). 나머지 저장소 설정(rustflags, `[lints]`, `clippy.toml`)은 따른다: `repository_config=honored`, 읽은 파일을 `config_files`에 기록하고 작업 사본 위 디렉터리에 Cargo·clippy 설정이 있으면 `null`(실측: cargo와 clippy 모두 조상 디렉터리 설정을 읽는다).
 7. 소스 안 억제는 `honored`다. `#[allow]`가 숨긴 진단을 보고하는 옵션이 없고 `--force-warn`은 숨긴 진단을 표시 없이 일반 경고로 내므로 억제와 구분할 수 없다(실측). 따라서 사라진 finding은 해결되지 않는다(`source_suppressions_hidden`).
@@ -234,6 +234,15 @@
 10. 모듈은 가장 바깥 Cargo.toml 디렉터리마다 하나이고 `--workspace --all-targets`, 기본 feature, host target으로 실행한다.
 
 [분석기](ANALYZERS.md)
+
+**A57 — 저장소 코드 실행 허가 아래의 build 문맥.** (기록 2026-11-23) REQ-002/006/007/015와 TC-285~286에 대해 A24 4와 A27 4를 다음처럼 바꾼다. 실제 프로젝트 결함 집합(dev 분할)에서 C/C++ 사례는 compile DB가 없어 clang-tidy·GCC가 실행되지 않고 cppcheck가 축소 모드에서 헤더를 찾지 못했으며, C 코드를 빌드하는 build script가 있는 Rust 사례는 모두 `build_script_failed`였다.
+
+1. **CMake configure로 compile DB를 만든다.** 스냅샷에 compile DB가 없고 CMake 프로젝트가 있으면 분석기 앞에 `compile-db` 작업(단계 `build`, 판정 필수 아님)을 둔다. configure는 저장소 코드를 실행하므로 Rust의 cargo check와 같은 저장소 코드 실행 허가가 있어야 하고, 없으면 실행 없이 `unsupported`(`repository_code_not_allowed`·`repository_code_not_offered`)다. 이 규칙이 A24 4의 "구현하지 않았다"를 대체한다.
+2. **보호 장치.** 작업 사본에서만 실행하고(스냅샷은 보호 경로, 원본 경로는 쓰지 않음), build 디렉터리는 작업 사본의 `.codeye/compile-db/<n>`, configure만 하고 target을 build하지 않으며, FetchContent는 끊고 사용자·시스템 package registry는 읽지 않는다. argv·cwd·`PATH`(`--toolchain-path`)·`LANG`·제한시간 5분으로 실행하고 정리 결과는 executor가 확인한다. 실행 전 `CMakeLists.txt`를 manifest 해시와 대조하고, 분석기는 생성 기록의 DB 해시가 다르면 실패한다. 생성한 DB도 스냅샷 DB와 같은 flag 허용 목록을 지나며 항목 compiler를 실행하지 않는다. cmake·make·ninja는 내려받지 않는다.
+3. **한계를 결과로 남긴다.** 허가 없음·도구 없음·configure 실패는 분석기의 제약(`compile_db_generation_not_allowed`·`compile_db_generation_unavailable`·`compile_db_generation_failed`)으로 보이고 분석기는 축소 모드로 남는다. 생성한 DB로 분석한 결과는 `compile_db_source=generated`, `compile_db_generated`를 기록한다. 축소 모드에서 include 경로를 추측하지 않는다는 A24 4의 나머지는 그대로다. Meson·autotools·`bear`는 아직 생성하지 않는다.
+4. **허가받은 build 코드의 PATH.** build script(`cc` crate)와 configure는 C 도구를 이름으로 찾으므로 절대 경로 하나로는 충분하지 않다. 저장소 코드 실행 허가를 받은 작업(cargo check·clippy·rustdoc, `compile-db`)에 한해 자식 PATH를 toolchain 디렉터리 뒤에 `--toolchain-path` 디렉터리로 넓힌다. 이는 운영자가 이미 시스템 도구 경로로 정한 값이며 새 설정이 아니다. 의존성 받기(`cargo fetch`)와 허가 없는 분석기는 그대로 toolchain 디렉터리 하나다. A27 4의 "목록 자체를 자식의 PATH로 주지 않는다"를 이 범위에서 대체한다.
+
+[분석기](ANALYZERS.md#compile-db-생성)
 
 **A28 — 구조·중복·비밀값 팩.** (기록 2026-11-18) REQ-007/008/011/012/013/015/031, NFR-006과 TC-117~119에 대해 다음을 확정한다.
 

@@ -58,8 +58,8 @@
     },
     "checks": {
       "type": "array",
-      "minItems": 11,
-      "maxItems": 11,
+      "minItems": 12,
+      "maxItems": 12,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -81,7 +81,8 @@
               "opencode_cli",
               "analyzers",
               "configured_tools",
-              "database"
+              "database",
+              "build_tools"
             ]
           },
           "status": {
@@ -122,7 +123,9 @@
               "baseline_analyzer_usable",
               "no_baseline_analyzer",
               "configured_tools_usable",
-              "configured_tool_unusable"
+              "configured_tool_unusable",
+              "compile_db_generation_ready",
+              "build_tools_missing"
             ]
           },
           "version": {
