@@ -195,24 +195,26 @@ func (a *ClangTidy) Run(ctx context.Context, job analysis.Job, task analysis.Tas
 		return *bad
 	}
 	doc := clangTidyBase(job, task.Key, l)
-	if len(l.DBs) == 0 {
-		// Without build flags the clang frontend cannot compile a unit; a
-		// configure step that would write the DB executes repository code
-		// and is not implemented.
-		doc.Limitations = append(doc.Limitations, "compile_db_generation_not_implemented")
+	src, broken := compileDBs(job, l)
+	if broken != "" {
+		return notRun(s, doc, domain.TaskFailed, broken, obsdoc.ExitNotRun)
+	}
+	if len(src.DBs) == 0 {
+		// Without build flags the clang frontend cannot compile a unit. The
+		// limitation says why there is no database: no CMake project, or
+		// the generation task did not run or did not succeed.
+		doc.Limitations = append(doc.Limitations, src.Limitations...)
 		return notRun(s, doc, domain.TaskUnsupported, ReasonCompileDBMissing, obsdoc.ExitNotRun)
 	}
-	data, cfgFiles, ok := readDBs(job, l)
-	if !ok {
-		return notRun(s, doc, domain.TaskFailed, ReasonSnapshotIntegrity, obsdoc.ExitNotRun)
-	}
-	m, err := MapDBs(l.DBs, data, l.Files, func(rel string) bool { return pack.PathInScope(rel, job.Scope) })
+	l.DBs = src.DBs
+	m, err := MapDBs(src.DBs, src.Data, l.Files, func(rel string) bool { return pack.PathInScope(rel, job.Scope) })
 	if err != nil {
 		return notRun(s, doc, domain.TaskFailed, ReasonCompileDBUnreadable, obsdoc.ExitNotRun)
 	}
-	in := ctInput{Key: task.Key, Layout: l, Mapping: &m, ConfigFiles: cfgFiles}
+	in := ctInput{Key: task.Key, Layout: l, Mapping: &m, ConfigFiles: src.ConfigFiles}
 	doc.Target.Properties["mode"] = modeCompileDB
 	applyCompileDB(&doc, in.Mapping, in.Layout, in.ConfigFiles)
+	src.apply(&doc)
 	if len(m.Units) == 0 {
 		return notRun(s, doc, domain.TaskUnsupported, ReasonNoTranslationUnits, obsdoc.ExitNotRun)
 	}

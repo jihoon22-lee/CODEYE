@@ -33,15 +33,15 @@
     "without_compile_db": {
       "description": "No compile DB: cppcheck runs in the reduced mode without build flags and cannot find the project headers; clang-tidy is not run (generating a compile DB would execute repository code).",
       "remove": ["compile_commands.json"],
-      "cppcheck": {"task_status": "failed", "reason": "missing_include_files", "exit_class": "configuration_error", "units": {"analyzed_with_findings_without_build_flags": 2, "partial_missing_include": 2}, "processed_paths": null, "observations": ["arrayIndexOutOfBounds src/parse.cpp:14", "memleak src/ring.c:12", "mismatchAllocDealloc src/util.cpp:22", "nullPointer src/ring.c:23", "zerodiv src/standalone.c:4"], "tool_errors": ["missing_include src/parse.cpp:5", "missing_include src/ring.c:4"], "limitations": ["compile_db_missing", "reduced_mode_no_build_flags", "system_includes_not_parsed"], "executions": ["cppcheck.version", "cppcheck.check"], "properties": {"mode": "reduced"}},
-      "clang_tidy": {"task_status": "unsupported", "reason": "compile_db_missing", "exit_class": "not_run", "units": {}, "processed_paths": [], "observations": [], "tool_errors": [], "limitations": ["compile_db_generation_not_implemented", "compile_db_missing"], "executions": [], "properties": {}}
+      "cppcheck": {"task_status": "failed", "reason": "missing_include_files", "exit_class": "configuration_error", "units": {"analyzed_with_findings_without_build_flags": 2, "partial_missing_include": 2}, "processed_paths": null, "observations": ["arrayIndexOutOfBounds src/parse.cpp:14", "memleak src/ring.c:12", "mismatchAllocDealloc src/util.cpp:22", "nullPointer src/ring.c:23", "zerodiv src/standalone.c:4"], "tool_errors": ["missing_include src/parse.cpp:5", "missing_include src/ring.c:4"], "limitations": ["compile_db_generation_unavailable", "compile_db_missing", "reduced_mode_no_build_flags", "system_includes_not_parsed"], "executions": ["cppcheck.version", "cppcheck.check"], "properties": {"mode": "reduced"}},
+      "clang_tidy": {"task_status": "unsupported", "reason": "compile_db_missing", "exit_class": "not_run", "units": {}, "processed_paths": [], "observations": [], "tool_errors": [], "limitations": ["compile_db_generation_unavailable", "compile_db_missing"], "executions": [], "properties": {}}
     },
     "reduced_self_contained": {
       "description": "No compile DB and only self-contained sources in scope: the reduced mode succeeds and says that it had no build flags.",
       "remove": ["compile_commands.json"],
       "scope": ["src/standalone.c", "src/util.cpp"],
-      "cppcheck": {"task_status": "succeeded", "exit_class": "success_with_findings", "units": {"analyzed_with_findings_without_build_flags": 2}, "processed_paths": ["src/standalone.c", "src/util.cpp"], "observations": ["mismatchAllocDealloc src/util.cpp:22", "zerodiv src/standalone.c:4"], "tool_errors": [], "limitations": ["compile_db_missing", "reduced_mode_no_build_flags", "system_includes_not_parsed"], "executions": ["cppcheck.version", "cppcheck.check"], "properties": {"mode": "reduced"}},
-      "clang_tidy": {"task_status": "unsupported", "reason": "compile_db_missing", "exit_class": "not_run", "units": {}, "processed_paths": [], "observations": [], "tool_errors": [], "limitations": ["compile_db_generation_not_implemented", "compile_db_missing"], "executions": [], "properties": {}}
+      "cppcheck": {"task_status": "succeeded", "exit_class": "success_with_findings", "units": {"analyzed_with_findings_without_build_flags": 2}, "processed_paths": ["src/standalone.c", "src/util.cpp"], "observations": ["mismatchAllocDealloc src/util.cpp:22", "zerodiv src/standalone.c:4"], "tool_errors": [], "limitations": ["compile_db_generation_unavailable", "compile_db_missing", "reduced_mode_no_build_flags", "system_includes_not_parsed"], "executions": ["cppcheck.version", "cppcheck.check"], "properties": {"mode": "reduced"}},
+      "clang_tidy": {"task_status": "unsupported", "reason": "compile_db_missing", "exit_class": "not_run", "units": {}, "processed_paths": [], "observations": [], "tool_errors": [], "limitations": ["compile_db_generation_unavailable", "compile_db_missing"], "executions": [], "properties": {}}
     },
     "option_like_names": {
       "description": "Source files named like options are analyzed as files: every positional the tools receive is an absolute path.",
@@ -55,7 +55,7 @@
       "add": {"src/--help.cpp": "int help_ratio(int n) {\n  int z = 0;\n  return n / z;\n}\n", "src/-x.c": "int x_ratio(int n) {\n  int z = 0;\n  return n / z;\n}\n"},
       "remove": ["compile_commands.json"],
       "scope": ["src/--help.cpp", "src/-x.c"],
-      "cppcheck": {"task_status": "succeeded", "exit_class": "success_with_findings", "units": {"analyzed_with_findings_without_build_flags": 2}, "processed_paths": ["src/--help.cpp", "src/-x.c"], "observations": ["zerodiv src/--help.cpp:3", "zerodiv src/-x.c:3"], "tool_errors": [], "limitations": ["compile_db_missing", "reduced_mode_no_build_flags"], "executions": ["cppcheck.version", "cppcheck.check"], "properties": {"mode": "reduced"}}
+      "cppcheck": {"task_status": "succeeded", "exit_class": "success_with_findings", "units": {"analyzed_with_findings_without_build_flags": 2}, "processed_paths": ["src/--help.cpp", "src/-x.c"], "observations": ["zerodiv src/--help.cpp:3", "zerodiv src/-x.c:3"], "tool_errors": [], "limitations": ["compile_db_generation_unavailable", "compile_db_missing", "reduced_mode_no_build_flags"], "executions": ["cppcheck.version", "cppcheck.check"], "properties": {"mode": "reduced"}}
     },
     "repository_tool_config": {
       "description": "Repository files the tools would read if they looked in the repository: a broken std.cfg and posix.cfg (cppcheck reads them from its cwd) and clang driver configuration files that force-include a missing header. The outcome equals with_generated_header.",
@@ -76,8 +76,8 @@
       "add": {"src/clean.c": "int clean_add(int a, int b) {\n  return a + b;\n}\n"},
       "remove": ["compile_commands.json"],
       "scope": ["src/clean.c"],
-      "cppcheck": {"task_status": "succeeded", "exit_class": "success_without_findings", "units": {"analyzed_clean_without_build_flags": 1}, "processed_paths": ["src/clean.c"], "observations": [], "tool_errors": [], "limitations": ["compile_db_missing", "reduced_mode_no_build_flags"], "executions": ["cppcheck.version", "cppcheck.check"], "properties": {"mode": "reduced"}},
-      "clang_tidy": {"task_status": "unsupported", "reason": "compile_db_missing", "exit_class": "not_run", "units": {}, "processed_paths": [], "observations": [], "tool_errors": [], "limitations": ["compile_db_generation_not_implemented", "compile_db_missing"], "executions": [], "properties": {}}
+      "cppcheck": {"task_status": "succeeded", "exit_class": "success_without_findings", "units": {"analyzed_clean_without_build_flags": 1}, "processed_paths": ["src/clean.c"], "observations": [], "tool_errors": [], "limitations": ["compile_db_generation_unavailable", "compile_db_missing", "reduced_mode_no_build_flags"], "executions": ["cppcheck.version", "cppcheck.check"], "properties": {"mode": "reduced"}},
+      "clang_tidy": {"task_status": "unsupported", "reason": "compile_db_missing", "exit_class": "not_run", "units": {}, "processed_paths": [], "observations": [], "tool_errors": [], "limitations": ["compile_db_generation_unavailable", "compile_db_missing"], "executions": [], "properties": {}}
     }
   }
 }
