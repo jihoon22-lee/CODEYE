@@ -99,12 +99,12 @@ func TestWorkflowSelectionsReachReview(t *testing.T) {
 				t.Fatalf("optional selections disturbed ordinary results: %+v", doc)
 			}
 			if kind != "selected" {
-				if doc.Schema != record.SchemaVersion || len(doc.WorkflowSelections) != 0 {
+				if doc.Schema != record.SchemaVersionCitedLines || len(doc.WorkflowSelections) != 0 {
 					t.Fatalf("unexpected selections: %+v", doc)
 				}
 				return
 			}
-			if doc.Schema != record.SchemaVersionWorkflow || len(doc.WorkflowSelections) != 1 ||
+			if doc.Schema != record.SchemaVersionCitedLines || len(doc.WorkflowSelections) != 1 ||
 				len(doc.WorkflowSelections[0].RouteDigests) != 2 {
 				t.Fatalf("selection not recorded: %+v", doc)
 			}
@@ -176,7 +176,9 @@ func TestLowerAndRead(t *testing.T) {
 `,
 	}
 	text := string(mustRead(t, filepath.Join(workflowFixture, impl)))
-	tree[impl] = strings.Replace(text, "func removeFromShelf(", strings.Repeat("// storage setup\n", 57)+"func removeFromShelf(", 1)
+	// The storage file is longer than the smallest request holds, so the
+	// overview leaves the implementation unread for the follow-up.
+	tree[impl] = strings.Replace(text, "func removeFromShelf(", strings.Repeat("// storage setup\n", 900)+"func removeFromShelf(", 1)
 	j := treeJob(t, tree)
 	caller := &scriptedCaller{script: map[string]func(int, opencode.Request) opencode.Reply{
 		"documents": func(_ int, q opencode.Request) opencode.Reply {
@@ -235,7 +237,7 @@ func TestLowerAndRead(t *testing.T) {
 			return asJSON(map[string]any{"contract_comparisons": []record.ContractComparison{comp}})
 		},
 	}}
-	_, results := runRole(t, j, vetStub{}, caller, "1.27.4")
+	_, results := runRoleSmall(t, j, vetStub{}, caller, "1.27.4")
 	if r := results[record.TaskContract]; r.Status != domain.TaskSucceeded {
 		t.Fatalf("contract followup = %+v", r)
 	}
@@ -340,14 +342,14 @@ func TestSupplementalWorkflowChoices(t *testing.T) {
 			wantCalls := 1
 			if tc.outcome != "" {
 				wantCalls++
-				if doc.Schema != record.SchemaVersionWorkflow || len(doc.Calls) != wantCalls {
+				if doc.Schema != record.SchemaVersionCitedLines || len(doc.Calls) != wantCalls {
 					t.Fatalf("supplemental result lost from record: %+v", doc)
 				}
 				call := doc.Calls[1]
 				if call.Purpose != record.WorkflowSelectionPurpose || call.Outcome != tc.outcome || call.Attempt != 2 || call.RequestDigest == "" {
 					t.Fatalf("supplemental call attribution failed: %+v", call)
 				}
-			} else if len(doc.Calls) != wantCalls || (tc.selections == 0 && doc.Schema != record.SchemaVersion) {
+			} else if len(doc.Calls) != wantCalls || (tc.selections == 0 && doc.Schema != record.SchemaVersionCitedLines) {
 				t.Fatalf("unnecessary call: %+v", doc)
 			}
 			if used, err := callsUsed(j); err != nil || used != tc.earlierCalls+wantCalls+caller.calls("investigate") {

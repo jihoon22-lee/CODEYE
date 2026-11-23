@@ -38,6 +38,11 @@ type LocalModelRelay struct {
 	BaseURL string `json:"base_url"`
 	Token   string `json:"token"`
 	Model   string `json:"model"`
+	// OutputTokens and ContextTokens are the limits the profile declares
+	// for the model, set by the adapter from the review budget (never read
+	// from the descriptor).
+	OutputTokens  int `json:"-"`
+	ContextTokens int `json:"-"`
 }
 
 // ModelProvider is the one provider of the managed OpenCode profile: the
@@ -156,7 +161,7 @@ func managedOpenCodeEnv(model string, p *ModelProvider) map[string]string {
 		settings["provider"] = map[string]any{provider: map[string]any{
 			"npm": "@ai-sdk/openai-compatible", "name": "CODEYE budgeted QA relay",
 			"options": map[string]any{"apiKey": r.Token, "baseURL": r.BaseURL},
-			"models":  map[string]any{r.Model: map[string]any{"id": r.Model, "name": r.Model, "tool_call": false, "limit": map[string]int{"context": 64000, "output": 1536}}},
+			"models":  map[string]any{r.Model: relayModel(r)},
 		}}
 	case p != nil && p.Native != nil:
 		n := p.Native
@@ -224,3 +229,14 @@ func managedOpenCodeEnv(model string, p *ModelProvider) map[string]string {
 // OpenCodeNpmRegistry is the npm registry of the managed OpenCode profile: a
 // loopback port nothing listens on (discard), so the lookup fails at once.
 const OpenCodeNpmRegistry = "http://127.0.0.1:9/"
+
+// relayModel is the relay's one model entry. Its token limits are the
+// review budget's (the adapter sets them); a relay without them declares
+// none.
+func relayModel(r *LocalModelRelay) map[string]any {
+	m := map[string]any{"id": r.Model, "name": r.Model, "tool_call": false}
+	if r.OutputTokens > 0 && r.ContextTokens > 0 {
+		m["limit"] = map[string]int{"context": r.ContextTokens, "output": r.OutputTokens}
+	}
+	return m
+}

@@ -60,9 +60,9 @@ func observedTests(excerpts []record.Excerpt, facts []analysis.ObservedTest) []o
 type verifyInput struct {
 	ObservedTests []observedTestCase `json:"observed_test_cases,omitempty"`
 	Scope         struct {
-		Snapshot    string           `json:"snapshot_manifest_digest"`
-		Excerpts    []record.Excerpt `json:"excerpts"`
-		Limitations []string         `json:"limitations"`
+		Snapshot    string      `json:"snapshot_manifest_digest"`
+		Excerpts    excerptList `json:"excerpts"`
+		Limitations []string    `json:"limitations"`
 	} `json:"scope"`
 	Contracts    []record.Contract       `json:"contracts"`
 	Observations []record.ObservationRef `json:"observations"`
@@ -71,7 +71,7 @@ type verifyInput struct {
 }
 
 // limVerifyBudget marks candidates left unreviewed because the verifier
-// request could not carry them within PromptBudget.
+// request could not carry them within the request budget.
 const limVerifyBudget = "verification_budget_exceeded"
 const limVerifyHashesOmitted = "verification_excerpt_hashes_omitted"
 
@@ -181,17 +181,27 @@ func (s *roleStage) verify() analysis.TaskResult {
 			changed[p] = true
 		}
 	}
-	extra, lims, err := expand(s.ctx, s.j.Snapshot, normalizedScope(s.j.Scope), withText, plain, s.secretFiles(), changed)
+	// The expansion is measured against the cited excerpts only: a caller
+	// inside an upstream unit that this request does not resend (a long
+	// unit of another file) still travels, and one inside a unit it does
+	// resend travels as a reference to that unit (requestExcerpts).
+	anchors := slices.DeleteFunc(slices.Clone(withText), func(x record.Excerpt) bool { return !cited[x.ID] })
+	extra, lims, err := expandWithin(s.ctx, s.j.Snapshot, normalizedScope(s.j.Scope), anchors, plain, s.secretFiles(), changed,
+		expansionCaps{s.limit().expansion, s.limit().expansionBytes})
 	if err != nil {
 		s.setEvidence(context)
 		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
 	}
-	anchors := slices.DeleteFunc(slices.Clone(withText), func(x record.Excerpt) bool { return !cited[x.ID] })
-	budget := maxExpansionBytes
+	declarations, err := s.enclosingDeclarations(anchors)
+	if err != nil {
+		s.setEvidence(context)
+		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+	}
+	budget := s.limit().expansionBytes
 	for _, x := range extra {
 		budget -= record.JSONLen(x.Text)
 	}
-	linked, err := s.sourceCallContext(".", anchors, append(slices.Clone(anchors), extra...), maxExpansion-len(extra), budget)
+	linked, err := s.sourceCallContext(".", anchors, append(slices.Clone(anchors), extra...), s.limit().expansion-len(extra), budget)
 	if err != nil {
 		s.setEvidence(context)
 		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
@@ -213,10 +223,13 @@ func (s *roleStage) verify() analysis.TaskResult {
 			}
 		}
 	}
-	// The request must fit PromptBudget. Expansion, uncited context and
-	// contracts go first; then candidates are verified as a prefix (investigate
-	// before interpret) and the rest stay unreviewed with a limitation. Every
-	// sent candidate keeps all excerpts it cites.
+	// The request must fit the request budget. The cited ranges come first,
+	// then the declarations enclosing them, the expansion (callers, tests,
+	// direct calls), the whole units of the cited files and the other small
+	// upstream windows; contracts go first among the optional parts. Then
+	// candidates are verified as a prefix (investigate before interpret) and
+	// the rest stay unreviewed with a limitation. Every sent candidate keeps
+	// all excerpts it cites.
 	in := verifyInput{Observations: s.rec.Observations}
 	in.Scope.Snapshot = s.j.Snapshot.Digest
 	contract := verifyContract
@@ -242,19 +255,36 @@ func (s *roleStage) verify() analysis.TaskResult {
 			}
 		}
 		keep := len(ordered)
-		for _, e := range extra {
+		citedFiles := map[string]bool{}
+		for _, e := range ordered {
+			citedFiles[e.Path] = true
+		}
+		add := func(e record.Excerpt) {
 			if !citedBy[e.ID] {
 				ordered = append(ordered, e)
 				citedBy[e.ID] = true
 			}
 		}
-		for _, e := range withText {
-			if !citedBy[e.ID] {
-				ordered = append(ordered, e)
+		for _, d := range declarations {
+			if slices.ContainsFunc(ordered[:keep], func(x record.Excerpt) bool { return x.Path == d.Path && d.Start <= x.Start && x.End <= d.End }) {
+				add(d)
 			}
 		}
-		if len(ordered) > 40 {
-			ordered = ordered[:max(keep, 40)]
+		for _, e := range extra {
+			add(e)
+		}
+		for _, e := range withText {
+			if citedFiles[e.Path] && e.End-e.Start+1 > record.MaxCitedLines {
+				add(e)
+			}
+		}
+		for _, e := range withText {
+			if e.End-e.Start+1 <= record.MaxCitedLines {
+				add(e)
+			}
+		}
+		if len(ordered) > s.limit().verifyExcerpts {
+			ordered = ordered[:max(keep, s.limit().verifyExcerpts)]
 		}
 		for _, variant := range []struct{ withContracts, omitHashes bool }{
 			{true, false}, {false, false}, {true, true}, {false, true},
@@ -311,11 +341,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 		}
 	}
 	s.setEvidence(recorded)
-	catalog := catalogOf(sent)
-	for id, e := range catalog {
-		e.Text = ""
-		catalog[id] = e
-	}
+	cite := newCiter(s.j.Snapshot.Digest, sent)
 	ids := make([]string, 0, len(sent))
 	for _, e := range sent {
 		ids = append(ids, e.ID)
@@ -352,7 +378,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 		}
 		q := opencode.Request{Role: s.role, Scratch: s.j.Scratch, SnapshotDigest: s.j.Snapshot.Digest, Instructions: text, Input: query, ProtectedRoots: []string{s.j.Snapshot.SnapshotDir}}
 		size := len(opencode.Prompt(q))
-		if size > PromptBudget {
+		if size > s.limit().request {
 			return *s.fail(result(domain.TaskFailed, reasonInputTooLarge))
 		}
 		if r := s.reserveCall(); r != nil {
@@ -393,7 +419,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 		notJSON := reply.Reason != ""
 		got, itemErrs, outputErrs, dropped := map[string]record.Verification{}, map[string][]string{}, []string{"output_not_json"}, []string(nil)
 		if !notJSON {
-			got, itemErrs, outputErrs, dropped = parseVerificationItems(reply.Output, want, catalog, observationIDs)
+			got, itemErrs, outputErrs, dropped = parseVerificationItems(reply.Output, want, cite, observationIDs, s.limit().listText)
 		}
 		for id, v := range got {
 			if verificationClaimsExecution(v) {
@@ -467,6 +493,11 @@ func (s *roleStage) verify() analysis.TaskResult {
 	if len(accepted) == 0 {
 		return *s.fail(result(domain.TaskFailed, reasonOutputInvalid))
 	}
+	var citedIDs [][]string
+	for _, v := range accepted {
+		citedIDs = append(citedIDs, v.SupportingEvidence, v.Counterevidence)
+	}
+	s.rec.Evidence = withCited(s.rec.Evidence, textless(cite.used(citedIDs...)))
 	s.rec.Verifications = make([]record.Verification, len(candidates))
 	for i, c := range candidates {
 		v, ok := accepted[c.ID]

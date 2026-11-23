@@ -18,18 +18,53 @@ import (
 var errTooLarge = errors.New(reasonInputTooLarge)
 
 // fitExcerpts keeps the longest prefix of list (at least keep items) whose
-// request, including a possible repair, fits PromptBudget.
+// request, including a possible repair, fits the request budget. The
+// request grows with the prefix, so the longest fitting prefix is found by
+// bisection.
 func (s *roleStage) fitExcerpts(instructions string, keep int, list []record.Excerpt, build func([]record.Excerpt) ([]byte, error)) ([]record.Excerpt, bool, error) {
-	for n := len(list); n >= keep; n-- {
+	fitsAt := func(n int) (bool, error) {
 		b, err := build(list[:n])
+		if err != nil {
+			return false, err
+		}
+		_, ok := s.fits(instructions, b, true)
+		return ok, nil
+	}
+	ok, err := fitsAt(len(list))
+	if err != nil {
+		return nil, false, err
+	}
+	if ok {
+		return list, false, nil
+	}
+	lo, hi := keep-1, len(list) // fitsAt(hi) is false; lo is the largest known fit
+	if keep > 0 {
+		if ok, err = fitsAt(keep); err != nil {
+			return nil, false, err
+		} else if !ok {
+			return nil, false, errTooLarge
+		}
+		lo = keep
+	}
+	for hi-lo > 1 {
+		mid := lo + (hi-lo)/2
+		ok, err := fitsAt(mid)
 		if err != nil {
 			return nil, false, err
 		}
-		if _, ok := s.fits(instructions, b, true); ok {
-			return list[:n], n < len(list), nil
+		if ok {
+			lo = mid
+		} else {
+			hi = mid
 		}
 	}
-	return nil, false, errTooLarge
+	if lo < 0 {
+		if ok, err := fitsAt(0); err != nil || !ok {
+			return nil, false, errors.Join(err, errTooLarge)
+		}
+		lo = 0
+	}
+	return list[:lo], true, nil
 }
 
 func (s *roleStage) inputFailure(err error) analysis.TaskResult {
@@ -176,7 +211,7 @@ func (s *roleStage) environment() analysis.TaskResult {
 		}
 		seen := map[string]bool{}
 		for _, n := range out.Notes {
-			errs = addLim(errs, textErrors(n.AffectedChecks, n.StillCheckable, n.NeededObservation)...)
+			errs = addLim(errs, s.textErrors(n.AffectedChecks, n.StillCheckable, n.NeededObservation)...)
 			if n.RequirementIDs == nil || n.EvidenceIDs == nil {
 				errs = addLim(errs, "item_schema_invalid")
 				continue
@@ -507,7 +542,7 @@ func (s *roleStage) documents() analysis.TaskResult {
 			return false
 		}
 		for i, c := range out.Contracts {
-			row := addLim(textErrors(c.Statement), evidenceErrors("contracts_evidence_ids", c.EvidenceIDs, 4)...)
+			row := addLim(s.textErrors(c.Statement), evidenceErrors("contracts_evidence_ids", c.EvidenceIDs, 4)...)
 			errs = addLim(errs, row...)
 			if len(row) == 0 && checkScope("contracts", i, &c.AppliesTo, c.EvidenceIDs, c.Statement, true) {
 				kept.Contracts = append(kept.Contracts, c)
@@ -515,7 +550,7 @@ func (s *roleStage) documents() analysis.TaskResult {
 			}
 		}
 		for i, c := range out.Conflicts {
-			errs = addLim(errs, textErrors(c.Summary, c.Impact)...)
+			errs = addLim(errs, s.textErrors(c.Summary, c.Impact)...)
 			first := evidenceErrors("conflicts_first_evidence_ids", c.FirstEvidence, 3)
 			second := evidenceErrors("conflicts_second_evidence_ids", c.SecondEvidence, 3)
 			errs = addLim(addLim(errs, first...), second...)
@@ -532,21 +567,21 @@ func (s *roleStage) documents() analysis.TaskResult {
 			}
 		}
 		for i, q := range out.Questions {
-			row := addLim(textErrors(q.Question), evidenceErrors("questions_evidence_ids", q.EvidenceIDs, 4)...)
+			row := addLim(s.textErrors(q.Question), evidenceErrors("questions_evidence_ids", q.EvidenceIDs, 4)...)
 			errs = addLim(errs, row...)
 			if len(row) == 0 && checkScope("questions", i, &q.AppliesTo, q.EvidenceIDs, q.Question, true) {
 				kept.Questions = append(kept.Questions, q)
 			}
 		}
 		for _, n := range out.InstructionNotes {
-			errs = addLim(errs, textErrors(n.Note)...)
+			errs = addLim(errs, s.textErrors(n.Note)...)
 			errs = addLim(errs, evidenceErrors("instruction_notes_evidence_ids", n.EvidenceIDs, 3)...)
 		}
 		for _, q := range out.DocumentQuality {
 			errs = addLim(errs, evidenceErrors("document_quality_evidence_ids", q.EvidenceIDs, 4)...)
 			if record.ForeignInsightProse(q.Statement) {
 				errs = addLim(errs, record.InsightLanguageError)
-			} else if !q.Valid(catalog) {
+			} else if !q.ValidWithin(catalog, s.limit().text) {
 				errs = addLim(errs, "document_quality_invalid")
 			}
 		}
@@ -583,20 +618,19 @@ func (s *roleStage) documents() analysis.TaskResult {
 	}
 	if len(selectedWorkflow) > 0 {
 		s.rec.WorkflowSelections = selectedWorkflow
-		s.rec.Schema = record.SchemaVersionWorkflow
 	}
 	return s.finish()
 }
 
 // ---- investigate -----------------------------------------------------------
 
-const investigateContract = `For this role use exactly {"candidates":[{"title":"...","condition":"concrete trigger","impact":"...","improvement":"...","counterpoint":"actual counterevidence or remaining uncertainty","evidence_ids":["ev_..."]}],"strengths":[{"title":"specific engineering practice","benefit":"what it prevents or enables","scope":"directory","evidence_ids":["ev_..."]}],"contract_comparisons":[{"contract_index":1,"applies_to":"directory","status":"match|partial|mismatch|unknown","reason":"specific link or missing evidence","document_evidence_ids":["ev_..."],"code_evidence_ids":["ev_..."]}]}. Return at most 4 candidates and 3 strengths. Cite scope.excerpts code or test for candidates and scoped implementation code for strengths. For whole_run only, compare up to 6 documents.contracts, using its 1-based index, scope or narrower directory and unmodified evidence_ids. Cite scoped implementation for match, partial or mismatch. Unknown may cite no code. Slices return no comparisons. Do not claim reproduction or provide attack instructions.`
+const investigateContract = `For this role use exactly {"candidates":[{"title":"what goes wrong","condition":"the concrete trigger input or state","mechanism":"how the cited lines produce the failure, step by step","impact":"...","improvement":"fix direction","counterpoint":"what would refute it: actual counterevidence or remaining uncertainty","evidence_ids":["ev_...:12-30"]}],"strengths":[{"title":"specific engineering practice","benefit":"what it prevents or enables","scope":"directory","evidence_ids":["ev_..."]}],"contract_comparisons":[{"contract_index":1,"applies_to":"directory","status":"match|partial|mismatch|unknown","reason":"specific link or missing evidence","document_evidence_ids":["ev_..."],"code_evidence_ids":["ev_..."]}]}. Return at most %d candidates and 3 strengths. Cite scope.excerpts code or test lines for candidates and scoped implementation code for strengths; an excerpt with "within" has its lines inside the named excerpt. For whole_run only, compare up to 6 documents.contracts, using its 1-based index, scope or narrower directory and unmodified evidence_ids. Cite scoped implementation for match, partial or mismatch. Unknown may cite no code. Slices return no comparisons. Do not claim reproduction or provide attack instructions.`
 
 type investigateScope struct {
 	WholeRun        bool                    `json:"whole_run"`
 	Snapshot        string                  `json:"snapshot_manifest_digest"`
 	Modules         []string                `json:"modules"`
-	Excerpts        []record.Excerpt        `json:"excerpts"`
+	Excerpts        excerptList             `json:"excerpts"`
 	DirectCalls     []directCall            `json:"direct_calls,omitempty"`
 	MemberTest      *memberTestHint         `json:"member_test,omitempty"`
 	WorkflowRoutes  []workflowEvidenceInput `json:"workflow_routes,omitempty"`
@@ -770,7 +804,12 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		}
 		return marshal(x)
 	}
-	instructions := s.instructions(investigateContract)
+	// The candidate count the contract states follows the code the request
+	// can carry; it is fixed before fitting, so the instructions do not
+	// change with the excerpts sent.
+	maxCandidates := s.limit().candidateLimit(sourceBytes(code))
+	baseContract := fmt.Sprintf(investigateContract, maxCandidates)
+	instructions := s.instructions(baseContract)
 	sent, trimmed, err := s.fitExcerpts(instructions, 1, code, build)
 	// Keep space for multiple implementation paths before sending every
 	// environment note. A truncated handoff is visible in the role record.
@@ -796,6 +835,9 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	}
 	if trimmed {
 		s.rec.Limitations = addLim(s.rec.Limitations, limInputTrimmed, "files_outside_review_context")
+		if s.partialFiles(sent) {
+			s.rec.Limitations = addLim(s.rec.Limitations, "excerpt_only")
+		}
 		in.Scope.Limitations = s.rec.Limitations
 	}
 	if len(links.wholeWitness) > 0 {
@@ -808,7 +850,7 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	}
 	in.Scope = in.Scope.withExcerpts(sent, links)
 	if links.claims.keep > 0 {
-		if balanced, ok := s.fitContractAllocation(in, links, docEv); ok {
+		if balanced, ok := s.fitContractAllocation(in, links, docEv, instructions); ok {
 			balancedScope := in.Scope.withExcerpts(balanced, links)
 			if len(balancedScope.RustAPIs) >= len(in.Scope.RustAPIs) {
 				sent = balanced
@@ -821,14 +863,14 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		s.rec.Limitations = addLim(s.rec.Limitations, rustAPIContextOmitted)
 		in.Scope.Limitations = s.rec.Limitations
 	}
-	contract := investigateContract
+	contract := baseContract
 	var navigation []contractNavigationCandidate
 	if s.slice == nil && uDoc.State == record.UpstreamAccepted {
 		locations := s.navigationCatalog(docRec, sent, links.witnessSource)
 		if len(links.workflow) > 0 {
 			locations = mergeWorkflowNavigation(s.workflowNavigation(docRec, links.workflow, sent), locations)
 		}
-		navigation = s.fitNavigation(&in, locations)
+		navigation = s.fitNavigation(&in, locations, baseContract)
 		if len(navigation) > 0 {
 			contract += investigateProbeContract
 		}
@@ -839,13 +881,13 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	if err != nil {
 		return s.inputFailure(err)
 	}
-	source := catalogOf(sent)
 	var candidates []record.Candidate
 	var strengths []record.Strength
 	var strengthsOmitted bool
 	var comparisons []record.ContractComparison
 	var probe *record.ContractProbe
 	var probeObservation string
+	var cite *citer
 	parse := func(raw json.RawMessage) []string {
 		var out struct {
 			Candidates          []record.CandidateText      `json:"candidates"`
@@ -857,15 +899,19 @@ func (s *roleStage) investigate() analysis.TaskResult {
 			return errs
 		}
 		var errs []string
-		if len(out.Candidates) > 4 || len(out.ContractComparisons) > record.MaxContractComparisons {
+		if len(out.Candidates) > maxCandidates || len(out.ContractComparisons) > record.MaxContractComparisons {
 			errs = addLim(errs, "too_many_items")
 		}
+		reply := newCiter(s.j.Snapshot.Digest, sent, docEv)
 		var list []record.Candidate
 		for i, c := range out.Candidates {
 			if c.ID != "" {
 				errs = addLim(errs, "item_schema_invalid")
 			}
-			errs = addLim(errs, candidateErrors(c, catalog)...)
+			var citeErrs []string
+			c.Evidence, _, citeErrs = reply.resolve(c.Evidence, citeNarrow)
+			errs = addLim(errs, citeErrs...)
+			errs = addLim(errs, s.candidateErrors(c, reply.catalog(), true)...)
 			c.ID = fmt.Sprintf("investigate_%d", i+1)
 			list = append(list, record.Candidate{CandidateText: c, Origin: record.StageInvestigate})
 		}
@@ -874,25 +920,31 @@ func (s *roleStage) investigate() analysis.TaskResult {
 			if len(supported) == record.MaxReviewStrengths {
 				break
 			}
-			if x.Valid(catalog) && s.existingDir(x.Scope) && slices.ContainsFunc(x.EvidenceIDs, func(id string) bool {
-				return strengthImplementation(source[id])
+			var citeErrs []string
+			x.EvidenceIDs, _, citeErrs = reply.resolve(x.EvidenceIDs, citeOptional)
+			cited := reply.catalog()
+			if len(citeErrs) == 0 && x.ValidWithin(cited, s.limit().text) && s.existingDir(x.Scope) && slices.ContainsFunc(x.EvidenceIDs, func(id string) bool {
+				return strengthImplementation(cited[id])
 			}) {
 				supported = append(supported, x)
 			}
 		}
 		seen := map[int]bool{}
-		for _, x := range out.ContractComparisons {
+		for i := range out.ContractComparisons {
+			x := &out.ContractComparisons[i]
+			var citeErrs []string
+			x.CodeEvidenceIDs, _, citeErrs = reply.resolve(x.CodeEvidenceIDs, citeStrip)
 			if record.ForeignInsightProse(x.Reason) {
 				errs = addLim(errs, record.InsightLanguageError)
-			} else if s.slice != nil || seen[x.ContractIndex] || !x.Valid(catalog) || !x.MatchesContract(in.Documents.Contracts) ||
-				!s.existingDir(x.AppliesTo) || !javaAPIComparisonValid(x, javaBindings, catalog) ||
-				!rustAPIComparisonValid(x, links.rustAPIs, catalog) {
+			} else if len(citeErrs) > 0 || s.slice != nil || seen[x.ContractIndex] || !x.ValidWithin(catalog, s.limit().text) || !x.MatchesContract(in.Documents.Contracts) ||
+				!s.existingDir(x.AppliesTo) || !javaAPIComparisonValid(*x, javaBindings, catalog) ||
+				!rustAPIComparisonValid(*x, links.rustAPIs, catalog) {
 				errs = addLim(errs, "contract_comparison_invalid")
 			}
 			seen[x.ContractIndex] = true
 		}
 		if len(errs) == 0 {
-			candidates, strengths, comparisons = list, supported, out.ContractComparisons
+			candidates, strengths, comparisons, cite = list, supported, out.ContractComparisons, reply
 			strengthsOmitted = len(supported) != len(out.Strengths)
 			probe, probeObservation = selectContractProbe(out.ContractProbe, navigation, comparisons, in)
 		}
@@ -903,6 +955,16 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		return *r
 	}
 	s.rec.Candidates, s.rec.Strengths, s.rec.ContractComparisons = candidates, strengths, comparisons
+	if cite != nil {
+		var ids [][]string
+		for _, c := range candidates {
+			ids = append(ids, c.Evidence)
+		}
+		for _, x := range strengths {
+			ids = append(ids, x.EvidenceIDs)
+		}
+		s.rec.Evidence = withCited(s.rec.Evidence, textless(cite.used(ids...)))
+	}
 	if strengthsOmitted {
 		s.rec.Limitations = addLim(s.rec.Limitations, "review_strength_omitted")
 	}
@@ -911,14 +973,12 @@ func (s *roleStage) investigate() analysis.TaskResult {
 			resolveContractProbeReason(&s.rec.ContractComparisons[i], *probe, navigation, in)
 		}
 		s.rec.ContractProbe = probe
-		s.rec.Schema = record.SchemaVersionContract
 	}
 	if probeObservation != "" {
 		s.rec.Limitations = addLim(s.rec.Limitations, probeObservation)
 	}
 	if reading := s.submittedWorkflowReading(links.workflow, sent); reading != nil {
 		s.rec.WorkflowReading = reading
-		s.rec.Schema = record.SchemaVersionWorkflowReading
 	}
 	return s.finish()
 }
@@ -937,8 +997,18 @@ func strengthImplementation(e record.Excerpt) bool {
 	return found
 }
 
-func candidateErrors(c record.CandidateText, catalog map[string]record.Excerpt) []string {
-	errs := textErrors(c.Title, c.Condition, c.Impact, c.Improvement, c.Counterpoint)
+// candidateErrors checks one candidate's prose and citations; mechanism
+// says whether the role's contract asks for one.
+func (s *roleStage) candidateErrors(c record.CandidateText, catalog map[string]record.Excerpt, mechanism bool) []string {
+	errs := s.textErrors(c.Title, c.Condition, c.Impact, c.Improvement, c.Counterpoint)
+	switch {
+	case mechanism && strings.TrimSpace(c.Mechanism) == "":
+		errs = addLim(errs, "mechanism_missing")
+	case mechanism:
+		errs = addLim(errs, proseErrors(s.limit().mechanism, c.Mechanism)...)
+	case c.Mechanism != "":
+		errs = addLim(errs, "item_schema_invalid")
+	}
 	errs = addLim(errs, idErrors(c.Evidence, catalog, 6, "code", "test", "document")...)
 	code := false
 	for _, id := range c.Evidence {
@@ -951,6 +1021,26 @@ func candidateErrors(c record.CandidateText, catalog map[string]record.Excerpt) 
 	return errs
 }
 
+// sourceBytes is the numbered size of the code and test excerpts of list.
+func sourceBytes(list []record.Excerpt) int {
+	n := 0
+	for _, e := range list {
+		if e.Kind == "code" || e.Kind == "test" {
+			n += record.NumberedLen(e.Text, e.Start)
+		}
+	}
+	return n
+}
+
+// textless is list without source text (as records keep it).
+func textless(list []record.Excerpt) []record.Excerpt {
+	out := slices.Clone(list)
+	for i := range out {
+		out[i].Text = ""
+	}
+	return out
+}
+
 func nonNilList[T any](l []T) []T {
 	if l == nil {
 		return []T{}
@@ -960,15 +1050,15 @@ func nonNilList[T any](l []T) []T {
 
 // ---- interpret -------------------------------------------------------------
 
-const interpretContract = `For this role use exactly {"hypotheses":[{"observation_ids":["obs_..."],"title":"...","condition":"code condition under which the diagnostic matters","impact":"...","improvement":"...","counterpoint":"what would make the diagnostic harmless here","evidence_ids":["ev_..."]}],"limits":[{"observation_ids":["obs_..."],"statement":"why the observation cannot be related to code from this input"}]}, ignoring any wider output examples. Both lists are required: at most 2 hypotheses and 3 limits, at least one item in total. A hypothesis links observation IDs of input.observations and cites a code or test evidence ID listed for one of them. Keep each raw message, rule and location as the tool reported it; do not restate the tool's run status, finding count or severity, and never describe absent diagnostics as clean code.`
+const interpretContract = `For this role use exactly {"hypotheses":[{"observation_ids":["obs_..."],"title":"what goes wrong","condition":"code condition under which the diagnostic matters","mechanism":"how the cited lines produce the failure","impact":"...","improvement":"fix direction","counterpoint":"what would make the diagnostic harmless here","evidence_ids":["ev_...:12-30"]}],"limits":[{"observation_ids":["obs_..."],"statement":"why the observation cannot be related to code from this input"}]}, ignoring any wider output examples. Both lists are required: at most 2 hypotheses and 3 limits, at least one item in total. A hypothesis links observation IDs of input.observations and cites a code or test evidence ID listed for one of them. Keep each raw message, rule and location as the tool reported it; do not restate the tool's run status, finding count or severity, and never describe absent diagnostics as clean code.`
 
 type interpretInput struct {
 	Tools        []toolInput `json:"tools"`
 	Observations []obsInput  `json:"observations"`
 	Scope        struct {
-		Snapshot    string           `json:"snapshot_manifest_digest"`
-		Excerpts    []record.Excerpt `json:"excerpts"`
-		Limitations []string         `json:"limitations"`
+		Snapshot    string      `json:"snapshot_manifest_digest"`
+		Excerpts    excerptList `json:"excerpts"`
+		Limitations []string    `json:"limitations"`
 	} `json:"scope"`
 	Repair *outputRepair `json:"repair,omitempty"`
 }
@@ -978,6 +1068,7 @@ type hypothesis struct {
 	Title          string   `json:"title"`
 	Condition      string   `json:"condition"`
 	Impact         string   `json:"impact"`
+	Mechanism      string   `json:"mechanism"`
 	Improvement    string   `json:"improvement"`
 	Counterpoint   string   `json:"counterpoint"`
 	Evidence       []string `json:"evidence_ids"`
@@ -1040,7 +1131,6 @@ func (s *roleStage) interpret() analysis.TaskResult {
 		s.rec.Limitations = addLim(s.rec.Limitations, limInputTrimmed, "observation_context_outside_input")
 	}
 	s.setEvidence(sent)
-	catalog := catalogOf(sent)
 	in = withWindows(sent)
 	given := map[string]obsInput{}
 	for _, o := range in.Observations {
@@ -1048,6 +1138,7 @@ func (s *roleStage) interpret() analysis.TaskResult {
 	}
 	var candidates []record.Candidate
 	var limits []record.InterpretationLimit
+	var cite *citer
 	obsErrs := func(ids []string) []string {
 		if len(ids) == 0 || len(ids) > 4 {
 			return []string{"observation_ids_invalid"}
@@ -1078,14 +1169,17 @@ func (s *roleStage) interpret() analysis.TaskResult {
 			errs = addLim(errs, "no_items")
 		}
 		var list []record.Candidate
+		reply := newCiter(s.j.Snapshot.Digest, sent)
 		for i, h := range out.Hypotheses {
-			c := record.CandidateText{Title: h.Title, Condition: h.Condition, Impact: h.Impact, Improvement: h.Improvement, Counterpoint: h.Counterpoint, Evidence: h.Evidence}
-			errs = addLim(errs, candidateErrors(c, catalog)...)
+			ids, base, citeErrs := reply.resolve(h.Evidence, citeNarrow)
+			c := record.CandidateText{Title: h.Title, Condition: h.Condition, Mechanism: h.Mechanism, Impact: h.Impact, Improvement: h.Improvement, Counterpoint: h.Counterpoint, Evidence: ids}
+			errs = addLim(errs, citeErrs...)
+			errs = addLim(errs, s.candidateErrors(c, reply.catalog(), true)...)
 			errs = addLim(errs, obsErrs(h.ObservationIDs)...)
 			at := false
 			for _, oid := range h.ObservationIDs {
 				for _, eid := range given[oid].EvidenceIDs {
-					at = at || slices.Contains(h.Evidence, eid)
+					at = at || slices.Contains(base, eid)
 				}
 			}
 			if !at {
@@ -1095,11 +1189,11 @@ func (s *roleStage) interpret() analysis.TaskResult {
 			list = append(list, record.Candidate{CandidateText: c, Origin: record.StageInterpret, ObservationIDs: h.ObservationIDs})
 		}
 		for _, l := range out.Limits {
-			errs = addLim(errs, textErrors(l.Statement)...)
+			errs = addLim(errs, s.textErrors(l.Statement)...)
 			errs = addLim(errs, obsErrs(l.ObservationIDs)...)
 		}
 		if len(errs) == 0 {
-			candidates, limits = list, out.Limits
+			candidates, limits, cite = list, out.Limits, reply
 		}
 		return errs
 	}
@@ -1108,5 +1202,12 @@ func (s *roleStage) interpret() analysis.TaskResult {
 		return *r
 	}
 	s.rec.Candidates, s.rec.Limits = candidates, limits
+	if cite != nil {
+		var ids [][]string
+		for _, c := range candidates {
+			ids = append(ids, c.Evidence)
+		}
+		s.rec.Evidence = withCited(s.rec.Evidence, textless(cite.used(ids...)))
+	}
 	return s.finish()
 }

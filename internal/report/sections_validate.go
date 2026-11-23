@@ -514,7 +514,8 @@ func validateInsights(r Report) error {
 		}
 		return out
 	}
-	text := func(s string) bool { return record.ModelText(s) && (r.Export.IncludeCode || s == textOmitted) }
+	limit := proseLimit(r.Builder.Version)
+	text := func(s string) bool { return record.ProseText(s, limit) && (r.Export.IncludeCode || s == textOmitted) }
 	if len(docs.Quality) > record.MaxDocumentQuality || len(docs.Comparisons) > record.MaxContractComparisons ||
 		(len(docs.Comparisons) > 0 && len(docs.Contracts) != len(docs.Comparisons)) ||
 		len(code.Strengths) > MaxReportedStrengths {
@@ -539,7 +540,7 @@ func validateInsights(r Report) error {
 		}
 	}
 	for _, q := range docs.Quality {
-		if !q.Valid(byDoc) || !text(q.Statement) {
+		if !q.ValidWithin(byDoc, limit) || !text(q.Statement) {
 			return invalidf("document quality is invalid")
 		}
 	}
@@ -548,7 +549,7 @@ func validateInsights(r Report) error {
 		d := docs.Contracts[i]
 		comparison := record.ContractComparison{ContractIndex: i + 1, AppliesTo: x.AppliesTo,
 			Status: x.Status, Reason: x.Reason, DocumentEvidenceIDs: x.DocumentEvidenceIDs, CodeEvidenceIDs: x.CodeEvidenceIDs}
-		if !comparison.Valid(byDoc) || !record.ScopeUnder(x.AppliesTo, d.AppliesTo) ||
+		if !comparison.ValidWithin(byDoc, limit) || !record.ScopeUnder(x.AppliesTo, d.AppliesTo) ||
 			!slices.Equal(x.DocumentEvidenceIDs, d.EvidenceIDs) || x.Statement != d.Statement || !text(x.Reason) {
 			return invalidf("document comparison is invalid")
 		}
@@ -578,7 +579,7 @@ func validateInsights(r Report) error {
 		}
 	}
 	for _, x := range code.Strengths {
-		if !x.Valid(byCode) || !text(x.Title) || !text(x.Benefit) {
+		if !x.ValidWithin(byCode, limit) || !text(x.Title) || !text(x.Benefit) {
 			return invalidf("strength is invalid")
 		}
 	}
@@ -603,7 +604,7 @@ func validWorkflowCitations(workflow RelatedWorkflow, scope string, catalog map[
 func hasAcceptedWorkflowReading(r Report) bool {
 	version, _ := strconv.Atoi(r.Builder.Version)
 	const taskKey = "review.investigate"
-	decoder := (WorkflowReadingDecoder{}).Key().String()
+	decoders := []string{(WorkflowReadingDecoder{}).Key().String(), (CitedReviewDecoder{}).Key().String()}
 	return version >= WorkflowReadingSince && r.CodeReview != nil &&
 		slices.ContainsFunc(r.Tasks, func(t Task) bool {
 			return t.Key == taskKey && t.Status == string(domain.TaskSucceeded)
@@ -612,6 +613,6 @@ func hasAcceptedWorkflowReading(r Report) bool {
 			return t.Key == taskKey && t.Result == "accepted" && deref(t.TaskStatus) == string(domain.TaskSucceeded)
 		}) &&
 		slices.ContainsFunc(r.Artifacts, func(a Artifact) bool {
-			return deref(a.TaskKey) == taskKey && deref(a.Decoder) == decoder
+			return deref(a.TaskKey) == taskKey && slices.Contains(decoders, deref(a.Decoder))
 		})
 }

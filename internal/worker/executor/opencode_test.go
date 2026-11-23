@@ -66,15 +66,22 @@ func TestManagedModelEnvironment(t *testing.T) {
 	}
 }
 
-// The QA relay's profile is byte-for-byte what the regression pilot ran
-// with before the relay became one instance of the general provider.
+// The QA relay's profile is pinned byte for byte. Its token limits are the
+// review budget's, here the default (16384 output tokens; the 256 KiB
+// request, OpenCode's overhead and the output as context); a relay
+// without limits declares none.
 func TestRelayProfileUnchanged(t *testing.T) {
-	r := &LocalModelRelay{BaseURL: "http://127.0.0.1:4567/v1", Token: "tok-0123456789abcdef0123456789abcdef", Model: "gpt-6.2-sol"}
+	bare := &LocalModelRelay{BaseURL: "http://127.0.0.1:4567/v1", Token: "tok-0123456789abcdef0123456789abcdef", Model: "gpt-6.2-sol"}
+	if got := managedOpenCodeEnv("codeye-gateway/gpt-6.2-sol", RelayProvider(bare))["OPENCODE_CONFIG_CONTENT"]; strings.Contains(got, `"limit"`) {
+		t.Fatalf("relay without limits declared some: %s", got)
+	}
+	r := &LocalModelRelay{BaseURL: "http://127.0.0.1:4567/v1", Token: "tok-0123456789abcdef0123456789abcdef", Model: "gpt-6.2-sol",
+		OutputTokens: 16384, ContextTokens: 262144 + 16384 + 16384}
 	p := RelayProvider(r)
 	if !validOpenCode("codeye-gateway/gpt-6.2-sol", p) || validOpenCode("codeye-gateway/gpt-6.1-sol", p) {
 		t.Fatal("relay model rule")
 	}
-	want := `{"autoupdate":false,"enabled_providers":["codeye-gateway"],"formatter":false,"lsp":false,"model":"codeye-gateway/gpt-6.2-sol","permission":"deny","plugin":[],"provider":{"codeye-gateway":{"models":{"gpt-6.2-sol":{"id":"gpt-6.2-sol","limit":{"context":64000,"output":1536},"name":"gpt-6.2-sol","tool_call":false}},"name":"CODEYE budgeted QA relay","npm":"@ai-sdk/openai-compatible","options":{"apiKey":"tok-0123456789abcdef0123456789abcdef","baseURL":"http://127.0.0.1:4567/v1"}}},"share":"disabled","small_model":"codeye-gateway/gpt-6.2-sol","snapshot":false,"tools":{"*":false}}`
+	want := `{"autoupdate":false,"enabled_providers":["codeye-gateway"],"formatter":false,"lsp":false,"model":"codeye-gateway/gpt-6.2-sol","permission":"deny","plugin":[],"provider":{"codeye-gateway":{"models":{"gpt-6.2-sol":{"id":"gpt-6.2-sol","limit":{"context":294912,"output":16384},"name":"gpt-6.2-sol","tool_call":false}},"name":"CODEYE budgeted QA relay","npm":"@ai-sdk/openai-compatible","options":{"apiKey":"tok-0123456789abcdef0123456789abcdef","baseURL":"http://127.0.0.1:4567/v1"}}},"share":"disabled","small_model":"codeye-gateway/gpt-6.2-sol","snapshot":false,"tools":{"*":false}}`
 	if got := managedOpenCodeEnv("codeye-gateway/gpt-6.2-sol", p)["OPENCODE_CONFIG_CONTENT"]; got != want {
 		t.Fatalf("relay profile changed:\n got %s\nwant %s", got, want)
 	}

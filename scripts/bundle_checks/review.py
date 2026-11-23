@@ -557,7 +557,7 @@ def check_slice_examples(raw: dict, validators: dict) -> int:
             doc = docs[name]
             record_v.validate(doc)
             stage = name.split(".")[0]
-            ensure(doc["schema_version"] == "0.3" and doc["stage"] == stage and doc["slice"] == {"key": entry["key"], "modules": entry["modules"]}, "slice record identity: " + name)
+            ensure(doc["schema_version"] in ("0.3", "0.7") and doc["stage"] == stage and doc.get("slice") == {"key": entry["key"], "modules": entry["modules"]}, "slice record identity: " + name)
             ensure(all(doc[k] == scope[k] for k in ("snapshot_manifest_digest", "run_id", "attempt_id", "pack")), "slice record of another attempt: " + name)
             for e in doc["evidence"]:
                 body = (root / e["path"]).read_bytes()

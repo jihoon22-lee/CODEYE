@@ -98,6 +98,8 @@ func (w secretsStub) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpe
 	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}}
 }
 
+// coverageJob is the slices fixture. Its slices exist at the smallest
+// request budget (smallBudget); a larger budget reads it in the overview.
 func coverageJob(t *testing.T) analysis.Job {
 	return dirJob(t, "../../../fixtures/modules/slices/input")
 }
@@ -195,7 +197,7 @@ func TestSliceAdmissionKeepsTheCeiling(t *testing.T) {
 					script = threeCalls(script)
 				}
 				f := &scriptedCaller{script: script}
-				plan, res := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: f, MaxCalls: n}, "1.27.4")
+				plan, res := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: f, MaxCalls: n, Budget: smallBudget}, "1.27.4")
 				keys := taskKeys(plan)
 				if basePlan == nil {
 					basePlan = keys
@@ -294,17 +296,18 @@ func investigateFiles(t *testing.T, q opencode.Request) []string {
 }
 
 // TC-167 (docs/REVIEW.md#모듈-단위-검토-분할): each line reaches only one
-// accepted investigate request; every slice request carries the
-// overview's review instructions, without its optional location selection;
-// slice records are schema 0.3 records bound to the scope artifact, and the
-// run sends more distinct files than the overview alone.
+// accepted investigate request (a split file's header and a reference to a
+// sent unit are context, not lines under review); every slice request
+// carries the overview's review instructions, without its optional
+// location selection; slice records are bound to the scope artifact, and
+// the run sends more distinct files than the overview alone.
 func TestSlicesContinueWithoutRepeatingOverviewLines(t *testing.T) {
 	j := coverageJob(t)
 	f := &scriptedCaller{script: coverageScript(t)}
-	_, res := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
+	_, res := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: f, MaxCalls: record.MaxMaxCalls, Budget: smallBudget}, "1.27.4")
 	seen := map[string]map[int]bool{}
 	instructions := map[string]string{}
-	overview := 0
+	overview, headed := 0, 0
 	for _, q := range f.requests {
 		common := q.Instructions
 		if q.Role == record.StageInvestigate {
@@ -323,10 +326,31 @@ func TestSlicesContinueWithoutRepeatingOverviewLines(t *testing.T) {
 			continue
 		}
 		in := decodeAs[investigateInput](t, q)
+		raw := decodeAs[struct {
+			Scope struct {
+				Excerpts []record.Excerpt `json:"excerpts"`
+			} `json:"scope"`
+		}](t, q)
 		if in.Scope.WholeRun {
-			overview = len(in.Scope.Excerpts)
+			files := map[string]bool{}
+			for _, e := range in.Scope.Excerpts {
+				files[e.Path] = true
+			}
+			overview = len(files)
 		}
-		for _, e := range in.Scope.Excerpts {
+		for _, e := range raw.Scope.Excerpts {
+			// A Go unit that does not start its file travels with the
+			// file's package clause and imports (a header or the file's
+			// first unit in the same request).
+			if strings.HasSuffix(e.Path, ".go") && e.Start > 1 && e.Within == "" && e.Origin != record.OriginCited {
+				if !slices.ContainsFunc(raw.Scope.Excerpts, func(x record.Excerpt) bool { return x.Path == e.Path && x.Start == 1 }) {
+					t.Fatalf("%s:%d sent without its header", e.Path, e.Start)
+				}
+				headed++
+			}
+			if e.Within != "" || e.Origin == record.OriginHeader {
+				continue
+			}
 			if seen[e.Path] == nil {
 				seen[e.Path] = map[int]bool{}
 			}
@@ -338,8 +362,8 @@ func TestSlicesContinueWithoutRepeatingOverviewLines(t *testing.T) {
 			}
 		}
 	}
-	t.Logf("overview sent %d files, the run %d", overview, len(seen))
-	if overview != 8 || len(seen) != 39 {
+	t.Logf("overview sent %d files, the run %d, %d units after a header", overview, len(seen), headed)
+	if overview != 8 || len(seen) != 39 || headed == 0 {
 		t.Fatalf("overview %d files, run %d", overview, len(seen))
 	}
 	b, err := os.ReadFile(scopePath(j))
@@ -369,7 +393,7 @@ func TestSlicesContinueWithoutRepeatingOverviewLines(t *testing.T) {
 			if err != nil {
 				t.Fatal(name, err)
 			}
-			if r.Schema != record.SchemaVersionSlice || r.Slice == nil || r.Slice.Key != sl.Key || !slices.Equal(r.Slice.Modules, sl.Modules) {
+			if r.Schema != record.SchemaVersionCitedLines || r.Slice == nil || r.Slice.Key != sl.Key || !slices.Equal(r.Slice.Modules, sl.Modules) {
 				t.Fatalf("%s schema %s slice %+v", name, r.Schema, r.Slice)
 			}
 			if !slices.ContainsFunc(r.Upstream, func(u record.Upstream) bool {
@@ -380,8 +404,8 @@ func TestSlicesContinueWithoutRepeatingOverviewLines(t *testing.T) {
 		}
 	}
 	for _, stage := range record.Stages {
-		if _, err := os.Stat(recordPath(j, stage)); err == nil && readRecord(t, j, stage).Schema != record.SchemaVersion {
-			t.Fatalf("%s is not a 0.2 record", stage)
+		if _, err := os.Stat(recordPath(j, stage)); err == nil && readRecord(t, j, stage).Schema != record.SchemaVersionCitedLines {
+			t.Fatalf("%s is not a record of the current schema", stage)
 		}
 	}
 }
@@ -406,7 +430,7 @@ func overviewContext(t *testing.T, j analysis.Job) []string {
 func TestSliceRequestSizeWorstCaseAllLanguages(t *testing.T) {
 	j := worstCaseJob(t, func(root string) { polyglotWorstCase(t, root) })
 	f := &scriptedCaller{script: maxScript(t)}
-	plan, res := runRoleWith(t, j, Handler{Static: secretsStub{obs: polyglotObservations}, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
+	plan, res := runRoleWith(t, j, Handler{Static: secretsStub{obs: polyglotObservations}, Caller: f, MaxCalls: record.MaxMaxCalls, Budget: smallBudget}, "1.27.4")
 	slicesRun := 0
 	for _, p := range plan {
 		if _, key, ok := record.SliceTask(p.Key); ok {
@@ -470,7 +494,7 @@ func TestSliceSecretGating(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			j := coverageJob(t)
 			f := &scriptedCaller{script: coverageScript(t)}
-			plan, res := runRoleWith(t, j, Handler{Static: c.static, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
+			plan, res := runRoleWith(t, j, Handler{Static: c.static, Caller: f, MaxCalls: record.MaxMaxCalls, Budget: smallBudget}, "1.27.4")
 			slicesRun := 0
 			for _, p := range plan {
 				_, _, slice := record.SliceTask(p.Key)
@@ -505,7 +529,7 @@ func TestSliceSecretGating(t *testing.T) {
 		j := coverageJob(t)
 		withhold := []string{"store/cache.go", "store/sync.go", "store/tombstone.go", "store/txn.go", "store/wal.go"}
 		f := &scriptedCaller{script: coverageScript(t)}
-		plan, res := runRoleWith(t, j, Handler{Static: secretsStub{withhold: withhold}, Caller: f, MaxCalls: record.MaxMaxCalls}, "1.27.4")
+		plan, res := runRoleWith(t, j, Handler{Static: secretsStub{withhold: withhold}, Caller: f, MaxCalls: record.MaxMaxCalls, Budget: smallBudget}, "1.27.4")
 		for _, q := range f.requests {
 			if q.Role == "investigate" {
 				for _, p := range investigateFiles(t, q) {
@@ -553,7 +577,7 @@ func TestSliceSecretGating(t *testing.T) {
 	t.Run("precedence", func(t *testing.T) {
 		j := coverageJob(t)
 		f := &scriptedCaller{script: coverageScript(t)}
-		h := Handler{Static: secretsStub{}, Caller: f, MaxCalls: record.WholeRunMaxCalls}
+		h := Handler{Static: secretsStub{}, Caller: f, MaxCalls: record.WholeRunMaxCalls, Budget: smallBudget}
 		inv := analysis.TaskSpec{Key: "review.investigate.s001", Stage: domain.StageCodeReview}
 		static, _ := secretsStub{}.Plan(t.Context(), j)
 		for _, task := range static {
@@ -587,7 +611,7 @@ func TestSliceSecretGating(t *testing.T) {
 		j := coverageJob(t)
 		withhold := []string{"store/sync.go", "store/tombstone.go", "store/txn.go", "store/wal.go"}
 		f := &scriptedCaller{script: coverageScript(t)}
-		plan, res := runRoleWith(t, j, Handler{Static: secretsStub{withhold: withhold}, Caller: f, MaxCalls: record.WholeRunMaxCalls}, "1.27.4")
+		plan, res := runRoleWith(t, j, Handler{Static: secretsStub{withhold: withhold}, Caller: f, MaxCalls: record.WholeRunMaxCalls, Budget: smallBudget}, "1.27.4")
 		filled := filledSlots(t, j)
 		empty, exhausted := 0, 0
 		for _, key := range sliceKeys(plan) {

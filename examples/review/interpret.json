@@ -1,8 +1,8 @@
 {
-  "schema_version": "0.2",
+  "schema_version": "0.7",
   "pack": {
     "id": "review",
-    "version": "2.6.0"
+    "version": "2.7.0"
   },
   "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
   "run_id": "0195f3a0-0000-7000-8000-000000000025",
@@ -45,6 +45,7 @@
       "impact": "마지막 오류만 남는다.",
       "improvement": "각 시도의 오류를 기록한다.",
       "counterpoint": "마지막 오류만 반환하는 것이 문서상 계약일 수 있다.",
+      "mechanism": "반복마다 오류 변수가 덮어써진다.",
       "evidence_ids": [
         "ev_405823cae53ecf5dd298c5fd"
       ],
@@ -63,8 +64,8 @@
       "model": "fake/scripted",
       "opencode_version": "1.19.5",
       "pack_id": "review",
-      "pack_version": "2.6.0",
-      "pack_sha256": "dd8a85c6a94dfd2654bd0b69a6ddfd31b394ebf2e4740f2b5ee25eda89899b56",
+      "pack_version": "2.7.0",
+      "pack_sha256": "0a650478f020c078668df32d171cc7765c2c73c31545743dab9a41ccdbfa4138",
       "pack_files": [
         "00-core.md",
         "domains.md",
@@ -72,10 +73,10 @@
         "languages/go.md",
         "pack.yaml"
       ],
-      "request_sha256": "5e4cde2ebdffd9d3dbe2bbe88a60ea2f0782b1047a76e905deb9c183fc750f1b",
-      "request_bytes": 11010,
+      "request_sha256": "38e9a7bc09abc42d3dd5208e36351af54b7fedf02150feed93f3b9b06435f530",
+      "request_bytes": 11705,
       "usage": {
-        "input": 1372,
+        "input": 1421,
         "output": 50
       },
       "attempt": 1,

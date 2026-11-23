@@ -470,7 +470,7 @@ func exampleScript(t *testing.T) map[string]func(int, opencode.Request) opencode
 			t.Fatalf("interpret observations %+v", in.Observations)
 		}
 		return asJSON(map[string]any{"hypotheses": []map[string]any{{"observation_ids": []string{gw.ID}, "title": "재시도 반복에서 앞선 시도의 오류를 덮어씀",
-			"condition": "send가 두 번 이상 실패하는 경우", "impact": "호출자는 마지막 오류만 받고 앞선 실패 원인을 잃는다.", "improvement": "시도마다 오류를 기록하거나 errors.Join으로 묶어 반환한다.",
+			"condition": "send가 두 번 이상 실패하는 경우", "mechanism": "반복문이 매 시도의 오류를 같은 변수에 덮어쓴다.", "impact": "호출자는 마지막 오류만 받고 앞선 실패 원인을 잃는다.", "improvement": "시도마다 오류를 기록하거나 errors.Join으로 묶어 반환한다.",
 			"counterpoint": "마지막 오류만 반환하는 것이 Forward 주석의 계약이다.", "evidence_ids": gw.EvidenceIDs}},
 			"limits": []map[string]any{{"observation_ids": []string{other.ID}, "statement": "Normalize의 호출자와 비교 용도가 입력에 없어 진단의 영향을 판단할 수 없다."}}})
 	}

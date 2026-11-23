@@ -163,9 +163,18 @@ func enclosing(lines []string, at int) window {
 	return w
 }
 
+// expansionCaps bound the excerpts and bytes an expansion adds.
+type expansionCaps struct{ count, bytes int }
+
 // expand returns caller/test excerpts for the cited symbols, each bound to
-// the snapshot blob and line range, plus limitation codes.
+// the snapshot blob and line range, plus limitation codes, within the caps
+// of the smallest request budget.
 func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, catalog []Excerpt, candidates []CandidateText, withheld, changed map[string]bool) ([]Excerpt, []string, error) {
+	return expandWithin(ctx, snapshot, scope, catalog, candidates, withheld, changed, expansionCaps{maxExpansion, maxExpansionBytes})
+}
+
+// expandWithin is expand within caps (the request budget's expansion).
+func expandWithin(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, catalog []Excerpt, candidates []CandidateText, withheld, changed map[string]bool, caps expansionCaps) ([]Excerpt, []string, error) {
 	lims := []string{limExpansionGoOnly, limDirectCalls}
 	if !slices.ContainsFunc(catalog, func(e Excerpt) bool { return strings.HasSuffix(e.Path, ".go") }) {
 		return nil, append(lims, limNoSymbol), nil
@@ -293,7 +302,7 @@ func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, c
 			}) {
 				continue
 			}
-			if len(out) >= maxExpansion || used+size > maxExpansionBytes {
+			if len(out) >= caps.count || used+size > caps.bytes {
 				overflow = true
 				continue
 			}
@@ -337,7 +346,7 @@ func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, c
 			for _, l := range lines[w.lo : w.hi+1] {
 				size += len(l) + 1
 			}
-			if size > maxWindowBytes || len(out) >= maxExpansion || used+size > maxExpansionBytes {
+			if size > maxWindowBytes || len(out) >= caps.count || used+size > caps.bytes {
 				overflow = true
 				return true
 			}

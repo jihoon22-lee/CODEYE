@@ -3,6 +3,7 @@ package review
 import (
 	"cmp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
@@ -130,9 +131,11 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 	facts := s.priorityFacts(s.entries())
 	doc := record.ScopeDoc{Schema: record.ScopeSchemaVersion, Kind: record.ScopeKind, Pack: record.PackRef{ID: sel.ID, Version: sel.Version}, Snapshot: s.j.Snapshot.Digest,
 		RunID: s.j.RunID, AttemptID: s.j.AttemptID, Screen: screenOf(s.screen),
-		Budget: record.ScopeBudget{MaxCalls: maxCalls, MaxRequestBytes: PromptBudget, WholeRunMaxCalls: record.WholeRunMaxCalls, SliceReserveCalls: record.SliceMinCalls,
+		Budget: record.ScopeBudget{MaxCalls: maxCalls, MaxRequestBytes: s.limit().request, WholeRunMaxCalls: record.WholeRunMaxCalls, SliceReserveCalls: record.SliceMinCalls,
 			CallsBeforeSlices: used, Admission: record.AdmissionReserveVerification},
-		Limits:   record.ScopeLimits{MaxFiles: sliceMaxFiles, MaxBytes: sliceMaxBytes, MaxFileBytes: roleMaxCodeFile, MaxFileLines: roleMaxCodeLines, MaxSlices: maxSlots, Slots: activeSlots},
+		// The limits are those of this node's request budget: a slot holds
+		// at most one request of units (slice_run.go reads them back).
+		Limits:   record.ScopeLimits{MaxFiles: s.limit().excerpts, MaxBytes: s.limit().source, MaxFileBytes: s.limit().unit, MaxFileLines: s.limit().unit, MaxSlices: maxSlots, Slots: activeSlots},
 		Priority: record.ScopePriority{Order: priorityOrder(s.j), Secondary: rule}, Upstream: []record.Upstream{up},
 		Modules: []record.ScopeModule{}, Overview: record.ScopeOverview{Files: []record.ScopeFile{}, Offered: []string{}},
 		Slices: []record.ScopeSlice{}, Excluded: []record.ScopeFile{}, Limitations: s.screenLimitation(addLim([]string{}, groups.lims...))}
@@ -142,6 +145,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		discovered[m.ID] = true
 	}
 	var cursors []*coverageCursor
+	costs := map[string]int{}
 	modules := map[string]*record.ScopeModule{}
 	for _, key := range groups.order {
 		id := moduleID(key)
@@ -194,11 +198,18 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 			if len(prior) > 0 {
 				row := f
 				row.State = record.FileCoveredByOverview
-				for _, w := range prior {
+				for k, w := range prior {
 					if w.Start < 1 || w.End > len(lines) {
 						return result(domain.TaskFailed, "review_input_unavailable")
 					}
-					row.PlannedBytes += record.JSONLen(strings.Join(lines[w.Start-1:w.End], "\n"))
+					// A window inside another travels as a reference
+					// (requestExcerpts) and adds no bytes.
+					if !slices.ContainsFunc(prior[:k], func(x record.Excerpt) bool { return x.Start <= w.Start && w.End <= x.End }) &&
+						!slices.ContainsFunc(prior[k+1:], func(x record.Excerpt) bool {
+							return x.Start <= w.Start && w.End <= x.End && (x.Start != w.Start || x.End != w.End)
+						}) {
+						row.PlannedBytes += record.JSONLen(strings.Join(lines[w.Start-1:w.End], "\n"))
+					}
 					for i := w.Start - 1; i < w.End; i++ {
 						if !covered[i] {
 							covered[i] = true
@@ -209,7 +220,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 				row.BoundBytes = row.PlannedBytes
 				doc.Overview.Files = append(doc.Overview.Files, row)
 			}
-			windows := missingCoverageWindows(f, lines, covered, activeSlots, &doc.Omitted)
+			windows := s.unitCoverageWindows(f, lines, covered, activeSlots, &doc.Omitted, costs)
 			prioritizeCoverageWindow(windows, text, e.Path, facts.line[e.Path])
 			cursors = append(cursors, &coverageCursor{file: f, tier: groups.tierOf(e.Path), severity: facts.severity[e.Path],
 				windows: windows})
@@ -219,7 +230,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 	for _, f := range doc.Overview.Files {
 		doc.Overview.Offered = append(doc.Overview.Offered, f.Path)
 	}
-	scheduleCoverage(&doc, cursors, sent)
+	scheduleCoverageWithin(&doc, cursors, sent, costs)
 	doc.Limits.Slots = slots
 	slotOmissions := map[string]bool{}
 	for _, omission := range doc.Omitted {
@@ -336,10 +347,84 @@ func missingCoverageWindows(f record.ScopeFile, lines []string, covered []bool, 
 	return out
 }
 
-// Give each unrepresented module a useful source window before filling in
-// the other files. Then complete remaining windows round by round. Never
-// mix path classes or pull-request tiers in one request.
-func scheduleCoverage(doc *record.ScopeDoc, cursors []*coverageCursor, offered map[string][]record.Excerpt) {
+// unitCoverageWindows cuts the lines of f the overview did not send into
+// review units (unitsOf) of at most one unit of the request budget each. A
+// line longer than a unit is omitted (review_line_input_limit), a blank
+// unit too (source_blank_range), and windows beyond what the active slots
+// can hold are omitted (review_slice_limit). costs receives each window's
+// numbered size plus that of the header it travels with.
+func (s *roleStage) unitCoverageWindows(f record.ScopeFile, lines []string, covered []bool, slots int, omissions *[]record.ScopeOmission,
+	costs map[string]int) []record.ScopeFile {
+	var out []record.ScopeFile
+	header := headerEnd(f.Path, lines)
+	for i := 0; i < len(lines); {
+		if covered != nil && covered[i] {
+			i++
+			continue
+		}
+		start := i
+		for i < len(lines) && (covered == nil || !covered[i]) {
+			i++
+		}
+		fu, long := unitsOf(f.Path, lines, start+1, i, s.limit().unit)
+		type piece struct {
+			span lineSpan
+			long bool
+		}
+		var pieces []piece
+		for _, u := range fu.units {
+			pieces = append(pieces, piece{span: u})
+		}
+		for _, n := range long {
+			pieces = append(pieces, piece{span: lineSpan{n, n}, long: true})
+		}
+		slices.SortFunc(pieces, func(a, b piece) int { return cmp.Compare(a.span.start, b.span.start) })
+		for _, p := range pieces {
+			a, b := p.span.start, p.span.end
+			switch {
+			case p.long:
+				addScopeOmission(omissions, f.Path, a, b, record.ScopeReasonLineLimit)
+				continue
+			case !slices.ContainsFunc(lines[a-1:b], func(line string) bool { return strings.TrimSpace(line) != "" }):
+				addScopeOmission(omissions, f.Path, a, b, record.ScopeReasonBlankRange)
+				continue
+			case len(out) >= slots*s.limit().excerpts:
+				addScopeOmission(omissions, f.Path, a, b, record.ScopeReasonSlotLimit)
+				continue
+			}
+			size := record.JSONLen(strings.Join(lines[a-1:b], "\n"))
+			w := f
+			w.StartLine, w.PlannedLines, w.PlannedBytes, w.BoundBytes, w.State = a, b-a+1, size, size, record.FilePlanned
+			costs[windowKey(w)] = numberedSize(lines, a, b)
+			if h := min(header, a-1); h > 0 {
+				costs[headerKey(w)] = numberedSize(lines, 1, h)
+			}
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// unitArtifact reports whether a scope artifact's windows are review units
+// (unitCoverageWindows): its line bound is its byte bound, so a window that
+// does not start its file was planned with room for the file's header.
+// Earlier artifacts planned 50-line windows without one.
+func unitArtifact(l record.ScopeLimits) bool { return l.MaxFileLines == l.MaxFileBytes }
+
+func windowKey(f record.ScopeFile) string { return f.Path + "\x00" + strconv.Itoa(f.StartLine) }
+
+// headerKey keys the header cost of a window that does not start its file.
+func headerKey(f record.ScopeFile) string { return windowKey(f) + "\x00header" }
+
+// scheduleCoverageWithin fills the slots in priority order. Each
+// unrepresented module first gets the units of its best file, then every
+// other file follows with all its units together, so a file split into
+// units travels in one slot or consecutive slots and a slot holds whole
+// directories in path order. Never mix path classes or pull-request tiers
+// in one request. Each window costs its numbered size (costs, by
+// windowKey; its planned bytes without one) plus its file's header once
+// per slot, within the artifact's limits.
+func scheduleCoverageWithin(doc *record.ScopeDoc, cursors []*coverageCursor, offered map[string][]record.Excerpt, costs map[string]int) {
 	slices.SortFunc(cursors, func(a, b *coverageCursor) int {
 		return cmp.Or(cmp.Compare(a.tier, b.tier), cmp.Compare(a.file.Class, b.file.Class),
 			cmp.Compare(record.RankIndex(a.file.Rank), record.RankIndex(b.file.Rank)), cmp.Compare(b.severity, a.severity),
@@ -349,7 +434,7 @@ func scheduleCoverage(doc *record.ScopeDoc, cursors []*coverageCursor, offered m
 	for _, f := range doc.Overview.Files {
 		represented[f.Module] = true
 	}
-	writer := coverageSlotWriter{doc: doc}
+	writer := coverageSlotWriter{doc: doc, costs: costs}
 	for first := 0; first < len(cursors); {
 		last := first + 1
 		for last < len(cursors) && cursors[last].tier == cursors[first].tier {
@@ -359,6 +444,8 @@ func scheduleCoverage(doc *record.ScopeDoc, cursors []*coverageCursor, offered m
 		for _, c := range tier {
 			if !represented[c.file.Module] && writer.add(c) {
 				represented[c.file.Module] = true
+				for writer.add(c) {
+				}
 			}
 		}
 		for _, class := range []string{record.ClassPrimary, record.ClassSecondary} {
@@ -368,21 +455,17 @@ func scheduleCoverage(doc *record.ScopeDoc, cursors []*coverageCursor, offered m
 	}
 }
 
+// fillCoverageClass adds the files of one class, the files the overview did
+// not show before the rest of those it showed in part, each with all its
+// remaining units.
 func fillCoverageClass(writer *coverageSlotWriter, tier []*coverageCursor, offered map[string][]record.Excerpt, class string) {
-	for _, c := range tier {
-		if c.file.Class == class && !c.assigned && len(offered[c.file.Path]) == 0 {
-			writer.add(c)
-		}
-	}
-	for {
-		added := false
+	for _, shown := range []bool{false, true} {
 		for _, c := range tier {
-			if c.file.Class == class && writer.add(c) {
-				added = true
+			if c.file.Class != class || (len(offered[c.file.Path]) > 0) != shown {
+				continue
 			}
-		}
-		if !added {
-			return
+			for writer.add(c) {
+			}
 		}
 	}
 }
@@ -391,6 +474,9 @@ type coverageSlotWriter struct {
 	doc   *record.ScopeDoc
 	slot  *record.ScopeSlice
 	bytes int
+	costs map[string]int
+	// headers are the files whose header the current slot already carries.
+	headers map[string]bool
 }
 
 func (w *coverageSlotWriter) add(c *coverageCursor) bool {
@@ -399,7 +485,19 @@ func (w *coverageSlotWriter) add(c *coverageCursor) bool {
 	}
 	f := c.windows[0]
 	s := w.slot
-	if s == nil || s.Class != f.Class || s.PullRequest != f.PullRequest || len(s.Files) >= sliceMaxFiles || w.bytes+f.PlannedBytes > sliceMaxBytes {
+	cost, ok := w.costs[windowKey(f)]
+	if !ok {
+		cost = f.PlannedBytes
+	}
+	header := w.costs[headerKey(f)]
+	if s != nil && w.headers[f.Path] {
+		header = 0
+	}
+	cost += header
+	l := w.doc.Limits
+	newModule := s != nil && !slices.Contains(s.Modules, f.Module)
+	if s == nil || s.Class != f.Class || s.PullRequest != f.PullRequest || len(s.Files) >= l.MaxFiles || w.bytes+cost > l.MaxBytes ||
+		(newModule && len(s.Modules) >= record.MaxSliceModules) {
 		if len(w.doc.Slices) >= w.doc.Limits.Slots {
 			return false
 		}
@@ -408,15 +506,19 @@ func (w *coverageSlotWriter) add(c *coverageCursor) bool {
 		w.doc.Slices = append(w.doc.Slices, record.ScopeSlice{Key: key, InvestigateTask: i, VerifyTask: v,
 			Class: f.Class, Rank: f.Rank, PullRequest: f.PullRequest})
 		w.slot = &w.doc.Slices[len(w.doc.Slices)-1]
-		w.bytes = 0
+		w.bytes, w.headers = 0, map[string]bool{}
 		s = w.slot
+		cost = cost - header + w.costs[headerKey(f)]
 	}
 	s.Files = append(s.Files, f)
 	if !slices.Contains(s.Modules, f.Module) {
 		s.Modules = append(s.Modules, f.Module)
 		slices.Sort(s.Modules)
 	}
-	w.bytes += f.PlannedBytes
+	w.bytes += cost
+	if w.costs[headerKey(f)] > 0 {
+		w.headers[f.Path] = true
+	}
 	c.windows = c.windows[1:]
 	c.assigned = true
 	return true

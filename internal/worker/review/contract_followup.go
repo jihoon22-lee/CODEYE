@@ -25,7 +25,7 @@ type contractReviewInput struct {
 	Prior    record.ContractComparison `json:"prior"`
 	Scope    struct {
 		Snapshot       string                  `json:"snapshot_manifest_digest"`
-		Excerpts       []record.Excerpt        `json:"excerpts"`
+		Excerpts       excerptList             `json:"excerpts"`
 		DirectCalls    []directCall            `json:"direct_calls,omitempty"`
 		WorkflowRoutes []workflowEvidenceInput `json:"workflow_routes,omitempty"`
 	} `json:"scope"`
@@ -306,8 +306,23 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 			return []string{"contract_comparison_invalid"}
 		}
 		x := out.Comparisons[0]
-		if errs := textErrors(x.Reason); len(errs) > 0 {
+		if errs := s.textErrors(x.Reason); len(errs) > 0 {
 			return errs
+		}
+		// A cited range is checked against the sent window and the
+		// window's own ID kept: the follow-up compares whole windows.
+		reply := newCiter(s.j.Snapshot.Digest, sent)
+		var citeErrs []string
+		x.CodeEvidenceIDs, _, citeErrs = reply.resolve(x.CodeEvidenceIDs, citeStrip)
+		if p := x.PartialSupport; p != nil {
+			ids, _, errs := reply.resolve([]string{p.Matching.EvidenceID, p.Violating.EvidenceID}, citeStrip)
+			citeErrs = addLim(citeErrs, errs...)
+			support := *p
+			support.Matching.EvidenceID, support.Violating.EvidenceID = ids[0], ids[1]
+			x.PartialSupport = &support
+		}
+		if len(citeErrs) > 0 {
+			return citeErrs
 		}
 		if record.ForeignInsightProse(x.Reason) {
 			return []string{record.InsightLanguageError}

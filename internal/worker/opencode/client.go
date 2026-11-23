@@ -24,11 +24,36 @@ import (
 // Version is the OpenCode release this build was tested with. Other
 // releases run too; their calls carry the opencode_version_untested limitation.
 const Version = "1.19.5"
-const maxInput = 64 << 10
-const maxOutput = 64 << 10
 
-// DefaultTimeout bounds one model call (the agent's --model-timeout default).
-const DefaultTimeout = 180 * time.Second
+// The review request budget (codeye agent --review-request-bytes,
+// --review-output-tokens; docs/REVIEW.md#요청-크기). MaxRequestBytes is
+// also the largest prompt (instructions and input) one call sends.
+const (
+	DefaultRequestBytes = 256 << 10
+	MinRequestBytes     = 40000
+	MaxRequestBytes     = 1 << 20
+	DefaultOutputTokens = 16384
+	MinOutputTokens     = 1536
+	MaxOutputTokens     = 65536
+)
+
+// ValidRequestBytes reports whether n is an accepted request budget (0 is
+// the default).
+func ValidRequestBytes(n int) bool { return n == 0 || (n >= MinRequestBytes && n <= MaxRequestBytes) }
+
+// ValidOutputTokens reports whether n is an accepted output budget (0 is
+// the default).
+func ValidOutputTokens(n int) bool { return n == 0 || (n >= MinOutputTokens && n <= MaxOutputTokens) }
+
+// maxOutput bounds the reply text kept from one call: MaxOutputTokens of
+// at most eight bytes each.
+const maxOutput = 8 * MaxOutputTokens
+
+// DefaultTimeout bounds one model call (the agent's --model-timeout
+// default). It covers reading a request of the default review budget and
+// writing up to DefaultOutputTokens; it is a ceiling for a stuck call, not
+// a measured latency.
+const DefaultTimeout = 600 * time.Second
 
 // MaxTimeout is the longest accepted per-call limit.
 const MaxTimeout = 30 * time.Minute
@@ -74,6 +99,12 @@ type Config struct {
 	// CABundle is the PEM file OpenCode trusts for the endpoint's TLS
 	// (executor.CAEnv); "" keeps OpenCode's own store.
 	CABundle string
+	// OutputTokens and RequestBytes are the review budget (codeye agent
+	// --review-output-tokens, --review-request-bytes). The relay profile
+	// declares them as the model's output and context limits; 0 means
+	// DefaultOutputTokens and MaxRequestBytes.
+	OutputTokens int
+	RequestBytes int
 }
 
 // ReasonEndpointNotConfigured: offline mode and the model would be reached
@@ -152,6 +183,7 @@ func (cfg Config) provider() (*executor.ModelProvider, string) {
 		if err != nil || executor.GatewayProvider+"/"+relay.Model != cfg.Model {
 			return nil, "model_relay_unavailable"
 		}
+		relay.OutputTokens, relay.ContextTokens = cfg.relayLimits()
 		return executor.RelayProvider(relay), ""
 	case cfg.ConfigFile != "":
 		_, p, err := nativeSelection(cfg.ConfigFile, cfg.Model, cfg.CredentialFile, cfg.Offline, cfg.NativeHome, cfg.NativeConfigDigest)
@@ -181,6 +213,25 @@ func (cfg Config) provider() (*executor.ModelProvider, string) {
 	return nil, ""
 }
 
+// relayLimits are the output and context token limits the relay profile
+// declares. A token is at least one byte of the prompt, so the request
+// budget bounds the input tokens; OpenCode's own messages and the output
+// are added.
+func (cfg Config) relayLimits() (output, context int) {
+	output = cfg.OutputTokens
+	if output <= 0 || output > MaxOutputTokens {
+		output = DefaultOutputTokens
+	}
+	request := cfg.RequestBytes
+	if request <= 0 || request > MaxRequestBytes {
+		request = MaxRequestBytes
+	}
+	return output, request + relayOverheadTokens + output
+}
+
+// relayOverheadTokens is room for OpenCode's own system messages.
+const relayOverheadTokens = 16384
+
 func outcome(r executor.Result) string {
 	switch {
 	case r.Cleanup == executor.CleanupUncertain:
@@ -208,7 +259,7 @@ func (cfg Config) Review(ctx context.Context, runner executor.Runner, q Request)
 	}
 	digest, err := hex.DecodeString(q.SnapshotDigest)
 	if err != nil || len(digest) != sha256.Size || !filepath.IsAbs(q.Scratch) ||
-		len(q.Input)+len(q.Instructions) > maxInput || !json.Valid(q.Input) {
+		len(q.Input)+len(q.Instructions) > MaxRequestBytes || !json.Valid(q.Input) {
 		reply.Reason = "invalid_review_input"
 		return
 	}
@@ -285,7 +336,7 @@ func (cfg Config) Review(ctx context.Context, runner executor.Runner, q Request)
 	}
 	spec.Args = []string{"run", "--pure", "--print-logs", "--log-level", "ERROR", "--model", cfg.Model, "--format", "json", "--title", "CODEYE " + q.Role, "--dir", dir, "--file", marker}
 	spec.Stdin = []byte(prompt)
-	spec.Timeout, spec.StdoutLimit, spec.StderrLimit = cfg.Timeout, 1<<20, 32<<10
+	spec.Timeout, spec.StdoutLimit, spec.StderrLimit = cfg.Timeout, 4*maxOutput, 32<<10
 	run = runner.Run(ctx, spec)
 	reply.Cleanup, reply.Reason = run.Cleanup, outcome(run)
 	if reply.Reason != "" {

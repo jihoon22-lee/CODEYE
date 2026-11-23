@@ -3,11 +3,33 @@ package report
 import (
 	"bytes"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
+// fileOnlyLedgerForTest turns a current report into one an older builder
+// wrote: the ledger of its version and, before CitedLinesSince, the review
+// artifacts under the decoders of the earlier record schemas.
 func fileOnlyLedgerForTest(r *Report) {
+	if version, err := strconv.Atoi(r.Builder.Version); err == nil && version < CitedLinesSince {
+		cited := (CitedReviewDecoder{}).Key().String()
+		for i := range r.Artifacts {
+			a := &r.Artifacts[i]
+			if a.Decoder == nil || *a.Decoder != cited {
+				continue
+			}
+			key := (ReviewDecoder{}).Key().String()
+			if _, _, ok := record.SliceTask(deref(a.TaskKey)); ok {
+				key = (SliceReviewDecoder{}).Key().String()
+			} else if deref(a.TaskKey) == record.TaskContract {
+				key = (ContractReviewDecoder{}).Key().String()
+			}
+			a.Decoder = &key
+		}
+	}
 	if r.CodeReview == nil || r.CodeReview.Ledger == nil {
 		return
 	}

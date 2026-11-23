@@ -19,7 +19,9 @@ import (
 )
 
 func TestInvestigateKeepsFindingsWhenProbeIsInvalid(t *testing.T) {
-	longPrefix := strings.Repeat("// unrelated setup\n", 65)
+	// The files are longer than the request holds, so the contract's
+	// implementation line stays unread and navigation can offer it.
+	longPrefix := strings.Repeat("// unrelated setup\n", 700)
 	impl, tests := "shade/control.ts", "shade/control.test.ts"
 	base := map[string]string{
 		"shade/README.md":    "# 조명\n\n창을 기울이면 빛이 줄어든다.\n",
@@ -34,7 +36,7 @@ func TestInvestigateKeepsFindingsWhenProbeIsInvalid(t *testing.T) {
 	for _, name := range []string{"valid", "canonical", "absent", "null", "wrong type", "unoffered id", "inexact alias", "injected literal", "duplicate id", "invented literal", "test only", "known comparison"} {
 		t.Run(name, func(t *testing.T) {
 			j := treeJob(t, maps.Clone(base))
-			stub := langStub{eco: "javascript", path: impl, line: 66, manifest: "shade/package.json", secrets: "hit", secretPath: "shade/secret.ts"}
+			stub := langStub{eco: "javascript", path: impl, line: 701, manifest: "shade/package.json", secrets: "hit", secretPath: "shade/secret.ts"}
 			script := maxScript(t)
 			script["documents"] = func(_ int, q opencode.Request) opencode.Reply {
 				in := decodeAs[docsInput](t, q)
@@ -60,8 +62,8 @@ func TestInvestigateKeepsFindingsWhenProbeIsInvalid(t *testing.T) {
 					}
 					selected[candidate.Path] = candidate
 				}
-				if selected[impl].Start < 60 || selected[impl].Symbol != "tiltShutter" ||
-					selected[tests].Start < 60 || selected[tests].Kind != "test" || len(in.Documents.Questions) != 1 {
+				if selected[impl].Start < 600 || selected[impl].Symbol != "tiltShutter" ||
+					selected[tests].Start < 600 || selected[tests].Kind != "test" || len(in.Documents.Questions) != 1 {
 					t.Fatalf("translated contract missing code or test locations: %+v", in)
 				}
 				i := slices.IndexFunc(in.Scope.Excerpts, func(e record.Excerpt) bool { return e.Path == impl })
@@ -78,9 +80,9 @@ func TestInvestigateKeepsFindingsWhenProbeIsInvalid(t *testing.T) {
 				}
 				result := map[string]any{
 					"candidates": []record.CandidateText{{
-						Title: "빛 조정 오류를 사용자에게 표시하지 않음", Condition: "상태 표시가 필요한 경우",
+						Title: "빛 조정 오류를 사용자에게 표시하지 않음", Condition: "상태 표시가 필요한 경우", Mechanism: "조정 결과가 화면 상태로 전달되지 않는다.",
 						Impact: "사용자가 밝기를 판단하기 어렵다.", Improvement: "조정 결과를 표시한다.",
-						Counterpoint: "다른 화면의 상태 표시를 읽지 않았다.", Evidence: []string{in.Scope.Excerpts[i].ID},
+						Counterpoint: "다른 화면의 상태 표시를 읽지 않았다.", Evidence: []string{cite(in.Scope.Excerpts[i])},
 					}},
 					"contract_comparisons": comparisons,
 				}
@@ -117,7 +119,7 @@ func TestInvestigateKeepsFindingsWhenProbeIsInvalid(t *testing.T) {
 				return asJSON(result)
 			}
 			f := &scriptedCaller{script: script}
-			_, results := runRole(t, j, stub, f, "1.27.4")
+			_, results := runRoleSmall(t, j, stub, f, "1.27.4")
 			if r := results["review.investigate"]; r.Status != domain.TaskSucceeded {
 				t.Fatalf("probe affected the initial investigation: %+v", r)
 			}
@@ -139,13 +141,13 @@ func TestInvestigateKeepsFindingsWhenProbeIsInvalid(t *testing.T) {
 				}
 			}
 			if name != "valid" && name != "canonical" {
-				if r.ContractProbe != nil || r.Schema != record.SchemaVersion {
+				if r.ContractProbe != nil || r.Schema != record.SchemaVersionCitedLines {
 					t.Fatalf("invalid selection was persisted: %+v", r.ContractProbe)
 				}
 				return
 			}
 			p := r.ContractProbe
-			if p == nil || r.Schema != record.SchemaVersionContract || len(p.Candidates) != 2 || len(p.Literals) != 1 ||
+			if p == nil || r.Schema != record.SchemaVersionCitedLines || len(p.Candidates) != 2 || len(p.Literals) != 1 ||
 				!p.Valid(j.Snapshot.Digest, r.ContractComparisons[0]) {
 				t.Fatalf("valid snapshot-bound probe missing: %+v", r)
 			}
@@ -155,7 +157,7 @@ func TestInvestigateKeepsFindingsWhenProbeIsInvalid(t *testing.T) {
 				t.Fatalf("navigation reference or comparison state changed unexpectedly: %+v", comparison)
 			}
 			for _, x := range r.Evidence {
-				if strings.HasPrefix(x.ID, "loc_") || x.Path == tests && x.Start > 60 {
+				if strings.HasPrefix(x.ID, "loc_") || x.Path == tests && x.Start > 600 {
 					t.Fatalf("location metadata was counted as evidence: %+v", x)
 				}
 			}
@@ -184,10 +186,11 @@ func TestNavigationFitsAfterExistingExcerpts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	instructions := s.instructions(investigateContract + investigateProbeContract)
+	contract := fmt.Sprintf(investigateContract, 4)
+	instructions := s.instructions(contract + investigateProbeContract)
 	fullSize, _ := s.fits(instructions, b, true)
 	s.pack.Text = strings.Repeat("x", PromptBudget-fullSize+1)
-	kept := s.fitNavigation(&in, candidates)
+	kept := s.fitNavigation(&in, candidates, contract)
 	if len(kept) != 1 || len(in.NavigationCandidates) != 1 || in.NavigationCandidates[0].Path != "first.go" || in.NavigationCandidates[0].ID != "L1" ||
 		!slices.Equal(in.Scope.Excerpts, full.Scope.Excerpts) {
 		t.Fatalf("request did not trim location metadata before code: %+v", in)
@@ -439,7 +442,11 @@ func TestContractProbeRecordExample(t *testing.T) {
 		}
 		return asJSON(out)
 	}
-	_, results := runRole(t, j, vetStub{obs: gatewayObservation}, &scriptedCaller{script: script}, "1.27.4")
+	// The smallest request leaves the charge implementation unsent, so the
+	// investigation is offered its location; the default output budget keeps
+	// the documents record the role examples publish (its upstream digest).
+	_, results := runRoleWith(t, j, Handler{Static: vetStub{obs: gatewayObservation}, Caller: &scriptedCaller{script: script},
+		Budget: Budget{RequestBytes: MinRequestBytes}}, "1.27.4")
 	if r := results["review.investigate"]; r.Status != domain.TaskSucceeded {
 		t.Fatalf("example probe failed: %+v", r)
 	}

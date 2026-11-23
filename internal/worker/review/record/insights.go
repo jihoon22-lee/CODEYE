@@ -62,14 +62,24 @@ func ForeignInsightProse(s string) bool {
 	return han >= 4
 }
 
-func insightText(s string) bool { return ModelText(s) && !ForeignInsightProse(s) }
-
-func (d DocumentQuality) Valid(catalog map[string]Excerpt) bool {
-	return ValidQuality(d.Aspect, d.Assessment) && insightText(d.Statement) && refs(d.EvidenceIDs, catalog, 4, "document")
+func insightTextWithin(s string, limit int) bool {
+	return ProseText(s, limit) && !ForeignInsightProse(s)
 }
 
-func (s Strength) Valid(catalog map[string]Excerpt) bool {
-	if !insightText(s.Title) || !insightText(s.Benefit) || !ValidScopePath(s.Scope) ||
+func (d DocumentQuality) Valid(catalog map[string]Excerpt) bool {
+	return d.ValidWithin(catalog, maxText)
+}
+
+// ValidWithin is Valid with prose bounded to text bytes.
+func (d DocumentQuality) ValidWithin(catalog map[string]Excerpt, text int) bool {
+	return ValidQuality(d.Aspect, d.Assessment) && insightTextWithin(d.Statement, text) && refs(d.EvidenceIDs, catalog, 4, "document")
+}
+
+func (s Strength) Valid(catalog map[string]Excerpt) bool { return s.ValidWithin(catalog, maxText) }
+
+// ValidWithin is Valid with prose bounded to text bytes.
+func (s Strength) ValidWithin(catalog map[string]Excerpt, text int) bool {
+	if !insightTextWithin(s.Title, text) || !insightTextWithin(s.Benefit, text) || !ValidScopePath(s.Scope) ||
 		!refs(s.EvidenceIDs, catalog, 4, "code", "test") || !hasKind(s.EvidenceIDs, catalog, "code") {
 		return false
 	}
@@ -77,8 +87,13 @@ func (s Strength) Valid(catalog map[string]Excerpt) bool {
 }
 
 func (c ContractComparison) Valid(catalog map[string]Excerpt) bool {
+	return c.ValidWithin(catalog, maxText)
+}
+
+// ValidWithin is Valid with the reason bounded to text bytes.
+func (c ContractComparison) ValidWithin(catalog map[string]Excerpt, text int) bool {
 	if c.ContractIndex < 1 || c.ContractIndex > MaxContractComparisons || !ValidScopePath(c.AppliesTo) ||
-		!insightText(c.Reason) || !ValidComparison(c.Status) ||
+		!insightTextWithin(c.Reason, text) || !ValidComparison(c.Status) ||
 		!refs(c.DocumentEvidenceIDs, catalog, 4, "document") || !documentsSupportScope(c.DocumentEvidenceIDs, catalog, c.AppliesTo, "", true) {
 		return false
 	}
@@ -167,7 +182,7 @@ func (r Record) CitedEvidence() []Excerpt {
 	return out
 }
 
-func checkInsights(r Record, catalog map[string]Excerpt) error {
+func checkInsights(r Record, catalog map[string]Excerpt, b bounds) error {
 	quality, strengths, comparisons := r.DocumentQuality, r.Strengths, r.ContractComparisons
 	if len(quality) > MaxDocumentQuality || len(strengths) > MaxReviewStrengths || len(comparisons) > MaxContractComparisons ||
 		(len(quality) > 0 && (!r.Accepted() || r.Stage != StageDocuments)) ||
@@ -178,24 +193,24 @@ func checkInsights(r Record, catalog map[string]Excerpt) error {
 		return invalid("insight content")
 	}
 	for _, x := range quality {
-		if !x.Valid(catalog) {
+		if !x.ValidWithin(catalog, b.text) {
 			return invalid("document quality")
 		}
 	}
 	for _, x := range strengths {
-		if !x.Valid(catalog) {
+		if !x.ValidWithin(catalog, b.text) {
 			return invalid("strength")
 		}
 	}
 	seen := map[int]bool{}
 	for _, x := range comparisons {
-		if seen[x.ContractIndex] || !x.Valid(catalog) {
+		if seen[x.ContractIndex] || !x.ValidWithin(catalog, b.text) {
 			return invalid("contract comparison")
 		}
 		seen[x.ContractIndex] = true
 	}
 	if r.Stage == StageContract && r.Accepted() {
-		if !validContractPartial(comparisons[0], r.PartialSupport, catalog) {
+		if !validContractPartial(comparisons[0], r.PartialSupport, catalog, b.text) {
 			return invalid("contract partial support")
 		}
 	} else if r.PartialSupport != nil {

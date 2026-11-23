@@ -201,10 +201,10 @@ func goPinJobs(t *testing.T) map[string]analysis.Job {
 }
 
 var pinnedGo = map[string][]string{
-	"go-build-files":         {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret skipped_policy/no_tool_observations", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c 0f35e48b1837906c", "documents 0af57c400b0bf7df cbb9d0c83ce64f50", "investigate ece7724ecbbfe81e c3580ccbe7f93361", "verify 604e7c4a55236649 e0f027c525ea4547"},
-	"modules":                {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c 1591d2065785bf02", "documents 0af57c400b0bf7df 044b26c350ee8aac", "investigate ece7724ecbbfe81e 7fab296a9fdf4def", "interpret 07f3d86f118cca51 6c30210249e618c0", "verify 604e7c4a55236649 739ea4868928c8e1"},
-	"modules-worst":          {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 0af57c400b0bf7df 8ea8deedb933224b", "investigate ece7724ecbbfe81e 72f5989b6eb7246e", "interpret 07f3d86f118cca51 0ba79c5a6cd9bbf3", "verify 604e7c4a55236649 208b5395107c96d2"},
-	"modules-worst-screened": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment 5a399a3b40ccea8c a26534f4af3e1545", "documents 0af57c400b0bf7df 8ea8deedb933224b", "investigate ece7724ecbbfe81e 72f5989b6eb7246e", "interpret 07f3d86f118cca51 71915d5d7b19dc70", "verify 604e7c4a55236649 208b5395107c96d2"},
+	"go-build-files":         {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret skipped_policy/no_tool_observations", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment 82d1ae444074501f 0f35e48b1837906c", "documents 1ffc0d934bdfcf5f cbb9d0c83ce64f50", "investigate 348cb4752df73b24 119fede47bae06bc", "verify c764f4bfd74b1807 61eb76f4c28efe0e"},
+	"modules":                {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment 82d1ae444074501f 1591d2065785bf02", "documents 1ffc0d934bdfcf5f 044b26c350ee8aac", "investigate 348cb4752df73b24 5b8413e0e1c249c2", "interpret 8a5abc3670355633 c9450e5228781aca", "verify c764f4bfd74b1807 0e7dfe8686abbccc"},
+	"modules-worst":          {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment 82d1ae444074501f a26534f4af3e1545", "documents 1ffc0d934bdfcf5f 8ea8deedb933224b", "investigate cffe8126d851d203 d0cbf04835661545", "interpret 8a5abc3670355633 7f67451825912287", "verify c764f4bfd74b1807 ce984c05fc1024e0"},
+	"modules-worst-screened": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment 82d1ae444074501f a26534f4af3e1545", "documents 1ffc0d934bdfcf5f 8ea8deedb933224b", "investigate cffe8126d851d203 d0cbf04835661545", "interpret 8a5abc3670355633 229298a67ef0c9b9", "verify c764f4bfd74b1807 ce984c05fc1024e0"},
 }
 
 func TestGoReviewInputsUnchanged(t *testing.T) {
@@ -241,7 +241,7 @@ func goBuildFilesScript(t *testing.T) map[string]func(int, opencode.Request) ope
 	}
 	s["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
 		in := decodeAs[investigateInput](t, q)
-		return asJSON(map[string]any{"candidates": []map[string]any{{"title": "설정 주소 검증 누락", "condition": "주소가 비어 있는 경우", "impact": "서비스가 잘못된 주소로 시작한다.",
+		return asJSON(map[string]any{"candidates": []map[string]any{{"title": "설정 주소 검증 누락", "condition": "주소가 비어 있는 경우", "mechanism": "빈 주소가 검사 없이 연결에 쓰인다.", "impact": "서비스가 잘못된 주소로 시작한다.",
 			"improvement": "주소를 검사한다.", "counterpoint": "기본값이 항상 채워질 수 있다.", "evidence_ids": []string{in.Scope.Excerpts[0].ID}}}})
 	}
 	return s

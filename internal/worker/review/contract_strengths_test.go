@@ -10,7 +10,8 @@ import (
 
 func TestContractFollowupUsesPromisedTermFromAcceptedSliceStrength(t *testing.T) {
 	j := coverageJob(t)
-	h := Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: coverageScript(t)}}
+	// At the smallest budget the overview leaves files to the slices.
+	h := Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: coverageScript(t)}, Budget: smallBudget}
 	runRoleWith(t, j, h, "1.27.4")
 	s := roleStage{j: j, ctx: t.Context(), h: h}
 	_, docs := s.prior(record.StageDocuments)

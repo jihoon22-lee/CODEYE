@@ -178,7 +178,8 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(g.parse_budget("9.99"), 9_990_000)
         self.assertEqual(g.parse_budget("0.5"), 500_000)
         self.assertEqual(g.parse_budget("20"), 20_000_000)
-        for bad in ("21", "20.000001", "0", "-1", "nan", "inf", "1.0000001", "abc"):
+        self.assertEqual(g.parse_budget("25"), 25_000_000)
+        for bad in ("26", "25.000001", "0", "-1", "nan", "inf", "1.0000001", "abc"):
             with self.assertRaises(ValueError, msg=bad):
                 g.parse_budget(bad)
 
@@ -186,8 +187,14 @@ class PolicyTests(unittest.TestCase):
         bound, reserved = g.reservation_for(1000, 2, 1536)
         self.assertEqual(bound, 1000 + 2 * 16 + 256)
         self.assertEqual(reserved, 2 * (bound * 5 + 1536 * 10) + 1000)
-        _, largest = g.reservation_for(g.DEFAULT_MAX_INPUT_BYTES, g.MAX_MESSAGES, g.OUTPUT_TOKEN_CAP)
-        self.assertLess(largest, 600_000)  # < $0.60 per request at the default caps
+        # The default caps: the worker's 256 KiB request plus OpenCode's messages,
+        # 16384 output tokens. Every input byte is a worst-case token.
+        _, largest = g.reservation_for(g.DEFAULT_MAX_INPUT_BYTES, g.MAX_MESSAGES, g.DEFAULT_MAX_OUTPUT_TOKENS)
+        self.assertEqual(largest, 2 * ((g.DEFAULT_MAX_INPUT_BYTES + g.MAX_MESSAGES * 16 + 256) * 5
+                                       + g.DEFAULT_MAX_OUTPUT_TOKENS * 10) + 1000)
+        self.assertLess(largest, 3_200_000)  # < $3.20 per request at the default caps
+        _, hardest = g.reservation_for(g.HARD_MAX_INPUT_BYTES, g.MAX_MESSAGES, g.HARD_MAX_OUTPUT_TOKENS)
+        self.assertLess(hardest, g.HARD_CAP_MICROUSD)  # one request at the hard caps fits the hard cap
 
     def test_payload_is_rebuilt_text_only(self):
         request = chat_request(tools=[{"type": "function", "function": {"name": "x"}}],
@@ -201,7 +208,7 @@ class PolicyTests(unittest.TestCase):
         payload = prepared["payload"]
         self.assertEqual(set(payload), {"model", "input", "max_output_tokens", "reasoning",
                                         "service_tier", "store"})
-        self.assertEqual(payload["max_output_tokens"], 1536)
+        self.assertEqual(payload["max_output_tokens"], g.DEFAULT_MAX_OUTPUT_TOKENS)
         self.assertEqual(payload["reasoning"], {"effort": "low"})
         self.assertIs(payload["store"], False)
         self.assertEqual(payload["service_tier"], "default")
@@ -212,6 +219,14 @@ class PolicyTests(unittest.TestCase):
         self.assertTrue(prepared["stream"] and prepared["include_usage"])
         self.assertEqual(g.build_upstream_request(chat_request(max_completion_tokens=200), MODEL,
                                                   4096)["output_cap"], 200)
+        # The configured cap bounds the request and its reservation; a client can only lower it.
+        capped = g.build_upstream_request(chat_request(max_tokens=99999), MODEL, 4096, 2048)
+        self.assertEqual((capped["output_cap"], capped["payload"]["max_output_tokens"]), (2048, 2048))
+        self.assertEqual(capped["reserved_microusd"],
+                         g.reservation_for(capped["input_bytes"], capped["message_count"], 2048)[1])
+        for bad in (0, g.HARD_MAX_OUTPUT_TOKENS + 1):
+            with self.assertRaises(ValueError):
+                g.Gateway(model=MODEL, ledger=None, upstream=None, token="t" * 32, max_output_tokens=bad)
 
     def test_rejects_non_text_and_tool_messages(self):
         cases = {
@@ -694,7 +709,9 @@ class ProcessTests(unittest.TestCase):
         self.assertEqual(self.cli("--ready-file", ready, "--ledger", self.ledger, "--model", MODEL,
                                   key=CANARY_KEY).returncode, 2)
         fresh = os.path.join(self.dir.name, "fresh.json")
-        for args in (["--budget-usd", "21"], ["--budget-usd", "20.000001"], ["--model", "gpt-4o"]):
+        for args in (["--budget-usd", "26"], ["--budget-usd", "25.000001"], ["--model", "gpt-4o"],
+                     ["--max-output-tokens", "0"], ["--max-output-tokens", str(g.HARD_MAX_OUTPUT_TOKENS + 1)],
+                     ["--max-input-bytes", str(g.HARD_MAX_INPUT_BYTES + 1)]):
             argv = ["--ready-file", fresh, "--ledger", self.ledger, "--model", MODEL, *args]
             self.assertNotEqual(self.cli(*argv, key=CANARY_KEY).returncode, 0, args)
         missing = self.cli("--ready-file", fresh, "--ledger", self.ledger, "--model", MODEL)
@@ -707,7 +724,8 @@ class ProcessTests(unittest.TestCase):
     def test_crash_mid_request_is_charged_in_full_after_restart(self):
         self.fake.mode = "hang"
         ready = os.path.join(self.dir.name, "ready1.json")
-        process = self.start(ready, "--budget-usd", "0.08")
+        # A small output cap keeps one reservation below the 0.08 USD ledger.
+        process = self.start(ready, "--budget-usd", "0.08", "--max-output-tokens", "1536")
         info = self.wait_ready(process, ready)
         threading.Thread(target=lambda: self._swallow(self.post, info, chat_request()), daemon=True).start()
         self.assertTrue(self.fake.received.wait(20))
@@ -721,7 +739,7 @@ class ProcessTests(unittest.TestCase):
         self.fake.release.set()
         os.unlink(ready)  # stale file from the killed process
         ready2 = os.path.join(self.dir.name, "ready2.json")
-        process = self.start(ready2, "--budget-usd", "9.99")  # cannot raise the 0.08 cap
+        process = self.start(ready2, "--budget-usd", "9.99", "--max-output-tokens", "1536")  # cannot raise the 0.08 cap
         info = self.wait_ready(process, ready2)
         calls_before = len(self.fake.calls)
         statuses = []

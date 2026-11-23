@@ -2,9 +2,11 @@ package review
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -211,7 +213,7 @@ func (s *roleStage) sliceTask(key string) analysis.TaskResult {
 		}
 		return result(domain.TaskSkippedPolicy, reasonDependency)
 	}
-	s.slice, s.scopeUp = &doc.Slices[i], up
+	s.slice, s.sliceLimits, s.scopeUp = &doc.Slices[i], doc.Limits, up
 	s.sliceReserve = doc.Budget.SliceReserveCalls
 	pending := slices.ContainsFunc(s.slice.Files, func(f record.ScopeFile) bool { return f.State == record.FilePlanned })
 	if s.role == record.StageVerify {
@@ -249,14 +251,22 @@ func (s *roleStage) sliceTask(key string) analysis.TaskResult {
 }
 
 // sliceCorpus verifies the assigned line windows against the snapshot
-// again. Older scope artifacts assigned only the first window per file.
+// again, within the limits the scope artifact recorded. A window that does
+// not start its file travels after the file's header (package clause and
+// imports, origin header). Older scope artifacts assigned only the first
+// window per file.
 func (s *roleStage) sliceCorpus() ([]record.Excerpt, []string, error) {
 	files := s.entries()
 	cached := map[string][]string{}
 	var out []record.Excerpt
 	// A slice is part of the repository by definition.
 	lims := []string{"files_outside_review_context"}
-	remain := roleMaxCodeBytes
+	maxFiles, remain := roleMaxCodeFiles, roleMaxCodeBytes
+	if s.sliceLimits.MaxFiles > 0 {
+		maxFiles, remain = s.sliceLimits.MaxFiles, s.sliceLimits.MaxBytes
+	}
+	headers := map[string]bool{}
+	windows := 0
 	for _, f := range s.slice.Files {
 		if f.State != record.FilePlanned {
 			continue
@@ -265,9 +275,10 @@ func (s *roleStage) sliceCorpus() ([]record.Excerpt, []string, error) {
 		if !ok || e.SHA256 != f.SHA256 {
 			return nil, nil, errSnapshotIntegrity
 		}
-		if len(out) >= roleMaxCodeFiles {
+		if windows >= maxFiles {
 			break
 		}
+		windows++
 		if f.StartLine > 0 {
 			end := f.StartLine + f.PlannedLines - 1
 			lines, ok, err := s.sourceLines(e, cached)
@@ -277,6 +288,11 @@ func (s *roleStage) sliceCorpus() ([]record.Excerpt, []string, error) {
 			text := strings.Join(lines[f.StartLine-1:end], "\n")
 			if record.JSONLen(text) != f.PlannedBytes {
 				return nil, nil, errSnapshotIntegrity
+			}
+			if h := min(headerEnd(e.Path, lines), f.StartLine-1); h > 0 && !headers[e.Path] && unitArtifact(s.sliceLimits) {
+				headers[e.Path] = true
+				out = append(out, record.Excerpt{ID: record.ExcerptID(s.j.Snapshot.Digest, e.Path, e.SHA256, 1, h), Path: e.Path, SHA256: e.SHA256,
+					Start: 1, End: h, Kind: windowKind(e.Path), Origin: record.OriginHeader, Text: strings.Join(lines[:h], "\n")})
 			}
 			out = append(out, record.Excerpt{ID: record.ExcerptID(s.j.Snapshot.Digest, e.Path, e.SHA256, f.StartLine, end),
 				Path: e.Path, SHA256: e.SHA256, Start: f.StartLine, End: end, Kind: windowKind(e.Path), Origin: "context", Text: text})
@@ -299,6 +315,10 @@ func (s *roleStage) sliceCorpus() ([]record.Excerpt, []string, error) {
 		out = append(out, x)
 		remain -= record.JSONLen(x.Text)
 	}
+	// A file's header and windows travel together, files in path order.
+	slices.SortStableFunc(out, func(a, b record.Excerpt) int {
+		return cmp.Or(cmp.Compare(path.Dir(a.Path), path.Dir(b.Path)), cmp.Compare(a.Path, b.Path), cmp.Compare(a.Start, b.Start))
+	})
 	return out, addLim(nil, lims...), nil
 }
 

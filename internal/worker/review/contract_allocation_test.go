@@ -60,7 +60,9 @@ func TestWholeInvestigationAllocatesEvidenceAcrossContractComparisons(t *testing
 			return asJSON(map[string]any{"candidates": []any{}})
 		}
 		wholeCalls++
-		if len(in.Scope.ContractAnchors) != 3 || len(in.Scope.Excerpts) > roleMaxCodeFiles || len(opencode.Prompt(q)) > PromptBudget {
+		// The request budget bounds the overview; the anchored windows keep
+		// their own count cap ahead of the units.
+		if len(in.Scope.ContractAnchors) != 3 || len(opencode.Prompt(q)) > MinRequestBytes {
 			t.Fatalf("claim allocation or bounds: %+v, %d excerpts", in.Scope.ContractAnchors, len(in.Scope.Excerpts))
 		}
 		catalog := catalogOf(in.Scope.Excerpts)

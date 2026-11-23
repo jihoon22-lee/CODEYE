@@ -147,9 +147,15 @@ func (s *roleStage) contractClaimAllocation(base []record.Excerpt, selected cont
 		return contractAllocation{}
 	}
 	allocation.keep = len(allocation.windows)
+	// The overview's own excerpts (selector windows and units) follow in
+	// their order; the request budget decides how many fit
+	// (fitContractAllocation). An excerpt inside an anchored window adds
+	// nothing.
 	for _, e := range base {
-		if windows, _, ok := admitClaimWindows(allocation.windows, []record.Excerpt{e}, roleMaxCodeFiles); ok {
-			allocation.windows = windows
+		if !slices.ContainsFunc(allocation.windows, func(old record.Excerpt) bool {
+			return old.Path == e.Path && old.SHA256 == e.SHA256 && old.Start <= e.Start && e.End <= old.End
+		}) {
+			allocation.windows = append(allocation.windows, e)
 		}
 	}
 	return allocation
@@ -223,7 +229,7 @@ func admitClaimWindows(existing, group []record.Excerpt, limit int) ([]record.Ex
 
 // Fit the complete anchored prefix using the real serialized request budget.
 // The caller keeps the existing excerpt order if this alternative cannot fit.
-func (s *roleStage) fitContractAllocation(in investigateInput, links corpusLinks, documents []record.Excerpt) ([]record.Excerpt, bool) {
+func (s *roleStage) fitContractAllocation(in investigateInput, links corpusLinks, documents []record.Excerpt, instructions string) ([]record.Excerpt, bool) {
 	allocation := links.claims
 	build := func(list []record.Excerpt) ([]byte, error) {
 		in.Scope = in.Scope.withExcerpts(list, links)
@@ -235,7 +241,7 @@ func (s *roleStage) fitContractAllocation(in investigateInput, links corpusLinks
 			return nil, false
 		}
 	}
-	windows, _, err := s.fitExcerpts(s.instructions(investigateContract), allocation.keep, allocation.windows, build)
+	windows, _, err := s.fitExcerpts(instructions, allocation.keep, allocation.windows, build)
 	if err != nil {
 		return nil, false
 	}

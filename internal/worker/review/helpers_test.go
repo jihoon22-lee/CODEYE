@@ -239,12 +239,13 @@ func validScript(t *testing.T) map[string]func(int, opencode.Request) opencode.R
 				ev = append(ev, in.Documents.Evidence[0].ID)
 			}
 			return asJSON(map[string]any{"candidates": []map[string]any{{"title": "Forward가 결제 호출에도 재시도를 적용할 수 있음", "condition": "svc/b 결제 호출을 Forward로 감싸는 경우",
-				"impact": "결제가 중복될 수 있다.", "improvement": "결제 경로에서는 재시도를 끈다.", "counterpoint": "Forward를 결제에 쓰는 호출자가 발췌에 없다.", "evidence_ids": ev}}})
+				"mechanism": "Forward의 반복문이 실패한 호출을 다시 보낸다.",
+				"impact":    "결제가 중복될 수 있다.", "improvement": "결제 경로에서는 재시도를 끈다.", "counterpoint": "Forward를 결제에 쓰는 호출자가 발췌에 없다.", "evidence_ids": ev}}})
 		},
 		"interpret": func(_ int, q opencode.Request) opencode.Reply {
 			in := decodeAs[interpretInput](t, q)
 			o := in.Observations[0]
-			return asJSON(map[string]any{"hypotheses": []map[string]any{{"observation_ids": []string{o.ID}, "title": "재시도 분기에서 결과를 버릴 수 있음", "condition": "send가 실패한 뒤 다시 호출되는 경우",
+			return asJSON(map[string]any{"hypotheses": []map[string]any{{"observation_ids": []string{o.ID}, "title": "재시도 분기에서 결과를 버릴 수 있음", "condition": "send가 실패한 뒤 다시 호출되는 경우", "mechanism": "반복마다 오류 변수가 덮어써진다.",
 				"impact": "마지막 오류만 남는다.", "improvement": "각 시도의 오류를 기록한다.", "counterpoint": "마지막 오류만 반환하는 것이 문서상 계약일 수 있다.", "evidence_ids": o.EvidenceIDs}},
 				"limits": []map[string]any{}})
 		},

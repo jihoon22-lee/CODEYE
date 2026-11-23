@@ -120,10 +120,11 @@ mod checks {
 				}
 				var implementation, assertion string
 				for _, e := range input.Scope.Excerpts {
-					if e.Path == tc.implementation && e.Kind == "code" && strings.Contains(e.Text, tc.code) {
+					// The narrowest windows (the selectors') come first.
+					if implementation == "" && e.Path == tc.implementation && e.Kind == "code" && strings.Contains(e.Text, tc.code) {
 						implementation = e.ID
 					}
-					if e.Path == tc.testFile && strings.Contains(e.Text, tc.assertion) {
+					if assertion == "" && e.Path == tc.testFile && strings.Contains(e.Text, tc.assertion) {
 						assertion = e.ID
 					}
 				}
@@ -135,7 +136,7 @@ mod checks {
 					DocumentEvidenceIDs: []string{canonical}, CodeEvidenceIDs: []string{implementation, assertion},
 				}}})
 			}
-			h := Handler{Static: vetStub{}, Caller: &scriptedCaller{script: script}}
+			h := Handler{Budget: smallBudget, Static: vetStub{}, Caller: &scriptedCaller{script: script}}
 			plan, results := runRoleWith(t, j, h, "1.27.4")
 			if results["review.investigate"].Status != domain.TaskSucceeded {
 				t.Fatalf("review.investigate: %+v", results["review.investigate"])
@@ -200,7 +201,7 @@ func TestAuthoredPublicAPIBindingRejectsAmbiguityAndScope(t *testing.T) {
 			if tc.guide == rust {
 				class = envdoc.ClassReadme
 			}
-			s := &roleStage{j: j, ctx: context.Background(), h: Handler{}}
+			s := &roleStage{j: j, ctx: context.Background(), h: Handler{Budget: smallBudget}}
 			out, err := s.documentExcerpts([]envdoc.Doc{{Path: tc.guide, Class: class, AppliesTo: ".", SHA256: &page.SHA256, LineCount: &n}})
 			if err != nil {
 				t.Fatal(err)
@@ -245,7 +246,7 @@ pub fn same_name(value: u8) -> u8 { value }
 	j := treeJob(t, files)
 	entry := includedFiles(j.Snapshot.Manifest)[page]
 	lines := 3
-	stage := &roleStage{j: j, ctx: context.Background(), h: Handler{}}
+	stage := &roleStage{j: j, ctx: context.Background(), h: Handler{Budget: smallBudget}}
 	found, err := stage.documentExcerpts([]envdoc.Doc{{Path: page, Class: envdoc.ClassReadme, AppliesTo: ".", SHA256: &entry.SHA256, LineCount: &lines}})
 	if err != nil {
 		t.Fatal(err)
@@ -364,7 +365,7 @@ mod checks {
 				}
 				return asJSON(map[string]any{"candidates": []any{}, "contract_comparisons": comparisons})
 			}
-			h := Handler{Static: vetStub{}, Caller: &scriptedCaller{script: script}}
+			h := Handler{Budget: smallBudget, Static: vetStub{}, Caller: &scriptedCaller{script: script}}
 			_, results := runRoleWith(t, j, h, "1.27.4")
 			if got := results["review.investigate"]; got.Status != domain.TaskSucceeded || !tight && !rejectedSwap {
 				t.Fatalf("unexpected investigation or wrong-function comparison accepted: %+v, %v", got, rejectedSwap)

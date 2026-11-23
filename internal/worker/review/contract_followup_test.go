@@ -357,7 +357,7 @@ func TestContractFollowupPreservesPriorOnBudgetOrInvalidOutput(t *testing.T) {
 				return
 			}
 			r := readRecord(t, j, record.StageContract)
-			if r.Schema != record.SchemaVersionContract || len(r.Calls) != test.wantCalls || r.Calls[0].RequestDigest == "" || r.Calls[0].Usage == nil {
+			if r.Schema != record.SchemaVersionCitedLines || len(r.Calls) != test.wantCalls || r.Calls[0].RequestDigest == "" || r.Calls[0].Usage == nil {
 				t.Fatalf("contract record %+v", r)
 			}
 			if test.wantResult == "" {
@@ -404,7 +404,8 @@ func TestContractFollowupPlansLastOnlyWithApprovedModelAndEligibleSource(t *test
 
 func TestContractFollowupRereadsAcceptedSliceEvidence(t *testing.T) {
 	j := coverageJob(t)
-	h := Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: coverageScript(t)}}
+	// At the smallest budget the overview leaves files to the slices.
+	h := Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: coverageScript(t)}, Budget: smallBudget}
 	runRoleWith(t, j, h, "1.27.4")
 	stage := roleStage{h: h, j: j, ctx: t.Context()}
 	_, docs := stage.prior(record.StageDocuments)
@@ -454,7 +455,7 @@ func TestContractFollowupPrioritizesSelectedLateSliceBeforeOrdinaryReadLimit(t *
 	script["investigate"] = func(_ int, _ opencode.Request) opencode.Reply {
 		return asJSON(map[string]any{"candidates": []any{}})
 	}
-	h := Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: script}}
+	h := Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: script}, Budget: smallBudget}
 	runRoleWith(t, j, h, "1.27.4")
 	stage := roleStage{h: h, j: j, ctx: t.Context()}
 	_, docs := stage.prior(record.StageDocuments)

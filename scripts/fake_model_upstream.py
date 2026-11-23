@@ -11,7 +11,9 @@ http://127.0.0.1:PORT`.
 Replies satisfy the relay's settlement rules (model `<requested>-fake`,
 `service_tier: default`, usage within the request bounds) and the CODEYE review
 output contract: `workspace_proof` is copied from the attached identity file and
-only evidence ids present in `<review-input>` are cited.
+only evidence ids present in `<review-input>` are cited. A code or test excerpt
+longer than the citation limit is cited as a line range inside it
+(`ev_…:START-END`), and a candidate states a mechanism.
 
 Modes: `normal` (small usage), `expensive` (usage at the relay's bounds, to
 exhaust a small ledger cap quickly), `fail` (HTTP 500, charged in full by the relay),
@@ -47,10 +49,15 @@ REVIEW_INPUT = re.compile(r"<review-input>\n(.*)\n</review-input>", re.S)
 ROLE = re.compile(r"^Role: ([a-z]+)$", re.M)
 CODE_SUFFIX = re.compile(r"\.(go|py|pyi|js|jsx|mjs|cjs|ts|tsx|mts|cts|rs|c|cc|cpp|cxx|h|hh|hpp|hxx)$")
 TEXT = "Placeholder from the dry-run upstream; no model produced this text."
+# The longest code or test excerpt a citation may name whole, and the longest
+# cited range (record.WholeCitationLines, record.MaxCitedLines).
+CITED_LINES = 80
 
 
-def _evidence(node, out):
-    """Collect (id, kind) of every cited-able excerpt in the review input."""
+def _evidence(node, out, ranges=None):
+    """Collect (id, kind) of every cited-able excerpt in the review input, and
+    into ranges the citation of each one: its id, or its first lines as a
+    range when it is longer than CITED_LINES."""
     if isinstance(node, dict):
         ident, path = node.get("id") or node.get("evidence_id"), node.get("path")
         if isinstance(ident, str) and ident.startswith("ev_") and isinstance(path, str):
@@ -58,11 +65,17 @@ def _evidence(node, out):
             if kind not in ("code", "document"):
                 kind = "code" if CODE_SUFFIX.search(path) else "document"
             out.setdefault(ident, kind)
+            start, end = node.get("start_line"), node.get("end_line")
+            if ranges is not None and ident not in ranges:
+                ranges[ident] = ident
+                if (isinstance(start, int) and isinstance(end, int) and end - start + 1 > CITED_LINES
+                        and node.get("origin") != "cited"):
+                    ranges[ident] = f"{ident}:{start}-{start + CITED_LINES - 1}"
         for value in node.values():
-            _evidence(value, out)
+            _evidence(value, out, ranges)
     elif isinstance(node, list):
         for value in node:
-            _evidence(value, out)
+            _evidence(value, out, ranges)
 
 
 def _candidates(node, out):
@@ -82,10 +95,11 @@ def _candidates(node, out):
 
 def result_for(role: str, review_input, echo: str | None = None) -> dict:
     evidence: dict[str, str] = {}
-    _evidence(review_input, evidence)
-    code = [i for i, k in evidence.items() if k == "code"]
+    cited: dict[str, str] = {}
+    _evidence(review_input, evidence, cited)
+    code = [cited[i] for i, k in evidence.items() if k == "code"]
     title = "Placeholder candidate (dry run)" + (": " + echo if echo else "")
-    candidate = {"title": title, "condition": TEXT, "impact": TEXT,
+    candidate = {"title": title, "condition": TEXT, "mechanism": TEXT, "impact": TEXT,
                  "improvement": TEXT, "counterpoint": TEXT, "evidence_ids": code[:1]}
     if role == "probe":  # codeye model probe: {"a": int, "b": int} -> {"sum": a + b}
         data = review_input if isinstance(review_input, dict) else {}

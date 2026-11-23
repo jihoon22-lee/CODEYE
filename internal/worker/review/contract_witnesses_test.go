@@ -69,7 +69,7 @@ func TestContractWitnessesReachCitedSnapshotLines(t *testing.T) {
 		}}})
 	}
 	f := &scriptedCaller{script: script}
-	_, results := runRole(t, j, stub, f, "1.27.4")
+	_, results := runRoleSmall(t, j, stub, f, "1.27.4")
 	for _, task := range []string{"review.documents", "review.investigate", record.TaskScope} {
 		if r := results[task]; r.Status != domain.TaskSucceeded {
 			t.Fatalf("%s %+v", task, r)
@@ -205,7 +205,7 @@ func TestContractDirectCallsReachUnmentionedDefinitions(t *testing.T) {
 					DocumentEvidenceIDs: in.Documents.Contracts[0].EvidenceIDs, CodeEvidenceIDs: []string{from.ID, to.ID},
 				}}})
 			}
-			_, results := runRole(t, j, langStub{eco: tc.eco, path: caller, line: 68, manifest: tc.manifest}, &scriptedCaller{script: script}, "1.27.4")
+			_, results := runRoleSmall(t, j, langStub{eco: tc.eco, path: caller, line: 68, manifest: tc.manifest}, &scriptedCaller{script: script}, "1.27.4")
 			if result := results["review.investigate"]; result.Status != domain.TaskSucceeded {
 				t.Fatalf("investigate result %+v", result)
 			}
@@ -267,7 +267,7 @@ func TestContractDirectCallFallback(t *testing.T) {
 				files["app/rules.js"] = "export function calculate(amount) { return amount; }\n"
 			}
 			j := treeJob(t, files)
-			s := &roleStage{h: Handler{}, ctx: t.Context(), j: j, role: "investigate"}
+			s := &roleStage{h: Handler{Budget: smallBudget}, ctx: t.Context(), j: j, role: "investigate"}
 			if tc.withheld {
 				s.screen.withheld = map[string]bool{callee: true}
 			}
@@ -346,7 +346,7 @@ func TestContractWitnessPriorityWithProductAndMaintenanceSources(t *testing.T) {
 			j := treeJob(t, files)
 			e := includedFiles(j.Snapshot.Manifest)["README.md"]
 			id := record.ExcerptID(j.Snapshot.Digest, e.Path, e.SHA256, 1, 5)
-			s := &roleStage{h: Handler{}, ctx: t.Context(), j: j, role: "investigate"}
+			s := &roleStage{h: Handler{Budget: smallBudget}, ctx: t.Context(), j: j, role: "investigate"}
 			selected, err := s.contractWitnesses(planCodeGroups(j.Snapshot.Manifest, j.Scope, record.DefaultSecondary), record.Record{
 				Evidence:  []record.Excerpt{{ID: id, Path: e.Path, SHA256: e.SHA256, Start: 1, End: 5, Kind: "document"}},
 				Contracts: []record.Contract{{Statement: tc.statement, AppliesTo: ".", EvidenceIDs: []string{id}}},
@@ -411,6 +411,9 @@ func TestSpareOverviewWindowsPreserveFileAndLineCoverage(t *testing.T) {
 		if !in.Scope.WholeRun {
 			return asJSON(map[string]any{"candidates": []any{}})
 		}
+		// The implementation travels as its units (whole declarations)
+		// beside the selector windows; a window inside a unit is a
+		// reference and adds no bytes.
 		seen := map[string]bool{}
 		var windows []record.Excerpt
 		total := 0
@@ -419,19 +422,35 @@ func TestSpareOverviewWindowsPreserveFileAndLineCoverage(t *testing.T) {
 			total += record.JSONLen(e.Text)
 			if e.Path == implementation {
 				windows = append(windows, e)
-				lines += e.End - e.Start + 1
-				used += record.JSONLen(e.Text)
 			}
 		}
-		if len(seen) != 6 || len(in.Scope.Excerpts) != 7 || total > roleMaxCodeBytes ||
-			len(windows) != 2 || lines > roleMaxCodeLines || used > roleMaxCodeFile ||
-			windows[0].End >= windows[1].Start || !strings.Contains(windows[0].Text, "'refreshed'") ||
-			!strings.Contains(windows[1].Text, "'archived'") {
-			t.Fatalf("unbounded or incomplete second implementation window: %+v", in.Scope.Excerpts)
+		covered := map[int]bool{}
+		for k, w := range windows {
+			for line := w.Start; line <= w.End; line++ {
+				covered[line] = true
+			}
+			if !slices.ContainsFunc(windows[:k], func(x record.Excerpt) bool { return x.Start <= w.Start && w.End <= x.End }) &&
+				!slices.ContainsFunc(windows[k+1:], func(x record.Excerpt) bool {
+					return x.Start <= w.Start && w.End <= x.End && (x.Start != w.Start || x.End != w.End)
+				}) {
+				used += record.JSONLen(w.Text)
+			}
+		}
+		lines = len(covered)
+		has := func(text string) bool {
+			return slices.ContainsFunc(windows, func(e record.Excerpt) bool { return strings.Contains(e.Text, text) })
+		}
+		if len(seen) != 6 || total > smallBudget.limits().source || !has("'refreshed'") || !has("'archived'") ||
+			lines != strings.Count(body, "\n") {
+			var brief []string
+			for _, e := range in.Scope.Excerpts {
+				brief = append(brief, fmt.Sprintf("%s:%d-%d/%s/%d", e.Path, e.Start, e.End, e.Origin, len(e.Text)))
+			}
+			t.Fatalf("unbounded or incomplete implementation: %v total %d lines %d used %d", brief, total, lines, used)
 		}
 		return asJSON(map[string]any{"candidates": []any{}})
 	}
-	_, results := runRole(t, j, langStub{eco: "javascript", manifest: "package.json", path: implementation, line: 67}, &scriptedCaller{script: script}, "1.27.4")
+	_, results := runRoleSmall(t, j, langStub{eco: "javascript", manifest: "package.json", path: implementation, line: 67}, &scriptedCaller{script: script}, "1.27.4")
 	if result := results[record.TaskScope]; result.Status != domain.TaskSucceeded {
 		t.Fatalf("scope task: %+v", result)
 	}
@@ -443,7 +462,10 @@ func TestSpareOverviewWindowsPreserveFileAndLineCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(scope.Overview.Offered) != 6 || len(scope.Overview.Files) != 6 || len(scope.Slices) == 0 {
+	// The overview holds every readable line; only the helpers' lines
+	// longer than a unit stay unsent, and they are recorded.
+	if len(scope.Overview.Offered) != 6 || len(scope.Overview.Files) != 6 || len(scope.Slices) != 0 || len(scope.Omitted) != 5 ||
+		slices.ContainsFunc(scope.Omitted, func(o record.ScopeOmission) bool { return o.Reason != record.ScopeReasonLineLimit }) {
 		t.Fatalf("scope counted a window as another file: %+v", scope)
 	}
 	if !slices.ContainsFunc(scope.Overview.Files, func(f record.ScopeFile) bool {
@@ -482,7 +504,7 @@ func TestRuntimeContractsPreferCodeToBenchmarksAndDeclarations(t *testing.T) {
 			j := treeJob(t, files)
 			e := includedFiles(j.Snapshot.Manifest)["README.md"]
 			id := record.ExcerptID(j.Snapshot.Digest, e.Path, e.SHA256, 1, 1)
-			s := &roleStage{h: Handler{}, ctx: t.Context(), j: j, role: "investigate"}
+			s := &roleStage{h: Handler{Budget: smallBudget}, ctx: t.Context(), j: j, role: "investigate"}
 			selected, err := s.contractWitnesses(planCodeGroups(j.Snapshot.Manifest, j.Scope, record.DefaultSecondary), record.Record{
 				Evidence:  []record.Excerpt{{ID: id, Path: e.Path, SHA256: e.SHA256, Start: 1, End: 1, Kind: "document"}},
 				Contracts: []record.Contract{{Statement: tc.statement, AppliesTo: ".", EvidenceIDs: []string{id}}},

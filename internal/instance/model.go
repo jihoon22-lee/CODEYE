@@ -129,6 +129,10 @@ type ResolvedModel struct {
 	RelayFile      string
 	Timeout        time.Duration
 	ReviewMaxCalls int
+	// ReviewRequestBytes and ReviewOutputTokens are the review request
+	// budget (0: the default).
+	ReviewRequestBytes int
+	ReviewOutputTokens int
 	// Source says where the credential comes from (ModelSource*).
 	Source string
 	// Notice explains a problem that will make model calls fail (for
@@ -149,7 +153,7 @@ func (m *ResolvedModel) Provider() string {
 // Caller is the worker-side call configuration of m.
 func (m *ResolvedModel) Caller() opencode.Config {
 	return opencode.Config{Executable: m.OpenCode, Model: m.ID, RelayFile: m.RelayFile, CredentialFile: m.CredentialFile, ConfigFile: m.ConfigFile, NativeHome: m.nativeHome, Timeout: m.Timeout,
-		Offline: m.Offline, CABundle: m.CABundle}
+		Offline: m.Offline, CABundle: m.CABundle, OutputTokens: m.ReviewOutputTokens, RequestBytes: m.ReviewRequestBytes}
 }
 
 // ResolveModel decides the local agent's model. It returns (nil, nil) when
@@ -168,6 +172,7 @@ func ResolveModel(cfg *Config, layout Layout, env ModelEnv) (*ResolvedModel, err
 		m = &Model{}
 	}
 	res := &ResolvedModel{RelayFile: m.RelayFile, Timeout: opencode.DefaultTimeout, ReviewMaxCalls: m.ReviewMaxCalls,
+		ReviewRequestBytes: m.ReviewRequestBytes, ReviewOutputTokens: m.ReviewOutputTokens,
 		Offline: cfg.Offline, CABundle: cfg.CABundle}
 	if m.TimeoutSeconds > 0 {
 		res.Timeout = time.Duration(m.TimeoutSeconds) * time.Second

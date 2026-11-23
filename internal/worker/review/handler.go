@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -24,14 +25,10 @@ import (
 	reviewpack "github.com/jihoon22-lee/CODEYE/prompts/review"
 )
 
-// PromptBudget bounds the full message text of one review request
-// (opencode.Prompt: instructions, contract, repair rules, input and wrapper).
-// The QA relay accepts 49152 UTF-8 bytes of message text per request; the
-// remainder is left for the OpenCode client's own messages.
-const PromptBudget = 40000
-
-// repairReserve keeps room for a repair request (rules and error codes).
-const repairReserve = 3072
+// The full message text of one review request (opencode.Prompt:
+// instructions, contract, repair rules, input and wrapper) is bounded by
+// the operator's request budget (Budget, budget.go); a repair request keeps
+// room within it (limits.reserve).
 
 // Task reasons and limitation codes of the review.
 const (
@@ -66,6 +63,9 @@ type Handler struct {
 	// material (docs/REVIEW.md#검토-우선순위); nil means
 	// record.DefaultSecondary. It orders the overview's files and the slots.
 	Secondary *record.SecondaryRule
+	// Budget is the node operator's request size; the zero value is the
+	// default budget.
+	Budget Budget
 }
 
 var _ analysis.Handler = Handler{}
@@ -205,9 +205,13 @@ type roleStage struct {
 	// slice is set for a slice task: its entry of the review.scope artifact
 	// and that artifact's upstream binding (slice_run.go).
 	slice        *record.ScopeSlice
+	sliceLimits  record.ScopeLimits
 	scopeUp      record.Upstream
 	sliceReserve int
 }
+
+// limit is the bounds of the handler's request budget.
+func (s *roleStage) limit() limits { return s.h.Budget.limits() }
 
 // begin loads the pack and the record skeleton; a nil caller is reported
 // only after the skip rules, which need no model.
@@ -225,14 +229,11 @@ func (s *roleStage) begin(upstream []record.Upstream) *analysis.TaskResult {
 	if upstream == nil {
 		upstream = []record.Upstream{}
 	}
-	s.rec = record.Record{Schema: record.SchemaVersion, Pack: record.PackRef{ID: sel.ID, Version: sel.Version}, Snapshot: s.j.Snapshot.Digest,
+	s.rec = record.Record{Schema: record.SchemaVersionCitedLines, Pack: record.PackRef{ID: sel.ID, Version: sel.Version}, Snapshot: s.j.Snapshot.Digest,
 		RunID: s.j.RunID, AttemptID: s.j.AttemptID, Stage: s.role, Outcome: record.OutcomeAccepted, Upstream: upstream,
 		Evidence: []record.Excerpt{}, Observations: []record.ObservationRef{}, Limitations: []string{}, Calls: []record.Call{}}
 	if s.slice != nil {
-		s.rec.Schema = record.SchemaVersionSlice
 		s.rec.Slice = &record.SliceRef{Key: s.slice.Key, Modules: append([]string{}, s.slice.Modules...)}
-	} else if s.role == record.StageContract {
-		s.rec.Schema = record.SchemaVersionContract
 	}
 	return nil
 }
@@ -264,10 +265,20 @@ func (s *roleStage) setEvidence(list []record.Excerpt) {
 }
 
 func (s *roleStage) instructions(contract string) string {
-	return s.pack.Text + "\n" + contract + requestRules
+	return s.pack.Text + "\n" + contract + s.requestRules()
 }
 
-const requestRules = "\nUse only the provided input. No code execution, test runs, reproduction or external access: never claim any. Cite only evidence and observation IDs given in this input; add no paths, line numbers or other fields. Keep every text field under 120 characters of concise Korean prose."
+// requestRules state the input, citation and prose rules of every role;
+// the prose length follows the request budget.
+func (s *roleStage) requestRules() string {
+	return fmt.Sprintf(requestRules, s.limit().chars, 2*s.limit().chars)
+}
+
+const requestRules = "\nUse only the provided input. No code execution, test runs, reproduction or external access: never claim any. " +
+	"Source excerpts show each line as \"<line>| <text>\"; the numbers are not part of the source. Cite only evidence and observation IDs given in this input; " +
+	"cite a code or test excerpt as \"<evidence id>:<start>-<end>\" (or \"<evidence id>:<line>\") with the lines that show the point, inside that excerpt and at most 80 lines; " +
+	"an excerpt of more than 80 lines must be cited with its lines. Add no paths or other fields. " +
+	"Keep every text field under %d characters of concise Korean prose (a mechanism under %d)."
 
 const repairRules = "\nFormat repair: your previous output was rejected with the platform error codes in input.repair.output_errors. Return the complete result again in the same contract, citing only IDs from this input."
 
@@ -283,9 +294,9 @@ type outputRepair struct {
 func (s *roleStage) fits(instructions string, input []byte, reserve bool) (int, bool) {
 	n := len(opencode.Prompt(opencode.Request{Role: s.role, Instructions: instructions + repairRules, Input: input}))
 	if reserve {
-		n += repairReserve
+		n += s.limit().reserve
 	}
-	return n, n <= PromptBudget
+	return n, n <= s.limit().request
 }
 
 // exchange sends a request and handles bounded retries and format repair.
@@ -313,7 +324,7 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 		}
 		q := opencode.Request{Role: s.role, Scratch: s.j.Scratch, SnapshotDigest: s.j.Snapshot.Digest, Instructions: text, Input: query, ProtectedRoots: []string{s.j.Snapshot.SnapshotDir}}
 		size := len(opencode.Prompt(q))
-		if size > PromptBudget {
+		if size > s.limit().request {
 			return s.fail(result(domain.TaskFailed, reasonInputTooLarge))
 		}
 		if r := s.reserveCall(); r != nil {
@@ -601,14 +612,19 @@ func decodeOutput(raw json.RawMessage, into any, keys ...string) []string {
 	return nil
 }
 
-// textErrors returns the codes of invalid model prose.
-func textErrors(texts ...string) []string {
+// textErrors returns the codes of invalid model prose within the budget's
+// prose limit.
+func (s *roleStage) textErrors(texts ...string) []string {
+	return proseErrors(s.limit().text, texts...)
+}
+
+func proseErrors(limit int, texts ...string) []string {
 	var errs []string
 	for _, t := range texts {
 		switch {
 		case record.ClaimsExecution(t):
 			errs = addLim(errs, "execution_claim")
-		case !record.ModelText(t):
+		case !record.ProseText(t, limit):
 			errs = addLim(errs, "text_invalid")
 		}
 	}

@@ -1,8 +1,8 @@
 {
-  "schema_version": "0.3",
+  "schema_version": "0.7",
   "pack": {
     "id": "review",
-    "version": "2.6.0"
+    "version": "2.7.0"
   },
   "snapshot_manifest_digest": "5555555555555555555555555555555555555555555555555555555555555555",
   "run_id": "0195f3a0-0000-7000-8000-000000000041",
@@ -19,89 +19,125 @@
     {
       "source": "review.documents",
       "state": "accepted",
-      "sha256": "d5bd411bdf6034bcfa981d1de708dfc915a20b6bbc4bd3fe503c6fc5a500fc83"
+      "sha256": "682f950e6ee5009869563d42a32c7329c45f34058cdd4c70fc58613ddaad8d56"
     },
     {
       "source": "review.investigate.s001",
       "state": "accepted",
-      "sha256": "80ec132975554066412370579393dcd8d68bbd767d5e6a536f10ca1f28340a6d"
+      "sha256": "f63bdc9252e48b546ebfcfd8d33b30659f8ae621c19d1e3af577e48776a06165"
     },
     {
       "source": "review.scope",
       "state": "accepted",
-      "sha256": "ab76c65125dd4477578c441062b0e89836d41a8c596666292e4fc1a79e2000ad"
+      "sha256": "599df7250afecc6769899db7cbeb2f58a662992b96514874e8a70e8195e61384"
     }
   ],
   "evidence": [
     {
-      "id": "ev_c108cc196202f680c7a2526a",
+      "id": "ev_7b3293b21abd12c55c087c9b",
       "path": "store/codec.go",
       "sha256": "93f73314c5264c8dadf0f380e68a37ee6af6c6707019a72f9427661d1906b3d5",
       "start_line": 1,
-      "end_line": 50,
+      "end_line": 71,
       "kind": "code",
       "origin": "context"
     },
     {
-      "id": "ev_da3c6e51a48679aa9bb0e1f7",
+      "id": "ev_be3077dd74fd0d00e4ed9a64",
+      "path": "store/codec.go",
+      "sha256": "93f73314c5264c8dadf0f380e68a37ee6af6c6707019a72f9427661d1906b3d5",
+      "start_line": 1,
+      "end_line": 1,
+      "kind": "code",
+      "origin": "header"
+    },
+    {
+      "id": "ev_5c45d946ae6f896435baf712",
+      "path": "store/codec.go",
+      "sha256": "93f73314c5264c8dadf0f380e68a37ee6af6c6707019a72f9427661d1906b3d5",
+      "start_line": 72,
+      "end_line": 89,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_731e6c4c83c8a55e596ad12c",
       "path": "store/compact.go",
       "sha256": "9ef0eca20bf12061ae2ba03f38fb9f80ed32c06bcec3fc20ddb98cd99950834b",
       "start_line": 1,
-      "end_line": 50,
+      "end_line": 71,
       "kind": "code",
       "origin": "context"
     },
     {
-      "id": "ev_3f8c86b27641f9ab13366997",
+      "id": "ev_688f783247be6c91d4b33b75",
+      "path": "store/compact.go",
+      "sha256": "9ef0eca20bf12061ae2ba03f38fb9f80ed32c06bcec3fc20ddb98cd99950834b",
+      "start_line": 1,
+      "end_line": 1,
+      "kind": "code",
+      "origin": "header"
+    },
+    {
+      "id": "ev_4f23f5aa829edf513e002ab6",
+      "path": "store/compact.go",
+      "sha256": "9ef0eca20bf12061ae2ba03f38fb9f80ed32c06bcec3fc20ddb98cd99950834b",
+      "start_line": 72,
+      "end_line": 89,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_daaa17c860a7b837889deb9f",
       "path": "store/cursor.go",
       "sha256": "b307d1f015fdc13f26705796d2322bec07cb8dd601edc08e2c8e6903437ef44b",
       "start_line": 1,
-      "end_line": 50,
+      "end_line": 71,
       "kind": "code",
       "origin": "context"
     },
     {
-      "id": "ev_fb559547c244fdada77e0be9",
+      "id": "ev_dc1b672f2f4fc8af0e16c120",
+      "path": "store/cursor.go",
+      "sha256": "b307d1f015fdc13f26705796d2322bec07cb8dd601edc08e2c8e6903437ef44b",
+      "start_line": 1,
+      "end_line": 1,
+      "kind": "code",
+      "origin": "header"
+    },
+    {
+      "id": "ev_65b42afb7cf3a83786e6f74f",
+      "path": "store/cursor.go",
+      "sha256": "b307d1f015fdc13f26705796d2322bec07cb8dd601edc08e2c8e6903437ef44b",
+      "start_line": 72,
+      "end_line": 89,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_60a92d48ea2d7c71a0f70278",
       "path": "store/delete.go",
       "sha256": "e255a7f3035e20a9b0e4963822b7dc87600b48cc4c0051c18f7be3fec2e31340",
       "start_line": 1,
-      "end_line": 50,
+      "end_line": 71,
       "kind": "code",
       "origin": "context"
     },
     {
-      "id": "ev_bc7f4f502e13fc86cf42cf0a",
-      "path": "store/encode.go",
-      "sha256": "eb60ec8caf4fda328a1e59584a3a508ef5b17ff0ae5a5a5cd358ba25f5cabae8",
+      "id": "ev_cb33267709369d77cc4f3a5b",
+      "path": "store/delete.go",
+      "sha256": "e255a7f3035e20a9b0e4963822b7dc87600b48cc4c0051c18f7be3fec2e31340",
       "start_line": 1,
-      "end_line": 50,
+      "end_line": 1,
       "kind": "code",
-      "origin": "context"
+      "origin": "header"
     },
     {
-      "id": "ev_1f25f2cbecf97065d701e718",
-      "path": "store/evict.go",
-      "sha256": "bb412f06b5b14efeaa375079e027df3bd5d6c4e766872e647d93c10e96702db7",
-      "start_line": 1,
-      "end_line": 50,
-      "kind": "code",
-      "origin": "context"
-    },
-    {
-      "id": "ev_c4e9ae7a627a9c05e8117d96",
-      "path": "store/flush.go",
-      "sha256": "77252f002872da47ace9a0d0439b028bb7c2405761ba9d6f43a262ea311e5dee",
-      "start_line": 1,
-      "end_line": 50,
-      "kind": "code",
-      "origin": "context"
-    },
-    {
-      "id": "ev_d68b57afbf9eb0a70f5a6167",
-      "path": "store/get.go",
-      "sha256": "74911882fadb23b36c435f9428e10653d7cef92effbf352b050141d24c9600b6",
-      "start_line": 1,
-      "end_line": 50,
+      "id": "ev_33210b75563199f7dad3d8f2",
+      "path": "store/delete.go",
+      "sha256": "e255a7f3035e20a9b0e4963822b7dc87600b48cc4c0051c18f7be3fec2e31340",
+      "start_line": 72,
+      "end_line": 89,
       "kind": "code",
       "origin": "context"
     },
@@ -123,8 +159,9 @@
       "impact": "서비스가 잘못된 주소로 시작한다.",
       "improvement": "주소를 검사한다.",
       "counterpoint": "기본값이 항상 채워질 수 있다.",
+      "mechanism": "빈 주소가 검사 없이 연결에 쓰인다.",
       "evidence_ids": [
-        "ev_c108cc196202f680c7a2526a"
+        "ev_7b3293b21abd12c55c087c9b"
       ],
       "origin": "investigate"
     }
@@ -140,7 +177,7 @@
       "valid_conditions": [],
       "invalid_conditions": [],
       "supporting_evidence_ids": [
-        "ev_c108cc196202f680c7a2526a"
+        "ev_7b3293b21abd12c55c087c9b"
       ],
       "counterevidence_ids": [],
       "unresolved_assumptions": [
@@ -163,8 +200,8 @@
       "model": "fake/scripted",
       "opencode_version": "1.19.5",
       "pack_id": "review",
-      "pack_version": "2.6.0",
-      "pack_sha256": "da4e178132aff3807b98185735b3311b4202d756fade647fdff6ee499ec7ef15",
+      "pack_version": "2.7.0",
+      "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
       "pack_files": [
         "00-core.md",
         "domains.md",
@@ -174,10 +211,10 @@
         "pack.yaml",
         "verify.md"
       ],
-      "request_sha256": "ad062dbe4bb7400b21793dfb46a069ba5afb55ba1f089ee38abc7eb538bb3cf1",
-      "request_bytes": 27755,
+      "request_sha256": "0a24bb8ba4a52d2a2f0ce6f401c5cf29af803ca469688ade374851724ec342f6",
+      "request_bytes": 29804,
       "usage": {
-        "input": 12573,
+        "input": 13997,
         "output": 50
       },
       "attempt": 1,

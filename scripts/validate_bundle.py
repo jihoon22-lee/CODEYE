@@ -268,6 +268,32 @@ def main() -> None:
     fourth = copy.deepcopy(retried)
     fourth["calls"][2]["attempt"] = 4
     expect_invalid("review call attempt 4", review_validator.validate, fourth)
+    # Schema 0.7 (docs/REVIEW.md#schema-07줄-번호-인용): narrowed citations, a
+    # candidate's mechanism, wider candidate IDs and longer prose; none of them
+    # is valid in an earlier record, which keeps its own bounds.
+    wide = copy.deepcopy(role_docs["investigate"])
+    wide["evidence"][0]["origin"] = "cited"
+    wide["candidates"][0].update(id="investigate_16", mechanism="m" * 2400, impact="i" * 1200)
+    review_validator.validate(wide)
+    earlier = copy.deepcopy(role_docs["investigate"])
+    earlier["schema_version"] = "0.2"
+    earlier["candidates"][0].pop("mechanism", None)
+    review_validator.validate(earlier)
+    seven_negatives = {
+        "0.7 mechanism over 2400 bytes": (wide, lambda d: d["candidates"][0].update(mechanism="m" * 2401)),
+        "0.7 prose over 1200 bytes": (wide, lambda d: d["candidates"][0].update(impact="i" * 1201)),
+        "0.7 candidate ID beyond 16": (wide, lambda d: d["candidates"][0].update(id="investigate_17")),
+        "0.7 unknown origin": (wide, lambda d: d["evidence"][0].update(origin="whole")),
+        "cited origin on an earlier record": (earlier, lambda d: d["evidence"][0].update(origin="cited")),
+        "mechanism on an earlier record": (earlier, lambda d: d["candidates"][0].update(mechanism="m")),
+        "fifth candidate ID on an earlier record": (earlier, lambda d: d["candidates"][0].update(id="investigate_5")),
+        "prose over 400 bytes on an earlier record": (earlier, lambda d: d["candidates"][0].update(impact="i" * 401)),
+    }
+    for name, (base, edit) in seven_negatives.items():
+        bad = copy.deepcopy(base)
+        edit(bad)
+        expect_invalid(name, review_validator.validate, bad)
+    print(f"PASS: review record schema 0.7 bounds and earlier-record bounds; {len(seven_negatives)} negative cases")
     dependencies = json_file(ROOT / "examples/dependencies.json")
     validators["dependencies.schema.json"].validate(dependencies)
     for name, edit in {

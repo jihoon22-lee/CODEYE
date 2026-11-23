@@ -1,8 +1,8 @@
 {
-  "schema_version": "0.2",
+  "schema_version": "0.7",
   "pack": {
     "id": "review",
-    "version": "2.6.0"
+    "version": "2.7.0"
   },
   "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
   "run_id": "0195f3a0-0000-7000-8000-000000000025",
@@ -13,17 +13,17 @@
     {
       "source": "review.documents",
       "state": "accepted",
-      "sha256": "0f215482a0c47d3c29b2469ab4570e45b86df3a18c228a449089387237184197"
+      "sha256": "2fbba254f845daed9ee03bca01f104c41d7cef563220b737ea26063db15859e1"
     },
     {
       "source": "review.investigate",
       "state": "accepted",
-      "sha256": "f9e56ab858fe322ae9a44c9034ab656e822e050ec9ccd78ed8598699e833133c"
+      "sha256": "c5d1246f06dd88c86a51b5f3324dd57ac16d7f8f25154d8b977ed9a4b3f0eb9c"
     },
     {
       "source": "review.interpret",
       "state": "accepted",
-      "sha256": "163cf618c8bc652595dc560c87afe539263ad314139ed58803f3123c035d66d8"
+      "sha256": "aa89334c385babc1cf5d22bbc5ea7b332506c2fc8fc8ee743e741e631cd1788f"
     }
   ],
   "evidence": [
@@ -98,6 +98,7 @@
       "impact": "결제가 중복될 수 있다.",
       "improvement": "결제 경로에서는 재시도를 끈다.",
       "counterpoint": "Forward를 결제에 쓰는 호출자가 발췌에 없다.",
+      "mechanism": "Forward의 반복문이 실패한 호출을 다시 보낸다.",
       "evidence_ids": [
         "ev_d8975f7e76b3341894d27aec",
         "ev_a663434311b594dfb09cfd15"
@@ -111,6 +112,7 @@
       "impact": "마지막 오류만 남는다.",
       "improvement": "각 시도의 오류를 기록한다.",
       "counterpoint": "마지막 오류만 반환하는 것이 문서상 계약일 수 있다.",
+      "mechanism": "반복마다 오류 변수가 덮어써진다.",
       "evidence_ids": [
         "ev_405823cae53ecf5dd298c5fd"
       ],
@@ -176,8 +178,8 @@
       "model": "fake/scripted",
       "opencode_version": "1.19.5",
       "pack_id": "review",
-      "pack_version": "2.6.0",
-      "pack_sha256": "78b4673c5f40850022379fbc7ae263c9b7f68792b3401bc5e56bab4e84664a05",
+      "pack_version": "2.7.0",
+      "pack_sha256": "46d1ed16720a257c65fc49213f6b9cb88dc537037b070a51dc8157fe7d0d7fed",
       "pack_files": [
         "00-core.md",
         "domains.md",
@@ -185,10 +187,10 @@
         "pack.yaml",
         "verify.md"
       ],
-      "request_sha256": "0d155bfa22d97b482a68b6fc8f2c8e7302033e3fa9bdd8829a4f5a320cdcc2bb",
-      "request_bytes": 16317,
+      "request_sha256": "a963a78dd1bc6d3e727bc13939830615fb8600101d873f2a43165b081e1ba7d6",
+      "request_bytes": 16782,
       "usage": {
-        "input": 4879,
+        "input": 4719,
         "output": 50
       },
       "attempt": 1,

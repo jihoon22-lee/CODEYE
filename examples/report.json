@@ -14,7 +14,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000057d",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "6a4b7ae05c5689f29575a86c2d9d456e36a805f03abbfc6d3843c3516cbde62c",
+      "sha256": "5e491b8ebdd2a8f8538a62c03d15f5cdc9ff2c452377e709fe3f8ea2fd9dbcf6",
       "size_bytes": 24792,
       "task_key": null
     },
@@ -712,48 +712,48 @@
       "task_key": "deps.go.m02"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-000000000563",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "0d9fb608216ca5860eb6b3d3879b183ec7d6e92b0c6376ab30647f4cdb4ddd2c",
+      "sha256": "d1235f96421fb3b051978659b74aded9e77c964e8d8d19dadfde482933e0f79d",
       "size_bytes": 1573,
       "task_key": "review.environment"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-000000000565",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "358a864945cb3ff3769e859c843d28fd7053634baadee82e23099903ff6b1e7d",
+      "sha256": "57fc23426bf15cf3d928807f147970853109933c9ef00a6df9452e36faac13a6",
       "size_bytes": 3377,
       "task_key": "review.documents"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-000000000567",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "73420931cc309d67e75032c04cf7e98c3b3c39ad4c51a2dbda76763eb4b7de17",
-      "size_bytes": 3231,
+      "sha256": "c64fdbac4bca28c9ece76f20d79f05bb6ebc6aeb42c88b924674f0e46cda21a0",
+      "size_bytes": 3307,
       "task_key": "review.investigate"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-000000000569",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "b2c74005aa394b5544ca6a63b5f357dc65ad3c788f80ef13b07d975cc7e4e95b",
-      "size_bytes": 3386,
+      "sha256": "3100b5c3f860d821621c3969edb4b55fe8ec9f4071b626f7af97788715fe3e53",
+      "size_bytes": 3468,
       "task_key": "review.interpret"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-00000000056b",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "d2e802f352ba043ad008f6471eb261e17c5c708d8639ab0106ff9e32afa21e74",
-      "size_bytes": 4666,
+      "sha256": "837fb0a351d815ee3d620b58df5c34e402c2ff5af886ae2b9ea10810ced793f0",
+      "size_bytes": 4824,
       "task_key": "review.verify"
     },
     {
@@ -761,8 +761,8 @@
       "id": "0195f3a0-0000-7000-8000-00000000056d",
       "media_type": "application/vnd.codeye.review-scope+json",
       "role": "other",
-      "sha256": "7f1944a7ebe3cf3ad7f8f9d00381704806e191905ae4df4078fc0ee71110d4a6",
-      "size_bytes": 2463,
+      "sha256": "9f7eb5aa057cfc7e84fb27848a77e3eaebc94119a848151eb95098491a5424a2",
+      "size_bytes": 2470,
       "task_key": "review.scope"
     }
   ],
@@ -776,9 +776,9 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "d030a1e5186b8eaf003c1078ded020d5fc084e42a0839450f24d76f6023541ea",
+    "input_digest": "c273672ccdfcca3c67ceaeca0ca73312789eaed2c483665fb7b44b8ffa30b1dd",
     "result_manifest_artifact_id": null,
-    "version": "19"
+    "version": "20"
   },
   "code_review": {
     "accepted_calls": 5,
@@ -845,7 +845,7 @@
         }
       ],
       "max_calls": 99,
-      "max_request_bytes": 40000,
+      "max_request_bytes": 262144,
       "modules": [
         {
           "bytes_sent": 568,
@@ -902,7 +902,7 @@
           "slices": []
         }
       ],
-      "request_bytes_sent": 73137,
+      "request_bytes_sent": 76534,
       "scope": {
         "key": "review.scope",
         "result": "accepted",
@@ -911,8 +911,8 @@
       "status": "overview_only"
     },
     "pack_id": "review",
-    "pack_version": "2.6.0",
-    "request_bytes": 73137,
+    "pack_version": "2.7.0",
+    "request_bytes": 76534,
     "roles": [
       {
         "key": "review.investigate",
@@ -1102,9 +1102,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "784f9a7340a518204177ac3a5332fd30e12b25dcfc0a4b4f5f0777da13a69dd4",
-        "pack_version": "2.6.0",
-        "request_sha256": "a205bafcc165d2bf09d793b5e1f695be481dfdbbd4a480d2385dfbbfb91d9b81",
+        "pack_sha256": "f8a8279ac1bc9874df15e855f9e799eb12b9df7de89c062a0bff81167ad45b2c",
+        "pack_version": "2.7.0",
+        "request_sha256": "c4427226f5c0388c7aa1588deaf93dd5c8354ef41b307a9c6975d4665e18b2b4",
         "role": "environment",
         "task_key": "review.environment"
       },
@@ -1113,9 +1113,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "394ccc0a7571197f1b85e120252644532f61d441064995d68ddda30271b69f42",
-        "pack_version": "2.6.0",
-        "request_sha256": "684e093aaf3bbb7448952749df3de98b457886ffbcfd9711f716feb5d215ca48",
+        "pack_sha256": "f332c6b484c4f9a57f389b8402b48cae563280d4ba046769bdf03707c15baf17",
+        "pack_version": "2.7.0",
+        "request_sha256": "627f29ff0e8adc8b768438c25004fa60f3741817f22c7e197104f2e7d4bea70f",
         "role": "documents",
         "task_key": "review.documents"
       },
@@ -1124,9 +1124,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "7e60ef3e7e2657ed348724e8b324c5c11f8cead611d2821442e2060280f1f020",
-        "pack_version": "2.6.0",
-        "request_sha256": "3b1842829f79ca2d75cd4f6799aa5b34d03abd56d8a491aaefa7be1db30d6e31",
+        "pack_sha256": "cd4975f074fd5477410d087a432c448faa73e769cceda5031857c5e6b6db28a3",
+        "pack_version": "2.7.0",
+        "request_sha256": "c33201bfd3305907ef90a5a78cf12cbf9ae55b170cd6cfaddd6da90d2a82236f",
         "role": "investigate",
         "task_key": "review.investigate"
       },
@@ -1135,9 +1135,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "dd8a85c6a94dfd2654bd0b69a6ddfd31b394ebf2e4740f2b5ee25eda89899b56",
-        "pack_version": "2.6.0",
-        "request_sha256": "e8832db33df3e95ecf86faec1c3df3b01684cf1cff019789e61460990a1bf308",
+        "pack_sha256": "0a650478f020c078668df32d171cc7765c2c73c31545743dab9a41ccdbfa4138",
+        "pack_version": "2.7.0",
+        "request_sha256": "e8fc5b65080284d317c869b2354bad8abf71c95c111c61a1f1b5f63b3613368c",
         "role": "interpret",
         "task_key": "review.interpret"
       },
@@ -1146,9 +1146,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "78b4673c5f40850022379fbc7ae263c9b7f68792b3401bc5e56bab4e84664a05",
-        "pack_version": "2.6.0",
-        "request_sha256": "ffaf8ac33d4bfdabafabb5d9f5133e17646867d3bb5bc9626a7e1fd874e30913",
+        "pack_sha256": "46d1ed16720a257c65fc49213f6b9cb88dc537037b070a51dc8157fe7d0d7fed",
+        "pack_version": "2.7.0",
+        "request_sha256": "468e2345bbfa3e38cb08c5c6078740f86068ed1cb050c1961af41b221e497bcd",
         "role": "verify",
         "task_key": "review.verify"
       }
@@ -2818,6 +2818,14 @@
           "kind": "inferred"
         },
         {
+          "assertion": "Forward의 반복문이 실패한 호출을 다시 보낸다.",
+          "evidence_ids": [
+            "ev_fefbd0c501bd533cc8f2743e",
+            "ev_db01a731b6e8e8a2d717118c"
+          ],
+          "kind": "inferred"
+        },
+        {
           "assertion": "Forward는 인자로 받은 send만 재시도하며 발췌 안에서 결제 호출을 감싸는 곳이 없다.",
           "evidence_ids": [
             "ev_fefbd0c501bd533cc8f2743e"
@@ -2931,6 +2939,13 @@
       "claims": [
         {
           "assertion": "재시도 반복에서 앞선 시도의 오류를 덮어씀",
+          "evidence_ids": [
+            "ev_5eaa486d238691eb5b4ba5c1"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "반복문이 매 시도의 오류를 같은 변수에 덮어쓴다.",
           "evidence_ids": [
             "ev_5eaa486d238691eb5b4ba5c1"
           ],

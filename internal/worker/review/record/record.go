@@ -17,7 +17,9 @@ import (
 
 const (
 	MediaType = "application/vnd.codeye.review+json"
-	MaxBytes  = 256 << 10
+	// MaxBytes bounds one stored record. Records of whole-file inputs carry
+	// more evidence entries and longer prose than the earlier 256 KiB held.
+	MaxBytes = 1 << 20
 
 	OutcomeAccepted = "accepted"
 	OutcomeFailed   = "failed"
@@ -52,16 +54,21 @@ type Excerpt struct {
 	PackageReference PackageReference `json:"package_reference,omitzero"`
 	// Text is sent to the model only; records never store source text.
 	Text string `json:"text,omitempty"`
+	// Within is set in a request only: the ID of another excerpt of the
+	// same request whose text holds these lines, so they are not sent twice.
+	Within string `json:"within,omitempty"`
 }
 
 type CandidateText struct {
-	ID           string   `json:"id,omitempty"`
-	Title        string   `json:"title"`
-	Condition    string   `json:"condition"`
-	Impact       string   `json:"impact"`
-	Improvement  string   `json:"improvement"`
-	Counterpoint string   `json:"counterpoint"`
-	Evidence     []string `json:"evidence_ids"`
+	ID           string `json:"id,omitempty"`
+	Title        string `json:"title"`
+	Condition    string `json:"condition"`
+	Impact       string `json:"impact"`
+	Improvement  string `json:"improvement"`
+	Counterpoint string `json:"counterpoint"`
+	// Mechanism is how the cited lines produce the failure (schema 0.7).
+	Mechanism string   `json:"mechanism,omitempty"`
+	Evidence  []string `json:"evidence_ids"`
 }
 
 type Usage struct {
@@ -226,12 +233,12 @@ func hasKind(ids []string, catalog map[string]Excerpt, kind string) bool {
 	return false
 }
 
-func texts(list []string, min, max int) bool {
+func texts(list []string, min, max, limit int) bool {
 	if list == nil || len(list) < min || len(list) > max {
 		return false
 	}
 	for _, s := range list {
-		if !SafeText(s) || len(s) > 600 {
+		if !SafeText(s) || len(s) > limit {
 			return false
 		}
 	}
@@ -250,9 +257,16 @@ func codes(list []string) bool {
 	return true
 }
 
-// CheckVerification enforces the verdict rules. Only the platform may set
-// unreviewed; reproduced never appears because verification has no execution evidence.
+// CheckVerification enforces the verdict rules with the prose bounds of the
+// earlier record versions.
 func CheckVerification(v Verification, catalog map[string]Excerpt) error {
+	return CheckVerificationWithin(v, catalog, maxListText)
+}
+
+// CheckVerificationWithin enforces the verdict rules; listText bounds one
+// condition, assumption or next step. Only the platform may set unreviewed;
+// reproduced never appears because verification has no execution evidence.
+func CheckVerificationWithin(v Verification, catalog map[string]Excerpt, listText int) error {
 	lists := [][]string{v.ValidConditions, v.InvalidConditions, v.SupportingEvidence, v.Counterevidence, v.UnresolvedAssumptions, v.NextVerification}
 	for _, l := range lists {
 		if l == nil {
@@ -275,7 +289,7 @@ func CheckVerification(v Verification, catalog map[string]Excerpt) error {
 	if !slices.Contains(Categories, v.Category) || !slices.Contains(Severities, v.Severity) || !SafeText(v.SeverityReason) || !SafeText(v.Impact) {
 		return invalid("verification attributes")
 	}
-	if !texts(v.ValidConditions, 0, 4) || !texts(v.InvalidConditions, 0, 4) || !texts(v.UnresolvedAssumptions, 0, 4) || !texts(v.NextVerification, 1, 3) {
+	if !texts(v.ValidConditions, 0, 4, listText) || !texts(v.InvalidConditions, 0, 4, listText) || !texts(v.UnresolvedAssumptions, 0, 4, listText) || !texts(v.NextVerification, 1, 3, listText) {
 		return invalid("verification text")
 	}
 	if !idsOK(v.SupportingEvidence, catalog, 8) || !idsOK(v.Counterevidence, catalog, 8) {

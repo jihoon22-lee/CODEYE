@@ -103,7 +103,7 @@ func TestDocumentedGoWrappersReachImplementationAndKeepScopeLedger(t *testing.T)
 			DocumentEvidenceIDs: in.Documents.Contracts[0].EvidenceIDs, CodeEvidenceIDs: ids,
 		}}})
 	}
-	_, results := runRole(t, j, langStub{eco: "go", path: render, line: 65, manifest: "go.mod"}, &scriptedCaller{script: script}, "1.27.4")
+	_, results := runRoleSmall(t, j, langStub{eco: "go", path: render, line: 65, manifest: "go.mod"}, &scriptedCaller{script: script}, "1.27.4")
 	if results[record.TaskScope].Status != domain.TaskSucceeded || results["review.investigate"].Status != domain.TaskSucceeded {
 		t.Fatalf("review stages did not finish: %+v", results)
 	}
@@ -202,7 +202,7 @@ func TestDocumentedGoWrappersRequireExactLocalUnambiguousSource(t *testing.T) {
 			if tc.pathScope {
 				j.Scope = domain.Scope{Kind: "paths", Paths: []string{wrapperPath}}
 			}
-			s := &roleStage{ctx: t.Context(), j: j, role: record.StageInvestigate}
+			s := &roleStage{h: Handler{Budget: smallBudget}, ctx: t.Context(), j: j, role: record.StageInvestigate}
 			if tc.withheld {
 				s.screen.withheld = map[string]bool{helperPath: true}
 			}

@@ -26,6 +26,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/hostaddr"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
@@ -219,11 +220,16 @@ type Model struct {
 	// CredentialFile is a CODEYE model credential or an OpenCode auth.json.
 	CredentialFile string `json:"credential_file,omitempty"`
 	RelayFile      string `json:"relay_file,omitempty"`
-	// TimeoutSeconds bounds one model call (default 180, 1..1800).
+	// TimeoutSeconds bounds one model call (default 600, 1..1800).
 	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 	// ReviewMaxCalls is the model call ceiling per review attempt
 	// (codeye agent --review-max-calls); 0 means the default.
 	ReviewMaxCalls int `json:"review_max_calls,omitempty"`
+	// ReviewRequestBytes and ReviewOutputTokens are the review request
+	// budget (codeye agent --review-request-bytes, --review-output-tokens);
+	// 0 means the default.
+	ReviewRequestBytes int `json:"review_request_bytes,omitempty"`
+	ReviewOutputTokens int `json:"review_output_tokens,omitempty"`
 }
 
 // Quota are storage area limits in bytes (0 = no limit).
@@ -582,10 +588,16 @@ func (c *Config) validate(knownTools []string) error {
 			return errors.New("agent.model.relay_file and agent.model.config_file are alternatives")
 		}
 		if m.TimeoutSeconds < 0 || m.TimeoutSeconds > 1800 {
-			return errors.New("agent.model.timeout_seconds must be 1..1800 (0 = 180)")
+			return errors.New("agent.model.timeout_seconds must be 1..1800 (0 = 600)")
 		}
 		if m.ReviewMaxCalls != 0 && !record.ValidMaxCalls(m.ReviewMaxCalls) {
 			return errors.New("agent.model.review_max_calls must be between 15 and 2013")
+		}
+		if !opencode.ValidRequestBytes(m.ReviewRequestBytes) {
+			return fmt.Errorf("agent.model.review_request_bytes must be between %d and %d", opencode.MinRequestBytes, opencode.MaxRequestBytes)
+		}
+		if !opencode.ValidOutputTokens(m.ReviewOutputTokens) {
+			return fmt.Errorf("agent.model.review_output_tokens must be between %d and %d", opencode.MinOutputTokens, opencode.MaxOutputTokens)
 		}
 	}
 	for _, v := range []int64{c.Quota.SnapshotBytes, c.Quota.WorkspaceBytes, c.Quota.CacheBytes, c.Quota.LogsBytes, c.Quota.ArtifactsBytes} {

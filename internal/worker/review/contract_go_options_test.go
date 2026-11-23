@@ -91,7 +91,7 @@ func TestDocumentedGoQueryOptionReachesDecisiveProjection(t *testing.T) {
 				if !in.Scope.WholeRun {
 					return asJSON(map[string]any{"candidates": []any{}})
 				}
-				if len(in.Scope.DirectCalls) != 1 || len(in.Scope.Excerpts) > roleMaxCodeFiles || len(opencode.Prompt(request)) > PromptBudget {
+				if len(in.Scope.DirectCalls) != 1 || len(in.Scope.Excerpts) > roleMaxCodeFiles || len(opencode.Prompt(request)) > MinRequestBytes {
 					t.Fatalf("incorrect overview bounds or binding: links %+v, %d evidence entries", in.Scope.DirectCalls, len(in.Scope.Excerpts))
 				}
 				if test.workflow && len(in.Scope.WorkflowRoutes) != 1 {
@@ -120,7 +120,7 @@ func TestDocumentedGoQueryOptionReachesDecisiveProjection(t *testing.T) {
 				}}})
 			}
 			call := &scriptedCaller{script: script}
-			_, results := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: call}, "1.27.4")
+			_, results := runRoleWith(t, j, Handler{Budget: smallBudget, Static: secretsStub{}, Caller: call}, "1.27.4")
 			rec := readRecord(t, j, record.StageInvestigate)
 			if results["review.investigate"].Status != domain.TaskSucceeded || len(rec.ContractComparisons) != 1 ||
 				rec.ContractComparisons[0].Status != test.verdict || call.calls(record.StageContract) != 0 {

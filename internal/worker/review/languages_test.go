@@ -205,7 +205,7 @@ func TestReviewPythonOnlySnapshotGetsThePythonGuide(t *testing.T) {
 			paths = append(paths, e.Path+":"+e.Kind)
 		}
 	}
-	if !slices.Equal(paths, []string{"tool/main.py:code", "tests/test_app.py:test"}) {
+	if !slices.Equal(paths, []string{"tests/test_app.py:test", "tool/main.py:code"}) {
 		t.Fatalf("investigate evidence %v", paths)
 	}
 	if len(f.requests) != 3 {

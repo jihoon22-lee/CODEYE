@@ -217,7 +217,7 @@ func TestSourceCallContextRejectsAmbiguousOrUnavailableBindings(t *testing.T) {
 	}
 }
 
-func TestVerifyFollowsImportedGoCallFromLateCandidate(t *testing.T) {
+func TestVerifyFollowsImportedGoCallFromCandidate(t *testing.T) {
 	p := testCallProjects()["Go"]
 	j := treeJob(t, p.tree)
 	script := coverageScript(t)
@@ -225,9 +225,9 @@ func TestVerifyFollowsImportedGoCallFromLateCandidate(t *testing.T) {
 	script[record.StageInvestigate] = func(_ int, q opencode.Request) opencode.Reply {
 		in := decodeAs[investigateInput](t, q)
 		for _, e := range in.Scope.Excerpts {
-			if !in.Scope.WholeRun && e.Path == p.callee && strings.Contains(e.Text, p.result) {
+			if e.Path == p.callee && strings.Contains(e.Text, p.result) {
 				return asJSON(map[string]any{"candidates": []record.CandidateText{{
-					Title: title, Condition: "Quote를 호출한다.", Impact: "가격이 변한다.", Improvement: "단위를 문서에 적는다.",
+					Title: title, Condition: "Quote를 호출한다.", Mechanism: "호출 결과의 단위가 바뀐다.", Impact: "가격이 변한다.", Improvement: "단위를 문서에 적는다.",
 					Counterpoint: "호출자에서 별도로 단위를 맞출 수 있다.", Evidence: []string{e.ID},
 				}}})
 			}

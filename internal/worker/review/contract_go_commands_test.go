@@ -41,7 +41,7 @@ func commandCorpus(t *testing.T, files map[string]string, statement string, conf
 func documentedCommandCorpus(t *testing.T, files map[string]string, doc, statement string, configure func(*roleStage)) ([]record.Excerpt, corpusLinks) {
 	t.Helper()
 	j := treeJob(t, files)
-	s := &roleStage{ctx: t.Context(), j: j, role: record.StageInvestigate}
+	s := &roleStage{h: Handler{Budget: smallBudget}, ctx: t.Context(), j: j, role: record.StageInvestigate}
 	if configure != nil {
 		configure(s)
 	}
@@ -83,8 +83,10 @@ func TestDocumentedGoCommandPrefersRuntimeRoute(t *testing.T) {
 	}) {
 		t.Fatalf("supporting product test was not sent: %+v", code)
 	}
+	// The QA runner may travel as an ordinary unit (the whole file), never
+	// as a targeted witness window.
 	if slices.ContainsFunc(code, func(e record.Excerpt) bool {
-		return e.Path == "scripts/browser_smoke.py" && strings.Contains(e.Text, "def browser")
+		return e.Path == "scripts/browser_smoke.py" && strings.Contains(e.Text, "def browser") && e.Start > 1
 	}) {
 		t.Fatalf("QA runner received the runtime witness slot: %+v", code)
 	}

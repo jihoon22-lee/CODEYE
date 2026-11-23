@@ -73,7 +73,7 @@ func unreviewed(id, lim string) Verification {
 // accepted without them when what remains passes every check of its verdict
 // on its own. Any other unknown ID keeps the entry rejected. Those
 // candidates are returned in dropped.
-func parseVerificationItems(raw json.RawMessage, want map[string]bool, catalog map[string]Excerpt, droppable map[string]bool) (map[string]Verification, map[string][]string, []string, []string) {
+func parseVerificationItems(raw json.RawMessage, want map[string]bool, cite *citer, droppable map[string]bool, listText int) (map[string]Verification, map[string][]string, []string, []string) {
 	got, itemErrs := map[string]Verification{}, map[string][]string{}
 	var dropped []string
 	var res struct {
@@ -110,11 +110,19 @@ func parseVerificationItems(raw json.RawMessage, want map[string]bool, catalog m
 			itemErrs[id] = []string{"item_schema_invalid"}
 			continue
 		}
-		v, errs := checkModel(m, catalog)
+		var supportErrs, counterErrs []string
+		m.SupportingEvidence, _, supportErrs = cite.resolve(m.SupportingEvidence, citeNarrow)
+		m.Counterevidence, _, counterErrs = cite.resolve(m.Counterevidence, citeNarrow)
+		if citeErrs := addLim(supportErrs, counterErrs...); len(citeErrs) > 0 {
+			itemErrs[id] = citeErrs
+			continue
+		}
+		catalog := cite.catalog()
+		v, errs := checkModel(m, catalog, listText)
 		if len(droppable) > 0 && slices.Equal(errs, []string{"evidence_id_unknown"}) && onlyDroppable(m.SupportingEvidence, catalog, droppable) && onlyDroppable(m.Counterevidence, catalog, droppable) {
 			known := m
 			known.SupportingEvidence, known.Counterevidence = knownIDs(m.SupportingEvidence, catalog), knownIDs(m.Counterevidence, catalog)
-			if kv, kerrs := checkModel(known, catalog); len(kerrs) == 0 {
+			if kv, kerrs := checkModel(known, catalog, listText); len(kerrs) == 0 {
 				v, errs = kv, nil
 				dropped = append(dropped, id)
 			}
@@ -152,7 +160,7 @@ func knownIDs(list []string, catalog map[string]Excerpt) []string {
 	return out
 }
 
-func checkModel(m modelVerification, catalog map[string]Excerpt) (Verification, []string) {
+func checkModel(m modelVerification, catalog map[string]Excerpt, listText int) (Verification, []string) {
 	v := Verification{CandidateID: m.CandidateID, Verdict: m.Verdict, Category: m.Category, Severity: m.Severity, SeverityReason: m.SeverityReason, Impact: m.Impact,
 		ValidConditions: nonNil(m.ValidConditions), InvalidConditions: nonNil(m.InvalidConditions), SupportingEvidence: nonNil(m.SupportingEvidence),
 		Counterevidence: nonNil(m.Counterevidence), UnresolvedAssumptions: nonNil(m.UnresolvedAssumptions), NextVerification: nonNil(m.NextVerification), Limitations: []string{}}
@@ -187,7 +195,7 @@ func checkModel(m modelVerification, catalog map[string]Excerpt) (Verification, 
 			bad("list_too_long")
 		}
 		for _, s := range list {
-			if !record.SafeText(s) || len(s) > 600 {
+			if !record.SafeText(s) || len(s) > listText {
 				bad("text_invalid")
 			}
 		}
@@ -235,7 +243,7 @@ func checkModel(m modelVerification, catalog map[string]Excerpt) (Verification, 
 			bad("unresolved_assumptions_missing")
 		}
 	}
-	if len(errs) == 0 && record.CheckVerification(v, catalog) != nil {
+	if len(errs) == 0 && record.CheckVerificationWithin(v, catalog, listText) != nil {
 		bad("verification_invalid")
 	}
 	if len(errs) == 0 && slices.Contains(v.Limitations, record.LimReproductionRejected) {

@@ -84,13 +84,13 @@ func TestDocumentedJSONFieldsReachBoundGoProducer(t *testing.T) {
 							t.Fatalf("missing bound producer evidence %s: %q, got %+v", wanted.path, wanted.text, in.Scope.Excerpts)
 						}
 					}
-					if len(in.Scope.Excerpts) > roleMaxCodeFiles || len(opencode.Prompt(request)) > PromptBudget {
+					if len(in.Scope.Excerpts) > roleMaxCodeFiles || len(opencode.Prompt(request)) > MinRequestBytes {
 						t.Fatal("overview bounded input grew")
 					}
 				}
 				return asJSON(map[string]any{"candidates": []any{}})
 			}
-			_, results := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: script}}, "1.27.4")
+			_, results := runRoleWith(t, j, Handler{Budget: smallBudget, Static: secretsStub{}, Caller: &scriptedCaller{script: script}}, "1.27.4")
 			if results["review.investigate"].Status != domain.TaskSucceeded {
 				t.Fatalf("overview failed: %+v", results["review.investigate"])
 			}

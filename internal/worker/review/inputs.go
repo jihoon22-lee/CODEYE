@@ -438,13 +438,16 @@ type corpusLinks struct {
 	claims        contractAllocation
 }
 
-// codeCorpus selects code and test excerpts round-robin over the modules of
-// the snapshot, so every module in scope is represented before any module
-// gets a second file. A Go file belongs to its deepest go.mod directory; a
-// file of another ecosystem to its deepest build manifest directory of that
-// ecosystem, and modules are visited ecosystem by ecosystem (sources.go,
-// groupOrder). Accepted document contracts can add targeted windows before
-// the ordinary file prefixes.
+// codeCorpus selects the code and test of the overview. Accepted document
+// contracts and the selectors (contract_*.go, python_formula.go, ...) first
+// add targeted windows within their own fixed caps; then whole files, or
+// declaration-bounded units of a file too large for one, fill the request
+// budget round-robin over the modules of the snapshot, so every module in
+// scope is represented before any module gets a second file (packUnits). A
+// selector window inside a sent unit travels as a reference to it. A Go
+// file belongs to its deepest go.mod directory; a file of another ecosystem
+// to its deepest build manifest directory of that ecosystem, and modules
+// are visited ecosystem by ecosystem (sources.go, groupOrder).
 func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpusLinks, []string, error) {
 	g := planCodeGroupsFor(s.j.Snapshot.Manifest, s.j.Scope, s.h.secondary(), changedPaths(s.j))
 	lims := append([]string{}, g.lims...)
@@ -454,7 +457,6 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 	links := corpusLinks{partial: map[string]bool{}}
 	keep := func(x record.Excerpt, total int) {
 		if x.Start > 1 || x.End < total {
-			lims = addLim(lims, "excerpt_only")
 			links.partial[x.ID] = true
 		}
 		out = append(out, x)
@@ -726,19 +728,14 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 		links.partial[signature.ID] = true
 		remain -= record.JSONLen(signature.Text)
 	}
-	for e := range g.orderedFiles() {
-		if len(out) >= roleMaxCodeFiles || remain < 128 {
-			break
-		}
-		if offered[e.Path] == "" {
-			if err := add(e, 1, roleMaxCodeLines, roleMaxCodeFile); err != nil {
-				return nil, corpusLinks{}, nil, err
-			}
-		}
+	out, err = s.packUnits(g, out, offered)
+	if err != nil {
+		return nil, corpusLinks{}, nil, err
 	}
+	partial := s.partialFiles(out)
 	if g.eligible > len(offered) {
 		lims = append(lims, "files_outside_review_context")
-	} else if len(out) < roleMaxCodeFiles && len(selected.additional) > 0 {
+	} else if partial && len(out) < s.limit().excerpts && len(selected.additional) > 0 {
 		before := len(out)
 		out, err = s.additionalWitnesses(out, selected.additional, remain)
 		if err != nil {
@@ -747,6 +744,9 @@ func (s *roleStage) codeCorpus(documents record.Record) ([]record.Excerpt, corpu
 		for _, x := range out[before:] {
 			links.partial[x.ID] = true
 		}
+	}
+	if partial {
+		lims = addLim(lims, "excerpt_only")
 	}
 	links.claims = s.contractClaimAllocation(out, selected, workflow, documents)
 	return out, links, addLim(nil, lims...), nil

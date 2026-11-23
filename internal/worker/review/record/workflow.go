@@ -72,7 +72,7 @@ func checkWorkflowReading(r Record, catalog map[string]Excerpt) error {
 	if w == nil {
 		return nil
 	}
-	if r.Schema != SchemaVersionWorkflowReading || w.ContractIndex < 1 || w.ContractIndex > MaxContractComparisons ||
+	if (r.Schema != SchemaVersionWorkflowReading && r.Schema != SchemaVersionCitedLines) || w.ContractIndex < 1 || w.ContractIndex > MaxContractComparisons ||
 		!hex64.MatchString(w.RouteDigest) || w.ReadEvidenceID == w.ChangeEvidenceID ||
 		!refs([]string{w.ReadEvidenceID, w.ChangeEvidenceID}, catalog, 2, "code") ||
 		!refs([]string{w.TestEvidenceID}, catalog, 1, "test") {
@@ -92,7 +92,8 @@ func checkWorkflowReading(r Record, catalog map[string]Excerpt) error {
 }
 
 func checkWorkflowSelections(r Record) error {
-	if r.Schema != SchemaVersionWorkflow {
+	if r.Schema != SchemaVersionWorkflow && (r.Schema != SchemaVersionCitedLines ||
+		(r.WorkflowSelections == nil && !slices.ContainsFunc(r.Calls, func(c Call) bool { return c.Purpose == WorkflowSelectionPurpose }))) {
 		if r.WorkflowSelections != nil {
 			return invalid("workflow selections on an older record")
 		}

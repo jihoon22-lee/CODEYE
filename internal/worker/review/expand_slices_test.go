@@ -16,7 +16,8 @@ func TestVerifyLateGoSliceReceivesCallersAndTests(t *testing.T) {
 	const title = "계산 결과에 추가된 단위"
 	tree := map[string]string{
 		"go.mod": "module example.org/billing\n\ngo 1.23\n",
-		"value.go": "package billing\n\nfunc Amount(amount int) int {\n" + strings.Repeat("// preprocessing\n", 70) +
+		// Longer than the smallest overview holds: the marker reaches a slice.
+		"value.go": "package billing\n\nfunc Amount(amount int) int {\n" + strings.Repeat("// preprocessing\n", 700) +
 			"\t" + marker + "\n}\n",
 		"request.go": "package billing\n\nfunc Recalculate(amount int) int {\nreturn Amount(amount)\n}\n",
 		"amount_test.go": "package billing\n\nimport \"testing\"\n" +
@@ -29,9 +30,9 @@ func TestVerifyLateGoSliceReceivesCallersAndTests(t *testing.T) {
 		for _, e := range in.Scope.Excerpts {
 			if e.Path == "value.go" && strings.Contains(e.Text, marker) && e.Start > 1 {
 				return asJSON(map[string]any{"candidates": []record.CandidateText{{
-					Title: title, Condition: "Amount로 수를 계산한다.", Impact: "계산된 값이 달라진다.",
+					Title: title, Condition: "Amount로 수를 계산한다.", Mechanism: "반환 직전에 1을 더한다.", Impact: "계산된 값이 달라진다.",
 					Improvement: "경계의 단위를 확인한다.", Counterpoint: "한 단위를 의도적으로 추가할 수 있다.",
-					Evidence: []string{e.ID},
+					Evidence: []string{citeLine(e, marker)},
 				}}})
 			}
 		}
@@ -53,7 +54,7 @@ func TestVerifyLateGoSliceReceivesCallersAndTests(t *testing.T) {
 		}
 		return verify(n, q)
 	}
-	_, results := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: script}}, "1.27.4")
+	_, results := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: script}, Budget: smallBudget}, "1.27.4")
 	if !sawCandidate || !slices.ContainsFunc(filledSlots(t, j), func(key string) bool {
 		return results["review.verify."+key].Status == domain.TaskSucceeded
 	}) {
@@ -96,8 +97,9 @@ func TestAdjustment(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			tree := map[string]string{
-				"go.mod":   "module example.org/billing\n\ngo 1.23\n",
-				"quota.go": implementation + strings.Repeat("// normalize input\n", 70) + marker + "\n}\n",
+				"go.mod": "module example.org/billing\n\ngo 1.23\n",
+				// Longer than the smallest overview holds: the marker reaches a slice.
+				"quota.go": implementation + strings.Repeat("// normalize input\n", 700) + marker + "\n}\n",
 				"unrelated.go": `package billing
 
 type Discount struct{}
@@ -140,9 +142,9 @@ func TestUnrelatedAssertion(t *testing.T) {
 				for _, e := range in.Scope.Excerpts {
 					if e.Path == "quota.go" && strings.Contains(e.Text, marker) && e.Start > 1 {
 						return asJSON(map[string]any{"candidates": []record.CandidateText{{
-							Title: title, Condition: "음수 수량이 보정되지 않는다.", Impact: "요청 수량이 음수가 된다.",
+							Title: title, Condition: "음수 수량이 보정되지 않는다.", Mechanism: "보정값을 그대로 더해 반환한다.", Impact: "요청 수량이 음수가 된다.",
 							Improvement: "호출 경계에서 음수 입력을 제어한다.", Counterpoint: "호출자가 값을 제한할 수 있다.",
-							Evidence: []string{e.ID},
+							Evidence: []string{citeLine(e, marker)},
 						}}})
 					}
 				}
@@ -205,7 +207,7 @@ func TestUnrelatedAssertion(t *testing.T) {
 					v["unresolved_assumptions"] = []string{"구체 호출자의 입력 범위를 확인하지 못했다."}
 				})}})
 			}
-			_, results := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: script}}, "1.27.4")
+			_, results := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: script}, Budget: smallBudget}, "1.27.4")
 			if !seen {
 				t.Fatal("the candidate from the late source window did not reach verification")
 			}
@@ -299,100 +301,81 @@ func (Discount) Adjust(n int) int { return n - 1 }
 	}
 }
 
-func TestVerifyPromotesExistingEvidenceWithoutBreakingPublication(t *testing.T) {
+func TestVerifyMovesCallerAheadOfUnrelatedContext(t *testing.T) {
 	const (
 		callerPath = "request.go"
 		otherPath  = "a_defaults.go"
 		title      = "음수 수량의 보정 누락"
 	)
-	// Put each declaration at the beginning of a later slice window. The
-	// caller window can then match the investigation context byte for byte.
-	prefix := "package billing\n" + strings.Repeat("// Context.\n", roleMaxCodeLines-1)
+	// The overview reads each file whole. The verifier receives the caller
+	// of the cited method right after it, ahead of the unrelated file, as
+	// a reference into the overview's unit of the caller's file.
 	j := treeJob(t, map[string]string{
-		"go.mod": "module example.org/billing\n\ngo 1.23\n",
-		"quota.go": prefix + `type Quota struct{}
-func (Quota) Adjust(n int) int { return n + 1 }
-`,
-		otherPath: prefix + "func DefaultThreshold() int { return 3 }\n",
-		callerPath: prefix + `func RequestAmount(n int) int {
-	if n < 0 {
-		return 0
-	}
-	return (Quota{}).Adjust(n)
-}
-`,
+		"go.mod":   "module example.org/billing\n\ngo 1.23\n",
+		"quota.go": "package billing\n\ntype Quota struct{}\nfunc (Quota) Adjust(n int) int { return n + 1 }\n",
+		otherPath:  "package billing\n\nfunc DefaultThreshold() int { return 3 }\n",
+		callerPath: "package billing\n\nfunc RequestAmount(n int) int {\n\tif n < 0 {\n\t\treturn 0\n\t}\n\treturn (Quota{}).Adjust(n)\n}\n",
 	})
 	script := coverageScript(t)
-	var prior, promoted record.Excerpt
-	investigationOrder := func(excerpts []record.Excerpt, path string) int {
-		return slices.IndexFunc(excerpts, func(e record.Excerpt) bool {
-			return e.Path == path && e.Start == roleMaxCodeLines+1
-		})
+	var prior, caller record.Excerpt
+	at := func(excerpts []record.Excerpt, path string) int {
+		return slices.IndexFunc(excerpts, func(e record.Excerpt) bool { return e.Path == path })
 	}
 	script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
 		in := decodeAs[investigateInput](t, q)
-		anchor := investigationOrder(in.Scope.Excerpts, "quota.go")
-		caller := investigationOrder(in.Scope.Excerpts, callerPath)
-		other := investigationOrder(in.Scope.Excerpts, otherPath)
-		if anchor < 0 || caller < 0 || other < 0 {
+		anchor, unit, other := at(in.Scope.Excerpts, "quota.go"), at(in.Scope.Excerpts, callerPath), at(in.Scope.Excerpts, otherPath)
+		if anchor < 0 || unit < 0 || other < 0 {
 			return asJSON(map[string]any{"candidates": []any{}})
 		}
-		if other >= caller {
+		if other >= unit {
 			t.Fatal("an unrelated upstream excerpt must precede the caller in this fixture")
 		}
-		prior = in.Scope.Excerpts[caller]
+		prior = in.Scope.Excerpts[unit]
 		return asJSON(map[string]any{"candidates": []record.CandidateText{{
-			Title: title, Condition: "음수 수량이 요청에 들어온다.", Impact: "계산된 결과의 부호가 바뀐다.",
+			Title: title, Condition: "음수 수량이 요청에 들어온다.", Mechanism: "Adjust는 입력에 1을 더해 그대로 반환한다.", Impact: "계산된 결과의 부호가 바뀐다.",
 			Improvement: "입력 범위를 확인한다.", Counterpoint: "호출자가 먼저 입력을 제한할 수 있다.",
 			Evidence: []string{in.Scope.Excerpts[anchor].ID},
 		}}})
 	}
 	script["verify"] = func(_ int, q opencode.Request) opencode.Reply {
 		in := decodeAs[verifyInput](t, q)
-		caller := investigationOrder(in.Scope.Excerpts, callerPath)
-		other := investigationOrder(in.Scope.Excerpts, otherPath)
-		if len(in.Candidates) != 1 || caller != 1 || other <= caller {
+		index := slices.IndexFunc(in.Scope.Excerpts, func(e record.Excerpt) bool { return e.Path == callerPath && e.Origin == "caller" })
+		other := at(in.Scope.Excerpts, otherPath)
+		if len(in.Candidates) != 1 || index != 1 || other <= index {
 			t.Fatalf("the related context must move ahead of unrelated context: %+v", in.Scope.Excerpts)
 		}
-		promoted = in.Scope.Excerpts[caller]
-		if promoted.ID != prior.ID || !strings.Contains(promoted.Text, "if n < 0") ||
-			slices.ContainsFunc(in.Scope.Excerpts[caller+1:], func(e record.Excerpt) bool { return e.ID == prior.ID }) {
-			t.Fatalf("verifier should receive the existing caller once: prior=%+v promoted=%+v", prior, promoted)
+		caller = in.Scope.Excerpts[index]
+		raw := decodeAs[struct {
+			Scope struct {
+				Excerpts []record.Excerpt `json:"excerpts"`
+			} `json:"scope"`
+		}](t, q)
+		sent := raw.Scope.Excerpts[index]
+		if !strings.Contains(caller.Text, "if n < 0") || caller.Start < prior.Start || caller.End > prior.End ||
+			sent.Text != "" || sent.Within != prior.ID || !slices.ContainsFunc(raw.Scope.Excerpts, func(e record.Excerpt) bool { return e.ID == prior.ID && e.Text != "" }) {
+			t.Fatalf("the caller inside the sent unit must travel as a reference: prior=%+v caller=%+v sent=%+v", prior, caller, sent)
 		}
 		return asJSON(map[string]any{"verifications": []any{verdict(in.Candidates[0].ID, "refuted", func(v map[string]any) {
-			v["counterevidence_ids"] = []string{promoted.ID}
+			v["counterevidence_ids"] = []string{caller.ID}
 			v["invalid_conditions"] = []string{"요청 진입점은 음수 수량에서 반환한다."}
 		})}})
 	}
 	pinExampleSnapshot(t, &j)
 	published := sliceReportWithCaller(t, j, secretsStub{}, DefaultMaxCalls, &exampleIDs{n: 0x602},
 		&scriptedCaller{script: script})
-	accepted := false
-	for _, key := range filledSlots(t, j) {
-		name := "verify." + key
-		verified, err := record.Decode(mustRead(t, recordPath(j, name)), expectRecord(j, name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !slices.ContainsFunc(verified.Candidates, func(candidate record.Candidate) bool { return candidate.Title == title }) {
-			continue
-		}
-		accepted = verified.Accepted() && len(verified.Verifications) == 1 &&
-			verified.Verifications[0].Verdict == "refuted"
-	}
-	if !accepted {
-		t.Fatal("the worker did not accept the scripted verification")
+	verified := readRecord(t, j, record.StageVerify)
+	if !verified.Accepted() || len(verified.Verifications) != 1 || verified.Verifications[0].Verdict != "refuted" {
+		t.Fatalf("the worker did not accept the scripted verification: %+v", verified.Verifications)
 	}
 	index := slices.IndexFunc(published.Findings, func(f report.Finding) bool { return strings.HasSuffix(f.Title, title) })
-	if prior.ID == "" || promoted.ID == "" || index < 0 {
-		t.Fatal("the real slice verification did not reach the report")
+	if prior.ID == "" || caller.ID == "" || index < 0 {
+		t.Fatal("the verification did not reach the report")
 	}
 	finding := published.Findings[index]
-	if finding.Validation != report.ValidationRefuted || !slices.Equal(finding.CounterevidenceIDs, []string{prior.ID}) {
-		t.Fatalf("report rejected the accepted verification: validation=%s, limits=%v, provenance=%s/%s",
-			finding.Validation, finding.Limitations, promoted.Origin, promoted.Symbol)
+	if finding.Validation != report.ValidationRefuted || !slices.Equal(finding.CounterevidenceIDs, []string{caller.ID}) {
+		t.Fatalf("report rejected the accepted verification: validation=%s, limits=%v", finding.Validation, finding.Limitations)
 	}
-	if prior != promoted || prior.Origin != "context" || prior.Symbol != "" {
-		t.Fatalf("promoting the caller changed its upstream evidence metadata: prior=%+v promoted=%+v", prior, promoted)
+	if prior.Origin != "context" || prior.Symbol != "" || caller.Symbol != "Adjust" {
+		t.Fatalf("evidence metadata changed: prior=%+v caller=%+v", prior, caller)
 	}
 }

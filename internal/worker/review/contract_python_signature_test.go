@@ -69,7 +69,7 @@ func TestDocumentedPythonCallSuppliesCompleteScopedSignature(t *testing.T) {
 			}
 		}
 		if header == "" || runtime == "" || header == runtime || lines > roleMaxCodeLines || bytes > roleMaxCodeFile ||
-			len(in.Scope.Excerpts) > roleMaxCodeFiles || len(opencode.Prompt(q)) > PromptBudget {
+			len(in.Scope.Excerpts) > roleMaxCodeFiles || len(opencode.Prompt(q)) > MinRequestBytes {
 			t.Fatalf("missing complete header or bounded runtime excerpt: %+v", in.Scope.Excerpts)
 		}
 		if !slices.ContainsFunc(in.Scope.Excerpts, func(e record.Excerpt) bool {
@@ -79,7 +79,7 @@ func TestDocumentedPythonCallSuppliesCompleteScopedSignature(t *testing.T) {
 		}
 		return asJSON(map[string]any{"candidates": []any{}})
 	}
-	_, results := runRole(t, j, vetStub{}, &scriptedCaller{script: script}, "1.27.4")
+	_, results := runRoleSmall(t, j, vetStub{}, &scriptedCaller{script: script}, "1.27.4")
 	if results["review.investigate"].Status != domain.TaskSucceeded {
 		t.Fatalf("investigate: %+v", results["review.investigate"])
 	}

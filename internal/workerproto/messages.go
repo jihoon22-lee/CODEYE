@@ -79,6 +79,10 @@ type Hello struct {
 	// ReviewMaxCalls is the node operator's model call ceiling per review
 	// attempt; 0 means the default (docs/REVIEW.md#모듈-단위-검토-분할).
 	ReviewMaxCalls int `json:"review_max_calls,omitempty"`
+	// ReviewRequestBytes and ReviewOutputTokens are the node operator's
+	// review request budget; 0 means the default (docs/REVIEW.md#요청-크기).
+	ReviewRequestBytes int `json:"review_request_bytes,omitempty"`
+	ReviewOutputTokens int `json:"review_output_tokens,omitempty"`
 	// ModelName is PROVIDER/MODEL.
 	ModelName      string `json:"model_name,omitempty"`
 	ModelRelayFile string `json:"model_relay_file,omitempty"`
@@ -89,7 +93,7 @@ type Hello struct {
 	ModelConfigFile     string `json:"model_config_file,omitempty"`
 	// ModelSettings is present only on the native instance's local worker.
 	ModelSettings *ModelSettings `json:"model_settings,omitempty"`
-	// ModelTimeoutSeconds bounds one model call; 0 means the default (180).
+	// ModelTimeoutSeconds bounds one model call; 0 means the default (600).
 	ModelTimeoutSeconds int `json:"model_timeout_seconds,omitempty"`
 	// GitCredentialFile is the file the worker reads a Git host token from
 	// for one fetch of that host (the service's GitHub token,

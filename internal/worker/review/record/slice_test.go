@@ -51,9 +51,12 @@ func example(t *testing.T, stage string) ([]byte, Record, Expect) {
 }
 
 // asSlice turns a whole-run investigate or verify record into a record of
-// slice s001 (schema 0.3, its own upstream names).
+// slice s001 (its own upstream names): schema 0.3 for an earlier record,
+// and a record of schema 0.7, which every role and slice writes, keeps it.
 func asSlice(r Record) Record {
-	r.Schema = SchemaVersionSlice
+	if r.Schema != SchemaVersionCitedLines {
+		r.Schema = SchemaVersionSlice
+	}
 	r.Slice = &SliceRef{Key: "s001", Modules: []string{"go:.", "go:svc/b"}}
 	r.Upstream = append([]Upstream{}, r.Upstream...)
 	for i := range r.Upstream {
@@ -89,18 +92,18 @@ func TestSliceRecordSchema(t *testing.T) {
 		t.Fatal("slice record accepted as a whole-run record")
 	}
 	mutations := map[string]func(*Record){
-		"no slice on 0.3":  func(r *Record) { r.Slice = nil },
-		"slice on 0.2":     func(r *Record) { r.Schema = SchemaVersion },
-		"key s000":         func(r *Record) { r.Slice.Key = "s000" },
-		"key s033":         func(r *Record) { r.Slice.Key = "s033" },
-		"other slice":      func(r *Record) { r.Slice.Key = "s002" },
-		"upper case key":   func(r *Record) { r.Slice.Key = "S001" },
-		"no modules":       func(r *Record) { r.Slice.Modules = []string{} },
-		"nil modules":      func(r *Record) { r.Slice.Modules = nil },
-		"unsorted modules": func(r *Record) { r.Slice.Modules = []string{"go:svc/b", "go:."} },
-		"duplicate module": func(r *Record) { r.Slice.Modules = []string{"go:.", "go:."} },
-		"invalid module":   func(r *Record) { r.Slice.Modules = []string{"go"} },
-		"absolute module":  func(r *Record) { r.Slice.Modules = []string{"go:/etc"} },
+		"no slice on slice": func(r *Record) { r.Slice = nil },
+		"slice on 0.2":      func(r *Record) { r.Schema = SchemaVersion },
+		"key s000":          func(r *Record) { r.Slice.Key = "s000" },
+		"key s033":          func(r *Record) { r.Slice.Key = "s033" },
+		"other slice":       func(r *Record) { r.Slice.Key = "s002" },
+		"upper case key":    func(r *Record) { r.Slice.Key = "S001" },
+		"no modules":        func(r *Record) { r.Slice.Modules = []string{} },
+		"nil modules":       func(r *Record) { r.Slice.Modules = nil },
+		"unsorted modules":  func(r *Record) { r.Slice.Modules = []string{"go:svc/b", "go:."} },
+		"duplicate module":  func(r *Record) { r.Slice.Modules = []string{"go:.", "go:."} },
+		"invalid module":    func(r *Record) { r.Slice.Modules = []string{"go"} },
+		"absolute module":   func(r *Record) { r.Slice.Modules = []string{"go:/etc"} },
 		"too many modules": func(r *Record) {
 			r.Slice.Modules = strings.Split("go:a go:b go:c go:d go:e go:f go:g go:h go:i", " ")
 		},
