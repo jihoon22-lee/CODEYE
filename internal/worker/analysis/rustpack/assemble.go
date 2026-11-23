@@ -114,8 +114,8 @@ type assembleInput struct {
 	Linker                      bool
 	// ToolPath: the operator's tool path directories followed the toolchain
 	// directory on the child PATH (programs build scripts spawn by name).
-	ToolPath bool
-	OutOfScope                  func(rel string) bool
+	ToolPath   bool
+	OutOfScope func(rel string) bool
 	// Dependencies is the limitation of a run that read the crates this
 	// attempt fetched (CARGO_HOME of deps.rust); "" for a scratch home.
 	Dependencies string

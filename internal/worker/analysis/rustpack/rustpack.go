@@ -161,16 +161,16 @@ type Config struct {
 
 // Analyzer is the configured cargo check or clippy adapter.
 type Analyzer struct {
-	kind    Kind
-	cfg     Config
-	tcDir   string // resolved toolchain bin directory
-	rustc   string // absolute rustc next to cargo
-	linker  string // absolute cc from ToolPath, "" if none
+	kind   Kind
+	cfg    Config
+	tcDir  string // resolved toolchain bin directory
+	rustc  string // absolute rustc next to cargo
+	linker string // absolute cc from ToolPath, "" if none
 	// toolDirs are the existing absolute ToolPath directories, appended to
 	// the child PATH of the cargo runs.
 	toolDirs []string
-	cargo   string // cargo as the operator named it
-	toolExe string // executable of the main execution
+	cargo    string // cargo as the operator named it
+	toolExe  string // executable of the main execution
 }
 
 var _ pack.Analyzer = (*Analyzer)(nil)
