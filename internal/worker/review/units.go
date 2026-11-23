@@ -237,7 +237,7 @@ func braceDepths(lines []string, q quoteRule) (startDepth, endDepth []int, close
 				continue
 			case c == '"' || (c == '`' && q.backtick):
 				quote = c
-			case c == '/' && q.regex && regexOperand(line[:j], last):
+			case c == '/' && q.regex && (j+1 == len(line) || line[j+1] != '>') && regexOperand(line[:j], last):
 				j = regexEnd(line, j)
 			case c == '\'':
 				if q.single {
@@ -250,7 +250,8 @@ func braceDepths(lines []string, q quoteRule) (startDepth, endDepth []int, close
 			case c == '}':
 				depth = max(0, depth-1)
 			}
-			if c != ' ' && c != '\t' {
+			// A CRLF line ends in "\r"; it is not the line's last token.
+			if c != ' ' && c != '\t' && c != '\r' {
 				last = c
 			}
 		}
@@ -267,8 +268,10 @@ func braceDepths(lines []string, q quoteRule) (startDepth, endDepth []int, close
 // regexOperand reports whether a "/" after before (last its last
 // non-blank byte on the line) is where a JS operand is expected: the line
 // start, an operator or opening punctuation, or a keyword such as return.
+// "<" is left out (a JSX closing tag "</b>"), and so is "/>" (a
+// self-closing tag) at the call site.
 func regexOperand(before string, last byte) bool {
-	if last == 0 || strings.IndexByte("(,=:[!&|?{};+-*%<>~^", last) >= 0 {
+	if last == 0 || strings.IndexByte("(,=:[!&|?{};+-*%>~^", last) >= 0 {
 		return true
 	}
 	word := strings.TrimRightFunc(before, unicode.IsSpace)

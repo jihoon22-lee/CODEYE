@@ -50,6 +50,25 @@ func TestBraceCutsJSRegexLiteral(t *testing.T) {
 	if got := cutLines("x.js", div, 1<<20); !slices.Contains(got, 4) {
 		t.Fatalf("division cuts %v", got)
 	}
+	// JSX closing and self-closing tags are not regular expressions.
+	jsx := "export function A({ flag }) {\n  return <span>{flag && <b>yes</b>}</span>;\n}\n\nexport function B({ x }) {\n  return <C v={x} />;\n}\n\nexport function D() {}\n"
+	if got := cutLines("x.tsx", jsx, 1<<20); !slices.Contains(got, 4) || !slices.Contains(got, 8) {
+		t.Fatalf("jsx cuts %v", got)
+	}
+}
+
+// A CRLF file is cut like the same file with LF line ends.
+func TestBraceCutsCRLF(t *testing.T) {
+	for path, src := range map[string]string{
+		"x.c":    "#include <stdio.h>\n\nint a(void) {\n  return 1;\n}\nint b;\n",
+		"A.java": "package p;\n\nclass A {\n  int f() { return 1; }\n}\n\nclass B {}\n",
+		"x.ts":   "import { a } from \"./a\";\n\nexport function f() {\n  return a;\n}\n\nexport const x = 1;\n",
+	} {
+		lf := cutLines(path, src, 1<<20)
+		if crlf := cutLines(path, strings.ReplaceAll(src, "\n", "\r\n"), 1<<20); !slices.Equal(lf, crlf) {
+			t.Errorf("%s: CRLF cuts %v, LF cuts %v", path, crlf, lf)
+		}
+	}
 }
 
 // Alternative preprocessor branches that each open a function do not leave
