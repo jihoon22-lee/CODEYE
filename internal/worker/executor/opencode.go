@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // openCodeModel is a PROVIDER/MODEL identifier. The model part may hold
@@ -148,8 +149,18 @@ func ValidBaseURL(s string) bool {
 }
 
 // Arbitrary OPENCODE_* values in Spec.Env still follow the credential filter.
-func managedOpenCodeEnv(model string, p *ModelProvider) map[string]string {
+// timeout is the call's wall-clock limit (Spec.Timeout).
+func managedOpenCodeEnv(model string, p *ModelProvider, timeout time.Duration) map[string]string {
 	provider, name, _ := strings.Cut(model, "/")
+	// OpenCode aborts a provider request that gets no response headers, or
+	// no next stream chunk, within headerTimeout or chunkTimeout (300,000 ms
+	// each unless set; OpenCode 1.19.5). The relay sends its headers only
+	// once the upstream answer is complete, so the provider profiles CODEYE
+	// writes wait as long as the call may run.
+	waits := map[string]any{}
+	if ms := timeout.Milliseconds(); ms > 0 {
+		waits["headerTimeout"], waits["chunkTimeout"] = ms, ms
+	}
 	settings := map[string]any{
 		"enabled_providers": []string{provider}, "model": model, "small_model": model,
 		"permission": "deny", "tools": map[string]bool{"*": false}, "share": "disabled", "snapshot": false,
@@ -160,12 +171,13 @@ func managedOpenCodeEnv(model string, p *ModelProvider) map[string]string {
 		r := p.relay
 		settings["provider"] = map[string]any{provider: map[string]any{
 			"npm": "@ai-sdk/openai-compatible", "name": "CODEYE budgeted QA relay",
-			"options": map[string]any{"apiKey": r.Token, "baseURL": r.BaseURL},
+			"options": withWaits(map[string]any{"apiKey": r.Token, "baseURL": r.BaseURL}, waits),
 			"models":  map[string]any{r.Model: relayModel(r)},
 		}}
 	case p != nil && p.Native != nil:
 		n := p.Native
-		options := map[string]any{}
+		// The operator's own timeouts stay as set.
+		options := withWaits(map[string]any{}, waits)
 		for key, value := range n.Timeouts {
 			options[key] = value
 		}
@@ -197,7 +209,7 @@ func managedOpenCodeEnv(model string, p *ModelProvider) map[string]string {
 		}
 		settings["provider"] = map[string]any{provider: block}
 	case p != nil:
-		options := map[string]any{"apiKey": p.APIKey}
+		options := withWaits(map[string]any{"apiKey": p.APIKey}, waits)
 		if p.BaseURL != "" {
 			options["baseURL"] = p.BaseURL
 		}
@@ -224,6 +236,13 @@ func managedOpenCodeEnv(model string, p *ModelProvider) map[string]string {
 		// port instead of registry.npmjs.org or an internal mirror.
 		"npm_config_registry": OpenCodeNpmRegistry,
 	}
+}
+
+func withWaits(options, waits map[string]any) map[string]any {
+	for key, value := range waits {
+		options[key] = value
+	}
+	return options
 }
 
 // OpenCodeNpmRegistry is the npm registry of the managed OpenCode profile: a

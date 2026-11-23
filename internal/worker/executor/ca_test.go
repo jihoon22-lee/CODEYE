@@ -73,7 +73,7 @@ func TestCAEnvNamesOneBundleForEveryTool(t *testing.T) {
 // provider.
 func TestManagedOpenCodePinsTheNpmRegistry(t *testing.T) {
 	for _, p := range []*ModelProvider{nil, {ID: "openai", APIKey: "k", BaseURL: "https://llm.internal/v1"}} {
-		env := managedOpenCodeEnv("openai/gpt-6.2-sol", p)
+		env := managedOpenCodeEnv("openai/gpt-6.2-sol", p, 0)
 		if env["npm_config_registry"] != OpenCodeNpmRegistry {
 			t.Fatalf("npm_config_registry = %q", env["npm_config_registry"])
 		}

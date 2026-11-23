@@ -23,6 +23,8 @@ the relay) gets the same reply as a Responses event stream; its `input` content
 may be a list of `input_text` parts.
 `--tls-cert CERT --tls-key KEY` serves HTTPS (an internal endpoint behind a private
 CA, docs/OPERATIONS.md#사내-ca); the key and certificate are the caller's test files.
+`--delay-seconds N` answers each request N seconds late, to see a slow model through the
+relay (which sends its headers only once the answer is complete) and OpenCode's waits.
 `--echo-text TEXT` appends an operator-chosen text to every investigate candidate
 title, to see whether a model's own words reach the verify request (the relay's
 `--allow-model-echo` path). The text comes from the operator, never from labels.
@@ -169,8 +171,9 @@ def reply_text(payload: dict, echo: str | None = None) -> tuple[str, str]:
 
 
 class FakeUpstream:
-    def __init__(self, mode: str, dump: Path | None, echo: str | None = None):
+    def __init__(self, mode: str, dump: Path | None, echo: str | None = None, delay: float = 0.0):
         self.mode = mode
+        self.delay = delay
         self.dump = dump
         self.echo = echo
         self.calls = 0
@@ -182,6 +185,8 @@ class FakeUpstream:
             number = self.calls
         if self.dump is not None:
             (self.dump / f"{number:04d}.json").write_text(json.dumps(payload, ensure_ascii=False, indent=1))
+        if self.delay > 0:
+            time.sleep(self.delay)
         if self.mode == "fail":
             return 500, {"error": {"message": "fake failure", "type": "server_error", "code": "fake_failure"}}
         if self.mode == "unauthorized":
@@ -267,6 +272,7 @@ def main(argv=None) -> int:
     parser.add_argument("--mode", choices=("normal", "expensive", "fail", "unauthorized"), default="normal")
     parser.add_argument("--dump", type=Path, help="write every received payload here (dry-run analysis only)")
     parser.add_argument("--echo-text", help="append this operator text to investigate candidate titles")
+    parser.add_argument("--delay-seconds", type=float, default=0.0, help="answer every request this many seconds late")
     parser.add_argument("--tls-cert", type=Path, help="serve HTTPS with this certificate chain (PEM)")
     parser.add_argument("--tls-key", type=Path, help="the private key of --tls-cert (PEM)")
     args = parser.parse_args(argv)
@@ -278,7 +284,10 @@ def main(argv=None) -> int:
         return 2
     if args.dump is not None:
         args.dump.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fake = FakeUpstream(args.mode, args.dump, args.echo_text)
+    if not 0 <= args.delay_seconds <= 3600:
+        print("--delay-seconds is between 0 and 3600", file=sys.stderr)
+        return 2
+    fake = FakeUpstream(args.mode, args.dump, args.echo_text, args.delay_seconds)
     server = make_server(fake)
     if args.tls_cert is not None:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

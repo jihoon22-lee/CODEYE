@@ -16,6 +16,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -616,6 +617,33 @@ class GatewayHTTPTests(unittest.TestCase):
         report = self.report()
         self.assertEqual(report["settled_by_status"], {"timeout": 1})
         self.assertEqual(report["charged_microusd_total"], report["reserved_microusd_total"])
+
+    def test_queued_request_of_a_closed_client_is_not_reserved_or_forwarded(self):
+        self.fake.mode = "hang"
+        original = g.QUEUE_POLL_S
+        g.QUEUE_POLL_S = 0.05
+        first = threading.Thread(target=lambda: self.call(chat_request()), daemon=True)
+        try:
+            first.start()
+            self.assertTrue(self.fake.received.wait(5))
+            # A second client sends its whole request, waits in the queue and
+            # gives up (closes) before the slot frees.
+            data = json.dumps(chat_request()).encode()
+            sock = socket.create_connection(("127.0.0.1", self.port), timeout=5)
+            sock.sendall(b"POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1:%d\r\nAuthorization: Bearer tok-123\r\n"
+                         b"Content-Type: application/json\r\nContent-Length: %d\r\n\r\n" % (self.port, len(data)) + data)
+            time.sleep(0.3)
+            sock.close()
+            deadline = time.monotonic() + 5
+            while not any(e.get("event") == "client_gone" for e in self.events) and time.monotonic() < deadline:
+                time.sleep(0.02)
+        finally:
+            g.QUEUE_POLL_S = original
+            self.fake.release.set()
+            first.join(10)
+        self.assertTrue(any(e.get("event") == "client_gone" for e in self.events), self.events)
+        self.assertEqual(len(self.fake.calls), 1)
+        self.assertEqual(self.report()["requests"], 1)
 
     @classmethod
     def tearDownClass(cls):

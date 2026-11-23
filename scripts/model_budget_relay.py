@@ -15,6 +15,10 @@ Guarantees (see docs/EVALUATION.md):
   is sent. Failures, missing usage and crashes are charged the full reservation.
 - Errors returned to clients use non-retryable HTTP statuses only, so SDK retry
   loops cannot silently multiply paid calls.
+- One request is upstream at a time. A queued request whose client has closed
+  its connection (OpenCode gave up at its own timeout) is dropped before it is
+  reserved or forwarded; a client that only half-closes after sending looks the
+  same and is dropped too.
 - with --forbidden-phrases FILE (the evaluation corpus answer list), a
   request whose forwarded text contains a listed phrase is never reserved or
   forwarded; a durable `blocked` ledger record (no charge) is written instead.
@@ -39,6 +43,7 @@ import json
 import os
 import re
 import secrets
+import select
 import signal
 import socket
 import ssl
@@ -96,6 +101,8 @@ CLIENT_IO_TIMEOUT_S = 30.0
 # The worker's default model call timeout (opencode.DefaultTimeout).
 UPSTREAM_DEADLINE_S = 600.0
 QUEUE_WAIT_S = UPSTREAM_DEADLINE_S + 60.0
+# How often a queued request checks that its client is still connected.
+QUEUE_POLL_S = 1.0
 
 LEDGER_VERSION = 1
 PRICING = {
@@ -147,6 +154,21 @@ class RequestRejected(Exception):
         super().__init__(code)
         self.status = status
         self.code = code
+
+
+class ClientGone(Exception):
+    """The client closed its connection before its request was forwarded."""
+
+
+def client_connected(sock) -> bool:
+    """Whether a client that has sent its whole request still holds the
+    connection: an HTTP client sends nothing more until the reply, so a
+    readable socket that peeks no bytes was closed by the client."""
+    try:
+        readable, _, _ = select.select([sock], [], [], 0)
+        return not readable or sock.recv(1, socket.MSG_PEEK) != b""
+    except (OSError, ValueError):
+        return False
 
 
 class UpstreamFailure(Exception):
@@ -937,7 +959,7 @@ class Gateway:
             return False
         return hmac.compare_digest(header[7:].encode(), self.token)
 
-    def chat(self, body: bytes) -> tuple[int, str, bytes]:
+    def chat(self, body: bytes, client_alive=None) -> tuple[int, str, bytes]:
         try:
             request = json.loads(body)
         except ValueError:
@@ -958,9 +980,21 @@ class Gateway:
                                   message_count=prepared["message_count"], role_hint=hint, echo_matches=echo)
                 self.log({"event": "blocked", "status": BLOCKED_STATUS, "match_count": len(found), "role_hint": hint})
                 raise RequestRejected(403, BLOCKED_STATUS)
-        if not self.in_flight.acquire(timeout=QUEUE_WAIT_S):
-            raise RequestRejected(424, "relay_busy")
+        # Wait for the upstream slot; a client that left meanwhile is neither
+        # reserved nor forwarded (nothing would read the answer).
+        give_up = time.monotonic() + QUEUE_WAIT_S
+        while True:
+            if client_alive is not None and not client_alive():
+                self.log({"event": "client_gone", "role_hint": hint})
+                raise ClientGone()
+            if self.in_flight.acquire(timeout=max(0.0, min(QUEUE_POLL_S, give_up - time.monotonic()))):
+                break
+            if time.monotonic() >= give_up:
+                raise RequestRejected(424, "relay_busy")
         try:
+            if client_alive is not None and not client_alive():
+                self.log({"event": "client_gone", "role_hint": hint})
+                raise ClientGone()
             try:
                 rid = self.ledger.reserve(
                     model=self.model, reserved_microusd=prepared["reserved_microusd"],
@@ -1055,6 +1089,11 @@ def make_handler(gateway: Gateway):
         def _dispatch(self):
             try:
                 self._route()
+            except ClientGone:  # nobody to answer
+                self.close_connection = True
+            except (BrokenPipeError, ConnectionResetError):  # the client left before the reply
+                gateway.log({"event": "client_gone_before_reply"})
+                self.close_connection = True
             except RequestRejected as rejected:
                 self._reply(rejected.status, "application/json",
                             error_body(rejected.code, extra=getattr(rejected, "extra", None)))
@@ -1097,7 +1136,7 @@ def make_handler(gateway: Gateway):
                 if not chunk:
                     raise RequestRejected(400, "body_incomplete")
                 body += chunk
-            status, content_type, payload = gateway.chat(bytes(body))
+            status, content_type, payload = gateway.chat(bytes(body), lambda: client_connected(self.connection))
             self._reply(status, content_type, payload)
 
         do_GET = do_POST = do_PUT = do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = _dispatch

@@ -342,6 +342,31 @@ func TestLiveOpenCode(t *testing.T) {
 	t.Logf("version=%s model=%s workspace verified, cleanup=%s", reply.Version, reply.Model, reply.Cleanup)
 }
 
+// A relay answer that arrives later than OpenCode's own 300 s header and
+// chunk waits still reaches the review when the call timeout is longer:
+// the managed profile carries the call timeout as both waits. Run it with
+// the relay in front of scripts/fake_model_upstream.py --delay-seconds
+// (for example 320) and CODEYE_TEST_MODEL_TIMEOUT above the delay (400s).
+func TestLiveRelaySlowAnswer(t *testing.T) {
+	descriptor, limit := os.Getenv("CODEYE_TEST_REVIEW_RELAY"), os.Getenv("CODEYE_TEST_MODEL_TIMEOUT")
+	if descriptor == "" || limit == "" {
+		t.Skip("slow relay answer not requested")
+	}
+	timeout, err := time.ParseDuration(limit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{Executable: os.Getenv("CODEYE_TEST_OPENCODE_BIN"), Model: "codeye-gateway/gpt-6.2-sol", RelayFile: descriptor, Timeout: timeout}
+	started := time.Now()
+	reply := cfg.Review(t.Context(), &executor.Executor{}, Request{Scratch: t.TempDir(), Role: "probe", SnapshotDigest: strings.Repeat("0", 64),
+		Input: json.RawMessage(`{"a":2,"b":3}`), Instructions: "Return the integer sum in result.sum."})
+	t.Logf("answered after %s: reason=%q cleanup=%s", time.Since(started).Round(time.Second), reply.Reason, reply.Cleanup)
+	var result struct{ Sum int }
+	if reply.Reason != "" || json.Unmarshal(reply.Output, &result) != nil || result.Sum != 5 {
+		t.Fatalf("slow answer lost: reason=%s output=%s", reply.Reason, reply.Output)
+	}
+}
+
 // Once the relay has reserved a real upstream request, cancel the client and
 // require OS-confirmed cleanup. The relay still accounts for the upstream call.
 func TestLiveInFlightCancel(t *testing.T) {
