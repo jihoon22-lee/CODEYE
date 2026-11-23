@@ -422,3 +422,62 @@ func TestVerifyDeclarationThatIsAStrengthRange(t *testing.T) {
 		t.Fatalf("verify request %+v", sent)
 	}
 }
+
+// A Go file whose function starts right after its import line: the first
+// unit is exactly the file header (package clause and import).
+func headerFirstFile(i int) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "package billing\nimport \"fmt\"\nfunc Fill%d(n int) int {\n", i)
+	for k := range 70 {
+		fmt.Fprintf(&b, "\tn = clamp(n*%d + %d) // filler line that carries bytes\n", k+2, k)
+	}
+	b.WriteString("\tfmt.Println(n)\n\treturn n\n}\n")
+	return b.String()
+}
+
+// When a slot holds a file's first unit, which is exactly its header, and
+// a later unit of the same file, the header is not sent again under the
+// same ID: the unit starting at line 1 already carries those lines.
+func TestSliceHeaderThatIsTheFirstUnit(t *testing.T) {
+	// Eight small files fill the overview; the long file is planned into
+	// one slot whole: its header unit, then its later units.
+	tree := map[string]string{"go.mod": "module example.org/billing\n\ngo 1.23\n", "zfill.go": headerFirstFile(0)}
+	for i := range 8 {
+		tree[fmt.Sprintf("a%d.go", i)] = fmt.Sprintf("package billing\n\nfunc A%d() int { return %d }\n", i, i)
+	}
+	j := treeJob(t, tree)
+	both := 0
+	script := coverageScript(t)
+	investigate := script["investigate"]
+	script["investigate"] = func(n int, q opencode.Request) opencode.Reply {
+		in := decodeAs[investigateInput](t, q)
+		first, later, ids := map[string]bool{}, map[string]bool{}, map[string]bool{}
+		for _, e := range in.Scope.Excerpts {
+			if ids[e.ID] {
+				t.Errorf("%s %d-%d (%s) sent twice", e.Path, e.Start, e.End, e.Origin)
+			}
+			ids[e.ID] = true
+			if e.Origin == "context" && e.Start == 1 {
+				first[e.Path] = true
+			} else if e.Origin == "context" {
+				later[e.Path] = true
+			}
+		}
+		for p := range first {
+			if later[p] {
+				both++
+			}
+		}
+		return investigate(n, q)
+	}
+	r, res := reportAt(t, &j, secretsStub{}, &scriptedCaller{script: script}, Budget{RequestBytes: MinRequestBytes}, &exampleIDs{n: 0x906})
+	for key, s := range res {
+		if strings.HasPrefix(key, "review.investigate") && s.Status != "succeeded" && s.Status != "skipped_policy" {
+			t.Errorf("%s %+v", key, s)
+		}
+	}
+	if both == 0 {
+		t.Fatal("no request held a file's first unit and a later unit")
+	}
+	requireReviewCounted(t, r)
+}

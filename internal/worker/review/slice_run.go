@@ -266,6 +266,16 @@ func (s *roleStage) sliceCorpus() ([]record.Excerpt, []string, error) {
 		maxFiles, remain = s.sliceLimits.MaxFiles, s.sliceLimits.MaxBytes
 	}
 	headers := map[string]bool{}
+	// A file whose first unit this slot sends gets no separate header: that
+	// unit carries the header lines and may be exactly the header (the same
+	// evidence ID twice in one request and record).
+	planned := 0
+	for _, f := range s.slice.Files {
+		if f.State == record.FilePlanned && planned < maxFiles {
+			planned++
+			headers[f.Path] = headers[f.Path] || f.StartLine == 1
+		}
+	}
 	windows := 0
 	for _, f := range s.slice.Files {
 		if f.State != record.FilePlanned {

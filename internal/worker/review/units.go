@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
@@ -94,8 +95,11 @@ func declarationCuts(p string, lines []string, maxBytes int) map[int]bool {
 		splitLargeSpans(lines, cuts, maxBytes, goQuotes)
 	case braceLanguage(ext):
 		q := cQuotes
-		if jsLike(ext) {
+		switch {
+		case jsLike(ext):
 			q = jsQuotes
+		case cFamily(ext):
+			q = cppQuotes
 		}
 		braceCuts(lines, cuts, 0, q)
 		splitLargeSpans(lines, cuts, maxBytes, q)
@@ -109,6 +113,16 @@ func braceLanguage(ext string) bool {
 		return true
 	}
 	return jsLike(ext)
+}
+
+// cFamily are the C and C++ files, whose preprocessor lines the brace
+// scan reads.
+func cFamily(ext string) bool {
+	switch ext {
+	case ".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh", ".hxx":
+		return true
+	}
+	return false
 }
 
 func jsLike(ext string) bool {
@@ -140,15 +154,24 @@ func goCuts(lines []string, cuts map[int]bool) bool {
 	return true
 }
 
-// quoteRule lists the string delimiters of a language family.
+// quoteRule lists the string delimiters and lexical forms of a language
+// family that the brace scan must step over.
 type quoteRule struct {
 	backtick, single bool // ` strings (raw in Go, templates in JS); '…' strings
+	// regex: a "/" where an operand is expected opens a regular expression
+	// literal (JS), which may hold "/*" or braces.
+	regex bool
+	// preprocessor: "#" lines are directives (C, C++). Their braces do not
+	// count, and the alternative branches of #if/#else count as one: the
+	// depth after the first branch.
+	preprocessor bool
 }
 
 var (
-	goQuotes = quoteRule{backtick: true}
-	cQuotes  = quoteRule{}
-	jsQuotes = quoteRule{backtick: true, single: true}
+	goQuotes  = quoteRule{backtick: true}
+	cQuotes   = quoteRule{}
+	cppQuotes = quoteRule{preprocessor: true}
+	jsQuotes  = quoteRule{backtick: true, single: true, regex: true}
 )
 
 // braceDepths returns the brace depth at the start and end of every line,
@@ -156,8 +179,38 @@ var (
 func braceDepths(lines []string, q quoteRule) (startDepth, endDepth []int, closes []bool) {
 	startDepth, endDepth, closes = make([]int, len(lines)), make([]int, len(lines)), make([]bool, len(lines))
 	depth, block, quote := 0, false, byte(0)
+	// branches holds, per open #if, the depth at the #if and after its
+	// first branch (-1 until an #else or #elif ends it).
+	type branch struct{ at, first int }
+	var branches []branch
+	directive := false
 	for i, line := range lines {
 		startDepth[i] = depth
+		if q.preprocessor && !block && (directive || strings.HasPrefix(strings.TrimSpace(line), "#")) {
+			if !directive {
+				d := strings.Fields(strings.TrimPrefix(strings.TrimSpace(line), "#"))
+				switch {
+				case len(d) == 0:
+				case strings.HasPrefix(d[0], "if"):
+					branches = append(branches, branch{depth, -1})
+				case (d[0] == "else" || strings.HasPrefix(d[0], "elif")) && len(branches) > 0:
+					b := &branches[len(branches)-1]
+					if b.first < 0 {
+						b.first = depth
+					}
+					depth = b.at
+				case d[0] == "endif" && len(branches) > 0:
+					b := branches[len(branches)-1]
+					branches = branches[:len(branches)-1]
+					if b.first >= 0 {
+						depth = b.first
+					}
+				}
+			}
+			directive = strings.HasSuffix(strings.TrimRight(line, " \t\r"), `\`)
+			endDepth[i] = depth
+			continue
+		}
 		last := byte(0)
 		for j := 0; j < len(line); j++ {
 			c := line[j]
@@ -184,6 +237,8 @@ func braceDepths(lines []string, q quoteRule) (startDepth, endDepth []int, close
 				continue
 			case c == '"' || (c == '`' && q.backtick):
 				quote = c
+			case c == '/' && q.regex && regexOperand(line[:j], last):
+				j = regexEnd(line, j)
 			case c == '\'':
 				if q.single {
 					quote = c
@@ -207,6 +262,46 @@ func braceDepths(lines []string, q quoteRule) (startDepth, endDepth []int, close
 		closes[i] = last == '}' || last == ';'
 	}
 	return startDepth, endDepth, closes
+}
+
+// regexOperand reports whether a "/" after before (last its last
+// non-blank byte on the line) is where a JS operand is expected: the line
+// start, an operator or opening punctuation, or a keyword such as return.
+func regexOperand(before string, last byte) bool {
+	if last == 0 || strings.IndexByte("(,=:[!&|?{};+-*%<>~^", last) >= 0 {
+		return true
+	}
+	word := strings.TrimRightFunc(before, unicode.IsSpace)
+	for _, k := range []string{"return", "typeof", "case", "in", "of", "delete", "void", "throw", "yield", "await"} {
+		if strings.HasSuffix(word, k) && (len(word) == len(k) || !identByte(word[len(word)-len(k)-1])) {
+			return true
+		}
+	}
+	return false
+}
+
+func identByte(c byte) bool {
+	return c == '_' || c == '$' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+// regexEnd is the index of the "/" closing a regular expression literal
+// opened at j (escapes and [...] classes skipped), or j when the line has
+// none (then the "/" was a division).
+func regexEnd(line string, j int) int {
+	class := false
+	for k := j + 1; k < len(line); k++ {
+		switch c := line[k]; {
+		case c == '\\':
+			k++
+		case c == '[':
+			class = true
+		case c == ']':
+			class = false
+		case c == '/' && !class:
+			return k
+		}
+	}
+	return j
 }
 
 // charLiteralEnd is the index of the quote closing a character literal at
@@ -277,7 +372,8 @@ func pythonCuts(lines []string, cuts map[int]bool) {
 	pending := 0 // first line of comments or decorators above the next statement
 	for i, line := range lines {
 		n := i + 1
-		topLevel := triple == "" && depth == 0 && line != "" && line[0] != ' ' && line[0] != '\t'
+		// A CRLF file's blank line is "\r" here; it is not a statement.
+		topLevel := triple == "" && depth == 0 && strings.TrimSpace(line) != "" && line[0] != ' ' && line[0] != '\t'
 		if topLevel {
 			trimmed := strings.TrimSpace(line)
 			switch {
@@ -355,10 +451,8 @@ func headerEnd(p string, lines []string) int {
 		}
 	}
 	last, block, triple := 0, false, ""
-	for i, line := range lines {
-		if i >= maxHeaderLines {
-			break
-		}
+	for i := 0; i < len(lines) && i < maxHeaderLines; i++ {
+		line := lines[i]
 		t := strings.TrimSpace(line)
 		switch {
 		case triple != "":
@@ -376,22 +470,51 @@ func headerEnd(p string, lines []string) int {
 				triple = q
 			}
 		case headerLine.MatchString(line):
-			last = i + 1
-			// An import list continued on the next lines.
-			if strings.HasSuffix(t, "(") || strings.HasSuffix(t, "{") || strings.HasSuffix(t, ",") {
-				for j := i + 1; j < len(lines) && j < maxHeaderLines; j++ {
-					u := strings.TrimSpace(lines[j])
-					last = j + 1
-					if strings.HasPrefix(u, ")") || strings.HasPrefix(u, "}") {
-						break
-					}
+			// An import list continued until its brackets close, after a
+			// trailing comma, or a directive continued with a backslash (a
+			// multi-line #define).
+			directive, depth := strings.HasPrefix(t, "#"), 0
+			if !directive {
+				depth = bracketDelta(t)
+			}
+			for i+1 < len(lines) && i+1 < maxHeaderLines && (depth > 0 || !directive && strings.HasSuffix(t, ",") || strings.HasSuffix(t, `\`)) {
+				i++
+				t = strings.TrimSpace(lines[i])
+				if !directive {
+					depth += bracketDelta(t)
 				}
 			}
+			last = i + 1
 		default:
 			return last
 		}
 	}
 	return last
+}
+
+// bracketDelta is the opening minus the closing brackets of a header line
+// outside its quoted strings and trailing comment.
+func bracketDelta(t string) int {
+	n, quote := 0, byte(0)
+	for j := 0; j < len(t); j++ {
+		switch c := t[j]; {
+		case quote != 0:
+			if c == '\\' {
+				j++
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'' || c == '`':
+			quote = c
+		case j > 0 && (c == '#' || c == '/' && j+1 < len(t) && t[j+1] == '/'):
+			return n
+		case c == '(' || c == '[' || c == '{':
+			n++
+		case c == ')' || c == ']' || c == '}':
+			n--
+		}
+	}
+	return n
 }
 
 // goHeaderEnd is the end of the package clause and the import

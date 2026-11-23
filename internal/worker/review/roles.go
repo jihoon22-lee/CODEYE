@@ -22,6 +22,10 @@ var errTooLarge = errors.New(reasonInputTooLarge)
 // request grows with the prefix, so the longest fitting prefix is found by
 // bisection.
 func (s *roleStage) fitExcerpts(instructions string, keep int, list []record.Excerpt, build func([]record.Excerpt) ([]byte, error)) ([]record.Excerpt, bool, error) {
+	if keep > len(list) {
+		// More required excerpts than the list holds cannot be sent.
+		return nil, false, errTooLarge
+	}
 	fitsAt := func(n int) (bool, error) {
 		b, err := build(list[:n])
 		if err != nil {
