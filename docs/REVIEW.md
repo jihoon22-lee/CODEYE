@@ -267,7 +267,7 @@
 - 요청은 메시지 하나이고 도구 정의를 쓰지 않는다.
 - 보내기 전에 메시지 바이트를 재고, 넘으면 발췌를 뒤에서부터 줄이고 `review_input_trimmed`를 남긴다. 최소 발췌로도 넘으면 task는 `failed`(`review_input_too_large`)다.
 - 예산이 모자라면 목록 뒤쪽이 먼저 빠진다. 첫 순회에서 생태계 이름 순으로 뒤인 언어의 발췌가 여기에 해당한다. 여섯 생태계가 모두 범위에 있으면 언어 지침이 커져 코드 발췌가 줄고, 최대 길이 후보가 많은 verify는 일부 후보를 보내지 못할 수 있다. 합성 최악 입력(모든 서술 필드를 최대 길이로 쓴 후보)에서 최소 예산의 verify는 후보 6개 중 4개를 보내고, 기본과 최대 예산은 모두 보낸다(`TestReviewRequestSizeWorstCase`). 보내지 못한 후보는 `unreviewed`(`verification_budget_exceeded`)다.
-- 서술 필드와 후보 수는 출력 토큰에서만 정한다. 작은 요청 바이트에 큰 출력 토큰을 짝지으면 후보 서술이 verify 요청의 자리를 차지해, 최대 길이로 쓴 후보는 일부만 검증되고 나머지는 `unreviewed`(`verification_budget_exceeded`, task `review_input_incomplete`)로 남는다. 합성 최악 입력에서 최소 요청 바이트(40,000)에 기본 출력 토큰(16,384)을 짝지으면 verify는 후보 6개 중 2개만 보낸다. 최소 출력 토큰과 짝지으면 4개다(`TestReviewRequestSizeWorstCase`). 요청 바이트를 줄일 때는 출력 토큰도 함께 줄인다.
+- 서술 필드 한도와 조사 후보 상한은 출력 토큰에서만 정한다. 후보 수는 그 상한 안에서 보낸 코드에 따라 는다. 작은 요청 바이트에 큰 출력 토큰을 짝지으면 후보 서술이 verify 요청의 자리를 차지해, 최대 길이로 쓴 후보는 일부만 검증되고 나머지는 `unreviewed`(`verification_budget_exceeded`, task `review_input_incomplete`)로 남는다. 합성 최악 입력에서 최소 요청 바이트(40,000)에 기본 출력 토큰(16,384)을 짝지으면 verify는 후보 6개 중 2개만 보낸다. 최소 출력 토큰과 짝지으면 4개다(`TestReviewRequestSizeWorstCase`). 요청 바이트를 줄일 때는 출력 토큰도 함께 줄인다.
 - 비용은 요청과 출력 크기에 비례한다. 요청 바이트를 줄이면 한 번에 읽는 코드가 줄고 남은 줄은 slice로 넘어간다. 출력 토큰을 줄이면 서술과 후보 수가 준다. 호출 수는 `review_max_calls`가 정한다. 실제 비용과 지연 시간은 측정하지 않았다.
 
 ## 모듈 단위 검토 분할
@@ -391,7 +391,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - 그 호출에 준 근거·관찰 ID만 인용할 수 있다. 오류 코드: `evidence_id_unknown`, `evidence_id_duplicate`, `evidence_kind_invalid`, `evidence_missing`, `evidence_list_too_long`, `observation_id_unknown`, `evidence_not_at_observation`, `code_evidence_missing`.
 - 탐색에서 정한 문서의 적용 경로보다 상위로 넓히면 거부한다(`scope_generalized`, `scope_unknown_path`, `scope_invalid`). 충돌의 두 쪽은 서로 다른 문서를 인용해야 한다(`conflict_same_document`).
 - 실행·재현·테스트 통과를 주장하는 서술은 거부한다. 호출 오류 코드는 `execution_claim`이고, 단계 기록에는 `execution_claim_rejected` 한계가 남는다. 이 검사는 정규식 휴리스틱이다. 놓친 주장이 있어도 상태·재현·통계는 구조화 기록에서만 정하므로 모델 서술이 판정을 바꾸지 못한다.
-- 서술 필드는 요청 크기가 정한 JSON 인코딩 바이트 이하다(기본 1,200바이트, 최소 출력 예산 400바이트). 요청은 그 3/10 글자 이하의 간결한 한국어를 요구한다(기본 360자, 짧은 문단 하나). 후보는 무엇이 잘못되는지(`title`), 발생 조건(`condition`), 인용한 줄이 실패를 만드는 과정(`mechanism`, 서술 필드의 두 배까지), 영향, 수정이 지켜야 할 속성(`improvement`), 반박 근거나 남은 불확실성(`counterpoint`)을 쓴다. `mechanism`은 선택이다. 기록에 남는 모델 서술은 schema 0.7에서 1,200바이트(`mechanism` 2,400바이트), 이전 schema에서 400바이트 이하이고 민감값 패턴에 걸리지 않아야 한다.
+- 서술 필드는 출력 토큰이 정한 JSON 인코딩 바이트 이하다([요청 크기](#요청-크기), 기본 1,200바이트, 최소 출력 예산 400바이트). 요청은 그 3/10 글자 이하의 간결한 한국어를 요구한다(기본 360자, 짧은 문단 하나). 후보는 무엇이 잘못되는지(`title`), 발생 조건(`condition`), 인용한 줄이 실패를 만드는 과정(`mechanism`, 서술 필드의 두 배까지), 영향, 수정이 지켜야 할 속성(`improvement`), 반박 근거나 남은 불확실성(`counterpoint`)을 쓴다. `mechanism`은 선택이다. 기록에 남는 모델 서술은 schema 0.7에서 1,200바이트(`mechanism` 2,400바이트), 이전 schema에서 400바이트 이하이고 민감값 패턴에 걸리지 않아야 한다.
 - 환경 메모는 플랫폼 판정을 다시 쓰거나 올리지 못한다. 판정 필드를 붙인 출력은 거부한다.
 
 ## 후보 검증과 근거 규칙
