@@ -144,7 +144,10 @@ type Config struct {
 	// ToolPath is the operator's --toolchain-path list. It is searched once,
 	// at construction, for the system linker `cc` that rustc needs to link
 	// build scripts and proc macros; the absolute result is passed as the
-	// target linker and the list is never given to the child as PATH.
+	// target linker. The cargo runs (repository code under the grant) also
+	// get its directories on PATH after the toolchain bin directory: build
+	// scripts compile C through the cc crate, which spawns `cc` and `ar`
+	// by name, and the compiler driver finds `as` on PATH.
 	ToolPath string
 	// DependencyCacheRoot is the node's shared dependency cache. When this
 	// attempt's deps.rust task fetched the module's crates there (its record
@@ -163,6 +166,9 @@ type Analyzer struct {
 	tcDir   string // resolved toolchain bin directory
 	rustc   string // absolute rustc next to cargo
 	linker  string // absolute cc from ToolPath, "" if none
+	// toolDirs are the existing absolute ToolPath directories, appended to
+	// the child PATH of the cargo runs.
+	toolDirs []string
 	cargo   string // cargo as the operator named it
 	toolExe string // executable of the main execution
 }
@@ -202,6 +208,28 @@ func FindLinker(toolPath string) string {
 	return ""
 }
 
+// BuildToolDirs are the existing absolute directories of the operator's tool
+// path list in list order, without the toolchain bin directory and
+// duplicates. Build scripts find the system C toolchain there.
+func BuildToolDirs(toolPath, toolchainDir string) []string {
+	seen := map[string]bool{filepath.Clean(toolchainDir): true}
+	var out []string
+	for _, dir := range filepath.SplitList(toolPath) {
+		if !filepath.IsAbs(dir) {
+			continue
+		}
+		dir = filepath.Clean(dir)
+		if seen[dir] {
+			continue
+		}
+		seen[dir] = true
+		if st, err := os.Stat(dir); err == nil && st.IsDir() {
+			out = append(out, dir)
+		}
+	}
+	return out
+}
+
 // New validates the configuration without running anything.
 func New(kind Kind, cfg Config) (*Analyzer, error) {
 	if !filepath.IsAbs(cfg.Cargo) {
@@ -230,7 +258,7 @@ func New(kind Kind, cfg Config) (*Analyzer, error) {
 	if kind == KindDoc && !regularExecutable(filepath.Join(dir, exeName("rustdoc"))) {
 		return nil, errors.New("rustdoc is not next to cargo")
 	}
-	a := &Analyzer{kind: kind, cfg: cfg, tcDir: dir, rustc: rustc, cargo: cfg.Cargo, toolExe: cfg.Cargo, linker: FindLinker(cfg.ToolPath)}
+	a := &Analyzer{kind: kind, cfg: cfg, tcDir: dir, rustc: rustc, cargo: cfg.Cargo, toolExe: cfg.Cargo, linker: FindLinker(cfg.ToolPath), toolDirs: BuildToolDirs(cfg.ToolPath, dir)}
 	if kind == KindClippy {
 		if !filepath.IsAbs(cfg.Clippy) {
 			return nil, errors.New("clippy executable must be an absolute path")
@@ -271,14 +299,15 @@ func (a *Analyzer) Plan(ctx context.Context, job analysis.Job) ([]pack.Task, err
 }
 
 // env is the complete explicit environment. Nothing is inherited: PATH is the
-// toolchain bin directory only (so `cargo` finds `rustc` and a `cargo-clippy`
-// of the same toolchain), CARGO_HOME and the target directory are task
+// toolchain bin directory first (so `cargo` finds `rustc` and a `cargo-clippy`
+// of the same toolchain), then the operator's tool path directories for the
+// programs build scripts spawn by name (cc, ar, as, pkg-config), CARGO_HOME and the target directory are task
 // scratch, the build is offline, the build target is pinned to the host and
 // no rustc wrapper from the repository's Cargo configuration runs. host
 // is "" until `rustc -vV` has been read.
 func (a *Analyzer) env(home, target, host string) map[string]string {
 	env := map[string]string{
-		"PATH":                     a.tcDir,
+		"PATH":                     strings.Join(append([]string{a.tcDir}, a.toolDirs...), string(os.PathListSeparator)),
 		"LANG":                     "C.UTF-8",
 		"CARGO_HOME":               home,
 		"CARGO_TARGET_DIR":         target,
@@ -406,7 +435,7 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		}
 	}
 	files := govet.IncludedFiles(job.Snapshot.Manifest)
-	in := assembleInput{Kind: a.kind, TaskKey: mod.Key, ManifestDigest: job.Snapshot.Digest, ModuleDir: mod.Dir, Patterns: mod.Patterns, Files: files, ScopeFiles: mod.Files, Linker: a.linker != ""}
+	in := assembleInput{Kind: a.kind, TaskKey: mod.Key, ManifestDigest: job.Snapshot.Digest, ModuleDir: mod.Dir, Patterns: mod.Patterns, Files: files, ScopeFiles: mod.Files, Linker: a.linker != "", ToolPath: len(a.toolDirs) > 0}
 	write := func(doc obsdoc.Document) analysis.TaskResult {
 		res := analysis.TaskResult{Status: doc.Outcome.TaskStatus, Limitations: doc.Limitations}
 		if doc.Outcome.Reason != nil {

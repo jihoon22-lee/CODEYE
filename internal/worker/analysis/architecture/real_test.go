@@ -33,6 +33,9 @@ func TestRealDependencyCruiser(t *testing.T) {
 	}{
 		{"violation", `import "./a.js";`, ".dependency-cruiser.json", ""},
 		{"clean", `export const b=2;`, ".dependency-cruiser.json", ""},
+		// A core module and an uninstalled package appear in the module
+		// list as targets that were not followed.
+		{"external", `import fs from "fs"; import pad from "left-pad"; export const b=[fs, pad];`, ".dependency-cruiser.json", ""},
 		{"skip", `import "./a.js";`, ".dependency-cruiser.cjs", "dependency_cruiser_executable_configuration"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

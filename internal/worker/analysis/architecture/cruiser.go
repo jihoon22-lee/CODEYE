@@ -160,10 +160,26 @@ func (a *Analyzer) runCruiser(ctx context.Context, run *anypack.Run, runner exec
 	parseCruiser(run, files, doc, outcome, res.Stdout.Data)
 }
 
+// cruiseModule is one entry of the cruiser's module list. Besides the cruised
+// sources the list holds the dependency targets that were not followed: Node
+// core modules ("fs"), packages that did not resolve (nothing is installed
+// in the staged project) and paths the doNotFollow option stops at
+// (`../package.json`). Those carry coreModule, couldNotResolve,
+// matchesDoNotFollow or followable=false (dependency-cruiser 18.8).
 type cruiseModule struct {
-	Source        string
-	Dependencies  []struct{ CouldNotResolve bool }
-	CouldNotParse bool
+	Source             string
+	Dependencies       []struct{ CouldNotResolve bool }
+	CouldNotParse      bool
+	CoreModule         bool
+	CouldNotResolve    bool
+	MatchesDoNotFollow bool
+	Followable         *bool
+}
+
+// target reports a module entry that is a dependency target, not a cruised
+// source.
+func (m cruiseModule) target() bool {
+	return m.CoreModule || m.CouldNotResolve || m.MatchesDoNotFollow || m.Followable != nil && !*m.Followable
 }
 
 type cruiseViolation struct {
@@ -184,21 +200,32 @@ func parseCruiser(run *anypack.Run, files []source.Entry, doc *obsdoc.Document, 
 		parseFailure(doc, outcome)
 		return
 	}
-	if len(result.Modules) == 0 {
-		outcome.Fail(domain.TaskUnsupported, "dependency_cruiser_no_parsed_sources", obsdoc.ExitConfigurationError)
-		return
-	}
 	selected := map[string]source.Entry{}
 	seen := map[string]bool{}
 	for _, f := range files {
 		selected[f.Path] = f
 	}
+	var cruised []cruiseModule
 	for _, m := range result.Modules {
-		if _, ok := selected[m.Source]; !ok || seen[m.Source] {
+		_, ok := selected[m.Source]
+		if !ok && m.target() {
+			// Not a source: a core module, an unresolved package or a path
+			// doNotFollow stops at. It is counted, never analyzed.
+			doc.Coverage.Units["dependency_targets_not_followed"]++
+			continue
+		}
+		if !ok || seen[m.Source] {
 			parseFailure(doc, outcome)
 			return
 		}
 		seen[m.Source] = true
+		cruised = append(cruised, m)
+	}
+	if len(cruised) == 0 {
+		outcome.Fail(domain.TaskUnsupported, "dependency_cruiser_no_parsed_sources", obsdoc.ExitConfigurationError)
+		return
+	}
+	for _, m := range cruised {
 		if m.CouldNotParse {
 			outcome.Fail(domain.TaskFailed, "dependency_cruiser_source_unparsed", obsdoc.ExitConfigurationError)
 			continue
