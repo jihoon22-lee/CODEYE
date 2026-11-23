@@ -1,0 +1,11 @@
+--- a/src/encode.ts
++++ b/src/encode.ts
+@@ -147,7 +147,7 @@
+     0x38_00_00_01, // 60 (`), 7B-7D ({|})
+ ]);
+ 
+-const XML_BITSET = /* #__PURE__ */ new Uint32Array([0, XML_BITSET_VALUE, 0, 0]);
++const XML_BITSET = /* #__PURE__ */ new Uint32Array([XML_BITSET_VALUE, 0, 0, 0]);
+ 
+ /*
+  * Regex equivalent of `HTML_BITSET` (plus all non-ASCII code units, lone

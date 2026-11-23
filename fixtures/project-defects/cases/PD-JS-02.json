@@ -1,0 +1,134 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-JS-02",
+ "split": "dev",
+ "language": "javascript",
+ "kind": "real_fix",
+ "category": "api_contract",
+ "family": "undefined-sentinel-masks-ancestor-option-source",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/tj/commander.js",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "c807ce933836d0d99719bac82ee477f3d7eb4268"
+ },
+ "after": {
+  "commit": "1536d5bb9da38d1d94926aedfa31c8ece1f7dce5"
+ },
+ "fix_diff": "diffs/PD-JS-02.diff",
+ "fix_commit_url": "https://github.com/tj/commander.js/commit/1536d5bb9da38d1d94926aedfa31c8ece1f7dce5",
+ "trees": {
+  "before": {
+   "digest": "1d001c24f1f05d24089c7a7839e5a8f61d63ff9d219dd157f0f3eefb65c9de45",
+   "scope_lines": 4309,
+   "scope_files": 9,
+   "files": 217
+  },
+  "after": {
+   "digest": "bb6bc394dcbea7d4235bd2ff19dab221e3ad9cc84fbf370db0447bd066bc5898",
+   "scope_lines": 4309,
+   "scope_files": 9,
+   "files": 217
+  }
+ },
+ "label": {
+  "trigger": "A parent command holds a value for an option key that was stored through setOptionValue, or through setOptionValueWithSource called without a source, and a subcommand declares the same key which the user passes on its command line; code in the subcommand then asks for the merged source of that key.",
+  "expected_impact": "The merged value returned by optsWithGlobals is the parent's, but the merged source lookup passes over the parent because its recorded source is undefined and reports the subcommand's 'cli'. A caller that branches on the source, for example to tell typed values from programmatic ones, gets a source that describes a different value than the one in effect.",
+  "positive_locations": [
+   {
+    "path": "lib/command.js",
+    "symbol": "Command.getOptionValueSourceWithGlobals",
+    "anchors": {
+     "start": "if (cmd.getOptionValueSource(key) !== undefined) {",
+     "end": "source = cmd.getOptionValueSource(key);"
+    },
+    "start_line": 978,
+    "end_line": 979
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "lib/command.js",
+    "symbol": "Command.setOptionValue",
+    "anchors": {
+     "start": "setOptionValue(key, value) {",
+     "end": "return this.setOptionValueWithSource(key, value, undefined);"
+    },
+    "start_line": 931,
+    "end_line": 932,
+    "note": "Plain value assignment goes through the source-recording setter with an empty source, so an entry whose source is undefined is an ordinary state rather than a missing one."
+   },
+   {
+    "path": "lib/command.js",
+    "symbol": "Command.optsWithGlobals",
+    "anchors": {
+     "start": "optsWithGlobals() {",
+     "end": "(combinedOptions, cmd) => Object.assign(combinedOptions, cmd.opts()),"
+    },
+    "start_line": 1936,
+    "end_line": 1939,
+    "note": "The merged values let an ancestor override the local value whenever it has the key at all; the source lookup is documented as the companion of this method and must pick the same command."
+   },
+   {
+    "path": "typings/index.d.ts",
+    "symbol": "OptionValueSource",
+    "anchors": {
+     "start": "export type OptionValueSource =",
+     "end": "| undefined;"
+    },
+    "start_line": 369,
+    "end_line": 371,
+    "note": "The published type lists undefined among the allowed source values, so storing it is part of the public contract and cannot serve as a not-present marker."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "lib/command.js",
+    "symbol": "Command._getCommandAndAncestors",
+    "anchors": {
+     "start": "_getCommandAndAncestors() {"
+    },
+    "start_line": 122,
+    "end_line": 122,
+    "note": "The chain lists the command first and its ancestors after it, so the overwrite order of the loop is right; a finding about traversal order does not match this defect, only the presence test does."
+   },
+   {
+    "note": "When every command in the chain recorded a string source such as default, env or cli, the merged source already agrees with the merged value; reports limited to default-value sources describe behaviour that works."
+   }
+  ],
+  "fix_summary": "Treat a command in the chain as overriding when the key is present in its own source map (Object.hasOwn on _optionValueSources) instead of comparing the stored source with undefined, so an explicitly stored undefined source wins exactly as the value does.",
+  "distinctive_tokens": [
+   "explicitly stored undefined source",
+   "source-recording setter"
+  ]
+ },
+ "check": {
+  "summary": "The upstream test file from the fix commit, run with the node test runner in TAP form; its new case stores a parent value without any source and expects the merged source lookup in the subcommand to give undefined.",
+  "argv": [
+   "{node}",
+   "--test",
+   "--test-reporter=tap",
+   "tests/options.optsWithGlobals.test.js"
+  ],
+  "cwd": ".",
+  "failure_signature": "not ok \\d+ - when same named option used in sub CLI and program set value",
+  "timeout_seconds": 300,
+  "files": [
+   {
+    "path": "tests/options.optsWithGlobals.test.js",
+    "source": "checks/PD-JS-02/options.optsWithGlobals.test.js"
+   }
+  ]
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with node v24.18.0: on before the added test case reports 'not ok' (merged source is 'cli' instead of undefined) and the runner exits non-zero; on after every test in the file passes. The package has no runtime dependencies and nothing is installed. Three test fixture symlinks under tests/fixtures are not written to the trees; the check does not use them.",
+  "toolchain": "node v24.18.0 linux-x64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

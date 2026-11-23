@@ -1,0 +1,140 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-JS-03",
+ "split": "holdout",
+ "language": "javascript",
+ "kind": "seeded",
+ "category": "input_to_sink_security",
+ "family": "escape-mask-in-wrong-bitset-word",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/fb55/entities",
+  "license": "BSD-2-Clause",
+  "license_file": "LICENSE"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "16ecb176ce357159d13463319017ae1e01baf13b",
+  "patch": "patches/PD-JS-03.patch"
+ },
+ "after": {
+  "commit": "16ecb176ce357159d13463319017ae1e01baf13b"
+ },
+ "trees": {
+  "before": {
+   "digest": "5d3f9ed70f2f61853c21725c69a004682b04716c8d1fb14cdd53996e0ae144e7",
+   "scope_lines": 2735,
+   "scope_files": 11,
+   "files": 43
+  },
+  "after": {
+   "digest": "187a6d7ac46fa2a19264f76e3978dde0d77319e7568eafe4e9e08519721f59ce",
+   "scope_lines": 2735,
+   "scope_files": 11,
+   "files": 43
+  }
+ },
+ "label": {
+  "trigger": "Untrusted text containing <, >, &, a double quote or an apostrophe is passed to encodeNonAsciiHTML, or to encode() with the ASCII mode at the HTML level, and the result is placed into an HTML page; short strings such as a single tag or an attribute fragment show it most clearly.",
+  "expected_impact": "Every markup character that the per-character scan examines is judged harmless and copied through as is; only those the regex fallback happens to land on after a long clean stretch get turned into entities. Short inputs come back unchanged, so text rendered through this encoder can open elements or leave a quoted attribute, which is a cross-site scripting hole for any page that relies on it.",
+  "positive_locations": [
+   {
+    "path": "src/encode.ts",
+    "symbol": "XML_BITSET",
+    "anchors": {
+     "start": "new Uint32Array([XML_BITSET_VALUE, 0, 0, 0])"
+    },
+    "start_line": 150,
+    "end_line": 150
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "src/escape.ts",
+    "symbol": "XML_BITSET_VALUE",
+    "anchors": {
+     "start": "export const XML_BITSET_VALUE = 0x50_00_00_c4;"
+    },
+    "start_line": 22,
+    "end_line": 22,
+    "note": "The imported mask is laid out for code points 32 to 63, as its trailing remark lists, so in a four-word table it has to sit at index 1."
+   },
+   {
+    "path": "src/encode.ts",
+    "symbol": "isEncodable",
+    "anchors": {
+     "start": "function isEncodable(bitset: Uint32Array, code: number): boolean {",
+     "end": "return code >= 0x80 || ((bitset[code >>> 5] >>> code) & 1) === 1;"
+    },
+    "start_line": 198,
+    "end_line": 199,
+    "note": "Selects the word by code >>> 5, so all five XML specials, which lie between 32 and 63, are looked up in word 1 and read as clear."
+   },
+   {
+    "path": "src/encode.ts",
+    "symbol": "encodeNonAsciiHTML",
+    "anchors": {
+     "start": "export function encodeNonAsciiHTML(input: string): string {",
+     "end": "return encodeHTMLTrieRe(XML_BITSET, xmlEncodeRegex, input);"
+    },
+    "start_line": 188,
+    "end_line": 189,
+    "note": "The affected public encoder pairs the table with the shared regex; the inline scan trusts the table and the regex only takes over once a window of clean characters is exhausted."
+   },
+   {
+    "path": "src/index.ts",
+    "symbol": "encode",
+    "anchors": {
+     "start": "case EncodingMode.ASCII: {",
+     "end": "level === EntityLevel.HTML ? encodeNonAsciiHTML : encodeXML"
+    },
+    "start_line": 127,
+    "end_line": 129,
+    "note": "The generic encode() entry routes the ASCII mode at the HTML level to this encoder, so callers of the package's main function are exposed as well."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "src/escape.ts",
+    "symbol": "isXmlEscapable",
+    "anchors": {
+     "start": "function isXmlEscapable(code: number): boolean {"
+    },
+    "start_line": 41,
+    "end_line": 41,
+    "note": "encodeXML tests the same mask directly with its own 32-to-63 range check, so XML encoding still escapes markup; findings against encodeXML, escapeUTF8 or the attribute and text escapers do not match."
+   },
+   {
+    "note": "Markup characters that the shared regex fallback lands on are still encoded, so longer sample inputs come out partly escaped and can make the encoder look correct at a glance."
+   }
+  ],
+  "fix_summary": "Put XML_BITSET_VALUE into the second slot of the four-word table (index 1, code points 32 to 63) so the per-character test agrees with the shared regex and every XML special character is encoded.",
+  "distinctive_tokens": [
+   "four-word table",
+   "long clean stretch"
+  ]
+ },
+ "check": {
+  "summary": "Standalone ES module copied into the work copy; it loads src/encode.ts directly through node type stripping and a resolve hook for the relative .js imports, encodes eight short strings with encodeNonAsciiHTML and prints a MISMATCH line for each output that differs from the expected entities.",
+  "argv": [
+   "{node}",
+   "check/encode-ascii-markup.mjs"
+  ],
+  "cwd": ".",
+  "failure_signature": "MISMATCH encodeNonAsciiHTML\\(",
+  "timeout_seconds": 120,
+  "files": [
+   {
+    "path": "check/encode-ascii-markup.mjs",
+    "source": "checks/PD-JS-03/encode-ascii-markup.mjs"
+   }
+  ]
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with node v24.18.0: on before the script prints seven MISMATCH lines (for example '<b>' comes back unchanged) and exits 1; on after all eight cases agree and it exits 0. The TypeScript sources run unbuilt through node's built-in type stripping with a module.registerHooks resolve hook; nothing is installed. The project's own vitest suite was not run. The html5lib-tests submodule under test/fixtures is not written to the trees and is not used.",
+  "toolchain": "node v24.18.0 linux-x64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

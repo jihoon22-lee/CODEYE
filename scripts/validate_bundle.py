@@ -28,7 +28,7 @@ from bundle_checks.report import check_analyzer, check_analyzer_observations, ch
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
 from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_slice_examples, check_workflow_example, pack_selection, slice_examples
 from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_shared_service_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
-from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_markdown_anchors, check_mode_names, check_stage_labels, heading_anchors
+from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_project_defect_corpus, check_markdown_anchors, check_mode_names, check_stage_labels, heading_anchors
 
 
 def main() -> None:
@@ -75,6 +75,7 @@ def main() -> None:
     check_account_contracts()
     check_shared_service_contracts()
     check_holdout_corpus()
+    check_project_defect_corpus()
     events = yaml_file(ROOT / "api/openapi.yaml")["paths"]["/api/v1/attempts/{attempt_id}/events"]["post"]
     payloads = events["requestBody"]["content"]["application/json"]["schema"]["properties"]["payload"]["oneOf"]
     created = [p for p in payloads if p.get("required") == ["key", "required"]]

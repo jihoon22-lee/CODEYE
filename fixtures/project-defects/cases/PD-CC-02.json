@@ -1,0 +1,138 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-CC-02",
+ "split": "holdout",
+ "language": "cpp",
+ "kind": "seeded",
+ "category": "boundary_correctness",
+ "family": "terminator-index-at-exact-buffer-fill",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/likle/cwalk",
+  "license": "MIT",
+  "license_file": "LICENSE.md"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "e98d23f68807208952c179b49e4fd1813f31298d",
+  "patch": "patches/PD-CC-02.patch"
+ },
+ "after": {
+  "commit": "e98d23f68807208952c179b49e4fd1813f31298d"
+ },
+ "trees": {
+  "before": {
+   "digest": "cfd7d48e224a8b5cf1780e8bcd737dc671cadc95c465e393e998a6e65c302aff",
+   "scope_lines": 1978,
+   "scope_files": 2,
+   "files": 76
+  },
+  "after": {
+   "digest": "b8689f72f7baa7de38f5e230fab8860c7694be9f561a0cff5557c9f7c23abbd9",
+   "scope_lines": 1978,
+   "scope_files": 2,
+   "files": 76
+  }
+ },
+ "label": {
+  "trigger": "Any path-producing call (normalize, join, get_absolute, get_relative, change_root, change_basename, change_extension, change_segment) whose complete result is exactly as long as the buffer_size it was given, for instance joining \"ab\" and \"cd\" into a 5-byte buffer, so the end position equals buffer_size.",
+  "expected_impact": "The final NUL is stored at index buffer_size, one byte beyond the caller's buffer, and the last byte inside the buffer keeps a path character. The caller ends up with an unterminated string plus a one-byte out-of-bounds write, so later strlen/strcmp/printf on the result read past the buffer, contrary to the documented truncation promise.",
+  "positive_locations": [
+   {
+    "path": "src/cwalk.c",
+    "symbol": "cwk_path_terminate_output",
+    "anchors": {
+     "start": "if (pos > buffer_size) {",
+     "end": "buffer[pos] = '\\0';"
+    },
+    "start_line": 116,
+    "end_line": 119
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "include/cwalk.h",
+    "symbol": "cwk_path_normalize",
+    "anchors": {
+     "start": "* This function creates a normalized version of the path within the specified",
+     "end": "* (excluding the null-terminating character). The path may be the same memory"
+    },
+    "start_line": 321,
+    "end_line": 326,
+    "note": "The public header defines buffer_size as the whole capacity including the terminator and promises a NUL inside it even when the text is cut short; the same promise is repeated for every writer in the API."
+   },
+   {
+    "path": "src/cwalk.c",
+    "symbol": "cwk_path_output_sized",
+    "anchors": {
+     "start": "if (buffer_size > position + length) {",
+     "end": "amount_written = buffer_size - position;"
+    },
+    "start_line": 50,
+    "end_line": 53,
+    "note": "Writers fill the buffer up to its last byte and return the untruncated length, so the position handed to the terminating helper can be equal to or larger than buffer_size."
+   },
+   {
+    "path": "src/cwalk.c",
+    "symbol": "cwk_path_join_and_normalize_multiple",
+    "anchors": {
+     "start": "cwk_path_terminate_output(buffer, buffer_size, pos);"
+    },
+    "start_line": 674,
+    "end_line": 674,
+    "note": "Typical caller: it passes the total output length as the position, which equals the capacity when the normalized path fits with no room left for the NUL."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "src/cwalk.c",
+    "symbol": "cwk_path_output_sized",
+    "anchors": {
+     "start": "} else if (buffer_size > position) {",
+     "end": "amount_written = buffer_size - position;"
+    },
+    "start_line": 52,
+    "end_line": 53,
+    "note": "Copying right up to the final byte of the buffer looks like it leaves no room for the NUL, but that is by design: the terminating step overwrites the last byte whenever the text did not fit. A finding about the copy clamp is not this defect."
+   }
+  ],
+  "fix_summary": "Treat a position equal to buffer_size like a larger one: use the greater-or-equal comparison so the NUL goes into buffer[buffer_size - 1] whenever no slot is left after the text.",
+  "distinctive_tokens": [
+   "exactly as long as the buffer_size",
+   "documented truncation promise"
+  ]
+ },
+ "check": {
+  "summary": "Builds the library and its own test runner with CMake and runs the full suite; the existing normalize/terminated test walks small buffer sizes and requires a NUL at the last usable index, which fails when the output length equals the buffer size.",
+  "setup": [
+   [
+    "{cmake}",
+    "-S",
+    ".",
+    "-B",
+    "{home}/build",
+    "-DENABLE_TESTS=ON",
+    "-DCMAKE_C_COMPILER={cc}"
+   ],
+   [
+    "{cmake}",
+    "--build",
+    "{home}/build"
+   ]
+  ],
+  "argv": [
+   "{home}/build/cwalktest"
+  ],
+  "cwd": ".",
+  "env": {},
+  "failure_signature": "'normalize/terminated' \\.+ FAILURE",
+  "timeout_seconds": 600
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with cmake 4.2.3 and gcc 15.2.0 (project flags, -Werror, no sanitizer): on before the suite exits non-zero and reports normalize/terminated as FAILURE; on the pinned commit it exits 0 without that line. A scratch build of the same trees showed 179/180 passing with the patch and 180/180 without. The one-byte write lands inside the test's FILENAME_MAX array, so detection comes from the test's content assertion, not from a sanitizer. No external dependencies.",
+  "toolchain": "cmake version 4.2.3; gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0, linux x86_64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

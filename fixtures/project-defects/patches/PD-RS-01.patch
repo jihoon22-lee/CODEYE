@@ -1,0 +1,11 @@
+--- a/src/legacy.rs
++++ b/src/legacy.rs
+@@ -88,7 +88,7 @@
+         // `c` already contains the first character of this identifier, skip it and
+         // all the other characters of this identifier, to reach the next element.
+         for _ in 0..len {
+-            c = chars.next().ok_or(())?;
++            c = chars.next().unwrap_or('E');
+         }
+ 
+         elements += 1;

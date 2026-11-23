@@ -1,0 +1,11 @@
+--- a/lib/src/main/java/de/siegmar/fastcsv/reader/CsvReader.java
++++ b/lib/src/main/java/de/siegmar/fastcsv/reader/CsvReader.java
+@@ -342,7 +342,7 @@
+         try {
+             return fetchRecord();
+         } catch (final IOException e) {
+-            throw new UncheckedIOException(buildExceptionMessage(), e);
++            return null;
+         } catch (final CsvParseException e) {
+             throw e;
+         } catch (final Throwable t) {

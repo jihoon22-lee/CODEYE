@@ -1,0 +1,127 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-RS-01",
+ "split": "dev",
+ "language": "rust",
+ "kind": "seeded",
+ "category": "error_handling",
+ "family": "end-of-input-mistaken-for-path-terminator",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/rust-lang/rustc-demangle",
+  "license": "MIT OR Apache-2.0",
+  "license_file": "LICENSE-MIT"
+ },
+ "scope": "src",
+ "before": {
+  "commit": "4023665a9bafb7cd9808033fd76fa50f83b9542c",
+  "patch": "patches/PD-RS-01.patch"
+ },
+ "after": {
+  "commit": "4023665a9bafb7cd9808033fd76fa50f83b9542c"
+ },
+ "trees": {
+  "before": {
+   "digest": "cdee9752a92723e4487f140d663753e824b759bdcb89d213b1b15c10efde13ec",
+   "scope_lines": 2654,
+   "scope_files": 3,
+   "files": 34
+  },
+  "after": {
+   "digest": "678205a7d0509764e953c13f0b09eb3f86822f16f4639c1684f63df5f3226780",
+   "scope_lines": 2654,
+   "scope_files": 3,
+   "files": 34
+  }
+ },
+ "label": {
+  "trigger": "A legacy (_ZN-prefixed) symbol that has no closing E is passed to demangle or try_demangle: either the text stops inside an identifier body, for example _ZN3fo (length 3, only two letters), or it ends right after the last complete name, for example a single four-letter name with nothing after it.",
+  "expected_impact": "Running out of characters while skipping an identifier is converted into the closing-E marker instead of an error, so the validator accepts the cut symbol. try_demangle then reports a Rust symbol, demangle picks the legacy style, and formatting it slices beyond the input's last byte and panics (observed for _ZN3fo); a symbol that stops exactly at the end of its last name is printed as a demangled path instead of being returned unchanged.",
+  "positive_locations": [
+   {
+    "path": "src/legacy.rs",
+    "symbol": "demangle",
+    "anchors": {
+     "start": "c = chars.next().unwrap_or('E');"
+    },
+    "start_line": 91,
+    "end_line": 91
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "src/lib.rs",
+    "symbol": "demangle",
+    "anchors": {
+     "start": "let mut style = match legacy::demangle(s) {",
+     "end": "Some(DemangleStyle::Legacy(d))"
+    },
+    "start_line": 110,
+    "end_line": 113,
+    "note": "The public entry point trusts an Ok from the legacy validator to classify the input as a Rust symbol; only an Err makes it fall back to v0 or to printing the raw text, and try_demangle reports success from this choice."
+   },
+   {
+    "path": "src/legacy.rs",
+    "symbol": "fmt",
+    "anchors": {
+     "start": "while rest.chars().next().unwrap().is_digit(10) {",
+     "end": "inner = &rest[i..];"
+    },
+    "start_line": 111,
+    "end_line": 115,
+    "note": "The formatter walks the element lengths again with unwrap and unchecked slicing, relying on the validator having proved that every declared length fits inside the string."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "src/legacy.rs",
+    "symbol": "demangle",
+    "anchors": {
+     "start": "c = chars.next().ok_or(())?;"
+    },
+    "start_line": 85,
+    "end_line": 85,
+    "note": "Reading the length digits still returns Err when the text ends, so an input that stops right after a length prefix is rejected; only a stop inside or right after the name characters slips through."
+   }
+  ],
+  "fix_summary": "Treat a missing character in the identifier-skipping loop as a validation failure again (chars.next().ok_or(())? ), so a legacy symbol that ends before its closing E is rejected and shown verbatim.",
+  "distinctive_tokens": [
+   "closing-E marker",
+   "cut symbol"
+  ]
+ },
+ "check": {
+  "summary": "Runs the crate's own unit tests legacy::tests::demangle and tests::demangle, whose assertions require an unterminated legacy input to be refused; the test binary is built with rustc --test from src/lib.rs.",
+  "argv": [
+   "{home}/unit",
+   "--exact",
+   "legacy::tests::demangle",
+   "tests::demangle"
+  ],
+  "cwd": ".",
+  "setup": [
+   [
+    "{rustc}",
+    "--edition",
+    "2015",
+    "--test",
+    "--crate-name",
+    "rustc_demangle",
+    "-C",
+    "linker={cc}",
+    "-o",
+    "{home}/unit",
+    "src/lib.rs"
+   ]
+  ],
+  "failure_signature": "test (legacy::)?tests::demangle \\.\\.\\. FAILED",
+  "timeout_seconds": 600
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with rustc 1.99.1 (linker gcc 15.2.0): the unit-test binary built from src/lib.rs with rustc --test fails legacy::tests::demangle and tests::demangle on before (an unterminated input is accepted) and passes both on after. No cargo, no network and no dependencies are used; the workspace members under crates/ and fuzz/ are not built.",
+  "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "before": "violation",
+  "after": "pass"
+ }
+}

@@ -24,7 +24,8 @@
 | 범위 | 상태 |
 |---|---|
 | 회귀 집합과 실행(`regression_pilot.py`), 보류 집합과 봉인 검사, 평가 runner(`tools`·`review` 조건, 정답 차단, holdout 등록부, 표본·예산 계획과 거절, 판정 양식, 판정 지표와 Wilson 구간, 반복 분산, 보고서 읽기 과제와 채점기), 예산 relay | 구현 |
-| 아래 데이터셋 표 중 저장소에 corpus가 없는 집합(실제 결함 수정, 레거시 프로젝트, 별도 공격/장애 corpus) | 평가 기준(설계). 공격/장애 경계는 단위 시험이 덮는다 |
+| 프로젝트 규모 결함 집합(`fixtures/project-defects/`, 공개 저장소의 실제 수정과 심은 결함, dev·holdout 분할과 봉인), runner의 corpus·분할·범위 선택, `--build-root`, 줄 범위 위치 지표, 블라인드 판정 묶음 | 구현. 실모델 baseline은 아직 없다 |
+| 아래 데이터셋 표 중 저장소에 corpus가 없는 집합(사용 허가된 개인 프로젝트의 수정, 레거시 프로젝트, 별도 공격/장애 corpus) | 평가 기준(설계). 공격/장애 경계는 단위 시험이 덮는다 |
 | 도구만·모델 맥락만·도구+모델·도구+모델+반증의 네 갈래 비교 | 평가 기준(설계). runner 조건은 `tools`와 `review` 둘이다 |
 | reversal quality 지표, CPU/RAM·캐시 기록 | 평가 기준(설계). 채점기가 내지 않는다. 철회 경로는 회귀 집합의 반례 입력에서 사람이 판정한다 |
 | 독립 검토자와 불일치 조정 절차, 판정자 간 일치도 | 설계. 채점기는 판정 충돌을 미판정으로 세고 목록만 낸다 |
@@ -36,6 +37,7 @@
 |---|---|---|
 | 합성 결함 쌍 | 결함 전/수정 후, 동일 API, 발생 조건·정답·반례 | 알려진 결함 발견과 수정 후 오탐 |
 | 정상/까다로운 코드 | 상위 방어, 소유권 이전, 의도된 예외, 비동기 종료 | 과도한 주장 억제 |
+| 프로젝트 규모 결함 | 허용 라이선스 공개 저장소의 고정 커밋과 범위. 실제 결함 수정의 전후와, 고정 커밋에 한 동작만 바꾼 패치를 심은 전후([아래](#프로젝트-규모-결함-집합)) | 파일 뒷부분·다른 파일이 필요한 실제 코드의 결함 발견, 수정 후 재지적 |
 | 실제 결함 수정 | 사용 허가된 개인 프로젝트의 수정 전후 | 현실적인 구조·맥락 검토 |
 | 레거시 프로젝트 | 문서 없음, 불완전 build, mixed versions | 부분 분석·공백 전달 |
 | 공격/장애 fixture | prompt injection, malformed output, invalid path, timeout | 실행·근거 경계 |
@@ -69,9 +71,22 @@
 |---|---|---|
 | 현재 | `99904b7bdf1239eb3f0732a465a43ec51ff735594f15f23af11ec701bbc424be` | 사례 ID와 디렉터리 이름만 바꾼 뒤의 값이다. 사례 내용과 변형별 입력 digest는 그대로이고, corpus digest가 사례 ID를 포함하므로 값이 달라졌다 |
 | 이름 변경 전 | `ab776f5f68cf34ece0dd32b0f18dab962d07fad1131a35c32a6149eebc045fe4` | 지침 조정에 쓰지 않았고, 작성자는 지침과 과거 모델 결과를 읽지 않았다. 첫 보류 평가가 이 값으로 실행됐다 |
+| 프로젝트 규모 holdout | `d4cec596f2f7b17619113848663d7031f55102b244a9b77294e90ec71875107f` | [프로젝트 규모 결함 집합](#프로젝트-규모-결함-집합)의 `holdout` 분할(`corpus.py digest --split holdout`). 2026-11-23 처음 봉인했다. 작성자는 지침과 과거 모델 결과를 읽지 않았고, 아직 실모델 평가에 쓰지 않았다 |
 
-- 확인: `python3 scripts/validate_bundle.py`가 `python3 -I fixtures/quality-holdout/corpus.py validate`와 `... digest`를 실행해 구조·위치·digest·누설 검사와 봉인 digest 일치를 확인한다. 불일치면 실패한다.
+- 확인: `python3 scripts/validate_bundle.py`가 `python3 -I fixtures/quality-holdout/corpus.py validate`와 `... digest`를 실행해 구조·위치·digest·누설 검사와 봉인 digest 일치를 확인한다. 프로젝트 규모 집합은 `fixtures/project-defects/corpus.py validate`와 `digest --split holdout`을 네트워크 없이 실행해 메타데이터·패치·라벨 위치와 holdout 봉인을 확인한다(값은 `scripts/bundle_checks/docs.py`의 `PROJECT_HOLDOUT_SEAL`). 불일치면 실패한다.
 - 봉인을 바꾸면 이전 봉인으로 얻은 결과와 새 결과는 다른 집합의 결과다. 같은 표에서 비교하지 않는다.
+
+### 프로젝트 규모 결함 집합
+
+[`fixtures/project-defects/`](../fixtures/project-defects/README.md)는 허용 라이선스 공개 저장소의 실제 코드에서 결함을 찾는지 잰다. 합성 집합은 짧은 함수라서 파일 뒷부분에 있거나 두 번째 파일이 있어야 알아볼 수 있는 결함을 재지 못한다. 이 집합은 그런 결함만 고르므로 모델 입력의 범위·크기를 바꾸기 전후를 비교할 수 있다. 지침 작성자가 읽지 않는 자료이므로 이 문서는 사례 내용을 담지 않는다.
+
+- 사례 하나는 저장소 URL·커밋 SHA·라이선스와 분석 범위(하위 디렉터리)를 고정한다. 범위 안 주 소스는 1,500~6,000줄이다. 실행은 사례마다 범위 경로를 run scope(`paths`)로 준다. 트리 전체(`.git` 제외)를 스냅샷으로 만들므로 범위 밖 파일도 문맥으로 읽을 수 있다.
+- 종류는 둘이고 대략 절반씩이다. `real_fix`는 실제 결함 수정 커밋의 부모가 before, 수정 커밋이 after이고 라벨은 수정 diff에서 나온다. `seeded`는 고정 커밋에 한 동작만 바꾼 작은 패치를 적용한 트리가 before이고 고정 커밋이 after다. 공개된 수정은 모델이 학습했을 수 있으므로 심은 사례를 대조군으로 둔다.
+- 선정 조건: 양성 위치는 모두 파일의 첫 50줄 밖이다. 대부분은 두 번째 파일(호출자·피호출자·설정·타입 정의)을 읽어야 알아볼 수 있고 `needs_cross_file`로 표시한다. 코드를 읽어 알아볼 수 있는 결함만 쓴다. 범주는 오류 처리·자원 수명·동시성·경계와 정확성·API 계약·데이터 무결성·입력에서 위험한 사용처까지의 보안이고, 언어는 Go·Python·JS/TS·Java·C/C++·Rust다.
+- 분할: `dev` 10개 이상, `holdout` 8개 이상. 두 분할은 저장소와 결함 계열이 겹치지 않는다. 모든 사례에 두 변형이 있어 수정된 코드의 재지적을 잴 수 있다.
+- 라벨(발생 조건·영향·양성 위치·문맥 위치·반대 근거·수정 요약·검증 상태)은 사례 파일에만 있다. 입력 트리에는 `.git`·사례 ID·변형 이름·라벨이 없고 디렉터리 이름은 무작위다. 라벨 문장의 5-gram과 고유 토큰이 두 트리에 나오면 `verify`가 실패한다. 심은 패치의 추가 줄에는 정답을 암시하는 단어가 없어야 한다.
+- 검증: 사례마다 프로젝트의 기존 시험이나 독립 입출력 검사로 before 실패·after 통과를 확인하고, 실행한 toolchain과 결과를 `verification`에 남긴다. 실행하지 못한 검사는 `partially_verified`·`not_verified`로 남긴다. 사례별 상태는 `validate` 출력의 `counts.verification`에서 본다.
+- 오프라인 검사(`validate`·`digest`)는 메타데이터·패치·diff만 읽는다. 입력을 만드는 `materialize`와 `verify`·`forbidden`은 `--cache` 디렉터리에 고정 커밋을 받아 둔다(네트워크 필요).
 
 ## 정답 라벨
 
@@ -101,6 +116,7 @@
 | 비용·시간 | batch | 검토 호출(역할·결과별), usage, 장부 요청 수·차감, batch 차감, 변형당 wall time(합·중앙값·최대). CPU/RAM과 캐시 여부는 설계이고 아직 기록하지 않는다 |
 | 검토 결과 분류 | 보고서가 있는 모든 변형(무효 포함) | `review_outcomes`: `performed`, `secret_screen_failed`, `review_input_unavailable`, `model_source_not_approved`(tools 조건), 그 밖 `not_performed:<사유>`. 비밀값 선별 실패는 정책 결과이고 모델 실패가 아니므로 따로 센다. 모델이 실행되지 않은 변형을 모델이 놓친 것으로 세지 않는다 |
 | 구조 지표 | 변형 | `auto_location_hit_before`, `auto_location_reflag_after`, `auto_suspect_flag_normal`, `auto_any_actionable_on_after_or_normal`, `ai_review_performed`, `model_saw_snapshot_files`(`llm_exposed_files>0`. README 같은 문서 발췌도 센다. 모델이 코드를 봤다는 뜻이 아니다) |
+| 줄 범위 위치 지표 | before 변형, after 변형 | `location_lines`: 라벨 파일과 같은 경로이고 줄 범위가 ±`--line-slack`(기본 2) 안에서 라벨 줄과 겹치는 위치가 있는 변형. 모델 finding(finding 자체의 위치만. 인용한 발췌는 세지 않는다)과 도구 진단(보고서 `observations`)을 따로 낸다. before는 `positive_locations`, after는 저장한 diff로 옮긴 같은 범위다. 심볼·제목 대조는 쓰지 않는다. 범위가 큰 사례는 진단이 많아 우연히 겹칠 수 있으므로 위치 수·라벨 파일 안의 수·겹친 수를 함께 낸다. 판정이 아니다 |
 | 코드 노출 | 변형 | 보존한 검토 기록의 근거 목록에서 낸다. `model_saw_code`(어느 역할 입력에 kind `code` 발췌가 있음), `labelled_file_in_investigate`(before 변형에서 라벨 결함 파일이 investigate 입력에 있음. recall의 상한을 읽는 값), `no_code_variants`. 모델이 답한(수락 또는 출력 거부) 호출이 있는 역할의 기록만 센다 |
 
 - 분해: 언어, 범주(category), `detection`별로 recall·FP와 구조 지표를 낸다.
@@ -194,7 +210,7 @@
 
 ## 보류 독립성
 
-- 지침(프롬프트) 작성자는 [평가 결과](EVALUATION-RESULTS.md)와 `fixtures/quality-holdout/`을 읽지 않는다. 저장소 밖 평가 결과 디렉터리, 판정 양식, answer key도 읽지 않는다. 그 경로를 지나는 검색도 하지 않는다.
+- 지침(프롬프트) 작성자는 [평가 결과](EVALUATION-RESULTS.md), `fixtures/quality-holdout/`, `fixtures/project-defects/`를 읽지 않는다. 저장소 밖 평가 결과 디렉터리, 판정 양식, 블라인드 판정 묶음, answer key도 읽지 않는다. 그 경로를 지나는 검색도 하지 않는다. 프로젝트 규모 집합은 `dev` 분할도 읽지 않는다. 지침 작성자가 dev 사례를 보면 그 지침의 dev 결과는 조정된 결과가 된다.
 - 보류 사례나 결과를 본 사람(조정자)은 지침 문구를 쓰지 않는다. 결과에서 알게 된 실패는 지침 문구를 그 사례에 맞추지 않고, 가능하면 구조(플랫폼 검사)로 막는다.
 - 지침 작성 지시에 보류 결과에서 얻은 관찰을 옮기지 않는다. 옮겼다면 그 사실을 결과와 함께 기록한다.
 - 결과는 [평가 결과](EVALUATION-RESULTS.md)에만 둔다. 다른 문서, 코드 주석, 지침, 커밋 메시지에 결과 수치나 사례 내용을 옮기지 않는다.
@@ -230,10 +246,16 @@
 | `capture-list` | 아무것도 막지 않는 감시용 목록(`purpose: envelope_capture`). 시험용 upstream 전용 |
 | `reader` | 보고서 읽기 과제와 평가자용 answer key |
 | `reader-score` | 사람의 답 채점. 답이 없으면 `not_measured` |
+| `blind` | batch 하나의 블라인드 판정 묶음과 별도 answer key([블라인드 판정](#블라인드-판정)) |
+| `blind-merge` | 판정한 묶음과 answer key를 `score`가 읽는 판정 파일로 되돌린다 |
+
+**corpus와 분할.** `--corpus quality-holdout`(기본)과 `--corpus project-defects`가 있다. 프로젝트 규모 집합에는 `--split dev|holdout`과 `--cache DIR`(저장소 캐시, 처음에는 네트워크 필요)이 필수다. 분할을 생략해서 holdout을 실수로 실행하는 일이 없게 하기 위해서다. `plan`·`run`·`score`·`blind`·`reader`·`capture-list`가 같은 옵션을 받는다. corpus digest는 선택한 분할의 digest이고, 정답 목록은 `corpus.py forbidden --split S`로 같은 분할에서 만든다. 프로젝트 사례는 README를 덧붙이지 않고(저장소 자체 문서만), 변형마다 사례의 범위 경로를 run scope로 준다. 행에 `scope_paths`가 남는다.
+
+**제품 빌드 위치.** `run --build-root DIR`은 다른 checkout(예: 기준 커밋)에서 제품 바이너리를 만들고, runner·corpus·채점은 지금 checkout을 쓴다. manifest의 `checkout`·`pack`(지침 트리 digest, holdout 등록부 항목)은 build root를 가리키고 `runner_checkout`이 runner의 커밋을 따로 남긴다. 기준 바이너리를 새 runner로 잴 때 결과가 어느 제품의 것인지 섞이지 않게 하기 위해서다. build root는 `git worktree add`로 만든 checkout이 좋다. `git archive`로 푼 트리처럼 Git 저장소가 아니면 빌드는 되지만 `checkout.commit`이 `null`로 남는다.
 
 | 부분 | 위치 | 역할 |
 |---|---|---|
-| 정답 목록 | `fixtures/quality-holdout/corpus.py forbidden` | 라벨 문구 n-gram과 고유 토큰 중 어떤 입력에도 나오지 않는 것을 JSON으로 내보낸다 |
+| 정답 목록 | `fixtures/quality-holdout/corpus.py forbidden`, `fixtures/project-defects/corpus.py forbidden --split S --cache DIR` | 라벨 문구 n-gram과 고유 토큰 중 어떤 입력에도 나오지 않는 것을 JSON으로 내보낸다. 두 corpus가 같은 형식과 대조 규칙을 쓴다 |
 | relay 차단 | `scripts/model_budget_relay.py --forbidden-phrases FILE [--allow-model-echo]` | 목록 항목이 든 요청을 예약·전달 없이 막는다 |
 | 시험용 upstream | `--test-upstream http://127.0.0.1:PORT`, [`scripts/fake_model_upstream.py`](../scripts/fake_model_upstream.py) | dry run 전용 loopback 가짜. 키를 읽지 않는다. `--echo-text`는 운영자가 정한 문장을 investigate 후보 제목에 붙이고, `--dump DIR`은 요청을 저장한다 |
 | 공용 실행 틀 | `scripts/eval_harness.py`, `scripts/test_postgres.py`의 `temporary_postgres` | 임시 PostgreSQL, 제품 빌드, controller·agent, 보고서 조회. 회귀 실행(`regression_pilot.py`)도 같은 코드를 쓴다 |
@@ -247,7 +269,7 @@
 
 - 사례 변형마다 `corpus.py materialize`로 무작위 이름의 디렉터리에 입력만 만든다. 프로젝트 이름도 무작위(`eval-<hex>`)다. 사례 ID·변형 이름·라벨은 스냅샷에 들어가지 않는다. README 포함 여부는 corpus 순서로 고정(짝수 번째 사례)이고 모든 batch가 같은 선택을 쓴다.
 - 분석기 플래그는 `--tool NAME=/abs/path`로 받아 agent에 `--NAME PATH`로 넘긴다. 값이 없는 agent 옵션(예: `python-both-type-checkers`)은 `--agent-flag NAME`으로 준다. 둘 다 manifest에 남고 tools 조건의 holdout digest에 들어간다. 이 빌드가 모르는 이름이면 agent가 사용 오류로 끝나고 runner가 멈춘다. 새 분석기 팩이 생기면 runner를 고치지 않고 플래그만 더한다. 분석기 공백은 보고서의 task(`pack-gap.<생태계>`, `tool_not_configured` 등)에서 읽는다.
-- corpus source root에는 기본으로 저장소 코드 실행 허가(`--repo-code-source-root`)를 준다(build script를 실행하는 분석기가 있다). `--no-repo-code-grant`로 끄고, 그 선택은 manifest에 남는다.
+- corpus source root에는 기본으로 저장소 코드 실행 허가(`--repo-code-source-root`)를 준다(build script를 실행하는 분석기가 있다). 서비스는 관리자가 아닌 사용자의 run에 build script를 기본으로 제공하지 않으므로(`repository_code_not_offered`), 허가를 줄 때 평가용 계정은 관리자로 만든다. `--no-repo-code-grant`로 둘 다 끄고, 그 선택은 manifest에 남는다. Java 분석기 플래그는 실행 스크립트가 아닌 jar를 가리킨다(`--tool pmd=…/lib/pmd-cli-<버전>.jar`, `--tool spotbugs=…/lib/spotbugs.jar`). `codeye start`로 띄운 서비스는 기본으로 의존성을 받지만 runner의 agent는 받지 않는다. 같은 조건을 재려면 `--agent-flag dependency-fetch`를 준다(네트워크가 필요하고, 받은 의존성 버전은 실행 시점에 따라 달라질 수 있다). 이 플래그가 없으면 Cargo 분석기와 형식 검사는 `dependency_unavailable`로 끝날 수 있다.
 - 실패한 run도 자료로 기록한다. 보고서를 조회하지 못하면 `report_error`에 HTTP 상태와 오류 코드를 남긴다.
 - `review` 조건은 사례를 하나씩 실행한다. 사례 전후의 장부를 비교해 호출·차감·차단·거절을 그 사례에 귀속하기 위해서다. `tools` 조건은 `--agents × --max-workers`개까지 동시에 실행한다. batch 전체 제한시간은 `--timeout`(기본 6시간)이다.
 - `--dry-run`은 `--test-upstream` relay를 쓰는 batch다. 결과에 표시가 붙고 평가로 세지 않는다. `--plant-leak CASE:VARIANT`는 dry run 자기 시험용으로 그 입력 상단 주석에 라벨 문구를 심는다.
@@ -330,6 +352,7 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 - `--history DIR`은 manifest의 지침 id로 같은 지침의 batch만 쓴다. 쓸 수 있는 행이 없으면 상수표로 돌아가지 않고 오류로 끝난다.
 - 호출당 비용의 출처 우선순위: (1) 실제 batch 이력이면 역할별 usage 평균 × relay 단가(입력 5, 출력 10 microUSD/token), (2) dry run 이력이면 역할별 최대 요청 바이트 ÷ 3(바이트당 토큰) × 5 + 출력 600 토큰 × 10, (3) 상수표(`quality_eval.py`의 `CONSTANTS`). 상수표는 단일 파일 Go 입력에서 나온 값이라 다파일·다언어 사례에서는 작을 수 있다.
 - 바이트당 3토큰과 여유 계수 1.5는 실측에 맞춘 값이 아닌 보수적 근사다. 실제 batch의 usage를 이력으로 주면 그 값을 쓴다.
+- 프로젝트 규모 집합은 범위가 커서 대부분의 변형이 모듈 slice를 계획한다. 이력이 없는 변형의 상한은 slice가 있다고 보고 `--review-max-calls` 회로 잡는다. 상수표의 기대값은 단일 파일 입력에서 나온 값이라 이 집합에서는 크게 작다. 같은 분할의 dry run(가짜 upstream)을 먼저 돌려 `--history`로 주고, 그 추정은 dry run을 실행한 제품의 입력 크기를 반영한다는 점을 결과와 함께 적는다. 입력 구성이 바뀐 제품에는 그 제품으로 dry run을 다시 한다.
 
 **거절.**
 
@@ -350,6 +373,19 @@ batch 디렉터리의 `manifest.json`에 다음을 남긴다. 비밀값과 relay
 - 양식에는 라벨 문장이 들어 있으므로 평가자 쪽에만 둔다.
 - 판정 파일을 여러 개 주면 합친다. 같은 finding에 판정이 다르면 그 finding은 미판정으로 세고 충돌 목록에 남긴다. 한쪽을 임의로 고르지 않는다. 조정은 조정한 파일 하나를 다시 주는 방식이다.
 - 판정 파일이 없으면 recall·FP·precision은 대부분 미판정으로 남는다. 판정자 간 일치도는 판정이 둘 이상일 때 충돌 목록으로만 보인다.
+
+### 블라인드 판정
+
+판정 양식은 라벨과 변형 이름을 보여 주므로 판정이 정답에 끌려갈 수 있다. `quality_eval.py blind BATCH --seed S --output DIR`(프로젝트 규모 집합이면 `--corpus project-defects --split S`)는 같은 finding을 판정자가 변형과 라벨을 모르는 상태로 보게 만든다.
+
+| 파일 | 내용 | 누가 본다 |
+|---|---|---|
+| `packet.json` | 무효가 아닌 변형마다 불투명 ID(`U001`)의 단위와 그 finding(`F0001`). finding마다 제목·범주·심각도·검증 상태·생산자(모델/도구)·발생 조건·영향·주장·위치·인용 발췌, 비어 있는 `verdict`·`matches_label`·`duplicate_of`·`notes`. 순서는 seed로 섞는다. 사례 ID·변형 이름·키·run·snapshot·fingerprint ID와 라벨이 없다. 같은 사례의 두 변형은 같은 `reference_id`를 가진다 | 판정자 |
+| `references.json` | `reference_id`마다 라벨 결함의 발생 조건·영향·파일(줄 범위 없음) | 판정자. 첫 판정을 마친 뒤에만 연다 |
+| `answer-key.json` | 단위·finding ID를 batch 행 키·finding ID로 되돌리는 표, 참조 ID와 사례 | 평가자 |
+
+- 판정은 두 번에 나눈다. 1차에는 `references.json`을 열지 않고 finding의 조건·영향·위치·발췌만으로 `verdict`(위 여섯 가지 판정)와 `duplicate_of`(같은 단위의 finding ID)를 정한다. 2차에 `references.json`을 열어 finding이 참조 결함의 원인·조건을 말하는지 `matches_label`을 정한다. 어느 단위가 결함판이고 어느 단위가 수정판인지는 묶음에 없다.
+- `quality_eval.py blind-merge --packet 판정한-packet.json --key answer-key.json --output J.json`이 기존 판정 형식(`codeye-quality-judgments`, `blind: true`)을 만든다. 모르는 판정 값, 묶음에 없는 단위·finding, 다른 단위를 가리키는 `duplicate_of`는 거부한다. `score --judgments J.json`은 다른 판정 파일과 같이 읽는다.
 
 ### 반복 실행 분산
 
@@ -431,6 +467,7 @@ python3 scripts/quality_eval.py reader "$R/paid" --sample 6 --seed S --output "$
 - 2단계 capture는 유료 batch와 같은 `SEL`로 돌린다. 시험 장부의 요청 상한(기본 200건) 안에 들어가야 한다. 넘으면 언어마다 새 시험 relay를 쓴다.
 - 지침 개정 전후를 비교할 때: 개정 전 checkout(baseline)과 개정 뒤 checkout(candidate)에서 같은 표본으로 2단계 capture와 5~6단계를 각각 하고(`--batch capture-baseline`, `--batch paid-baseline`처럼 이름으로 구분한다), 7단계 `score`에 두 batch를 나란히 준다. 상한 호출이 큰 쪽을 먼저 실행하고, 끝난 뒤의 장부로 다른 쪽을 다시 계획한다. 거절이면 다른 쪽을 실행하지 않는다. 시작 전 남은 요청이 적으면 `남은 요청 − 먼저 실행한 쪽 기대 호출 − 5 ≥ 다른 쪽 상한 호출`이 되는 표본을 고른다.
 - 결과 수치와 판단은 [평가 결과](EVALUATION-RESULTS.md)에 쓰고 batch 디렉터리는 저장소 밖에 둔다.
+- 프로젝트 규모 집합: 모든 `plan`·`run`·`score`·`capture-list`·`blind`에 `--corpus project-defects --split dev --cache "$CACHE"`(holdout이면 `--split holdout`)를 더하고, 3단계 정답 목록은 `python3 -I fixtures/project-defects/corpus.py forbidden --split dev --cache "$CACHE" --allow-text prompts/review --allow-text "$R/allow.txt" --output "$R/forbidden.json"`로 만든다. `$CACHE`는 영구 비공개 경로에 둔다. 첫 `verify --cache "$CACHE"`가 캐시를 채운다. 기준 커밋의 제품을 잴 때는 그 커밋의 checkout을 따로 만들어 2단계 capture와 6단계 `run`에 `--build-root BASE`를 주고, runner·corpus는 지금 checkout을 쓴다. 7단계 판정은 `blind`로 만든 묶음을 판정한 뒤 `blind-merge`로 판정 파일을 만든다.
 
 검토 모델을 비교할 때는 같은 고정 입력을 `gpt-6.1-terra`와 `gpt-6-luna`로 번갈아 실행하고 두 relay가 장부 하나를 공유한다. 파일럿의 모델 ID는 ready 파일에서 읽는다.
 
@@ -529,3 +566,9 @@ python3 scripts/model_budget_relay.py \
 - 엄격 차단이 맞힌 사례를 얼마나 무효로 만드는지는 실모델 batch에서만 보인다. 예외 방식의 범위는 relay 프로세스 전체이고 사례 단위 확인은 runner가 한다. runner를 거치지 않고 relay를 쓰면 이 확인이 없다.
 - 예외 ID 확인은 순서를 보지 않는다. runner는 예외 ID가 같은 사례의 모델 출력에 있는지만 확인하고, 그 출력이 요청보다 먼저였는지는 보지 않는다.
 - 평가 실행 환경이 한 종류의 호스트이면 다른 OS·다중 노드에서의 결과로 일반화하지 않는다.
+- 프로젝트 규모 집합은 분할마다 사례가 10개 안팎이다. 언어·범주별 수는 한두 개이므로 언어·범주별 차이를 결론으로 쓰지 않는다. 비율에는 Wilson 구간을 붙이고 구간이 겹치는 차이를 개선이라고 하지 않는다.
+- 실제 수정 사례는 공개된 수정이라 모델이 학습했을 수 있다. 실제 수정과 심은 사례의 결과를 나누어 보고, 심은 사례에서 크게 떨어지면 기억의 효과를 의심한다. 심은 결함은 한 사람이 만든 것이라 실제 결함의 분포를 대표하지 않는다.
+- 스냅샷은 저장소 트리 전체다. 범위 밖 파일과 시험 파일도 문맥이 되고, 도구가 범위 밖을 분석하는지는 분석기마다 다르다. 위치 지표는 라벨 파일과 줄로만 세고 범위 밖 지적은 따로 판정한다.
+- 라벨은 한 결함만 담는다. 같은 범위의 다른 실제 결함을 지적한 finding은 라벨과 맞지 않아도 오탐이 아닐 수 있으므로 사람이 판정한다(`valid_*`이고 `matches_label=false`).
+- 사례의 기존 시험이나 독립 검사는 결함판이 실패하고 수정판이 통과한다는 것만 보인다. 수정판 전체에 결함이 없다는 뜻이 아니다.
+- 큰 사례는 한 시도의 모델 호출 상한(`--review-max-calls`)에 닿아 slice 일부만 검토될 수 있다. 행의 `review_calls` 수가 상한과 같으면 그 변형은 범위 전체를 검토했다고 보지 않는다.

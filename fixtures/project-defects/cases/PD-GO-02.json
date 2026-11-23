@@ -1,0 +1,135 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-GO-02",
+ "split": "dev",
+ "language": "go",
+ "kind": "real_fix",
+ "category": "concurrency",
+ "family": "unlocked-two-counter-queue-length",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/alitto/pond",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "17ae9fbf0216937cf6fab18c39ee1e74e7b1ac69"
+ },
+ "after": {
+  "commit": "9b1e4398e20271c2ba89f262929ce18d333b1842"
+ },
+ "fix_diff": "diffs/PD-GO-02.diff",
+ "fix_commit_url": "https://github.com/alitto/pond/commit/9b1e4398e20271c2ba89f262929ce18d333b1842",
+ "trees": {
+  "before": {
+   "digest": "be06ae7218d3454e1c4c6e839617171fefc1cf1d7305a42058b34a4dc51bd7dd",
+   "scope_lines": 1697,
+   "scope_files": 13,
+   "files": 50
+  },
+  "after": {
+   "digest": "e209c94c93210a2cce370133d0fa4c9bf9d627b637f3715482ff9a2ab665fa96",
+   "scope_lines": 1700,
+   "scope_files": 13,
+   "files": 50
+  }
+ },
+ "label": {
+  "trigger": "Some goroutine (a metrics gauge, a dashboard poller, a test loop) calls pool.WaitingTasks() on a pool with a bounded queue while other goroutines keep submitting tasks and the workers keep draining them.",
+  "expected_impact": "The method reads the buffer's two counters without taking the pool mutex. When workers consume entries between the two loads, the read counter looks ahead of the write counter, Len takes its wrap-around branch and the caller receives a number near 2^64 instead of a value between zero and the queue size.",
+  "positive_locations": [
+   {
+    "path": "pool.go",
+    "symbol": "pool.WaitingTasks",
+    "anchors": {
+     "start": "func (p *pool) WaitingTasks() uint64 {",
+     "end": "return p.tasks.Len()"
+    },
+    "start_line": 222,
+    "end_line": 223
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "internal/linkedbuffer/linkedbuffer.go",
+    "symbol": "LinkedBuffer.Len",
+    "anchors": {
+     "start": "func (b *LinkedBuffer[T]) Len() uint64 {",
+     "end": "return writeCount - readCount"
+    },
+    "start_line": 103,
+    "end_line": 112,
+    "note": "Len loads writeCount and then readCount as two separate atomic loads; a snapshot where reads overtook the earlier write load is interpreted as counter wrap-around and yields a huge length."
+   },
+   {
+    "path": "pool.go",
+    "symbol": "pool.readTask",
+    "anchors": {
+     "start": "func (p *pool) readTask() (task any, err error) {",
+     "end": "p.mutex.Unlock()"
+    },
+    "start_line": 477,
+    "end_line": 505,
+    "note": "Workers pop entries, and so advance readCount, only while holding p.mutex; trySubmit advances writeCount under the same mutex. A reader that skips the mutex can observe the counters at two different moments."
+   },
+   {
+    "path": "examples/prometheus/main.go",
+    "symbol": "main",
+    "anchors": {
+     "start": "return float64(pool.WaitingTasks())"
+    },
+    "start_line": 45,
+    "end_line": 45,
+    "note": "The documented metrics usage samples the queue length from a scrape goroutine while the pool is busy, which is exactly the concurrent caller that sees the torn value."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "pool.go",
+    "symbol": "pool.trySubmit",
+    "anchors": {
+     "start": "tasksLen := int(p.tasks.Len())"
+    },
+    "start_line": 424,
+    "end_line": 424,
+    "note": "This call, the one in readTask and the one in Resize run with p.mutex held, so their lengths are consistent; a report about these call sites is not this defect."
+   },
+   {
+    "note": "The counters themselves are atomics, so the race detector stays quiet; the problem is the missing snapshot consistency between two loads, not an unsynchronised memory access."
+   }
+  ],
+  "fix_summary": "Take p.mutex (with a deferred unlock) inside WaitingTasks before asking the buffer for its length, so the two counters are read while no submitter or worker can move them.",
+  "distinctive_tokens": [
+   "torn queue length",
+   "counters at two different moments"
+  ]
+ },
+ "check": {
+  "summary": "An adaptation of the upstream load test, repeated for a bounded time: four workers drain a 64-slot queue fed by pool.Go in a loop while the test samples WaitingTasks and fails when a sample exceeds 64.",
+  "argv": [
+   "{go}",
+   "test",
+   "-count=1",
+   "-run",
+   "^TestWaitingTasksStaysWithinQueueSize$",
+   "."
+  ],
+  "cwd": ".",
+  "failure_signature": "--- FAIL: TestWaitingTasksStaysWithinQueueSize",
+  "timeout_seconds": 300,
+  "files": [
+   {
+    "path": "pool_waiting_test.go",
+    "source": "checks/PD-GO-02/pool_waiting_test.go"
+   }
+  ]
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with go1.27.4 on a 12-CPU host, five runs: before=violation every time (the first round already reported WaitingTasks values near 2^64), after=pass every time (8 s of sampling, never above 64). The check adapts the upstream TestPoolWaitingTasksUnderLoad: renamed, repeated for up to 8 s and run with GOMAXPROCS of at least 4, because the upstream single round passed on before in one of eleven runs and failed only once in six runs at -cpu 1,2. The module has no dependencies; no network was used.",
+  "toolchain": "go1.27.4 linux/amd64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

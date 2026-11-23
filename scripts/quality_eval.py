@@ -9,8 +9,15 @@ Subcommands:
   allow-text  tool messages of a tools batch and instruction envelopes of a capture dry run,
               for an explicit `corpus.py forbidden --allow-text`
   capture-list  sentinel answer list (blocks nothing) for that capture dry run; test upstream only
+  blind       blind judging packet of one batch (opaque unit and finding ids) and a separate answer key
+  blind-merge   judged packet + answer key -> a judgments file for `score`
   reader      report-reading task sheets and an evaluator answer key (docs/EVALUATION.md#보고서-읽기-평가)
   reader-score  score supplied human answers; without answers the result is "not_measured"
+
+Corpora (--corpus): quality-holdout (default; small synthetic cases) and project-defects (real-fix and
+seeded defects in pinned public repositories; --split dev|holdout and --cache DIR are required, and
+every run is limited to the case's scope path). --build-root builds the product under test from
+another checkout while this runner and corpus stay as checked out here.
 
 The runner never reads a model key and never starts a relay. A review batch
 uses a relay the coordinator started (`--relay-file`, `--ledger`); the runner
@@ -19,8 +26,8 @@ upper estimate exceeds what the ledger has left minus a reserve. Dry runs use a
 relay started with `--test-upstream` (ledger upstream `test-loopback`); their
 results are labelled and never count as evaluation.
 
-Labels stay outside the analysed snapshots: inputs are materialized by
-fixtures/quality-holdout/corpus.py into opaque directories; results, judgment
+Labels stay outside the analysed snapshots: inputs are materialized by the
+corpus module's materialize into opaque directories; results, judgment
 templates and answer keys live under --results-root.
 """
 from __future__ import annotations
@@ -84,35 +91,93 @@ def write_json(path, value):
 
 # ---------------------------------------------------------------- corpus
 
-class Corpus:
-    """fixtures/quality-holdout/corpus.py loaded in-process (stdlib only)."""
+CORPORA = {"quality-holdout": CORPUS_DIR, "project-defects": ROOT / "fixtures/project-defects"}
+PROJECT_CORPUS = "project-defects"
 
-    def __init__(self, directory=CORPUS_DIR):
-        self.module = runpy.run_path(str(directory / "corpus.py"))
-        self.cases = self.module["load_cases"]()
+
+class Corpus:
+    """A corpus module loaded in-process (stdlib only).
+
+    quality-holdout: small synthetic multi-language cases (defect pairs and tricky normals), rendered from
+    corpus.json. project-defects: real-fix and seeded defects in pinned public repositories; a split is
+    required, inputs are fetched into `cache`, and every run is limited to the case's scope path."""
+
+    def __init__(self, name="quality-holdout", split=None, cache=None):
+        if name not in CORPORA:
+            raise SystemExit(f"unknown corpus {name!r} (choose from {', '.join(CORPORA)})")
+        self.name = name
+        self.project = name == PROJECT_CORPUS
+        self.module = runpy.run_path(str(CORPORA[name] / "corpus.py"))
+        if self.project:
+            if split not in self.module["SPLITS"]:
+                raise SystemExit("--corpus project-defects needs --split " + "|".join(self.module["SPLITS"]))
+            self.cases = self.module["load_cases"](split)
+        else:
+            if split not in (None, "holdout"):
+                raise SystemExit("the quality-holdout corpus has only the holdout split")
+            self.cases = self.module["load_cases"]()
+        self.split = split
+        self.cache = Path(cache) if cache else None
         self.by_id = {c["id"]: c for c in self.cases}
         self.digest = self.module["corpus_digest"](self.cases)
+
+    def describe(self):
+        return {"name": self.name, "split": self.split, "digest": self.digest, "cases": len(self.cases)}
 
     def variants(self, case):
         return self.module["variants"](case)
 
     def render(self, case, variant, documented=False):
+        if self.project:
+            raise ValueError("project-defects variants are whole repository trees; use materialize")
         return self.module["render"](case, variant, documented)
 
     def materialize(self, destination, case, variant, documented):
+        if self.project:
+            if self.cache is None:
+                raise SystemExit("--corpus project-defects needs --cache DIR (fetched repositories)")
+            return self.module["materialize"](destination, case, variant, self.cache)
         return self.module["materialize"](destination, case, variant, documented)
 
     def documented(self, case):
-        """README per case, fixed by corpus order (every other case, as in the regression pilot), the same for every batch."""
+        """README per case, fixed by corpus order (every other case, as in the regression pilot), the same for every batch.
+        Project cases are analysed as published: their own README, nothing added."""
+        if self.project:
+            return False
         return self.cases.index(case) % 2 == 0
+
+    def scope(self, case):
+        """Run scope paths (None: the whole snapshot)."""
+        if not self.project:
+            return None
+        return self.module["scope_paths"](case) or None
+
+    def targets(self, case, variant):
+        """Label locations of a project case; None for the synthetic corpus (quality_score renders it)."""
+        return self.module["targets"](case, variant) if self.project else None
+
+    def stratum(self, case):
+        return stratum(case)
 
 
 def stratum(case):
-    return (case["language"], case["kind"], case["detection"])
+    return (case["language"], case["kind"], case.get("detection") or "-")
+
+
+def is_pair(case):
+    """Every case kind except the tricky normals has a defect in before and its correction in after."""
+    return case["kind"] != "tricky_normal"
+
+
+def case_facts(case):
+    """Row fields shared by both corpora."""
+    return {"language": case["language"], "kind": case["kind"], "category": case["category"],
+            "detection": case.get("detection"), "cross_file": case.get("cross_file", case.get("needs_cross_file"))}
 
 
 def select(corpus, *, cases=None, languages=None, kinds=None, variants=None, sample=None, seed=0):
-    """Return (selected cases, selection record). Stratified sampling over language x kind x detection.
+    """Return (selected cases, selection record). Stratified sampling over language x kind x detection
+    (project cases have no detection field: language x kind).
 
     With --sample N, every stratum first gets floor(N * share) cases (largest remainder for the rest,
     at least one per stratum while N allows), then cases are drawn per stratum with random.Random(seed).
@@ -182,10 +247,10 @@ def key_of(case_id, variant, repeat):
 
 # ---------------------------------------------------------------- pack, registry
 
-def pack_tree():
-    """Identity of the review pack as checked out: id, version, status and a tree digest
-    (sha256 over every file, sorted, path NUL content NUL)."""
-    directory = ROOT / "prompts" / PACK
+def pack_tree(root=ROOT):
+    """Identity of the review pack as checked out under root (the checkout the product is built from):
+    id, version, status and a tree digest (sha256 over every file, sorted, path NUL content NUL)."""
+    directory = Path(root) / "prompts" / PACK
     digest = hashlib.sha256()
     for path in sorted(p for p in directory.rglob("*") if p.is_file()):
         rel = path.relative_to(directory).as_posix()
@@ -200,10 +265,11 @@ def pack_tree():
             "tree_digest": digest.hexdigest()}
 
 
-def checkout_state():
+def checkout_state(root=ROOT):
     try:
-        commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, timeout=30).strip()
-        dirty = bool(subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT,
+        commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True, timeout=30,
+                                         stderr=subprocess.DEVNULL).strip()
+        dirty = bool(subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no"], cwd=root,
                                              text=True, timeout=30).strip())
     except (OSError, subprocess.SubprocessError):
         return {"commit": None, "dirty": None}
@@ -325,7 +391,7 @@ def history_profile(dirs):
 
 
 def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAULTS["repair_rate"],
-             max_calls=DEFAULTS["review_max_calls"]):
+             max_calls=DEFAULTS["review_max_calls"], slices_unknown=False):
     """Calls and conservative ledger cost for a review batch.
 
     expected: per-role calls of the same variant in history (else history's per-variant average,
@@ -341,7 +407,8 @@ def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAU
     contract followup share the per-attempt ceiling. Its upper is max_calls calls at the
     dearest per-call cost of investigate, verify and contract. A variant without history is
     estimated as above (the constants are single-file inputs without slices); run the capture
-    dry run with the same selection first.
+    dry run with the same selection first. With slices_unknown (project-scale cases) a variant
+    without history is treated as one that may plan slices: its upper is the per-attempt ceiling.
     """
     roles = PACK_ROLES
     base = CONSTANTS
@@ -369,7 +436,9 @@ def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAU
         counts = {r: seen.get(r, 0) for r in roles} if seen is not None else {r: rates.get(r, 0) for r in roles}
         expected_calls += sum(counts.values())
         expected_cost += sum(counts[r] * per_call[r] for r in roles)
-        if seen is not None and sum(seen.get(r, 0) for r in BASE_REVIEW_ROLES) > len(BASE_REVIEW_ROLES):
+        sliced = (sum(seen.get(r, 0) for r in BASE_REVIEW_ROLES) > len(BASE_REVIEW_ROLES) if seen is not None
+                  else slices_unknown)
+        if sliced:
             upper_calls += max_calls
             upper_cost += max_calls * max(per_call[r] for r in ("investigate", "verify", "contract")) * margin
             continue
@@ -380,6 +449,7 @@ def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAU
         upper_calls += 2
         upper_cost += 2 * per_call["contract"] * margin
     return {"variants": n, "basis": basis, "margin": margin, "repair_rate": repair_rate, "max_calls": max_calls,
+            "slices_unknown": slices_unknown,
             "per_call_microusd": per_call, "calls_per_variant": rates,
             "expected": {"calls": round(expected_calls, 1), "ledger_microusd": int(expected_cost)},
             "upper": {"calls": int(upper_calls + 0.999), "ledger_microusd": int(upper_cost)}}
@@ -548,7 +618,8 @@ def plant_leak(destination, case, phrases_file):
     doc = json.loads(Path(phrases_file).read_text())
     entry = next(e for e in doc["entries"] if case["id"] in e["cases"] and e["mode"] == "words")
     marker = "#" if case["language"] == "python" else "//"
-    target = Path(destination) / case["contract_file"]
+    # project cases: the labelled file, so the comment lands in a file the scope covers
+    target = Path(destination) / (case.get("contract_file") or case["label"]["positive_locations"][0]["path"])
     os.chmod(target, 0o644)
     lines = target.read_text(encoding="utf-8").split("\n")
     lines.insert(1, f"{marker} Note: {entry['text']}.")
@@ -611,7 +682,10 @@ def run_batch(args):
     from eval_harness import Cluster, build_product, file_sha256, home_relative, keep_review_artifacts, tree_digest
     import test_postgres
 
-    corpus = Corpus()
+    corpus = Corpus(args.corpus, args.split, args.cache)
+    build_root = Path(args.build_root).resolve()
+    if not (build_root / "cmd" / "codeye").is_dir():
+        raise SystemExit(f"--build-root {build_root} is not a CODEYE checkout (no cmd/codeye)")
     review = args.condition == "review"
     if not os.path.isabs(args.go) or not os.access(args.go, os.X_OK):
         raise SystemExit("--go must be an absolute executable path")
@@ -632,7 +706,7 @@ def run_batch(args):
     name = args.batch or f"{args.condition}-{stamp}"
     batch = results_root / name
     batch.mkdir(mode=0o700)
-    pack = pack_tree() if review else None
+    pack = pack_tree(build_root) if review else None  # the instructions are compiled into the built binary
     relay, report_before, est, forbidden = None, None, None, None
     upstream = None
     if review:
@@ -657,7 +731,8 @@ def run_batch(args):
                              "--forbidden-phrases file for the current corpus digest")
         forbidden["allow_model_echo"] = bool(active[-1].get("allow_model_echo"))
         history = history_profile([Path(h) for h in args.history or []])
-        est = estimate(plan, history=history, margin=args.margin, max_calls=args.review_max_calls)
+        est = estimate(plan, history=history, margin=args.margin, max_calls=args.review_max_calls,
+                       slices_unknown=corpus.project)
         refusal = budget_gate(est, report_before, parse_usd(args.reserve_usd), args.request_reserve)
         write_json(batch / "plan.json", {"estimate": est, "refusal": refusal, "selection": selection})
         if refusal:
@@ -681,10 +756,13 @@ def run_batch(args):
         "schema": MANIFEST_SCHEMA, "version": 1, "batch": name, "condition": args.condition,
         "dry_run": bool(args.dry_run), "upstream": upstream, "started_at": now(), "finished_at": None,
         "selection": selection, "variants": [key_of(c["id"], v, r) for c, v, r in plan],
-        "corpus": {"digest": corpus.digest, "cases": len(corpus.cases)},
+        "corpus": corpus.describe(),
         "pack": pack, "model": ({"id": args.model, "relay_model": relay["model"]} if review else None),
-        "checkout": checkout_state(), "os": {"platform": platform.platform(), "python": platform.python_version(),
-                                             "machine": platform.machine()},
+        # checkout: the build root the product binary (and its instructions) came from; runner_checkout:
+        # this runner and corpus. They differ when a baseline binary is measured with a newer runner.
+        "checkout": checkout_state(build_root), "runner_checkout": checkout_state(ROOT),
+        "build_root": home_relative(build_root),
+        "os": {"platform": platform.platform(), "python": platform.python_version(), "machine": platform.machine()},
         "analyzers": {"go": {"path": home_relative(args.go), "sha256": file_sha256(args.go)},
                       "tools": {k: {"path": home_relative(v), "sha256": file_sha256(v)} for k, v in sorted(tools.items())},
                       "agent_flags": switches,
@@ -711,7 +789,7 @@ def run_batch(args):
         with test_postgres.temporary_postgres(base) as (url, env, _):
             env = {k: v for k, v in env.items() if k != "OPENAI_API_KEY"}
             env["CODEYE_DATABASE_URL"] = url
-            binary = build_product(base, ROOT, env)
+            binary = build_product(base, build_root, env)
             flags = help_flags(binary)
             unknown = sorted(t for t in list(tools) + switches if t not in flags)
             if unknown:
@@ -735,7 +813,8 @@ def run_batch(args):
 
             concurrency = 1 if review else max(1, args.agents * args.max_workers)
             with Cluster(base, binary, env, source, agent_args=agent_args, agents=args.agents,
-                         max_workers=args.max_workers, label="evaluation inputs") as cluster:
+                         max_workers=args.max_workers, label="evaluation inputs",
+                         admin=not args.no_repo_code_grant) as cluster:
                 stopped = execute(cluster, corpus, plan, batch, args, review, source, concurrency,
                                   keep_review_artifacts, tree_digest)
     rows = read_rows(batch)
@@ -785,7 +864,8 @@ def execute(cluster, corpus, plan, batch, args, review, source, concurrency, kee
     est_one = None
     if review:
         est_one = estimate(plan[:1], history=history_profile([Path(h) for h in args.history or []]),
-                           margin=args.margin, max_calls=args.review_max_calls)["upper"]
+                           margin=args.margin, max_calls=args.review_max_calls,
+                           slices_unknown=corpus.project)["upper"]
     deadline = time.monotonic() + args.timeout
     while queue or inflight:
         if not cluster.alive():
@@ -813,10 +893,11 @@ def execute(cluster, corpus, plan, batch, args, review, source, concurrency, kee
             original = tree_digest(source / rel)
             mark = len(ledger_records(ledger)) if review else None
             started = time.monotonic()
-            run_id = cluster.submit("eval-" + uuid4().hex[:12], rel)
+            scope = corpus.scope(case)
+            run_id = cluster.submit("eval-" + uuid4().hex[:12], rel, scope)
             inflight[run_id] = {"case": case, "variant": variant, "repeat": repeat, "rel": rel, "digest": digest,
                                 "documented": documented, "original": original, "mark": mark, "started": started,
-                                "started_at": now(), "planted": planted}
+                                "started_at": now(), "planted": planted, "scope": scope}
         if not inflight:
             break
         for run_id in list(inflight):
@@ -826,9 +907,8 @@ def execute(cluster, corpus, plan, batch, args, review, source, concurrency, kee
             info = inflight.pop(run_id)
             case, variant, repeat = info["case"], info["variant"], info["repeat"]
             key = key_of(case["id"], variant, repeat)
-            row = {"key": key, "case": case["id"], "variant": variant, "repeat": repeat, "language": case["language"],
-                   "kind": case["kind"], "category": case["category"], "detection": case["detection"],
-                   "cross_file": case["cross_file"], "documented": info["documented"], "input_digest": info["digest"],
+            row = {"key": key, "case": case["id"], "variant": variant, "repeat": repeat, **case_facts(case),
+                   "scope_paths": info["scope"], "documented": info["documented"], "input_digest": info["digest"],
                    "source_tree_sha256": info["original"], "run_id": run_id, "snapshot_id": run.get("snapshot_id"),
                    "run_status": run["status"], "started_at": info["started_at"], "finished_at": now(),
                    "wall_s": round(time.monotonic() - info["started"], 1), "invalid": None, "planted_leak": info["planted"]}
@@ -881,8 +961,7 @@ def execute(cluster, corpus, plan, batch, args, review, source, concurrency, kee
     if stopped:
         for case, variant, repeat in queue:
             append_row(batch, {"key": key_of(case["id"], variant, repeat), "case": case["id"], "variant": variant,
-                               "repeat": repeat, "language": case["language"], "kind": case["kind"],
-                               "category": case["category"], "detection": case["detection"],
+                               "repeat": repeat, **case_facts(case),
                                "status": "not_run", "invalid": "not_run:" + stopped})
     return stopped
 
@@ -934,10 +1013,22 @@ def capture_list(output, corpus):
 
 # ---------------------------------------------------------------- cli
 
+def add_corpus(p):
+    p.add_argument("--corpus", choices=sorted(CORPORA), default="quality-holdout",
+                   help="case corpus (default quality-holdout)")
+    p.add_argument("--split", help="project-defects: dev or holdout (required); quality-holdout: holdout")
+    p.add_argument("--cache", type=Path, help="project-defects: repository cache directory (filled over the network)")
+
+
+def corpus_of(args):
+    return Corpus(args.corpus, args.split, args.cache)
+
+
 def add_selection(p):
+    add_corpus(p)
     p.add_argument("--cases", help="comma-separated case ids")
-    p.add_argument("--languages", help="comma-separated languages (cpp,python,javascript,go,rust)")
-    p.add_argument("--kinds", help="defect_pair,tricky_normal")
+    p.add_argument("--languages", help="comma-separated languages (cpp,python,javascript,go,rust; project-defects adds java)")
+    p.add_argument("--kinds", help="defect_pair,tricky_normal (project-defects: real_fix,seeded)")
     p.add_argument("--variants", help="before,after (tricky normals have only before)")
     p.add_argument("--sample", type=int, help="stratified sample size (language x kind x detection)")
     p.add_argument("--seed", type=int, default=0)
@@ -960,6 +1051,9 @@ def main(argv=None):
     r = sub.add_parser("run", help="run one batch through a real controller and agents")
     add_selection(r)
     r.add_argument("--condition", choices=("tools", "review"), required=True)
+    r.add_argument("--build-root", type=Path, default=ROOT,
+                   help="CODEYE checkout to build the product binary from (default: this checkout); the "
+                        "manifest records it and this runner's checkout separately")
     r.add_argument("--results-root", required=True, help="stable directory above every batch (holds the registry)")
     r.add_argument("--batch", help="batch directory name (default condition-UTC)")
     r.add_argument("--go", required=True, help="absolute go toolchain (--go)")
@@ -986,6 +1080,7 @@ def main(argv=None):
     r.add_argument("--dry-run", action="store_true", help="the relay uses --test-upstream (labelled, never evaluation)")
     r.add_argument("--plant-leak", metavar="CASE:VARIANT", help="dry-run self-test: put a label phrase in a comment near the top of that input")
     s = sub.add_parser("score", help="metrics over judged items")
+    add_corpus(s)
     s.add_argument("batches", nargs="+", type=Path)
     s.add_argument("--judgments", action="append", type=Path, default=[])
     s.add_argument("--output", type=Path)
@@ -996,8 +1091,19 @@ def main(argv=None):
                    help="fake_model_upstream.py --dump directory of a clean dry run")
     a.add_argument("--output", type=Path, required=True)
     cl = sub.add_parser("capture-list", help="sentinel answer list for an envelope-capture dry run")
+    add_corpus(cl)
     cl.add_argument("--output", type=Path, required=True, help="new file")
+    bl = sub.add_parser("blind", help="blind judging packet of one batch and its separate answer key")
+    add_corpus(bl)
+    bl.add_argument("batch", type=Path)
+    bl.add_argument("--seed", type=int, default=0)
+    bl.add_argument("--output", type=Path, required=True, help="new directory for packet.json and answer-key.json")
+    bm = sub.add_parser("blind-merge", help="judged blind packet + answer key -> judgments file for score")
+    bm.add_argument("--packet", type=Path, required=True, help="the judged packet.json")
+    bm.add_argument("--key", type=Path, required=True)
+    bm.add_argument("--output", type=Path, required=True, help="new judgments file")
     rd = sub.add_parser("reader", help="report-reading task sheets and answer key")
+    add_corpus(rd)
     rd.add_argument("batch", type=Path)
     rd.add_argument("--sample", type=int, default=6)
     rd.add_argument("--seed", type=int, default=0)
@@ -1009,7 +1115,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     if args.command == "plan":
-        corpus = Corpus()
+        corpus = corpus_of(args)
         chosen, selection = select(corpus, cases=set(args.cases.split(",")) if args.cases else None,
                                    languages=set(args.languages.split(",")) if args.languages else None,
                                    kinds=set(args.kinds.split(",")) if args.kinds else None,
@@ -1018,8 +1124,11 @@ def main(argv=None):
         plan = variant_plan(corpus, chosen, set(args.variants.split(",")) if args.variants else None, args.repeat,
                             set(args.repeat_cases.split(",")) if args.repeat_cases else None)
         history = history_profile([Path(h) for h in args.history or []])
-        est = estimate(plan, history=history, margin=args.margin, max_calls=args.review_max_calls)
-        out = {"selection": selection, "variants": [key_of(c["id"], v, r) for c, v, r in plan], "estimate": est}
+        est = estimate(plan, history=history, margin=args.margin, max_calls=args.review_max_calls,
+                       slices_unknown=corpus.project)
+        out = {"corpus": corpus.describe(), "selection": selection,
+               "variants": [key_of(c["id"], v, r) for c, v, r in plan], "estimate": est,
+               "usd": {"expected": est["expected"]["ledger_microusd"] / 1e6, "upper": est["upper"]["ledger_microusd"] / 1e6}}
         if args.ledger:
             report = ledger_report(args.ledger)
             out["ledger"] = {k: report.get(k) for k in ("upstream", "remaining_microusd", "requests", "max_requests",
@@ -1040,7 +1149,7 @@ def main(argv=None):
         return 0
     import quality_score
     if args.command == "score":
-        result = quality_score.score(args.batches, args.judgments, Corpus(), line_slack=args.line_slack)
+        result = quality_score.score(args.batches, args.judgments, corpus_of(args), line_slack=args.line_slack)
         text = json.dumps(result, ensure_ascii=False, indent=1, sort_keys=True)
         if args.output:
             args.output.write_text(text + "\n")
@@ -1050,10 +1159,16 @@ def main(argv=None):
         allow_text(args.output, args.tools_batch, args.request_dump)
         return 0
     if args.command == "capture-list":
-        capture_list(args.output, Corpus())
+        capture_list(args.output, corpus_of(args))
+        return 0
+    if args.command == "blind":
+        quality_score.blind_packet(args.batch, corpus_of(args), args.seed, args.output)
+        return 0
+    if args.command == "blind-merge":
+        quality_score.blind_merge(args.packet, args.key, args.output)
         return 0
     if args.command == "reader":
-        quality_score.reader_sheets(args.batch, Corpus(), args.sample, args.seed, args.output)
+        quality_score.reader_sheets(args.batch, corpus_of(args), args.sample, args.seed, args.output)
         return 0
     if args.command == "reader-score":
         result = quality_score.reader_score(args.key, args.answers)

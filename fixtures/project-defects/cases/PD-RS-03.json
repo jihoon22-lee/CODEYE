@@ -1,0 +1,158 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-RS-03",
+ "split": "holdout",
+ "language": "rust",
+ "kind": "real_fix",
+ "category": "data_integrity",
+ "family": "stale-local-length-after-spill-push",
+ "needs_cross_file": false,
+ "repo": {
+  "url": "https://github.com/smallvec/smallvec",
+  "license": "MIT OR Apache-2.0",
+  "license_file": "LICENSE-MIT"
+ },
+ "scope": "src",
+ "before": {
+  "commit": "21422eb06e9fce73c2c95b717b0538b963bb7918"
+ },
+ "after": {
+  "commit": "3d6420055440aff5657d4fc38d4031736a36af76"
+ },
+ "fix_diff": "diffs/PD-RS-03.diff",
+ "fix_commit_url": "https://github.com/smallvec/smallvec/commit/3d6420055440aff5657d4fc38d4031736a36af76",
+ "trees": {
+  "before": {
+   "digest": "11d6d7e1d0844392b6987c2c7126a629baa3e17b5fd65805769bbabddaeead67",
+   "scope_lines": 2193,
+   "scope_files": 1,
+   "files": 16
+  },
+  "after": {
+   "digest": "4ba98fccae099a3b758e3a18e6117b04ee23b3c88cd926f217a685251c426ef8",
+   "scope_lines": 2194,
+   "scope_files": 1,
+   "files": 16
+  }
+ },
+ "label": {
+  "trigger": "extend, collect or from_iter fills a SmallVec beyond its current capacity from an iterator whose size_hint lower bound is smaller than the real item count, for example a filter or a mapped filter over a range, so the loop has to grow the storage through the single-element push.",
+  "expected_impact": "After the push that grows the storage, the loop keeps using its own element count, which is one short. The next batch is written starting at the slot that already holds the pushed element and the length is set from the stale count, so one element per growth step silently disappears (observed [100, 2, 4, 8, 12] instead of seven values); for types with a destructor the overwritten value is also never dropped.",
+  "positive_locations": [
+   {
+    "path": "src/lib.rs",
+    "symbol": "SmallVec::extend_impl",
+    "anchors": {
+     "start": "if let Some(item) = iter.next() {",
+     "end": "self.push(item);"
+    },
+    "start_line": 1521,
+    "end_line": 1522
+   },
+   {
+    "path": "src/lib.rs",
+    "symbol": "SmallVec::extend_impl",
+    "anchors": {
+     "start": "ptr = ptr.add(len);",
+     "end": "self.set_len(len);"
+    },
+    "start_line": 1511,
+    "end_line": 1519
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "src/lib.rs",
+    "symbol": "SmallVec::push",
+    "anchors": {
+     "start": "pub fn push(&mut self, value: T) {",
+     "end": "unsafe { self.set_len(len + 1) }"
+    },
+    "start_line": 954,
+    "end_line": 964,
+    "note": "push grows the buffer when full, writes at the current stored length and raises that stored length by one; the caller's private counter is not touched."
+   },
+   {
+    "path": "src/lib.rs",
+    "symbol": "Extend::extend",
+    "anchors": {
+     "start": "fn extend<I: IntoIterator<Item = T>>(&mut self, iterable: I) {",
+     "end": "self.extend_impl(iterable.into_iter());"
+    },
+    "start_line": 1700,
+    "end_line": 1701,
+    "note": "Both the public extend and from_iter go through this helper, so every collect into a SmallVec is affected."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "src/lib.rs",
+    "symbol": "SmallVec::extend_impl",
+    "anchors": {
+     "start": "let (lower_bound, _) = iter.size_hint();",
+     "end": "self.reserve(lower_bound);"
+    },
+    "start_line": 1503,
+    "end_line": 1504,
+    "note": "When the lower bound is exact (slices, vectors, plain ranges) the up-front reservation makes the first batch take every item, the single-element growth branch never runs, and the result is complete; tests with such iterators pass."
+   }
+  ],
+  "fix_summary": "Increment the loop's own length counter right after the push in the growth branch (len += 1), so the next batch starts after the pushed element and set_len records the true count.",
+  "distinctive_tokens": [
+   "one short",
+   "growth step"
+  ]
+ },
+ "check": {
+  "summary": "Own integration test copied into tests/: extends and collects through filtering iterators past the inline size and compares the full contents with the expected list; the crate is built with rustc as an rlib and the test with rustc --test against it.",
+  "argv": [
+   "{home}/check"
+  ],
+  "cwd": ".",
+  "setup": [
+   [
+    "{rustc}",
+    "--edition",
+    "2021",
+    "--crate-type",
+    "rlib",
+    "--crate-name",
+    "smallvec",
+    "-C",
+    "linker={cc}",
+    "--out-dir",
+    "{home}",
+    "src/lib.rs"
+   ],
+   [
+    "{rustc}",
+    "--edition",
+    "2021",
+    "--test",
+    "tests/extend_keeps_items.rs",
+    "--extern",
+    "smallvec={home}/libsmallvec.rlib",
+    "-C",
+    "linker={cc}",
+    "-o",
+    "{home}/check"
+   ]
+  ],
+  "env": {},
+  "files": [
+   {
+    "path": "tests/extend_keeps_items.rs",
+    "source": "checks/PD-RS-03/extend_keeps_items.rs"
+   }
+  ],
+  "failure_signature": "test (extend_past_inline_capacity_keeps_every_item|collect_from_unsized_iterator_keeps_every_item) \\.\\.\\. FAILED",
+  "timeout_seconds": 600
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with rustc 1.99.1 (linker gcc 15.2.0): both integration tests fail on before (elements missing from the extended and the collected vector) and pass on after. The crate is compiled directly with rustc (edition 2021, no optional features) instead of cargo, so the dev-dependency bincode is not built and nothing is downloaded; the project's own src/tests.rs and tests/macro.rs are not run.",
+  "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "before": "violation",
+  "after": "pass"
+ }
+}

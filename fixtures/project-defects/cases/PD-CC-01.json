@@ -1,0 +1,146 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-CC-01",
+ "split": "dev",
+ "language": "cpp",
+ "kind": "real_fix",
+ "category": "resource_lifecycle",
+ "family": "release-target-before-copying-aliased-patch",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/DaveGamble/cJSON",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "fb16e5cf358798aabb049655975cde8427101056"
+ },
+ "after": {
+  "commit": "6d9f2443ab071f86e5d9b43025a40929ec41c46c"
+ },
+ "fix_diff": "diffs/PD-CC-01.diff",
+ "fix_commit_url": "https://github.com/DaveGamble/cJSON/commit/6d9f2443ab071f86e5d9b43025a40929ec41c46c",
+ "trees": {
+  "before": {
+   "digest": "6ad5a7573533f18ee575395e1db027e3b202aa976192e2c497e774b488c12003",
+   "scope_lines": 5081,
+   "scope_files": 4,
+   "files": 229
+  },
+  "after": {
+   "digest": "578b7dc71bf0222c0b56e159a7eff578956efdeb723e40fb215fad755a971cef",
+   "scope_lines": 5085,
+   "scope_files": 4,
+   "files": 229
+  }
+ },
+ "label": {
+  "trigger": "cJSONUtils_MergePatch (or the case-sensitive variant) is called with a patch that is not an object, for example an array or a number, and that patch node lives inside the document passed as target, such as the array returned by cJSON_GetObjectItem(doc, \"list\") for the document {\"list\":[4,5]}.",
+  "expected_impact": "For a non-object patch, merge_patch releases the entire target tree through cJSON_Delete and only then asks cJSON_Duplicate for a copy of the patch. Since the patch node was part of the released tree, the copy walks freed nodes and strings: a heap use-after-free that can crash or yield a corrupted result.",
+  "positive_locations": [
+   {
+    "path": "cJSON_Utils.c",
+    "symbol": "merge_patch",
+    "anchors": {
+     "start": "cJSON_Delete(target);",
+     "end": "return cJSON_Duplicate(patch, 1);"
+    },
+    "start_line": 1328,
+    "end_line": 1329
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "cJSON.c",
+    "symbol": "cJSON_Delete",
+    "anchors": {
+     "start": "CJSON_PUBLIC(void) cJSON_Delete(cJSON *item)",
+     "end": "global_hooks.deallocate(item);"
+    },
+    "start_line": 253,
+    "end_line": 273,
+    "note": "The delete routine recurses into every child and also releases valuestring and key strings, so any node reachable from target, including one handed in as the patch, is gone afterwards."
+   },
+   {
+    "path": "cJSON.c",
+    "symbol": "cJSON_Duplicate_rec",
+    "anchors": {
+     "start": "cJSON * cJSON_Duplicate_rec(const cJSON *item, size_t depth, cJSON_bool recurse)"
+    },
+    "start_line": 2789,
+    "end_line": 2789,
+    "note": "The copy routine dereferences type, value fields, strings and the child chain of its argument, which is where the released memory gets read."
+   },
+   {
+    "path": "cJSON_Utils.h",
+    "symbol": "cJSONUtils_MergePatch",
+    "anchors": {
+     "start": "/* target will be modified by patch. return value is new ptr for target. */"
+    },
+    "start_line": 69,
+    "end_line": 69,
+    "note": "The public contract takes ownership of target and returns a replacement, and nothing forbids passing a patch borrowed from inside target."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "cJSON_Utils.c",
+    "symbol": "merge_patch",
+    "anchors": {
+     "start": "if (!cJSON_IsObject(target))",
+     "end": "}"
+    },
+    "start_line": 1332,
+    "end_line": 1336,
+    "note": "The branch that replaces a non-object target with a fresh object also releases target before the patch members are walked. The upstream change leaves that branch as it is, so an object patch taken from inside an array target still reads freed nodes in the after variant as well. It is a separate, still present path and not the location this case labels; a finding there is genuine but does not match this defect."
+   }
+  ],
+  "fix_summary": "Make the copy of the patch first and keep it in a local variable, then release the old target, and return the copy, so the duplicate never reads nodes that belonged to the released document.",
+  "distinctive_tokens": [
+   "patch node lives inside",
+   "released document"
+  ]
+ },
+ "check": {
+  "summary": "Compiles cJSON.c and cJSON_Utils.c with AddressSanitizer and UBSan together with a small program that applies an array member of a parsed document as the merge patch of that same document and then checks the three elements of the returned array.",
+  "setup": [
+   [
+    "{cc}",
+    "-g",
+    "-O1",
+    "-fno-omit-frame-pointer",
+    "-fsanitize=address,undefined",
+    "-I.",
+    "-o",
+    "{home}/merge_check",
+    "pd_check/merge_subtree_check.c",
+    "cJSON.c",
+    "cJSON_Utils.c",
+    "-lm"
+   ]
+  ],
+  "argv": [
+   "{home}/merge_check"
+  ],
+  "cwd": ".",
+  "env": {
+   "ASAN_OPTIONS": "detect_leaks=0"
+  },
+  "files": [
+   {
+    "path": "pd_check/merge_subtree_check.c",
+    "source": "checks/PD-CC-01/merge_subtree_check.c"
+   }
+  ],
+  "failure_signature": "ERROR: AddressSanitizer: heap-use-after-free",
+  "timeout_seconds": 300
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with gcc 15.2.0 (-fsanitize=address,undefined): on before the program aborts with an AddressSanitizer heap-use-after-free inside cJSON_Duplicate_rec reached from merge_patch; on after it prints the merged array and exits 0. The library has no external dependencies.",
+  "toolchain": "gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0, linux x86_64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

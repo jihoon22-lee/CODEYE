@@ -1,0 +1,167 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-CC-03",
+ "split": "holdout",
+ "language": "cpp",
+ "kind": "real_fix",
+ "category": "input_to_sink_security",
+ "family": "utf8-lead-byte-lookahead-past-length",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/kgabis/parson",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "ba29f4eda9ea7703a9f6a9cf2b0532a2605723c3"
+ },
+ "after": {
+  "commit": "bdd339a85976e68e5b789a3f4924db2ed3a9d0d9"
+ },
+ "fix_diff": "diffs/PD-CC-03.diff",
+ "fix_commit_url": "https://github.com/kgabis/parson/commit/bdd339a85976e68e5b789a3f4924db2ed3a9d0d9",
+ "trees": {
+  "before": {
+   "digest": "90423c2ece32148b4ca39384cc3780ee7c5e62d186830877f51f0bc29b5f027b",
+   "scope_lines": 2760,
+   "scope_files": 2,
+   "files": 19
+  },
+  "after": {
+   "digest": "39663afe2684e9b4e9dd88330ba4dd80159e9db0d2b10a8d9187ef221cf6b22a",
+   "scope_lines": 2768,
+   "scope_files": 2,
+   "files": 19
+  }
+ },
+ "label": {
+  "trigger": "An application passes bytes it does not control, together with an explicit length and without a terminating NUL, to the pointer-plus-count string constructor of the value API or to any object or array setter that takes a byte count, and the last bytes inside that length are a UTF-8 lead byte (0xC2-0xF4) whose continuation bytes fall outside the length, e.g. a 3-byte heap block holding 'a', 'b', 0xF0.",
+  "expected_impact": "The UTF-8 validator derives the sequence width from the lead byte and inspects up to three following bytes without comparing that width with the bytes remaining, so it reads beyond the caller's buffer (heap or stack out-of-bounds read). When the bytes past the end happen to be continuation bytes, a value cut in the middle of a character is accepted and stored as a valid string.",
+  "positive_locations": [
+   {
+    "path": "parson.c",
+    "symbol": "verify_utf8_sequence",
+    "anchors": {
+     "start": "static JSON_Status verify_utf8_sequence(const unsigned char *string, int *len) {",
+     "end": "cp = (cp << 6) | (string[3] & 0x3F);"
+    },
+    "start_line": 350,
+    "end_line": 367
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "parson.c",
+    "symbol": "is_valid_utf8",
+    "anchors": {
+     "start": "while (string < string_end) {",
+     "end": "string += len;"
+    },
+    "start_line": 395,
+    "end_line": 399,
+    "note": "The loop knows where the caller's bytes stop (string_end) but hands only the current pointer to the per-sequence check, so the remaining count never reaches it."
+   },
+   {
+    "path": "parson.c",
+    "symbol": "json_value_init_string_with_len",
+    "anchors": {
+     "start": "JSON_Value * json_value_init_string_with_len(const char *string, size_t length) {",
+     "end": "if (!is_valid_utf8(string, length)) {"
+    },
+    "start_line": 1653,
+    "end_line": 1659,
+    "note": "The length-taking constructor validates the caller's bytes before copying them; each counted-length setter for objects and arrays is routed through it."
+   },
+   {
+    "path": "parson.h",
+    "symbol": "json_value_init_string_with_len",
+    "anchors": {
+     "start": "JSON_Value * json_value_init_string_with_len(const char *string, size_t length);"
+    },
+    "start_line": 245,
+    "end_line": 245,
+    "note": "The public declaration lets the caller describe the string by pointer plus count, so a buffer with no terminator after the counted bytes is a legitimate argument."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "parson.h",
+    "symbol": "json_value_init_string_with_len",
+    "anchors": {
+     "start": "JSON_Value * json_value_init_string_with_len(const char *string, size_t length); /* copies passed string, length shouldn't include last null character */"
+    },
+    "start_line": 245,
+    "end_line": 245,
+    "note": "Counterpoint on the contract: the trailing remark on this declaration only says the count excludes the closing NUL, which a reader may take to mean callers always keep a terminator right after the counted bytes; if that held, the lookahead would stop at the NUL and stay in bounds. Nothing in the API enforces it, and the counted setters exist for buffers that are not terminated."
+   },
+   {
+    "path": "parson.c",
+    "symbol": "json_value_init_string",
+    "anchors": {
+     "start": "JSON_Value * json_value_init_string(const char *string) {",
+     "end": "return json_value_init_string_with_len(string, strlen(string));"
+    },
+    "start_line": 1646,
+    "end_line": 1650,
+    "note": "For the NUL-terminated entry point the length comes from strlen, so the terminator is not a continuation byte and the && chain stops there; that path stays in bounds."
+   },
+   {
+    "path": "parson.c",
+    "symbol": "parse_string_value",
+    "anchors": {
+     "start": "static JSON_Value * parse_string_value(const char **string) {",
+     "end": "value = json_value_init_string_no_copy(new_string, new_string_len);"
+    },
+    "start_line": 1071,
+    "end_line": 1078,
+    "note": "Strings read by the JSON text parser are built without this validator, so json_parse_string input does not reach the faulty lookahead; the exposure is through the length-taking string API only."
+   }
+  ],
+  "fix_summary": "Hand the number of bytes left before string_end to the per-sequence check and reject the sequence when the width implied by its lead byte exceeds that count, before any continuation byte is inspected; only report the width back on success.",
+  "distinctive_tokens": [
+   "width implied by its lead byte",
+   "bytes it does not control"
+  ]
+ },
+ "check": {
+  "summary": "Compiles parson.c with AddressSanitizer and UBSan plus a small program that copies byte strings ending in a cut-off 2, 3 or 4 byte UTF-8 character into heap blocks of exactly the counted size, expects the counted-length string constructor to refuse them, and expects complete characters filling the block to be accepted.",
+  "setup": [
+   [
+    "{cc}",
+    "-g",
+    "-O1",
+    "-fno-omit-frame-pointer",
+    "-fsanitize=address,undefined",
+    "-I.",
+    "-o",
+    "{home}/sized_check",
+    "pd_check/sized_string_check.c",
+    "parson.c",
+    "-lm"
+   ]
+  ],
+  "argv": [
+   "{home}/sized_check"
+  ],
+  "cwd": ".",
+  "env": {
+   "ASAN_OPTIONS": "detect_leaks=0"
+  },
+  "files": [
+   {
+    "path": "pd_check/sized_string_check.c",
+    "source": "checks/PD-CC-03/sized_string_check.c"
+   }
+  ],
+  "failure_signature": "ERROR: AddressSanitizer: heap-buffer-overflow",
+  "timeout_seconds": 300
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with gcc 15.2.0 (-fsanitize=address,undefined): on before the program aborts with an AddressSanitizer heap-buffer-overflow read in the UTF-8 sequence check on the first cut-off character; on after every cut-off string is refused, every complete one accepted, and it exits 0. parson has no external dependencies.",
+  "toolchain": "gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0, linux x86_64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

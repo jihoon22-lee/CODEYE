@@ -476,6 +476,9 @@ TC-104는 구문 검사와 관리 JS가 중복 진단을 내어 목록에서 관
 | TC-121 | 평가 실행·예산: `tools`·`review` 조건, 층별 표본과 seed, 반복, holdout 등록부, 상한 추정이 남은 예산·요청 수를 넘는 batch, batch 중간의 relay 예산 거절, 시험용 upstream | 사례마다 실제 controller·agent·분석기 경로로 실행하고 manifest에 팩·역할 digest, corpus digest, 모델, OS, 도구 버전·플래그, 예산, 시각, seed를 남긴다. 같은 seed는 같은 표본이다. 이전 다른 digest의 실제 실행이 있으면 `holdout_seen_by_prior_revision`을 표시한다. 시작 전 거절은 사유를 남기고 아무 사례도 실행하지 않는다. 중간 거절은 그 사례를 무효로, 남은 변형을 `not_run`으로 기록하고 멈춘다. 시험용 upstream은 loopback URL만 받고 키를 읽지 않으며 실제 장부와 섞이지 않는다. | REQ-006,013,018,027; NFR-010 |
 | TC-122 | 채점: 위치 pre-fill, 판정 양식, 미판정·판정 충돌, 판정된 단위의 지표와 Wilson 95% 구간, 언어·범주·detection 분해, 조건 비교, 반복 일치도, 보고서 읽기 답 없음·있음 | 자동 위치 대조는 판정이 아니며 구조 지표로만 보고한다. 비율의 분모는 판정된 단위이고 미판정 수를 함께 낸다. 충돌한 판정은 미판정이다. 비용·시간과 정확도를 한 점수로 합치지 않는다. 표시된 batch나 dry run이 섞인 비교는 `independent: false`다. 근거 유효성은 새로 만든 입력과 대조한다. 검토 결과는 task 상태로 분류하고, 비밀값 선별 실패(`secret_screen_failed`)는 모델 실패와 따로 센다. 코드 노출은 보고서의 파일 수가 아니라 검토 기록의 근거 종류로 센다. 보고서 읽기는 사람의 답이 없으면 `not_measured`이고 모델로 독자를 흉내 내지 않는다. | REQ-011,012,013,027; NFR-010 |
 
+| TC-283 | 프로젝트 규모 결함 집합(`fixtures/project-defects/`): 네트워크 없는 `validate`·`digest --split holdout`, 첫 50줄 안의 양성 위치·diff와 겹치지 않는 위치·두 번째 파일 없는 `needs_cross_file`·비허용 라이선스·범위 줄 수 밖·종류 불일치, 두 분할에 같은 저장소, 네트워크가 필요한 `verify`·`materialize` | 오프라인 검사가 메타데이터·패치·diff만으로 구조·라벨 위치·분할 규칙을 확인하고 holdout digest가 봉인과 같다. 잘못된 사례는 사유와 함께 거부한다. `verify`는 pin·부모 커밋·패치·diff 적용·트리 digest·범위 줄 수·앵커·라이선스 파일·라벨 누설을 확인하고, `--run-checks`로 사례 검사가 before 실패·after 통과인지 작업 사본에서 실행한다. 만든 입력에는 `.git`·사례 ID·변형 이름·라벨이 없다. 캐시에 커밋이 없고 네트워크가 없으면 이유와 함께 실패한다. 정답 목록은 relay가 그대로 읽는다. | REQ-027; NFR-010 |
+| TC-284 | runner·채점의 프로젝트 규모 지원: `--corpus`·`--split`(필수)·`--cache`, 사례 범위의 run scope, `--build-root`, 이력 없는 큰 범위 변형의 계획, 줄 범위 위치 지표, 블라인드 판정 묶음과 되돌리기 | 분할 없이는 시작하지 않는다. 변형마다 범위 경로가 `scope.kind=paths`로 간다. manifest가 build root와 runner checkout을 따로 남기고 지침 digest는 build root에서 읽는다. 이력이 없는 변형의 상한은 호출 상한이다. 위치 지표는 모델 finding과 도구 진단, before와 after를 나누고 심볼 대조 없이 줄 범위만 쓴다. 묶음에는 사례 ID·변형·키·run·snapshot·fingerprint ID·라벨이 없고, 되돌린 판정은 기존 판정 형식으로 `score`가 읽는다. 시험(`test_quality_eval.py`)은 모델·네트워크 없이 돈다. 품질 근거가 아니다. | REQ-011,013,027; NFR-010 |
+
 평가 방법과 보류 데이터 규칙은 [평가](EVALUATION.md)에 있다.
 
 ## 운영
@@ -569,7 +572,7 @@ GitHub token, pull request, 결과 댓글([GitHub 연결](GITHUB.md), [pull requ
 | REQ-023 | EXECUTION | TC-25 |
 | REQ-024,025 | GITHUB | TC-27,28,29, TC-227~236, TC-257,258 |
 | REQ-026 | REVIEW | TC-12,34,76,170,171,172,182,183,184,272 |
-| REQ-027 | REVIEW, EVALUATION | TC-33,97,100 |
+| REQ-027 | REVIEW, EVALUATION | TC-33,97,100,283,284 |
 | REQ-028,029 | ARCHITECTURE, REPORT | TC-14,31 |
 | REQ-030 | SECURITY, OPERATIONS | TC-30,170,240~245 |
 | REQ-031 | REPORT, SECURITY | TC-15,31,266 |

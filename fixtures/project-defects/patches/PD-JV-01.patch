@@ -1,0 +1,25 @@
+--- a/core/src/main/java/dev/failsafe/internal/CircuitBreakerImpl.java
++++ b/core/src/main/java/dev/failsafe/internal/CircuitBreakerImpl.java
+@@ -159,9 +159,9 @@
+     boolean transitioned = false;
+     State currentState;
+ 
+-    synchronized (this) {
+-      currentState = getState();
+-      if (!getState().equals(newState)) {
++    currentState = getState();
++    if (!currentState.equals(newState)) {
++      synchronized (this) {
+         switch (newState) {
+           case CLOSED:
+             state.set(new ClosedState<>(this));
+@@ -174,8 +174,8 @@
+             state.set(new HalfOpenState<>(this));
+             break;
+         }
+-        transitioned = true;
+       }
++      transitioned = true;
+     }
+ 
+     if (transitioned && listener != null) {

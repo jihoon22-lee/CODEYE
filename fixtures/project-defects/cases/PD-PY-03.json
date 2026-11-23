@@ -1,0 +1,157 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-PY-03",
+ "split": "holdout",
+ "language": "python",
+ "kind": "real_fix",
+ "category": "boundary_correctness",
+ "family": "keyed-extreme-of-empty-array",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/jmespath/jmespath.py",
+  "license": "MIT",
+  "license_file": "LICENSE.txt"
+ },
+ "scope": "jmespath",
+ "before": {
+  "commit": "f4c8806503ca5652890c1d3cd74bc66396f08200"
+ },
+ "after": {
+  "commit": "373c6401ebefe30821a3e416e64b5650ba369983"
+ },
+ "fix_diff": "diffs/PD-PY-03.diff",
+ "fix_commit_url": "https://github.com/jmespath/jmespath.py/commit/373c6401ebefe30821a3e416e64b5650ba369983",
+ "trees": {
+  "before": {
+   "digest": "77757deaa017a9c25e234474587e976d0951c80be56c5dc86cf45834e58c3020",
+   "scope_lines": 1708,
+   "scope_files": 8,
+   "files": 73
+  },
+  "after": {
+   "digest": "ac5bf5c0886615e4d9739ddf18bf76607c924fbdb28ba985ccf2b66d927db37d",
+   "scope_lines": 1714,
+   "scope_files": 8,
+   "files": 73
+  }
+ },
+ "label": {
+  "trigger": "An expression applies min_by or max_by to a list with no elements, for instance a literal empty list, a field that is present but holds an empty list such as nobody: [], or a filter that keeps nothing piped into max_by(@, &age).",
+  "expected_impact": "The builtin min() or max() is called on an empty sequence and raises a bare ValueError, so jmespath.search aborts instead of yielding null as the language's plain min and max do. Callers that handle only the package's own error classes see an unexpected crash on perfectly valid queries over empty data.",
+  "positive_locations": [
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "Functions._func_min_by",
+    "anchors": {
+     "start": "return min(array, key=keyfunc)"
+    },
+    "start_line": 334,
+    "end_line": 334
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "Functions._func_max_by",
+    "anchors": {
+     "start": "return max(array, key=keyfunc)"
+    },
+    "start_line": 341,
+    "end_line": 341
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "jmespath/visitor.py",
+    "symbol": "TreeInterpreter.visit_function_expression",
+    "anchors": {
+     "start": "def visit_function_expression(self, node, value):",
+     "end": "return self._functions.call_function(node['value'], resolved_args)"
+    },
+    "start_line": 166,
+    "end_line": 171,
+    "note": "The interpreter hands evaluated arguments to the function table and returns whatever comes back, without translating exceptions, so an exception from the builtin reaches search() unchanged."
+   },
+   {
+    "path": "jmespath/exceptions.py",
+    "symbol": "JMESPathError",
+    "anchors": {
+     "start": "class JMESPathError(ValueError):"
+    },
+    "start_line": 4,
+    "end_line": 4,
+    "note": "The library's errors form their own family; the builtin error raised for an empty sequence is not part of it, which is how the crash differs from a deliberate query error."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "Functions._func_max",
+    "anchors": {
+     "start": "def _func_max(self, arg):",
+     "end": "return None"
+    },
+    "start_line": 256,
+    "end_line": 260,
+    "note": "The unkeyed variant shows the intended result for no elements: it tests for emptiness and returns None (null)."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "Functions._func_sort_by",
+    "anchors": {
+     "start": "if not array:"
+    },
+    "start_line": 311,
+    "end_line": 311,
+    "note": "sort_by already returns its input early when the list has no elements, so it is not affected; only the two keyed extreme functions are."
+   },
+   {
+    "note": "Non-empty lists whose key expression yields mixed or unsupported types are refused by the key function with the package's type error; that path behaves as designed and is not this defect."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "Functions._func_max_by",
+    "anchors": {
+     "start": "'min_by')"
+    },
+    "start_line": 340,
+    "end_line": 340,
+    "note": "max_by passes the other function's name to its key function, so its type errors are reported under min_by. The same commit corrects it, but it is a separate cosmetic slip in error text and a finding about it does not match the empty-list defect."
+   }
+  ],
+  "fix_summary": "Return None when the array argument is empty before calling min() or max() with the key function in min_by and max_by. The same commit also makes max_by report its own name rather than min_by in key type errors.",
+  "distinctive_tokens": [
+   "keyed extreme functions",
+   "holds an empty list"
+  ]
+ },
+ "check": {
+  "summary": "Independent pytest module copied into the work copy (the project's own compliance runner depends on nose, which is not available): five queries apply min_by or max_by to lists with no elements and must give None; two controls check normal results and the unkeyed min and max.",
+  "argv": [
+   "{python}",
+   "-m",
+   "pytest",
+   "-p",
+   "no:cacheprovider",
+   "-q",
+   "tests/test_by_functions_on_empty_input.py"
+  ],
+  "cwd": ".",
+  "env": {
+   "PYTHONPATH": "{work}"
+  },
+  "files": [
+   {
+    "path": "tests/test_by_functions_on_empty_input.py",
+    "source": "checks/PD-PY-03/tests/test_by_functions_on_empty_input.py"
+   }
+  ],
+  "failure_signature": "FAILED tests/test_by_functions_on_empty_input\\.py::test_by_function_over_no_elements_gives_null",
+  "timeout_seconds": 600
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with system Python 3.14.4 and pytest 9.0.2: on before the five empty-list queries fail with a bare ValueError from min()/max() while the two controls pass; on after all seven tests pass. The check is an independent module because the project's compliance runner at this commit needs nose; it covers the two compliance cases the fix commit added (min_by and max_by over a literal empty list) plus three equivalent queries. PYTHONPATH points at the work copy; the library has no dependencies. Python 3.14 prints SyntaxWarnings for pre-existing 'is 0' comparisons in visitor.py, which do not affect the result.",
+  "toolchain": "Python 3.14.4, pytest 9.0.2",
+  "before": "violation",
+  "after": "pass"
+ }
+}

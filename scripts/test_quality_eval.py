@@ -580,5 +580,190 @@ class ReaderTests(unittest.TestCase):
             self.assertEqual(res["seconds_median"], 80)
 
 
+PROJECT = quality_eval.Corpus("project-defects", "dev")
+PCASE = "PD-GO-01"  # gorilla/mux, seeded: mux.go:129 in before, mux.go:129-130 in after
+
+
+def project_batch(root, name, findings_by_key, observations_by_key=(), condition="tools"):
+    batch = Path(root) / name
+    (batch / "reports").mkdir(parents=True)
+    manifest = {"schema": quality_eval.MANIFEST_SCHEMA, "batch": name, "condition": condition, "dry_run": False,
+                "corpus": PROJECT.describe(), "pack": None, "holdout": {"labels": []}, "budget": None}
+    (batch / "manifest.json").write_text(json.dumps(manifest))
+    observations_by_key = dict(observations_by_key)
+    with open(batch / "rows.jsonl", "w") as f:
+        for key, findings in findings_by_key.items():
+            case, variant, repeat = key.split(".")
+            row = {"key": key, "case": case, "variant": variant, "repeat": int(repeat), "status": "partial",
+                   "invalid": None, "documented": False, "ai_review": "skipped_policy", "llm_exposed_files": 0,
+                   "wall_s": 5.0, "review_calls": [], "usage": {}, **quality_eval.case_facts(PROJECT.by_id[case])}
+            f.write(json.dumps(row) + "\n")
+            doc = report(findings)
+            doc["observations"] = [{"id": f"obs_{i}", "location": {"path": p, "start_line": s, "end_line": e}}
+                                   for i, (p, s, e) in enumerate(observations_by_key.get(key, []))]
+            (batch / "reports" / (key + ".json")).write_text(json.dumps(doc))
+    return batch
+
+
+class ProjectCorpusTests(unittest.TestCase):
+    DIFF = ("--- a/x.go\n+++ b/x.go\n@@ -3,4 +3,5 @@\n c\n-d\n+D1\n+D2\n e\n f\n"
+            "@@ -20,3 +21,2 @@\n t\n-u\n v\n")
+
+    def test_diff_helpers_apply_map_and_mark_changed_lines(self):
+        m = PROJECT.module
+        entry = m["parse_diff"](self.DIFF)[0]
+        old = "".join(f"{c}\n" for c in "abcdefghijklmnopqrstuvwxyz")
+        new = m["apply_diff"](old, entry)
+        self.assertEqual(new.split("\n")[3:5], ["D1", "D2"])
+        self.assertNotIn("u\n", new)
+        self.assertEqual(m["apply_diff"](new, entry, reverse=True), old)
+        self.assertEqual(m["changed_lines"](entry, "old"), {4, 21})
+        self.assertEqual(m["changed_lines"](entry, "new"), {4, 5, 21, 22})  # a pure deletion marks its neighbours
+        self.assertEqual(m["map_line"](4, entry, "old"), (4, 5))
+        self.assertEqual(m["map_line"](5, entry, "new"), (4, 4))
+        self.assertEqual(m["map_line"](10, entry, "old"), (11, 11))
+        self.assertEqual(m["map_line"](30, entry, "old"), (30, 30))
+        with self.assertRaises(ValueError):
+            m["apply_diff"]("zzz\n" * 30, entry)
+
+    def test_split_is_required_and_targets_follow_the_patch(self):
+        with self.assertRaises(SystemExit):
+            quality_eval.Corpus("project-defects")
+        case = PROJECT.by_id[PCASE]
+        self.assertTrue(all(c["split"] == "dev" for c in PROJECT.cases))
+        self.assertEqual(PROJECT.scope(case), None)  # scope "." is the whole snapshot
+        self.assertFalse(PROJECT.documented(case))
+        before = quality_score.targets(PROJECT, case, "before")
+        after = quality_score.targets(PROJECT, case, "after")
+        self.assertEqual([(t["kind"], t["start_line"], t["end_line"]) for t in before], [("positive", 129, 129)])
+        self.assertEqual([(t["kind"], t["start_line"], t["end_line"]) for t in after], [("after_mapped", 129, 130)])
+        with self.assertRaises(SystemExit):  # materialize needs the repository cache
+            PROJECT.materialize(Path(tempfile.gettempdir()) / "unused", case, "before", False)
+
+    def test_validate_rejects_broken_labels_offline(self):
+        m = PROJECT.module
+        good = json.loads(json.dumps(PROJECT.by_id[PCASE]))
+        errors = []
+        m["validate_case"](good, errors)
+        self.assertEqual(errors, [])
+        for mutate, expect in (
+                (lambda c: c["label"]["positive_locations"][0].update(start_line=12, end_line=12), "first 50 lines"),
+                (lambda c: c["label"]["positive_locations"][0].update(start_line=200, end_line=201), "intersects"),
+                (lambda c: c.update(needs_cross_file=True) or c["label"].update(context_locations=[]), "two files"),
+                (lambda c: c["repo"].update(license="GPL-3.0-only"), "permissive"),
+                (lambda c: c["trees"]["before"].update(scope_lines=900), "outside"),
+                (lambda c: c.update(kind="real_fix"), "real_fix")):
+            case = json.loads(json.dumps(good))
+            mutate(case)
+            errors = []
+            m["validate_case"](case, errors)
+            self.assertTrue(any(expect in e for e in errors), (expect, errors))
+
+    def test_split_rules_need_disjoint_projects(self):
+        m = PROJECT.module
+        a = json.loads(json.dumps(PROJECT.by_id[PCASE]))
+        b = json.loads(json.dumps(a))
+        b.update(id="PD-GO-99", _file="PD-GO-99.json", split="holdout", family="another-family-slug")
+        errors, _ = m["validate"]([a, b], partial=True)
+        self.assertTrue(any("appears in both splits" in e for e in errors), errors)
+
+    def test_forbidden_list_loads_in_the_relay(self):
+        import model_budget_relay as gateway
+        m = PROJECT.module
+        case = PROJECT.by_id[PCASE]
+        tree = {"mux.go": ("100644", b"package mux\n\nfunc copyRouteConf() {}\n"), "LICENSE": ("100644", b"BSD\n")}
+        with mock.patch.dict(m["forbidden_list"].__globals__, {"render": lambda c, v, cache: (tree, [])}):
+            doc = m["forbidden_list"]([case], "/unused", "dev")
+        self.assertEqual(doc["corpus_digest"], m["corpus_digest"]([case]))
+        self.assertTrue(any(e["text"] == "shared backing array" for e in doc["entries"]))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "forbidden.json"
+            path.write_text(json.dumps(doc))
+            phrases = gateway.load_forbidden(str(path))
+            self.assertTrue(phrases.matches(["the matchers share a shared backing array here"]))
+            self.assertFalse(phrases.matches(["func copyRouteConf"]))
+
+    def test_unknown_slices_bound_the_upper_estimate_by_the_ceiling(self):
+        plan = quality_eval.variant_plan(PROJECT, [PROJECT.by_id[PCASE]])
+        small = quality_eval.estimate(plan)
+        sliced = quality_eval.estimate(plan, slices_unknown=True, max_calls=40)
+        self.assertEqual(small["upper"]["calls"], 2 * int(5 * 1.1 + 2 + 0.999) - 1)  # 7.5 per variant, rounded up once
+        self.assertEqual(sliced["upper"]["calls"], 80)
+        self.assertTrue(sliced["slices_unknown"])
+
+    def test_line_metrics_separate_model_findings_and_tool_diagnostics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            batch = project_batch(tmp, "p", {
+                PCASE + ".before.1": [finding("m1", "mux.go", 128, 128), finding("m2", "route.go", 241, 241),
+                                      finding("t1", "mux.go", 129, 129, producer="tool")],
+                PCASE + ".after.1": [finding("m3", "mux.go", 300, 301)]},
+                {PCASE + ".before.1": [("mux_test.go", 10, 10)], PCASE + ".after.1": [("mux.go", 131, 131)]})
+            manifest, rows, reports = quality_score.load_batch(batch)
+            m = quality_score.batch_metrics(manifest, rows, reports, {}, PROJECT, slack=1, batch_dir=batch)
+            loc = m["structural"]["location_lines"]
+            self.assertEqual(loc["line_slack"], 1)
+            self.assertEqual(loc["before"]["model_findings"]["k"], 1)  # 128 is within 1 line of 129
+            self.assertEqual(loc["before"]["tool_diagnostics"]["k"], 0)  # the diagnostic is in another file
+            self.assertEqual(loc["after"]["model_findings"]["k"], 0)
+            self.assertEqual(loc["after"]["tool_diagnostics"]["k"], 1)  # 131 is within 1 line of 129-130
+            self.assertEqual(loc["counts"]["before"]["model_findings"],
+                             {"locations": 2, "in_labelled_file": 1, "overlapping": 1})
+            m0 = quality_score.batch_metrics(manifest, rows, reports, {}, PROJECT, slack=0, batch_dir=batch)
+            self.assertEqual(m0["structural"]["location_lines"]["before"]["model_findings"]["k"], 0)
+            self.assertIn("lines: tool diagnostic hits label, before", quality_score.render_table(
+                {"batches": [m], "comparison": {"independent": False, "not_independent_because": []}}))
+
+    def test_blind_packet_hides_variant_and_label_and_merges_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f1 = finding("fnd_one", "mux.go", 129, 129)
+            f1["evidence"] = [{"kind": "code", "location": {"path": "mux.go", "start_line": 129, "end_line": 129,
+                                                             "snapshot_id": "snap-secret"},
+                               "excerpt": {"start_line": 127, "end_line": 131, "text": "c.matchers = x"}}]
+            f1["conditions"] = [{"statement": "two sibling routes", "status": "candidate"}]
+            f1["impact"] = "wrong handler"
+            batch = project_batch(tmp, "p", {PCASE + ".before.1": [f1, finding("fnd_two", "route.go", 241, 241)],
+                                            PCASE + ".after.1": [finding("fnd_three", "mux.go", 129, 130)]})
+            out = Path(tmp) / "blind"
+            quality_score.blind_packet(batch, PROJECT, 7, out)
+            text = (out / "packet.json").read_text()
+            for secret in (PCASE, "before", "after", "fnd_", "snap-secret", "fp2:",
+                           PROJECT.by_id[PCASE]["label"]["trigger"][:30]):
+                self.assertNotIn(secret, text)
+            packet = json.loads(text)
+            self.assertEqual(len(packet["units"]), 2)
+            self.assertEqual({u["reference_id"] for u in packet["units"]}, {"R01"})
+            refs = json.loads((out / "references.json").read_text())["references"]
+            self.assertEqual(refs[0]["files"], ["mux.go"])
+            self.assertNotIn("start_line", json.dumps(refs))
+            judged = next(f for u in packet["units"] for f in u["findings"] if f["cited_excerpts"])
+            self.assertEqual(judged["conditions"], ["two sibling routes"])
+            judged.update(verdict="valid_actionable", matches_label=True)
+            other = next(f for u in packet["units"] for f in u["findings"] if f is not judged)
+            other.update(verdict="bogus")
+            bad = Path(tmp) / "bad.json"
+            bad.write_text(json.dumps(packet))
+            with self.assertRaises(SystemExit):
+                quality_score.blind_merge(bad, out / "answer-key.json", Path(tmp) / "j0.json")
+            other.update(verdict=None)
+            good = Path(tmp) / "judged.json"
+            good.write_text(json.dumps(packet))
+            quality_score.blind_merge(good, out / "answer-key.json", Path(tmp) / "j.json")
+            judgments, conflicts, _ = quality_score.load_judgments([Path(tmp) / "j.json"])
+            self.assertEqual(conflicts, [])
+            self.assertEqual(judgments, {("p", PCASE + ".before.1", "fnd_one"):
+                                         {"verdict": "valid_actionable", "matches_label": True, "duplicate_of": None}})
+
+    def test_enqueue_passes_scope_paths(self):
+        import node_smoke
+        sent = []
+        session = node_smoke.Session.__new__(node_smoke.Session)
+        session.request = lambda method, path, body, headers=None: sent.append(body) or {
+            "status": "queued", "id": "00000000-0000-0000-0000-000000000001"}
+        session.enqueue("p1", ["pkg/sub"])
+        session.enqueue("p2")
+        self.assertEqual(sent[0]["scope"], {"kind": "paths", "paths": ["pkg/sub"]})
+        self.assertEqual(sent[1]["scope"], {"kind": "full"})
+
+
 if __name__ == "__main__":
     unittest.main()

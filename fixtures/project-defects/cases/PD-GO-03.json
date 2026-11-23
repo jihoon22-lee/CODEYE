@@ -1,0 +1,133 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-GO-03",
+ "split": "holdout",
+ "language": "go",
+ "kind": "seeded",
+ "category": "resource_lifecycle",
+ "family": "slot-returned-only-on-normal-exit",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/go-chi/chi",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": "middleware",
+ "before": {
+  "commit": "c64ed7d6635f33a8b2feaff7dcfa55677023ac7d",
+  "patch": "patches/PD-GO-03.patch"
+ },
+ "after": {
+  "commit": "c64ed7d6635f33a8b2feaff7dcfa55677023ac7d"
+ },
+ "trees": {
+  "before": {
+   "digest": "3a1cebdc076f8aa125f7629e716b3296046c9ecb49ae2f678d5c1e3a1663cad0",
+   "scope_lines": 2697,
+   "scope_files": 31,
+   "files": 111
+  },
+  "after": {
+   "digest": "8a5e696a0374a8c08fd1eacc63806153e773535f74c86badcc54948d40373019",
+   "scope_lines": 2699,
+   "scope_files": 31,
+   "files": 111
+  }
+ },
+ "label": {
+  "trigger": "A request gets a processing slot on the immediate path of the Throttle middleware and the wrapped handler panics, for instance a reverse proxy aborting with http.ErrAbortHandler or any handler bug caught by Recoverer mounted further out.",
+  "expected_impact": "The slot is put back into the tokens channel by a plain statement after next.ServeHTTP, so a panic unwinds past it and the slot is gone for good. Each such panic shrinks the effective limit by one; once all slots are lost every later request waits out the backlog timeout or is rejected with 429, until the process restarts.",
+  "positive_locations": [
+   {
+    "path": "middleware/throttle.go",
+    "symbol": "ThrottleWithOpts",
+    "anchors": {
+     "start": "case tok := <-t.tokens:",
+     "end": "return"
+    },
+    "start_line": 95,
+    "end_line": 98
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "middleware/recoverer.go",
+    "symbol": "Recoverer",
+    "anchors": {
+     "start": "defer func() {",
+     "end": "next.ServeHTTP(w, r)"
+    },
+    "start_line": 24,
+    "end_line": 45,
+    "note": "Recoverer catches the handler panic further up the chain and answers 500, so the server keeps running with the throttle instance whose slot was never handed back."
+   },
+   {
+    "path": "middleware/throttle.go",
+    "symbol": "ThrottleWithOpts",
+    "anchors": {
+     "start": "for i := 0; i < opts.Limit+opts.BacklogLimit; i++ {",
+     "end": "}"
+    },
+    "start_line": 70,
+    "end_line": 75,
+    "note": "The processing slots are created exactly once when the middleware is built; nothing ever refills the channel, so a slot that is not sent back reduces capacity permanently."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "middleware/throttle.go",
+    "symbol": "ThrottleWithOpts",
+    "anchors": {
+     "start": "case tok := <-t.tokens:",
+     "end": "}()"
+    },
+    "start_line": 114,
+    "end_line": 118,
+    "note": "The path that first waits for a slot hands it back from a deferred function, so it survives a panic; a report about this branch is not the defect."
+   },
+   {
+    "path": "middleware/throttle.go",
+    "symbol": "ThrottleWithOpts",
+    "anchors": {
+     "start": "defer func() {",
+     "end": "}()"
+    },
+    "start_line": 89,
+    "end_line": 91,
+    "note": "The backlog entry is released in a defer as well; only the processing slot on the immediate branch is affected."
+   }
+  ],
+  "fix_summary": "Hand the processing slot back from a deferred function registered right after it is taken (as the waiting branch already does), so a panicking handler still returns it to the channel.",
+  "distinctive_tokens": [
+   "slot is gone for good",
+   "shrinks the effective limit"
+  ]
+ },
+ "check": {
+  "summary": "Independent Go test: Recoverer around ThrottleBacklog(1, 0, 200ms); the first request's handler panics (500 expected), the next two requests must then get 200 instead of a 429 after the backlog wait.",
+  "argv": [
+   "{go}",
+   "test",
+   "-count=1",
+   "-run",
+   "^TestThrottleSlotAvailableAfterRecoveredPanic$",
+   "./middleware/"
+  ],
+  "cwd": ".",
+  "failure_signature": "--- FAIL: TestThrottleSlotAvailableAfterRecoveredPanic",
+  "timeout_seconds": 300,
+  "files": [
+   {
+    "path": "middleware/throttle_recover_test.go",
+    "source": "checks/PD-GO-03/throttle_recover_test.go"
+   }
+  ]
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with go1.27.4: before=violation (request 2 gets 429 after the 200 ms backlog wait), after=pass. The rest of the pinned test suite still passes on the patched tree, so no existing project test notices the change; the check is an independent test copied into middleware/. The module has no dependencies; no network was used.",
+  "toolchain": "go1.27.4 linux/amd64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

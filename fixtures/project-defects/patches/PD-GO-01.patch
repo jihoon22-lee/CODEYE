@@ -1,0 +1,12 @@
+--- a/mux.go
++++ b/mux.go
+@@ -126,8 +126,7 @@
+ 		c.regexp.queries = append(c.regexp.queries, copyRouteRegexp(q))
+ 	}
+ 
+-	c.matchers = make([]matcher, len(r.matchers))
+-	copy(c.matchers, r.matchers)
++	c.matchers = r.matchers[:len(r.matchers)]
+ 
+ 	return c
+ }

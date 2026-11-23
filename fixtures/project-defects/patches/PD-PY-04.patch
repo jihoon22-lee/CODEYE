@@ -1,0 +1,14 @@
+--- a/jsonpickle/pickler.py
++++ b/jsonpickle/pickler.py
+@@ -461,10 +461,7 @@
+         self, handler: handlers.BaseHandler, obj: Any, data: dict[str, Any]
+     ) -> Any:
+         kwargs: dict[str, Any] = {}
+-        if (
+-            self.handler_context is not None
+-            and handlers.handler_accepts_handler_context(handler.flatten)
+-        ):
++        if self.handler_context is not None:
+             kwargs["handler_context"] = self.handler_context
+         return handler.flatten(obj, data, **kwargs)
+ 

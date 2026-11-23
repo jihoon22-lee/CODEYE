@@ -1,0 +1,151 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-GO-04",
+ "split": "holdout",
+ "language": "go",
+ "kind": "real_fix",
+ "category": "error_handling",
+ "family": "expected-sentinel-returned-from-close-reply",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/gorilla/websocket",
+  "license": "BSD-3-Clause",
+  "license_file": "LICENSE"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "629990daa33ae01adc1d520aa995487e1213bdc3"
+ },
+ "after": {
+  "commit": "6f5d2139f4b96d5edfe6c1aac4fe87fed8d7f9fd"
+ },
+ "fix_diff": "diffs/PD-GO-04.diff",
+ "fix_commit_url": "https://github.com/gorilla/websocket/commit/6f5d2139f4b96d5edfe6c1aac4fe87fed8d7f9fd",
+ "trees": {
+  "before": {
+   "digest": "41a63fb6bc684a4eb5c4923125ab3d974b6f086569a61f137bc6adb1a8b33835",
+   "scope_lines": 3161,
+   "scope_files": 13,
+   "files": 65
+  },
+  "after": {
+   "digest": "f8c6eed7c0d03b9e6dfc3415dd175a198335c7259ba3c86bd455a338ea0eaecd",
+   "scope_lines": 3162,
+   "scope_files": 13,
+   "files": 65
+  }
+ },
+ "label": {
+  "trigger": "The local side begins the closing handshake (WriteMessage or WriteControl with a CloseMessage), keeps the default close handler, and then reads the connection until the peer's answering close frame arrives, which is the normal shutdown sequence of a client.",
+  "expected_impact": "Sending the first close frame makes every later write fail with ErrCloseSent. When the reply arrives, the default handler tries to echo a close frame, gets that sentinel and passes it up, so NextReader/ReadMessage return ErrCloseSent instead of the promised *CloseError. IsCloseError and IsUnexpectedCloseError then misclassify an orderly shutdown and applications log or count it as a failure.",
+  "positive_locations": [
+   {
+    "path": "conn.go",
+    "symbol": "Conn.SetCloseHandler",
+    "anchors": {
+     "start": "if err := c.WriteControl(CloseMessage, message, time.Now().Add(writeWait)); err != nil {",
+     "end": "}"
+    },
+    "start_line": 1166,
+    "end_line": 1168
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "doc.go",
+    "symbol": "package websocket",
+    "anchors": {
+     "start": "// Connections handle received close messages by calling the handler function",
+     "end": "// handler sends a close message to the peer."
+    },
+    "start_line": 89,
+    "end_line": 92,
+    "note": "The package documentation is the contract: a received close frame must surface from the read methods as a *CloseError, whatever the handler had to do."
+   },
+   {
+    "path": "conn.go",
+    "symbol": "Conn.write",
+    "anchors": {
+     "start": "if frameType == CloseMessage {",
+     "end": "}"
+    },
+    "start_line": 410,
+    "end_line": 412,
+    "note": "After a close frame goes out through WriteMessage (WriteControl does the same further down), the connection stores ErrCloseSent as its sticky write error."
+   },
+   {
+    "path": "conn.go",
+    "symbol": "Conn.WriteControl",
+    "anchors": {
+     "start": "c.writeErrMu.Lock()",
+     "end": "}"
+    },
+    "start_line": 467,
+    "end_line": 472,
+    "note": "WriteControl hands back that stored error before writing anything, so the handler's attempt to answer is guaranteed to fail on the side that started the handshake."
+   },
+   {
+    "path": "conn.go",
+    "symbol": "Conn.advanceFrame",
+    "anchors": {
+     "start": "if err := c.handleClose(closeCode, closeText); err != nil {",
+     "end": "return noFrame, &CloseError{Code: closeCode, Text: closeText}"
+    },
+    "start_line": 991,
+    "end_line": 994,
+    "note": "Any error from the close handler replaces the *CloseError that the reader would otherwise return."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "conn.go",
+    "symbol": "Conn.SetPingHandler",
+    "anchors": {
+     "start": "err := c.WriteControl(PongMessage, []byte(message), time.Now().Add(writeWait))",
+     "end": "return nil"
+    },
+    "start_line": 1190,
+    "end_line": 1192,
+    "note": "The default ping handler already treats the sentinel as harmless; a report about pong replies is not this defect, it only shows the pattern the close handler lacks."
+   },
+   {
+    "note": "A connection whose peer starts the handshake is unaffected: nothing was sent yet, the echo succeeds and the reader gets the *CloseError."
+   }
+  ],
+  "fix_summary": "In the default close handler keep the WriteControl result and ignore it when it equals ErrCloseSent (our close frame is already out, so there is nothing left to answer); still return any other write error.",
+  "distinctive_tokens": [
+   "orderly shutdown",
+   "sticky write error"
+  ]
+ },
+ "check": {
+  "summary": "An adaptation of the test added by the fix (new name, named close-code constant): over in-memory buffers the client sends a normal close, the server reads it and its default handler answers, then the client reads; both reads must yield a CloseError with code 1000.",
+  "argv": [
+   "{go}",
+   "test",
+   "-count=1",
+   "-run",
+   "^TestClientReadsCloseReplyAsCloseError$",
+   "."
+  ],
+  "cwd": ".",
+  "env": {
+   "GOFLAGS": "-mod=vendor"
+  },
+  "failure_signature": "--- FAIL: TestClientReadsCloseReplyAsCloseError",
+  "timeout_seconds": 300,
+  "files": [
+   {
+    "path": "close_reply_test.go",
+    "source": "checks/PD-GO-04/close_reply_test.go"
+   }
+  ]
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with go1.27.4: before=violation (the client read returns 'websocket: close sent' instead of a CloseError), after=pass. The check sets GOFLAGS=-mod=vendor because the pinned tree vendors golang.org/x/net v0.17.0; no network was used. The licence is recorded from the LICENSE text at the pinned commit (three clauses, BSD-3-Clause), although the GitHub API currently labels the repository BSD-2-Clause.",
+  "toolchain": "go1.27.4 linux/amd64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

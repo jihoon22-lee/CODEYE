@@ -1,0 +1,130 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-JV-03",
+ "split": "dev",
+ "language": "java",
+ "kind": "real_fix",
+ "category": "data_integrity",
+ "family": "float-preferred-when-double-rounding-matches",
+ "needs_cross_file": false,
+ "repo": {
+  "url": "https://github.com/apache/commons-lang",
+  "license": "Apache-2.0",
+  "license_file": "LICENSE.txt"
+ },
+ "scope": "src/main/java/org/apache/commons/lang3/math",
+ "before": {
+  "commit": "1dd7cb14c233140a8e76ba5441b6360a239a98dc"
+ },
+ "after": {
+  "commit": "5904c573ffacaa5d8836ffc2b346f400c8901ed1"
+ },
+ "fix_diff": "diffs/PD-JV-03.diff",
+ "fix_commit_url": "https://github.com/apache/commons-lang/commit/5904c573ffacaa5d8836ffc2b346f400c8901ed1",
+ "trees": {
+  "before": {
+   "digest": "909e8fd6ce15b1b48c137f5ca6b69a063cfb0d21d30f50fecd2b46f5d30be766",
+   "scope_lines": 2955,
+   "scope_files": 4,
+   "files": 623
+  },
+  "after": {
+   "digest": "4ae12e16e897968ec5eb3464b011d19010a8577d10411f68579273c61c93722d",
+   "scope_lines": 2954,
+   "scope_files": 4,
+   "files": 623
+  }
+ },
+ "label": {
+  "trigger": "NumberUtils.createNumber gets a decimal string without a type suffix that carries more significant digits than a float keeps, but whose nearest double happens to be exactly representable as a float, e.g. \"0.100000001490116121\".",
+  "expected_impact": "The Float shortcut accepts the input because the double parse and the float parse round to the same binary value, so a Float is returned whose decimal form (0.1 for the example) no longer matches the text. The trailing digits are dropped silently instead of falling through to the Double/BigDecimal branch that keeps the exact value, so printing, re-serialising or converting the result to BigDecimal yields different data than the caller supplied.",
+  "positive_locations": [
+   {
+    "path": "src/main/java/org/apache/commons/lang3/math/NumberUtils.java",
+    "symbol": "NumberUtils.createNumber",
+    "anchors": {
+     "start": "if (!f.isInfinite() && !(f.floatValue() == 0.0F && !isZero(mant, dec))",
+     "end": "&& ((double) d.floatValue() == d.doubleValue() || f.toString().equals(d.toString()))) {"
+    },
+    "start_line": 504,
+    "end_line": 505
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "src/main/java/org/apache/commons/lang3/math/NumberUtils.java",
+    "symbol": "NumberUtils.createNumber",
+    "anchors": {
+     "start": "final BigDecimal b = createBigDecimal(str);",
+     "end": "if (b.compareTo(BigDecimal.valueOf(d.doubleValue())) == 0) {"
+    },
+    "start_line": 509,
+    "end_line": 510,
+    "note": "The Double branch right below only returns a Double when it equals the exact BigDecimal of the text; the Float shortcut above skips any comparable exactness test, which shows the intended rule."
+   },
+   {
+    "path": "src/main/java/org/apache/commons/lang3/math/NumberUtils.java",
+    "symbol": "NumberUtils.createNumber",
+    "anchors": {
+     "start": "* If a type specifier is not found, it will check for a decimal point",
+     "end": "* from {@link Float} to {@link BigDecimal}."
+    },
+    "start_line": 330,
+    "end_line": 331,
+    "note": "The method documentation promises to move on to wider types, ending at BigDecimal, which only makes sense if a narrower type is chosen when it keeps the value."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "note": "For the affected inputs the returned Float widens to the same double that Double.valueOf would give, so callers that only use doubleValue() see no change; the loss appears through toString, floatValue-based storage or BigDecimal conversion."
+   },
+   {
+    "note": "The second half of the condition, matching shortest decimal forms of the float and the double, is sound and stays; only the binary-equality alternative lets imprecise Floats through."
+   }
+  ],
+  "fix_summary": "Drop the alternative that accepts a Float when the double rounds to the same binary value, and return a Float only if its shortest decimal text equals the double's; other inputs continue to the Double branch, which hands back a BigDecimal when the double is not exact.",
+  "distinctive_tokens": [
+   "binary-equality alternative",
+   "imprecise Floats"
+  ]
+ },
+ "check": {
+  "summary": "A main program compiled against src/main/java feeds five decimal strings to NumberUtils.createNumber and compares the BigDecimal of each result's toString with the BigDecimal of its input; any mismatch is a violation.",
+  "setup": [
+   [
+    "{javac}",
+    "-encoding",
+    "UTF-8",
+    "-nowarn",
+    "-d",
+    "{work}/out",
+    "--source-path",
+    "src/main/java",
+    "pdcheck/CheckCreateNumberDigits.java"
+   ]
+  ],
+  "argv": [
+   "{java}",
+   "-cp",
+   "{work}/out",
+   "CheckCreateNumberDigits"
+  ],
+  "cwd": ".",
+  "env": {},
+  "files": [
+   {
+    "path": "pdcheck/CheckCreateNumberDigits.java",
+    "source": "checks/PD-JV-03/CheckCreateNumberDigits.java"
+   }
+  ],
+  "failure_signature": "CHECK-VIOLATION: createNumber changed the value of \\d+ decimal input",
+  "timeout_seconds": 600
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with OpenJDK 21: the check program compiles with the whole src/main/java on the fix parent and on the fix commit. On before createNumber(\"0.100000001490116121\") returns Float 0.1 and the program exits 1 with CHECK-VIOLATION; on after it returns BigDecimal 0.100000001490116121 and the four short inputs keep their Float/Double results (exit 0). The upstream JUnit test added by the fix was not run; the check is an independent main program.",
+  "toolchain": "openjdk 21.0.13.1 (javac 21.0.13.1)",
+  "before": "violation",
+  "after": "pass"
+ }
+}
