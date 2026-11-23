@@ -15,6 +15,16 @@ only evidence ids present in `<review-input>` are cited. A code or test excerpt
 longer than the citation limit is cited as a line range inside it
 (`ev_…:START-END`), and a candidate states a mechanism.
 
+The documents role states one contract for each of the first three input
+documents, in-source API documentation (Javadoc, docstring, rustdoc) first.
+The whole-run investigate compares every input contract: an in-source document
+is compared on one line of the documented declaration's body, cited as a range
+of the code excerpt holding it; another contract on the first code excerpt in
+its scope, cited as candidates are. An even-numbered contract with a code
+excerpt longer than the citation limit in its scope cites that excerpt without
+a range, which the product rejects; the same answer after the format repair
+lets the product drop that comparison alone (`contract_comparison_omitted`).
+
 Modes: `normal` (small usage), `expensive` (usage at the relay's bounds, to
 exhaust a small ledger cap quickly), `fail` (HTTP 500, charged in full by the relay),
 `unauthorized` (HTTP 401, which OpenCode does not retry: a fast failing probe).
@@ -95,6 +105,71 @@ def _candidates(node, out):
             _candidates(value, out)
 
 
+def _under(path: str, scope: str) -> bool:
+    return scope in (".", "") or path == scope or path.startswith(scope.rstrip("/") + "/")
+
+
+def _body_line(doc: dict, lines: dict[int, str]) -> int | None:
+    """One line of the declaration an in-source document describes: the line
+    after a docstring, else the first line after the opening brace of the
+    first declaration below the comment."""
+    end = doc.get("end_line")
+    if not isinstance(end, int):
+        return None
+    if str(doc.get("path", "")).endswith((".py", ".pyi")):
+        return end + 1 if end + 1 in lines else None
+    n = end + 1
+    while n in lines and "{" not in lines[n]:
+        n += 1
+    if n not in lines:
+        return None
+    rest = lines[n].split("{", 1)[1].strip()
+    if rest and rest != "}":
+        return n
+    return n + 1 if n + 1 in lines else None
+
+
+def _comparisons(data: dict) -> list[dict]:
+    """One comparison per input contract (see the module docstring)."""
+    scope = data.get("scope") if isinstance(data.get("scope"), dict) else {}
+    excerpts = [e for e in scope.get("excerpts") or [] if isinstance(e, dict) and isinstance(e.get("id"), str)
+                and isinstance(e.get("path"), str) and isinstance(e.get("start_line"), int) and isinstance(e.get("end_line"), int)]
+    code = [e for e in excerpts if e.get("kind") == "code"]
+    text: dict[str, dict[int, str]] = {}
+    for e in excerpts:
+        if isinstance(e.get("text"), str):
+            for n, line in enumerate(e["text"].split("\n")):
+                text.setdefault(e["path"], {}).setdefault(e["start_line"] + n, line)
+    documents = data.get("documents") if isinstance(data.get("documents"), dict) else {}
+    in_source = {d["id"]: d for d in documents.get("evidence") or [] if isinstance(d, dict) and isinstance(d.get("id"), str)
+                 and (d.get("directive_path") or str(d.get("path", "")).endswith(".java"))}
+    out = []
+    for index, contract in enumerate((documents.get("contracts") or [])[:6], start=1):
+        if not isinstance(contract, dict) or not isinstance(contract.get("applies_to"), str):
+            continue
+        applies, refs = contract["applies_to"], [r for r in contract.get("evidence_ids") or [] if isinstance(r, str)]
+        cite = None
+        doc = next((in_source[r] for r in refs if r in in_source), None)
+        if doc is not None:
+            line = _body_line(doc, text.get(doc.get("path"), {}))
+            holder = next((e for e in code if line is not None and e["path"] == doc.get("path") and _under(e["path"], applies)
+                           and e["start_line"] <= line <= e["end_line"]), None)
+            if holder is not None:
+                cite = f"{holder['id']}:{line}-{line}"
+        else:
+            scoped = [e for e in code if _under(e["path"], applies) and e.get("origin") != "cited"]
+            long = [e for e in scoped if e["end_line"] - e["start_line"] + 1 > CITED_LINES]
+            if index % 2 == 0 and long:
+                cite = long[0]["id"]  # rejected: a long excerpt needs a range
+            elif scoped:
+                e = scoped[0]
+                cite = e["id"] if e["end_line"] - e["start_line"] + 1 <= CITED_LINES else \
+                    f"{e['id']}:{e['start_line']}-{e['start_line'] + CITED_LINES - 1}"
+        out.append({"contract_index": index, "applies_to": applies, "status": "match" if cite else "unknown",
+                    "reason": TEXT, "document_evidence_ids": refs, "code_evidence_ids": [cite] if cite else []})
+    return out
+
+
 def result_for(role: str, review_input, echo: str | None = None) -> dict:
     evidence: dict[str, str] = {}
     cited: dict[str, str] = {}
@@ -108,7 +183,13 @@ def result_for(role: str, review_input, echo: str | None = None) -> dict:
         a, b = data.get("a"), data.get("b")
         return {"sum": a + b} if isinstance(a, int) and isinstance(b, int) else {}
     if role == "investigate":
-        return {"candidates": [candidate] if code else []}
+        data = review_input if isinstance(review_input, dict) else {}
+        out = {"candidates": [candidate] if code else []}
+        if isinstance(data.get("scope"), dict) and data["scope"].get("whole_run") is True:
+            comparisons = _comparisons(data)
+            if comparisons:
+                out["contract_comparisons"] = comparisons
+        return out
     if role == "verify":
         found: list[tuple[str, list[str]]] = []
         _candidates(review_input, found)
@@ -120,7 +201,12 @@ def result_for(role: str, review_input, echo: str | None = None) -> dict:
                         "next_verification": [TEXT]})
         return {"verifications": out}
     if role == "documents":
-        return {"contracts": [], "conflicts": [], "questions": [], "instruction_notes": []}
+        data = review_input if isinstance(review_input, dict) else {}
+        docs = [d for d in data.get("documents") or [] if isinstance(d, dict)
+                and isinstance(d.get("evidence_id"), str) and isinstance(d.get("applies_to"), str)]
+        docs.sort(key=lambda d: not (d.get("public_api") or d.get("directive_path")))
+        contracts = [{"statement": TEXT, "applies_to": d["applies_to"], "evidence_ids": [d["evidence_id"]]} for d in docs[:3]]
+        return {"contracts": contracts, "conflicts": [], "questions": [], "instruction_notes": []}
     if role == "environment":  # one note per gap module, citing that module's requirements
         data = review_input if isinstance(review_input, dict) else {}
         reqs = [r for r in data.get("requirements") or [] if isinstance(r, dict)]

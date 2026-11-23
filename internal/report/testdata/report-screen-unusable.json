@@ -14,7 +14,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000a0d",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "4ad5e5d7c6f576c62638886ae0683aad1629d73396714b41d88fb852039e394d",
+      "sha256": "3eb5b3a38b5b1488490635bc645dbd26a3a14403c8febce2d2d5a710cdac2f8a",
       "size_bytes": 54636,
       "task_key": null
     },
@@ -320,7 +320,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000930",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "c69901270869f829e31036f36a1aa6b88c2a85638e69329fd19508c28269f743",
+      "sha256": "8ad301410fdd1e4db769725372b9e1e881463c9e10941607e5265642569db60b",
       "size_bytes": 4226,
       "task_key": "review.environment"
     },
@@ -329,7 +329,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000932",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "f68e0d227d219d948f29e8d68249eca0621bc1f48919f4ca5475682adebe0a42",
+      "sha256": "0dd8cb93cc8a93928f9b1c7bbeb6a7fe346b0a326803ac7d515d059f6aa84b0f",
       "size_bytes": 1374,
       "task_key": "review.documents"
     },
@@ -338,7 +338,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000934",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "9f87c2ba976316759e2a19c50f666baaae2e5da659d521267e45738525c62a76",
+      "sha256": "4b9448d63ae97cf53af84c5e496b63575cb96abef96112ca6d42f8235e5fee4e",
       "size_bytes": 3412,
       "task_key": "review.investigate"
     },
@@ -347,7 +347,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000937",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "fc4cf24aa0fbdd63b54a9afe7760d6606ec8fea968cefea041135f39cc2bc2e2",
+      "sha256": "05afab2b37782cb4d743d57c7daf9a183d21ad51ec8667234b0fc85519da839b",
       "size_bytes": 4343,
       "task_key": "review.verify"
     },
@@ -356,7 +356,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000939",
       "media_type": "application/vnd.codeye.review-scope+json",
       "role": "other",
-      "sha256": "7c5d523459f5ccda50665b7450d4dfc482304aeed317805b26a97f5762964ed9",
+      "sha256": "6f08b9cb656f7344fca3e4e7b9e86be93791b54ae4585fd870c609298382016a",
       "size_bytes": 21612,
       "task_key": "review.scope"
     },
@@ -365,7 +365,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000093b",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "c858ed04c7cb12b1ce3023ab3b7d94b28fd0c4dd060329bf86a18f348e8999a6",
+      "sha256": "d04f1a6510ab33bc216d5802562e0dd61a55cbcc1b23a4aaa1015f4f06259e1d",
       "size_bytes": 3187,
       "task_key": "review.investigate.s001"
     },
@@ -374,7 +374,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000093d",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "316e113f1395a751981127ffcc04175207134aef30ba6dd6cba565812759b50a",
+      "sha256": "60375eb2608308fe1c4df3e3e68c4cec782b3535246d24050ae9718482bfc3c3",
       "size_bytes": 3812,
       "task_key": "review.verify.s001"
     },
@@ -383,7 +383,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000093f",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "6ea195f23ed428561ff0008e4b94ab911682f6ea7618b5bd610ae56398240bde",
+      "sha256": "ec794fec9cad0502b9f12307141bcf11b121cff987a3c0314b18bc77eb64bb0b",
       "size_bytes": 3180,
       "task_key": "review.investigate.s002"
     },
@@ -392,7 +392,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000941",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "8de58efe6bcbdbfa34d6e70bbaf08056ef00a30a5abb39f32fe80541c6b75868",
+      "sha256": "6ae3788db693405adbe101d772c7f8c9142df2e25046965dd15a4bd155404968",
       "size_bytes": 3805,
       "task_key": "review.verify.s002"
     },
@@ -401,7 +401,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000943",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "dd049113dae28b72413de778438fad9558ced6f54fbe2416d2a2bcf4dea57344",
+      "sha256": "d7163044f87e828bd1887b32c790c15aea94fddf63acc0605038886c371db85b",
       "size_bytes": 3177,
       "task_key": "review.investigate.s003"
     },
@@ -410,7 +410,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000945",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "2c630c2afac3f420bea1b26e331247bdce296fa6678029c0f2945a7ce44d44b7",
+      "sha256": "58ba50d8502e3176c3cc1de84a0e8b170f92098a3befd04ad2246d90c894576f",
       "size_bytes": 3802,
       "task_key": "review.verify.s003"
     },
@@ -419,7 +419,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000947",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "0b4d6f5b441a3384f0a3dac44b54947f73cf8df99ba80e582cb7185459e708a1",
+      "sha256": "7b1ef6c4f2ece2609d3a1ddd9c6b9051f20b7546f731d85fd6ace0f40cdbd812",
       "size_bytes": 3188,
       "task_key": "review.investigate.s004"
     },
@@ -428,7 +428,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000949",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "1f2aa3d88667f063cbfe68020bf7e453e122ae7cb82776889661185eba64034a",
+      "sha256": "9ee9b230416dd7fa0b21ab1f833bc49b0d6fb71d7f62924d8dab8baaff436cb6",
       "size_bytes": 3813,
       "task_key": "review.verify.s004"
     },
@@ -437,7 +437,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000094b",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "8d53cafc059953a063c5eeb1e22f483cbe47ca4aaf2b3f0da65158bd0fa622d2",
+      "sha256": "c1427cdd7e9badb36d4a7723582aaa10a3d490cdd935226d89a29e45dc6128d3",
       "size_bytes": 3843,
       "task_key": "review.investigate.s005"
     },
@@ -446,7 +446,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000094d",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "24cc7167dba7ee5515c5eceacb1fb5bcaa9b08355ffca5854eb26a742064c8e6",
+      "sha256": "3a2f5e258689e9658dcaabdedfd192084ae5377792f4edb27c5d96eba78cfef1",
       "size_bytes": 4468,
       "task_key": "review.verify.s005"
     },
@@ -455,7 +455,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000094f",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "d9df191977e9e4822be72a0e83be38f5b3bd4859f44907bcf300e6af0b1a9066",
+      "sha256": "7fa13cc1810c841896779ffa3e55749421ee70303a3c73697840215d6b16bf18",
       "size_bytes": 5174,
       "task_key": "review.investigate.s006"
     },
@@ -464,7 +464,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000951",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "ecfefc95aeaa8faa83bc01ba6053faf5138d994adbac44c42aaeb04ec6036e9b",
+      "sha256": "8c45dda25e6f952e34480fcc2da35f940b12afbd7c30dbc67da0551039886339",
       "size_bytes": 6007,
       "task_key": "review.verify.s006"
     },
@@ -473,7 +473,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000953",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "f28b079861deb3cb226c69eb537cee57135abd82b67030b2a909953cfc496139",
+      "sha256": "aa7babe826956c6839f942794bae0a6266877279429fb0baa6d56a60ba29907d",
       "size_bytes": 5156,
       "task_key": "review.investigate.s007"
     },
@@ -482,7 +482,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000955",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "1a4ddfa66694e3b9bfcd3e60a987fc5f153e775b5348082f2e48194a6fc3a944",
+      "sha256": "df5713b6dc90628d0bc02d524b161ba1dc7e350f4ce9a4db13db1d7947b46110",
       "size_bytes": 5987,
       "task_key": "review.verify.s007"
     },
@@ -491,7 +491,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000957",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "4c6cfca17c69469eefde621c2405118ab21382e0ce0208757822cd9256110033",
+      "sha256": "f099c614f371a6e658e9f4d835fd4e7ff6eb5e794dd116e6bb8f4e7a89b313fe",
       "size_bytes": 5170,
       "task_key": "review.investigate.s008"
     },
@@ -500,7 +500,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000959",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "ec95afe54143c1cb8823f060ff059171cecf81de6405c4d3fdf6983212f5accc",
+      "sha256": "88a6406b2f77c015946783b3662515d7c6a3acd3fe9f394b0915fa4268e92d87",
       "size_bytes": 6002,
       "task_key": "review.verify.s008"
     },
@@ -509,7 +509,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000095b",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "3a49da98063f1544a39ad40bb9de55258dacb1aade55fb0f709a88c2259d16e1",
+      "sha256": "2c3afc1eee971003d8c919fe045b8adb1609579c105a5d9e277c02bd9569625c",
       "size_bytes": 3970,
       "task_key": "review.investigate.s009"
     },
@@ -518,7 +518,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000095d",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "2b0772d4b42931f09aba7f258c94b2578dd1c1854f9b2d618ca8ee9a0d3d320c",
+      "sha256": "70b1a0f9fe3a064393af2eb1383b0123ca8c512bf7318fe27a8f5662385fa8d5",
       "size_bytes": 4804,
       "task_key": "review.verify.s009"
     }
@@ -533,7 +533,7 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "1052664bee73c9b9e60cd88d8ee7471beba7c4ec5d222032aad42d8c6ccff066",
+    "input_digest": "d8d80fde1be37083db78f36879c6f030ed574415cb840c2d58f6ebcd939b465a",
     "result_manifest_artifact_id": null,
     "version": "20"
   },
@@ -1110,7 +1110,7 @@
           ]
         }
       ],
-      "request_bytes_sent": 604371,
+      "request_bytes_sent": 608871,
       "scope": {
         "key": "review.scope",
         "result": "accepted",
@@ -1119,8 +1119,8 @@
       "status": "complete"
     },
     "pack_id": "review",
-    "pack_version": "2.7.0",
-    "request_bytes": 604371,
+    "pack_version": "2.7.1",
+    "request_bytes": 608871,
     "roles": [
       {
         "key": "review.investigate",
@@ -2353,8 +2353,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "2b818e152f68070bde2acd9623410c5dd4aaefe841716e9f80da929e0969324a",
-        "pack_version": "2.7.0",
+        "pack_sha256": "0e7d778027572ace8e6eaabbaaae37561cd51fbcb40a3a7eec1c49b1faa70de7",
+        "pack_version": "2.7.1",
         "request_sha256": "9f3bfe8826075d45dc3c71f8d6eddf3e2b574e9db20a5904da82b81beb9e244a",
         "role": "environment",
         "task_key": "review.environment"
@@ -2364,8 +2364,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "3072f14c5a2d7aeab3c7bb67deb5f3d1f35340781759153e6db552897437c340",
-        "pack_version": "2.7.0",
+        "pack_sha256": "ac96a74c9f1231fc250e42b303b9638fe198b34a63168ea6237cb50241eb7aba",
+        "pack_version": "2.7.1",
         "request_sha256": "395bf3f8d266efe8915389fb4970d8bffc617e44004f77d8cf90c286c517ec75",
         "role": "documents",
         "task_key": "review.documents"
@@ -2375,9 +2375,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "78d9b39915a394180ea53957c0f55b81ddad88791bc13224cb16d15a900efbfa",
-        "pack_version": "2.7.0",
-        "request_sha256": "2dbb942b8724be207c71d7bad7d4c245c4f9bcd9a8b479fb04d870fe26da8c35",
+        "pack_sha256": "a4b6099c49d13ce52c9d491ed872e975630ef3643b329bbf1140acb08803c44d",
+        "pack_version": "2.7.1",
+        "request_sha256": "b1f974f5a0808c85570946532f490a16d91803725eec61fee2ab5cdc644ef27a",
         "role": "investigate",
         "task_key": "review.investigate"
       },
@@ -2386,9 +2386,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
-        "pack_version": "2.7.0",
-        "request_sha256": "0e00c069f3a7f5e21c7b661640f3ca1aca42959b2b510b7a914299d26c58aa09",
+        "pack_sha256": "ca3c82ae286e25565989f893dee8b3e2e9bd3fcbb427fd65abc9dabe24e7801a",
+        "pack_version": "2.7.1",
+        "request_sha256": "0423a7401164a5c141242e48247f4dfa3e15bb44bb4b99d9bfed1b5df8ddedf1",
         "role": "verify",
         "task_key": "review.verify"
       },
@@ -2397,9 +2397,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "78d9b39915a394180ea53957c0f55b81ddad88791bc13224cb16d15a900efbfa",
-        "pack_version": "2.7.0",
-        "request_sha256": "d71bdce78a380e40a26718d70841b031d27709b7fa72deb78d8e3887422a807a",
+        "pack_sha256": "a4b6099c49d13ce52c9d491ed872e975630ef3643b329bbf1140acb08803c44d",
+        "pack_version": "2.7.1",
+        "request_sha256": "8aedaff1b465cad03733245b507951c1023d1fd2363774f02a5fe40f94cc7c39",
         "role": "investigate",
         "task_key": "review.investigate.s001"
       },
@@ -2408,9 +2408,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
-        "pack_version": "2.7.0",
-        "request_sha256": "c05b50bb30e332f2d79c1cb4fa7b381782dd4ca6e15dffa4e90f726c60e84a82",
+        "pack_sha256": "ca3c82ae286e25565989f893dee8b3e2e9bd3fcbb427fd65abc9dabe24e7801a",
+        "pack_version": "2.7.1",
+        "request_sha256": "1c5d5334557242140bc65553b8348cf595255c2c6117c9ad2df3992b43d33cbf",
         "role": "verify",
         "task_key": "review.verify.s001"
       },
@@ -2419,9 +2419,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "78d9b39915a394180ea53957c0f55b81ddad88791bc13224cb16d15a900efbfa",
-        "pack_version": "2.7.0",
-        "request_sha256": "61b16df98a16a1bed7ac54063da47ed9635599b4503a8e75653c3e998fe6cc7e",
+        "pack_sha256": "a4b6099c49d13ce52c9d491ed872e975630ef3643b329bbf1140acb08803c44d",
+        "pack_version": "2.7.1",
+        "request_sha256": "d29c08935e0427ec10b39a43636389d403e09520d02a79e4a88fcf8f6cc44591",
         "role": "investigate",
         "task_key": "review.investigate.s002"
       },
@@ -2430,9 +2430,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
-        "pack_version": "2.7.0",
-        "request_sha256": "4a250618509835169c98bf2d4e614c6fff2e96f1bf90718789f1834f80506277",
+        "pack_sha256": "ca3c82ae286e25565989f893dee8b3e2e9bd3fcbb427fd65abc9dabe24e7801a",
+        "pack_version": "2.7.1",
+        "request_sha256": "83b678638ea69f1715698369b7cec11d235f9a8586469718025599ee850f02e3",
         "role": "verify",
         "task_key": "review.verify.s002"
       },
@@ -2441,9 +2441,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "78d9b39915a394180ea53957c0f55b81ddad88791bc13224cb16d15a900efbfa",
-        "pack_version": "2.7.0",
-        "request_sha256": "8a64c4e1c535a9e137eaf62c640be3157333898cf13e851315f1fca8113576c3",
+        "pack_sha256": "a4b6099c49d13ce52c9d491ed872e975630ef3643b329bbf1140acb08803c44d",
+        "pack_version": "2.7.1",
+        "request_sha256": "2b3954ce6283e0c1c28fcda55fac1d641a4becd7d6099edf3b38433c499af5b6",
         "role": "investigate",
         "task_key": "review.investigate.s003"
       },
@@ -2452,9 +2452,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
-        "pack_version": "2.7.0",
-        "request_sha256": "86674ab25cedbf5459227e52dca3330ce01ea9529acbc02cb2c3ab397d90bacd",
+        "pack_sha256": "ca3c82ae286e25565989f893dee8b3e2e9bd3fcbb427fd65abc9dabe24e7801a",
+        "pack_version": "2.7.1",
+        "request_sha256": "59be0ad60e5e8fa5f6a6a9599732da07bb8c8a33b38b871f9a70153d08b11c1c",
         "role": "verify",
         "task_key": "review.verify.s003"
       },
@@ -2463,9 +2463,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "78d9b39915a394180ea53957c0f55b81ddad88791bc13224cb16d15a900efbfa",
-        "pack_version": "2.7.0",
-        "request_sha256": "44828f598e42dfa1f594564f466669fc4c6048aebd0924391f69e67f7f899e1d",
+        "pack_sha256": "a4b6099c49d13ce52c9d491ed872e975630ef3643b329bbf1140acb08803c44d",
+        "pack_version": "2.7.1",
+        "request_sha256": "1548996c468b7a5bc47fdaa4a087b2723812ae09a0b86449d82c2b56932e5dc9",
         "role": "investigate",
         "task_key": "review.investigate.s004"
       },
@@ -2474,9 +2474,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
-        "pack_version": "2.7.0",
-        "request_sha256": "592ae296d1af06d23c42565d797ae2301bcfcc5cd63820401f88e477876bbb22",
+        "pack_sha256": "ca3c82ae286e25565989f893dee8b3e2e9bd3fcbb427fd65abc9dabe24e7801a",
+        "pack_version": "2.7.1",
+        "request_sha256": "9a648b778e732fd57808fb2932bcd54c7d7176a05e4de36d0c0e1f34c5a619a3",
         "role": "verify",
         "task_key": "review.verify.s004"
       },
@@ -2485,9 +2485,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "78d9b39915a394180ea53957c0f55b81ddad88791bc13224cb16d15a900efbfa",
-        "pack_version": "2.7.0",
-        "request_sha256": "492dd932931171bdc1cd0877ee068fedf79e270671fb70e1f0e3b1e36c2c1cde",
+        "pack_sha256": "a4b6099c49d13ce52c9d491ed872e975630ef3643b329bbf1140acb08803c44d",
+        "pack_version": "2.7.1",
+        "request_sha256": "01dd4fd599311f0771adcde6dd1bdedfa9293a7347c5bbb5e82855b8016e373d",
         "role": "investigate",
         "task_key": "review.investigate.s005"
       },
@@ -2496,9 +2496,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
-        "pack_version": "2.7.0",
-        "request_sha256": "e2a021ef7af3d5d9d2124408ec1a70b33bd7b530354bccc1b35c2785b468c9e2",
+        "pack_sha256": "ca3c82ae286e25565989f893dee8b3e2e9bd3fcbb427fd65abc9dabe24e7801a",
+        "pack_version": "2.7.1",
+        "request_sha256": "7e491795faa077d5c7a35f1dd414f87569060eb33e4bdfd5013a8df53fa04964",
         "role": "verify",
         "task_key": "review.verify.s005"
       },
@@ -2507,9 +2507,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "78d9b39915a394180ea53957c0f55b81ddad88791bc13224cb16d15a900efbfa",
-        "pack_version": "2.7.0",
-        "request_sha256": "814f2f7049689ca79e2061272b218c6f385ff847dd60e8ba83c0862b1f289fd3",
+        "pack_sha256": "a4b6099c49d13ce52c9d491ed872e975630ef3643b329bbf1140acb08803c44d",
+        "pack_version": "2.7.1",
+        "request_sha256": "5aa8190edc2b81dd2a5f26190f4fac45473be1ef3ae67949db3ecc935fe965bb",
         "role": "investigate",
         "task_key": "review.investigate.s006"
       },
@@ -2518,9 +2518,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
-        "pack_version": "2.7.0",
-        "request_sha256": "c74c77f03830fc91187d630ad156c9821586e3935a683222d6e86d6e6e117174",
+        "pack_sha256": "ca3c82ae286e25565989f893dee8b3e2e9bd3fcbb427fd65abc9dabe24e7801a",
+        "pack_version": "2.7.1",
+        "request_sha256": "ec7d0289c14133bc482bb4322ce8e3e215373ea721b9eccbcb7dd0cdd2566bde",
         "role": "verify",
         "task_key": "review.verify.s006"
       },
@@ -2529,9 +2529,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "78d9b39915a394180ea53957c0f55b81ddad88791bc13224cb16d15a900efbfa",
-        "pack_version": "2.7.0",
-        "request_sha256": "b463399598f951cbb84b1e4c7b6b648db73bd30a8bf3635e681452e1b8379ba3",
+        "pack_sha256": "a4b6099c49d13ce52c9d491ed872e975630ef3643b329bbf1140acb08803c44d",
+        "pack_version": "2.7.1",
+        "request_sha256": "de5bc10c3dd186cee211cad021d61a6c9c0dfa1bcb7f5e949c0177e0b287966e",
         "role": "investigate",
         "task_key": "review.investigate.s007"
       },
@@ -2540,9 +2540,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
-        "pack_version": "2.7.0",
-        "request_sha256": "63dc1d83322f5b02b08f686c50bdad797e0241bdee3335d2d2554285db199b1d",
+        "pack_sha256": "ca3c82ae286e25565989f893dee8b3e2e9bd3fcbb427fd65abc9dabe24e7801a",
+        "pack_version": "2.7.1",
+        "request_sha256": "c595f395a8d1781ffda912fc6a5177113ca0a740bfbcb1123f2bf7e214f27290",
         "role": "verify",
         "task_key": "review.verify.s007"
       },
@@ -2551,9 +2551,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "78d9b39915a394180ea53957c0f55b81ddad88791bc13224cb16d15a900efbfa",
-        "pack_version": "2.7.0",
-        "request_sha256": "dc023d5bd558224310d502ed32566c7189f9d5b4d60dd959cb9f3a55edd98e81",
+        "pack_sha256": "a4b6099c49d13ce52c9d491ed872e975630ef3643b329bbf1140acb08803c44d",
+        "pack_version": "2.7.1",
+        "request_sha256": "34462ec83c659c13b2bf5bc045addf62121d47f2f4b1df494059cc9673c6bccb",
         "role": "investigate",
         "task_key": "review.investigate.s008"
       },
@@ -2562,9 +2562,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
-        "pack_version": "2.7.0",
-        "request_sha256": "81cef9f13d52843faac40a2602ba8a410fb86bece679d81c7fb13e4d61c1f74e",
+        "pack_sha256": "ca3c82ae286e25565989f893dee8b3e2e9bd3fcbb427fd65abc9dabe24e7801a",
+        "pack_version": "2.7.1",
+        "request_sha256": "962532e7243dd08cfa70eac3cf4af75ad9613baefe7930e124bc7d996105b194",
         "role": "verify",
         "task_key": "review.verify.s008"
       },
@@ -2573,9 +2573,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "78d9b39915a394180ea53957c0f55b81ddad88791bc13224cb16d15a900efbfa",
-        "pack_version": "2.7.0",
-        "request_sha256": "6bb173777f9096703a1329345f926ccc112803a59b63ff7b5881fb748438c9c8",
+        "pack_sha256": "a4b6099c49d13ce52c9d491ed872e975630ef3643b329bbf1140acb08803c44d",
+        "pack_version": "2.7.1",
+        "request_sha256": "4389cd0af81acacf8812c3188571930a272d37d6b87d4babf9dc3fd9feb386d1",
         "role": "investigate",
         "task_key": "review.investigate.s009"
       },
@@ -2584,9 +2584,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
-        "pack_version": "2.7.0",
-        "request_sha256": "f5572ce9f28d76ca1ac218acac34a43e4336aae4be274f8e722be6aeb3a1c544",
+        "pack_sha256": "ca3c82ae286e25565989f893dee8b3e2e9bd3fcbb427fd65abc9dabe24e7801a",
+        "pack_version": "2.7.1",
+        "request_sha256": "9d735976e3a083cf2d9cb56d9a0f8c2f169f9ffc518681452d71ae083c535f95",
         "role": "verify",
         "task_key": "review.verify.s009"
       }

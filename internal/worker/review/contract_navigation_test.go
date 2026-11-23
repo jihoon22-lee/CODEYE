@@ -114,7 +114,7 @@ func TestInvestigateKeepsFindingsWhenProbeIsInvalid(t *testing.T) {
 					probe["candidate_ids"] = []string{selected[tests].ID}
 				case "known comparison":
 					comparisons[0].Status = "partial"
-					comparisons[0].CodeEvidenceIDs = []string{in.Scope.Excerpts[i].ID}
+					comparisons[0].CodeEvidenceIDs = []string{cite(in.Scope.Excerpts[i])}
 				}
 				return asJSON(result)
 			}

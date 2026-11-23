@@ -274,15 +274,23 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 	for _, e := range pool[:min(len(pool), maxContractExcerpts)] {
 		ordered = append(ordered, e.excerpt)
 	}
+	// A range the overview comparison cited (origin cited) is context
+	// only beside the excerpt it lies in; it is never the required fresh
+	// window, so dropping one leaves the first keep+1 entries in place.
+	ordered = containedRanges(ordered, nil)
 	sent, trimmed, err := s.fitExcerpts(instructions, keep+1, ordered, build)
 	if err != nil {
 		return s.inputFailure(err)
 	}
+	sent = containedRanges(sent, nil)
 	if trimmed || len(ordered) < len(pool) {
 		s.rec.Limitations = addLim(s.rec.Limitations, limInputTrimmed)
 	}
 	in.Scope.Excerpts = sent
-	for _, e := range pool[:len(sent)] {
+	for _, e := range pool {
+		if !slices.ContainsFunc(sent, func(x record.Excerpt) bool { return x.ID == e.excerpt.ID }) {
+			continue
+		}
 		for _, up := range e.sources {
 			if !slices.Contains(s.rec.Upstream, up) {
 				s.rec.Upstream = append(s.rec.Upstream, up)

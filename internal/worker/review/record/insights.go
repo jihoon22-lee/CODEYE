@@ -92,27 +92,122 @@ func (c ContractComparison) Valid(catalog map[string]Excerpt) bool {
 
 // ValidWithin is Valid with the reason bounded to text bytes.
 func (c ContractComparison) ValidWithin(catalog map[string]Excerpt, text int) bool {
-	if c.ContractIndex < 1 || c.ContractIndex > MaxContractComparisons || !ValidScopePath(c.AppliesTo) ||
-		!insightTextWithin(c.Reason, text) || !ValidComparison(c.Status) ||
-		!refs(c.DocumentEvidenceIDs, catalog, 4, "document") || !documentsSupportScope(c.DocumentEvidenceIDs, catalog, c.AppliesTo, "", true) {
-		return false
+	return len(c.Problems(catalog, text)) == 0
+}
+
+// Fixed rejection codes of a contract comparison, one per condition
+// (docs/REVIEW.md#문서-계약-대조). The worker adds the ones that need its
+// input (CompareIndexDuplicate, CompareDocumentsChanged, CompareScope*
+// against the contract and the snapshot, CompareCodeOutsideAPI,
+// CompareInSlice and the citation codes).
+const (
+	CompareIndexInvalid       = "contract_comparison_index_invalid"
+	CompareIndexDuplicate     = "contract_comparison_index_duplicate"
+	CompareScopeInvalid       = "contract_comparison_scope_invalid"
+	CompareScopeOutside       = "contract_comparison_scope_outside_contract"
+	CompareStatusInvalid      = "contract_comparison_status_invalid"
+	CompareReasonInvalid      = "contract_comparison_reason_invalid"
+	CompareDocumentsChanged   = "contract_comparison_documents_changed"
+	CompareCodeMissing        = "contract_comparison_code_missing"
+	CompareCodeInvalid        = "contract_comparison_code_invalid"
+	CompareCodeDuplicate      = "contract_comparison_code_duplicate"
+	CompareCodeTooMany        = "contract_comparison_code_too_many"
+	CompareCodeOutsideScope   = "contract_comparison_code_outside_scope"
+	CompareCodeIsDocument     = "contract_comparison_code_is_document"
+	CompareCodeOutsideAPI     = "contract_comparison_code_outside_documented_api"
+	CompareCodeRangeInvalid   = "contract_comparison_code_range_invalid"
+	CompareCodeRangeMissing   = "contract_comparison_code_range_missing"
+	CompareInSlice            = "contract_comparison_in_slice"
+	CompareTooMany            = "contract_comparisons_too_many"
+	MaxComparisonCodeEvidence = 4
+	// ErrExecutionClaim is the output error of prose claiming to have run
+	// or reproduced something (every role uses it).
+	ErrExecutionClaim = "execution_claim"
+	// LimContractComparisonOmitted: comparisons still invalid after the
+	// format repair were left out; their contracts stay unchecked.
+	LimContractComparisonOmitted = "contract_comparison_omitted"
+)
+
+// FieldProblem is one rejection of an output item: the field it concerns
+// and its fixed code.
+type FieldProblem struct {
+	Field string `json:"field"`
+	Code  string `json:"error"`
+}
+
+// Problems lists every rule of the comparison the catalog alone decides,
+// with the field each concerns; none means valid. An implementation must
+// not be the cited in-source document (a doc comment, docstring or rustdoc
+// of the same file): code evidence overlapping it does not count.
+func (c ContractComparison) Problems(catalog map[string]Excerpt, text int) []FieldProblem {
+	var out []FieldProblem
+	add := func(field, code string) {
+		if !slices.Contains(out, FieldProblem{field, code}) {
+			out = append(out, FieldProblem{field, code})
+		}
+	}
+	if c.ContractIndex < 1 || c.ContractIndex > MaxContractComparisons {
+		add("contract_index", CompareIndexInvalid)
+	}
+	if !ValidScopePath(c.AppliesTo) {
+		add("applies_to", CompareScopeInvalid)
+	}
+	switch {
+	case ForeignInsightProse(c.Reason):
+		add("reason", InsightLanguageError)
+	case ClaimsExecution(c.Reason):
+		add("reason", ErrExecutionClaim)
+	case !ProseText(c.Reason, text):
+		add("reason", CompareReasonInvalid)
+	}
+	if !ValidComparison(c.Status) {
+		add("status", CompareStatusInvalid)
+	}
+	if !refs(c.DocumentEvidenceIDs, catalog, 4, "document") {
+		add("document_evidence_ids", CompareDocumentsChanged)
+	} else if ValidScopePath(c.AppliesTo) && !documentsSupportScope(c.DocumentEvidenceIDs, catalog, c.AppliesTo, "", true) {
+		add("applies_to", CompareScopeOutside)
 	}
 	if len(c.CodeEvidenceIDs) == 0 {
-		return c.Status == "unknown" && c.CodeEvidenceIDs != nil
+		if c.Status != "unknown" || c.CodeEvidenceIDs == nil {
+			add("code_evidence_ids", CompareCodeMissing)
+		}
+		return out
 	}
-	if !refs(c.CodeEvidenceIDs, catalog, 4, "code", "test") || !scopedCode(c.CodeEvidenceIDs, c.AppliesTo, catalog) {
-		return false
+	seen := map[string]bool{}
+	for _, id := range c.CodeEvidenceIDs {
+		e, ok := catalog[id]
+		switch {
+		case seen[id]:
+			add("code_evidence_ids", CompareCodeDuplicate)
+		case !ok || (e.Kind != "code" && e.Kind != "test"):
+			add("code_evidence_ids", CompareCodeInvalid)
+		case !ScopeUnder(e.Path, c.AppliesTo):
+			add("code_evidence_ids", CompareCodeOutsideScope)
+		}
+		seen[id] = true
 	}
-	if c.Status == "unknown" {
-		return true
+	if len(c.CodeEvidenceIDs) > MaxComparisonCodeEvidence {
+		add("code_evidence_ids", CompareCodeTooMany)
 	}
-	return slices.ContainsFunc(c.CodeEvidenceIDs, func(id string) bool {
+	if c.Status == "unknown" || len(out) > 0 {
+		return out
+	}
+	if !slices.ContainsFunc(c.CodeEvidenceIDs, func(id string) bool {
 		code := catalog[id]
 		return code.Kind == "code" && !slices.ContainsFunc(c.DocumentEvidenceIDs, func(docID string) bool {
 			doc := catalog[docID]
 			return (doc.DirectivePath != "" || doc.IsJavaAPIDocument()) && doc.Path == code.Path && doc.Start <= code.End && code.Start <= doc.End
 		})
-	})
+	}) {
+		code := slices.ContainsFunc(c.CodeEvidenceIDs, func(id string) bool { return catalog[id].Kind == "code" })
+		if code {
+			add("code_evidence_ids", CompareCodeIsDocument)
+		} else {
+			add("code_evidence_ids", CompareCodeMissing)
+		}
+	}
+	return out
 }
 
 func scopedCode(ids []string, scope string, catalog map[string]Excerpt) bool {

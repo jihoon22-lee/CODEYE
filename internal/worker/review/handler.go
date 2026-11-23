@@ -208,6 +208,9 @@ type roleStage struct {
 	sliceLimits  record.ScopeLimits
 	scopeUp      record.Upstream
 	sliceReserve int
+	// lastChance is set by exchange while parse reads an output that gets
+	// no further format repair.
+	lastChance bool
 }
 
 // limit is the bounds of the handler's request budget.
@@ -283,10 +286,20 @@ const requestRules = "\nUse only the provided input. No code execution, test run
 const repairRules = "\nFormat repair: your previous output was rejected with the platform error codes in input.repair.output_errors. Return the complete result again in the same contract, citing only IDs from this input."
 
 // outputRepair carries fixed codes and, for document scope failures, choices
-// derived from the excerpts already sent to the model.
+// derived from the excerpts already sent to the model; for rejected contract
+// comparisons, the 1-based position, field and code of each.
 type outputRepair struct {
-	OutputErrors   []string             `json:"output_errors"`
-	DocumentScopes []documentScopeIssue `json:"document_scopes,omitempty"`
+	OutputErrors        []string             `json:"output_errors"`
+	DocumentScopes      []documentScopeIssue `json:"document_scopes,omitempty"`
+	ContractComparisons []comparisonIssue    `json:"contract_comparisons,omitempty"`
+}
+
+// comparisonIssue is one rejection of a contract comparison: its 1-based
+// position in contract_comparisons, the field and the fixed code.
+type comparisonIssue struct {
+	Index int    `json:"index"`
+	Field string `json:"field"`
+	Error string `json:"error"`
 }
 
 // fits reports whether the request text fits the budget, keeping room for
@@ -352,6 +365,9 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 		notJSON := reply.Reason != ""
 		errs := []string{"output_not_json"}
 		if !notJSON {
+			// The format repair is spent (or no call is left): a role may
+			// now leave out optional items that are still invalid.
+			s.lastChance = repaired || attempt == maxCalls
 			errs = parse(reply.Output)
 		}
 		if len(errs) == 0 {

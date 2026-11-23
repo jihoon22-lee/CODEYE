@@ -22,7 +22,9 @@ func (c sectionContext) gaps() []Gap {
 		switch code, detail := splitCode(l); code {
 		case LimResultManifestMissing, LimResultManifestRejected:
 			add(SectionReport, code, nil, detail)
-		case record.LimDocumentScopeItemsOmitted:
+		case record.LimDocumentScopeItemsOmitted, record.LimContractComparisonOmitted:
+			// A contract whose comparison was left out stays unchecked
+			// (status unknown) in the documents section.
 			add(SectionDocuments, code, nil, detail)
 		}
 	}

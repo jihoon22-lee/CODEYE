@@ -359,7 +359,10 @@ mod checks {
 					if in.Repair == nil {
 						comparisons[0] = claim(a, b.ImplementationID)
 					} else {
-						rejectedSwap = slices.Contains(in.Repair.OutputErrors, "contract_comparison_invalid")
+						// The repair names the comparison, its field and the
+						// rule: code of the other documented function.
+						rejectedSwap = slices.Equal(in.Repair.OutputErrors, []string{record.CompareCodeOutsideAPI}) &&
+							slices.Equal(in.Repair.ContractComparisons, []comparisonIssue{{Index: 1, Field: "code_evidence_ids", Error: record.CompareCodeOutsideAPI}})
 					}
 					comparisons = append(comparisons, claim(b, b.ImplementationID))
 				}

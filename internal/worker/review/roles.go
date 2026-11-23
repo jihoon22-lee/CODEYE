@@ -628,7 +628,7 @@ func (s *roleStage) documents() analysis.TaskResult {
 
 // ---- investigate -----------------------------------------------------------
 
-const investigateContract = `For this role use exactly {"candidates":[{"title":"what goes wrong","condition":"the concrete trigger input or state","mechanism":"how the cited lines produce the failure, step by step","impact":"...","improvement":"fix direction","counterpoint":"what would refute it: actual counterevidence or remaining uncertainty","evidence_ids":["ev_...:12-30"]}],"strengths":[{"title":"specific engineering practice","benefit":"what it prevents or enables","scope":"directory","evidence_ids":["ev_..."]}],"contract_comparisons":[{"contract_index":1,"applies_to":"directory","status":"match|partial|mismatch|unknown","reason":"specific link or missing evidence","document_evidence_ids":["ev_..."],"code_evidence_ids":["ev_..."]}]}. Return at most %d candidates and 3 strengths. Cite scope.excerpts code or test lines for candidates and scoped implementation code for strengths; an excerpt with "within" has its lines inside the named excerpt. For whole_run only, compare up to 6 documents.contracts, using its 1-based index, scope or narrower directory and unmodified evidence_ids. Cite scoped implementation for match, partial or mismatch. Unknown may cite no code. Slices return no comparisons. Do not claim reproduction or provide attack instructions.`
+const investigateContract = `For this role use exactly {"candidates":[{"title":"what goes wrong","condition":"the concrete trigger input or state","mechanism":"how the cited lines produce the failure, step by step","impact":"...","improvement":"fix direction","counterpoint":"what would refute it: actual counterevidence or remaining uncertainty","evidence_ids":["ev_...:12-30"]}],"strengths":[{"title":"specific engineering practice","benefit":"what it prevents or enables","scope":"directory","evidence_ids":["ev_..."]}],"contract_comparisons":[{"contract_index":1,"applies_to":"directory","status":"match|partial|mismatch|unknown","reason":"specific link or missing evidence","document_evidence_ids":["ev_..."],"code_evidence_ids":["ev_...:40-52"]}]}. Return at most %d candidates and 3 strengths; a candidate cites at most 6 evidence IDs. Cite scope.excerpts code or test lines for candidates and scoped implementation code for strengths; an excerpt with "within" has its lines inside the named excerpt. For whole_run only, compare up to 6 documents.contracts, one comparison per contract, using its 1-based index, scope or narrower directory and its evidence_ids copied unchanged, without line ranges. For match, partial or mismatch cite 1-4 distinct code_evidence_ids with the implementation lines inside the scope, as for candidates (an excerpt of more than 80 lines needs a range); for an API documented in its own source file cite lines of the documented declaration's body, not its doc comment. Unknown may cite no code. Slices return no comparisons. Do not claim reproduction or provide attack instructions.`
 
 type investigateScope struct {
 	WholeRun        bool                    `json:"whole_run"`
@@ -880,19 +880,20 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		}
 	}
 	s.setEvidence(append(append([]record.Excerpt{}, sent...), docEv...))
-	catalog := catalogOf(s.rec.Evidence)
 	javaBindings, err := s.javaAPIBindings(docEv)
 	if err != nil {
 		return s.inputFailure(err)
 	}
 	var candidates []record.Candidate
 	var strengths []record.Strength
-	var strengthsOmitted bool
+	var strengthsOmitted, comparisonsOmitted bool
 	var comparisons []record.ContractComparison
+	var comparisonIssues []comparisonIssue
 	var probe *record.ContractProbe
 	var probeObservation string
 	var cite *citer
 	parse := func(raw json.RawMessage) []string {
+		comparisonIssues = nil
 		var out struct {
 			Candidates          []record.CandidateText      `json:"candidates"`
 			Strengths           []record.Strength           `json:"strengths"`
@@ -903,7 +904,7 @@ func (s *roleStage) investigate() analysis.TaskResult {
 			return errs
 		}
 		var errs []string
-		if len(out.Candidates) > maxCandidates || len(out.ContractComparisons) > record.MaxContractComparisons {
+		if len(out.Candidates) > maxCandidates {
 			errs = addLim(errs, "too_many_items")
 		}
 		reply := newCiter(s.j.Snapshot.Digest, sent, docEv)
@@ -933,28 +934,48 @@ func (s *roleStage) investigate() analysis.TaskResult {
 				supported = append(supported, x)
 			}
 		}
+		// Comparisons are optional: each is checked on its own and, once the
+		// format repair is spent, one still invalid is left out instead of
+		// rejecting the candidates with it.
+		var kept []record.ContractComparison
+		var comparisonErrs []string
 		seen := map[int]bool{}
 		for i := range out.ContractComparisons {
-			x := &out.ContractComparisons[i]
+			x := out.ContractComparisons[i]
 			var citeErrs []string
-			x.CodeEvidenceIDs, _, citeErrs = reply.resolve(x.CodeEvidenceIDs, citeStrip)
-			if record.ForeignInsightProse(x.Reason) {
-				errs = addLim(errs, record.InsightLanguageError)
-			} else if len(citeErrs) > 0 || s.slice != nil || seen[x.ContractIndex] || !x.ValidWithin(catalog, s.limit().text) || !x.MatchesContract(in.Documents.Contracts) ||
-				!s.existingDir(x.AppliesTo) || !javaAPIComparisonValid(*x, javaBindings, catalog) ||
-				!rustAPIComparisonValid(*x, links.rustAPIs, catalog) {
-				errs = addLim(errs, "contract_comparison_invalid")
+			x.CodeEvidenceIDs, _, citeErrs = reply.resolve(x.CodeEvidenceIDs, citeNarrow)
+			problems := s.comparisonProblems(x, citeErrs, reply.catalog(), in.Documents.Contracts, javaBindings, links.rustAPIs, seen)
+			if i >= record.MaxContractComparisons {
+				problems = append(problems, record.FieldProblem{Field: "contract_comparisons", Code: record.CompareTooMany})
 			}
-			seen[x.ContractIndex] = true
+			if len(problems) == 0 {
+				seen[x.ContractIndex] = true
+				kept = append(kept, x)
+				continue
+			}
+			for _, p := range problems {
+				comparisonErrs = addLim(comparisonErrs, p.Code)
+				comparisonIssues = append(comparisonIssues, comparisonIssue{Index: i + 1, Field: p.Field, Error: p.Code})
+			}
+		}
+		omitted := false
+		if len(comparisonErrs) > 0 {
+			if s.lastChance && len(errs) == 0 {
+				omitted = true
+			} else {
+				errs = addLim(errs, comparisonErrs...)
+			}
 		}
 		if len(errs) == 0 {
-			candidates, strengths, comparisons, cite = list, supported, out.ContractComparisons, reply
-			strengthsOmitted = len(supported) != len(out.Strengths)
+			candidates, strengths, comparisons, cite = list, supported, kept, reply
+			strengthsOmitted, comparisonsOmitted = len(supported) != len(out.Strengths), omitted
 			probe, probeObservation = selectContractProbe(out.ContractProbe, navigation, comparisons, in)
 		}
 		return errs
 	}
-	input := func(r *outputRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
+	input := func(r *outputRepair) ([]byte, error) {
+		return s.fitComparisonRepair(in, r, comparisonIssues, s.instructions(contract))
+	}
 	if r := s.exchange(contract, input, parse); r != nil {
 		return *r
 	}
@@ -967,10 +988,16 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		for _, x := range strengths {
 			ids = append(ids, x.EvidenceIDs)
 		}
+		for _, x := range comparisons {
+			ids = append(ids, x.CodeEvidenceIDs)
+		}
 		s.rec.Evidence = withCited(s.rec.Evidence, textless(cite.used(ids...)))
 	}
 	if strengthsOmitted {
 		s.rec.Limitations = addLim(s.rec.Limitations, "review_strength_omitted")
+	}
+	if comparisonsOmitted {
+		s.rec.Limitations = addLim(s.rec.Limitations, record.LimContractComparisonOmitted)
 	}
 	if probe != nil {
 		for i := range s.rec.ContractComparisons {
@@ -1054,7 +1081,7 @@ func nonNilList[T any](l []T) []T {
 
 // ---- interpret -------------------------------------------------------------
 
-const interpretContract = `For this role use exactly {"hypotheses":[{"observation_ids":["obs_..."],"title":"what goes wrong","condition":"code condition under which the diagnostic matters","mechanism":"how the cited lines produce the failure","impact":"...","improvement":"fix direction","counterpoint":"what would make the diagnostic harmless here","evidence_ids":["ev_...:12-30"]}],"limits":[{"observation_ids":["obs_..."],"statement":"why the observation cannot be related to code from this input"}]}, ignoring any wider output examples. Both lists are required: at most 2 hypotheses and 3 limits, at least one item in total. A hypothesis links observation IDs of input.observations and cites a code or test evidence ID listed for one of them. Keep each raw message, rule and location as the tool reported it; do not restate the tool's run status, finding count or severity, and never describe absent diagnostics as clean code.`
+const interpretContract = `For this role use exactly {"hypotheses":[{"observation_ids":["obs_..."],"title":"what goes wrong","condition":"code condition under which the diagnostic matters","mechanism":"how the cited lines produce the failure","impact":"...","improvement":"fix direction","counterpoint":"what would make the diagnostic harmless here","evidence_ids":["ev_...:12-30"]}],"limits":[{"observation_ids":["obs_..."],"statement":"why the observation cannot be related to code from this input"}]}, ignoring any wider output examples. Both lists are required: at most 2 hypotheses and 3 limits, at least one item in total. A hypothesis links observation IDs of input.observations and cites a code or test evidence ID listed for one of them, at most 6 evidence IDs in total. Keep each raw message, rule and location as the tool reported it; do not restate the tool's run status, finding count or severity, and never describe absent diagnostics as clean code.`
 
 type interpretInput struct {
 	Tools        []toolInput `json:"tools"`

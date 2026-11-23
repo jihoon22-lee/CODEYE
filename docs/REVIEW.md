@@ -24,7 +24,7 @@
 
 | `pack.yaml` id·version | 기록 schema | 역할 |
 |---|---|---|
-| `review` 2.7.0 | `0.7`(줄 번호 인용, 모든 역할과 slice). 이전 워커의 `0.2`, slice `0.3`, 계약 후속 검토 `0.4`, HTTP 경로를 고른 문서 `0.5`, 함께 읽은 HTTP 근거 `0.6`도 읽는다 | environment, documents, investigate, interpret, verify, contract |
+| `review` 2.7.1 | `0.7`(줄 번호 인용, 모든 역할과 slice). 이전 워커의 `0.2`, slice `0.3`, 계약 후속 검토 `0.4`, HTTP 경로를 고른 문서 `0.5`, 함께 읽은 HTTP 근거 `0.6`도 읽는다 | environment, documents, investigate, interpret, verify, contract |
 
 - 지침 개정은 이 지침 하나에 한다. 개정의 검증 절차는 [평가](EVALUATION.md)에 있다.
 - 보고서는 Go가 만들므로 종합·보고 역할에 모델을 호출하지 않는다.
@@ -72,7 +72,7 @@
 | [문서 계약 후속 검토](../prompts/review/contract.md) | 문서 약속과 원래 판단, 새 구현과 관련 호출자·테스트 발췌 | 적용 범위와 문서 근거가 같은 대조 또는 미확인 |
 
 - 도구 진단 해석은 독립 조사와 별도 입력으로 수행하고 원시 메시지·규칙·위치를 보존한다. 도구의 실행 상태, finding 수, 심각도를 다시 말하지 않고, 진단이 없다는 사실을 깨끗한 코드로 서술하지 않는다.
-- 출력 개수 한도: documents는 계약 6, 충돌 3, 질문 4, 지침성 문구 메모 3개까지. interpret는 가설 2, 한계 3개까지이고 합해서 하나 이상. investigate 후보는 줄 번호를 붙여 보낸 코드·테스트 원문이 32 KiB 이하이면 4개, 32 KiB마다 하나씩 늘어 출력 한도가 정한 상한(4~12개, [요청 크기](#요청-크기))까지이고 요청에 그 수를 적는다. 강점은 3개까지다. 문서 검토는 명확성·완전성·실행 가능성·일관성에 관한 근거 있는 판단을 4개까지, 전체 조사 역할은 고른 문서 계약과 코드의 대조를 6개까지 기록한다. 대조는 계약 순번과 그 문서 근거에 묶인다. 일치·부분 일치·불일치에는 해당 경로의 구현 코드 근거가 필요하고, 미확인은 근거 부족을 설명한다. 보고서에서 대조가 없는 수락 계약은 미확인으로 표시한다.
+- 출력 개수 한도: documents는 계약 6, 충돌 3, 질문 4, 지침성 문구 메모 3개까지. interpret는 가설 2, 한계 3개까지이고 합해서 하나 이상. investigate 후보는 줄 번호를 붙여 보낸 코드·테스트 원문이 32 KiB 이하이면 4개, 32 KiB마다 하나씩 늘어 출력 한도가 정한 상한(4~12개, [요청 크기](#요청-크기))까지이고 요청에 그 수를 적는다. 강점은 3개까지다. 문서 검토는 명확성·완전성·실행 가능성·일관성에 관한 근거 있는 판단을 4개까지, 전체 조사 역할은 고른 문서 계약과 코드의 대조를 6개까지 기록한다. 대조는 계약 순번과 그 문서 근거에 묶인다. 일치·부분 일치·불일치에는 해당 경로의 구현 코드 근거가 필요하고, 미확인은 근거 부족을 설명한다. 보고서에서 대조가 없는 수락 계약은 미확인으로 표시한다([문서 계약 대조](#문서-계약-대조)). 후보와 interpret 가설은 근거 ID를 6개까지, verify의 근거 목록은 8개, 조건·가정 목록은 4개까지 인용한다. 이 한도는 역할 계약 문자열에도 적는다.
 - 문서 응답의 계약·질문·문서 품질 항목은 각각 서로 다른 근거 ID를 1~4개 인용한다. 지침성 문구 메모와 충돌의 각 편은 각각 1~3개다. 요청은 가장 직접적인 한 근거를 우선하도록 안내하고, 형식 복구 오류 코드에는 문제가 있는 근거 ID 필드 이름을 함께 표시한다.
 - 문서 검토는 README·사용 안내·공개 인터페이스에서 사용자가 확인할 수 있는 동작을 우선 고른다. 하나의 계약이 한 조건과 관찰 가능한 결과를 설명하며, 지원 범위와 예외는 별도로 판정할 수 있을 때 각각 기록한다. 설계에서 읽은 기대에는 구현을 확인할 질문을 연결한다.
 - 조사 역할은 사용자 진입점에서 결정적인 분기를 거쳐 결과가 전달되는 근거를 대조한다. 계약이 함수 자체의 동작으로 한정되면 그 함수의 구현을 대조한다. 확인하지 못한 호출 경로나 결과는 미확인으로 남긴다. 검토에서 읽은 테스트 단언은 해당 조건의 보조 근거다.
@@ -380,10 +380,45 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - 모델은 코드·테스트 발췌를 `<근거 ID>:<시작>-<끝>`(한 줄이면 `<근거 ID>:<줄>`)으로 인용한다. 범위는 그 발췌 안이고 80줄 이하다. 80줄보다 긴 발췌(대개 파일 전체 단위)는 범위 없이 인용할 수 없다(`citation_range_missing`). 문서·manifest 근거와 80줄 이하 발췌는 ID만으로 인용할 수 있다.
 - 워커는 범위가 보낸 발췌 안에 있는지 확인하고 인용을 그 범위의 근거 ID로 바꾼다. 같은 경로·blob·종류에 (snapshot digest, 경로, blob SHA-256, 행 범위)로 계산한 ID이고 출처 표시는 `cited`다. 후보, 판정, 해석 가설, 강점의 근거와 보고서 발췌는 이 좁힌 범위를 가리킨다. 좁힌 범위도 다른 근거처럼 decoder가 ID와 blob을 다시 계산해 확인한다.
 - 범위 형식이 틀리거나, 발췌 밖이거나, 80줄을 넘거나, 문서 근거에 범위를 붙이면 `citation_range_invalid`다. 보내지 않은 ID는 기존처럼 `evidence_id_unknown`이다. 두 오류 모두 형식 복구 요청에 오류 코드로 간다.
-- 문서 계약 대조와 계약 후속 검토의 코드 근거는 범위를 확인한 뒤 발췌의 원래 ID를 저장한다. 대조가 묶이는 계약·위치 선택 규칙이 발췌 ID를 기준으로 하기 때문이다.
+- 전체 조사의 문서 계약 대조도 후보처럼 인용한 범위를 저장한다([문서 계약 대조](#문서-계약-대조)). 계약 후속 검토의 코드 근거만 범위를 확인한 뒤 발췌의 원래 ID를 저장한다. 후속 검토는 새로 읽은 창 단위로 새 구현 여부를 정하기 때문이다.
 - verify는 앞 역할이 좁힌 범위를 인용 발췌로 받고, 그 범위를 다시 좁혀 인용할 수 있다.
 - 근거 ID는 위치(경로·blob·행 범위)에 묶이므로 verify가 만든 범위가 앞 역할의 발췌와 정확히 같을 수 있다. 감싸는 선언이 앞 역할이 보낸 단위 전체이거나, 확장 창이 앞 역할의 창이거나, 검증자가 다시 보내지 않은 앞 역할의 창과 같은 줄을 좁혀 인용하는 경우다. 그때 verify는 그 발췌를 앞 역할의 항목 그대로(출처 표시·심볼 포함) 보내고 기록한다. 워커는 기록을 쓰기 전에 이를 확인하고, 어긋나면 그 task를 `failed`(`review_lineage_mismatch`)로 끝낸다. 보고서도 같은 규칙으로 다시 확인한다([`record/lineage.go`](../internal/worker/review/record/lineage.go)).
-- 기록에 남는 좁힌 범위(`cited`)는 그것을 담은 발췌가 같은 기록에 있어야 한다. verify는 후보가 인용하지 않은 앞 역할의 좁힌 범위(강점의 범위 등)를 그 범위를 담은 발췌가 요청에 함께 남을 때만 보낸다. 담은 단위를 다시 보내지 않는 파일(후보가 인용하지 않은 긴 파일)이나 예산에서 잘린 단위의 범위는 보내지 않는다.
+- 기록에 남는 좁힌 범위(`cited`)는 그것을 담은 발췌가 같은 기록에 있어야 한다. verify는 후보가 인용하지 않은 앞 역할의 좁힌 범위(강점·계약 대조의 범위 등)를 그 범위를 담은 발췌가 요청에 함께 남을 때만 보낸다. 담은 단위를 다시 보내지 않는 파일(후보가 인용하지 않은 긴 파일)이나 예산에서 잘린 단위의 범위는 보내지 않는다. 계약 후속 검토도 앞선 대조가 인용한 범위를 같은 규칙으로 보낸다.
+
+## 문서 계약 대조
+
+전체 조사(`whole_run`)는 수락된 문서 계약을 최대 6건 구현과 대조한다(`contract_comparisons`, [`comparisons.go`](../internal/worker/review/comparisons.go)). 대조는 선택 항목이다. 후보와 강점이 유효하면 대조 하나가 틀렸다고 필수 검토를 잃지 않는다.
+
+- 코드 근거(`code_evidence_ids`)는 후보와 같은 규칙으로 인용하고 좁힌 범위를 저장한다. 80줄보다 긴 발췌는 범위를 붙여야 한다. 범위 없는 긴 단위는 어느 줄이 계약을 구현하는지 말하지 않으므로 거부한다. 같은 단위의 두 범위는 서로 다른 근거다.
+- 구현이 인용한 문서 자체이면 안 된다는 규칙과, 문서화된 API의 본문 안이어야 한다는 규칙은 좁힌 범위로 판단한다. 같은 소스 파일에 문서가 있는 API(Java Javadoc, 안내 문서가 가리키는 Python docstring·rustdoc)는 파일 전체 단위가 문서 줄도 담는다. 그래서 단위 전체를 근거로 쓰면 이 규칙을 만족할 수 없고, 본문 줄을 범위로 인용해야 한다.
+- 문서 근거(`document_evidence_ids`)는 계약의 `evidence_ids`를 범위 없이 그대로 쓴다.
+- 대조 한 건의 거부는 조건마다 고정 코드다. 형식 복구 요청의 `output_errors`에 코드가 가고, `repair.contract_comparisons`에는 1부터 세는 대조 번호, 필드 이름과 코드가 간다. 요청 크기를 넘으면 들어가는 만큼만 싣는다. 모델 서술은 어느 쪽에도 넣지 않는다.
+
+| 코드 | 필드 | 조건 |
+|---|---|---|
+| `contract_comparison_index_invalid` | `contract_index` | 입력의 계약 번호가 아니다 |
+| `contract_comparison_index_duplicate` | `contract_index` | 이미 수락한 대조와 같은 계약이다 |
+| `contract_comparison_scope_invalid` | `applies_to` | 경로 형식이 틀리거나 스냅샷의 디렉터리가 아니다 |
+| `contract_comparison_scope_outside_contract` | `applies_to` | 계약의 적용 범위보다 넓거나 문서 근거가 그 범위를 뒷받침하지 않는다 |
+| `contract_comparison_status_invalid` | `status` | `match`·`partial`·`mismatch`·`unknown`이 아니다 |
+| `contract_comparison_reason_invalid` | `reason` | 비었거나 서술 한도를 넘거나 민감값 패턴에 걸린다 |
+| `insight_prose_requires_korean` | `reason` | 한국어가 아닌 한자 서술이다 |
+| `execution_claim` | `reason` | 실행·재현을 주장한다(다른 역할과 같은 코드) |
+| `contract_comparison_documents_changed` | `document_evidence_ids` | 계약의 근거 ID와 다르다(범위를 붙인 경우 포함) |
+| `contract_comparison_code_missing` | `code_evidence_ids` | `unknown`이 아닌데 code 근거가 없다(test만 인용한 경우 포함) |
+| `contract_comparison_code_invalid` | `code_evidence_ids` | 보내지 않은 ID이거나 code·test가 아니다 |
+| `contract_comparison_code_duplicate` | `code_evidence_ids` | 같은 근거를 두 번 인용했다 |
+| `contract_comparison_code_too_many` | `code_evidence_ids` | 근거가 4개를 넘는다 |
+| `contract_comparison_code_outside_scope` | `code_evidence_ids` | 근거가 대조의 적용 범위 밖이다 |
+| `contract_comparison_code_range_invalid` | `code_evidence_ids` | 범위 형식이 틀리거나 발췌 밖이거나 80줄을 넘는다 |
+| `contract_comparison_code_range_missing` | `code_evidence_ids` | 80줄보다 긴 발췌를 범위 없이 인용했다 |
+| `contract_comparison_code_is_document` | `code_evidence_ids` | 모든 code 근거가 인용한 소스 안 문서와 겹친다 |
+| `contract_comparison_code_outside_documented_api` | `code_evidence_ids` | 문서화된 Java 메서드·Rust 항목의 본문 밖이다 |
+| `contract_comparison_in_slice` | `contract_comparisons` | slice 출력이 대조를 냈다 |
+| `contract_comparisons_too_many` | `contract_comparisons` | 7번째 이후 대조다 |
+
+- 형식 복구 기회가 남아 있으면 틀린 대조는 응답 전체를 거부하고 복구를 요청한다. 복구를 이미 썼거나 호출이 남지 않았으면, 다른 오류가 없을 때 틀린 대조만 빼고 응답을 받는다. 기록에는 `contract_comparison_omitted` 한계가 남는다. JSON이 아닌 응답 뒤의 재시도는 복구 기회를 쓰지 않으므로 빼지 않는다. 후보 오류는 이전처럼 응답을 거부한다.
+- 보고서는 뺀 대조의 계약을 미확인(`unknown`, 대조 결과 없음)으로 보이고, 문서 절의 분석 공백에 `contract_comparison_omitted`를 남긴다.
 
 ## 출력 검사
 
@@ -410,7 +445,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 
 모든 역할에 적용한다. 단계당 호출은 최대 3회(`record.RoleMaxCalls = 3`)이고 문서 계약 후속 검토는 최대 2회다. 각 호출은 attempt의 남은 예산을 확인한다.
 
-1. **형식 복구.** 출력이 JSON이지만 계약·근거 검사에서 거부되면, 고정 오류 코드만 담은 복구 요청을 한 번 보낸다. verify는 거부된 후보, 허용된 근거와 오류 코드만 다시 보낸다.
+1. **형식 복구.** 출력이 JSON이지만 계약·근거 검사에서 거부되면, 고정 오류 코드만 담은 복구 요청을 한 번 보낸다. verify는 거부된 후보, 허용된 근거와 오류 코드만 다시 보낸다. 거부된 문서 계약 대조는 대조 번호·필드·코드를 함께 보내고, 복구 뒤에도 틀린 대조는 그 대조만 뺀다([문서 계약 대조](#문서-계약-대조)).
 2. **JSON이 아닌 응답의 재시도.** JSON이 아닌 응답은 항목에 대해 아무 정보도 주지 않는다. 형식 복구 기회를 쓰지 않고 한 번 더 요청한다. 재시도 요청은 같은 입력에 복구 규칙과 오류 코드 `output_not_json`을 담은 `repair` 블록을 붙인다. 앞서 복구 요청이 있었으면 그 오류 코드(verify는 후보별 오류)를 유지하고 `output_not_json`을 더한다.
 3. **작업공간 확인값 불일치.** 완료 이벤트까지 검사한 모델 응답이 첨부의 확인값 검사를 통과하지 못하면 응답 전체를 버린다. 정리가 확인되고 단계와 attempt에 호출이 남아 있을 때 같은 요청을 새 디렉터리와 새 확인값으로 단계당 한 번 다시 보낸다. 기존 형식 복구가 있었다면 그 요청을 그대로 보낸다. 취소되거나 디렉터리·marker 쓰기, 공급자 호출 또는 정리에 실패하면 이 재시도를 하지 않는다. 원래 호출의 `workspace_unreachable` 사유와 제공된 사용량은 기록한다.
 4. **끝.** JSON이 아닌 응답이나 형식 거부가 각각 두 번 발생하거나 호출 상한에 닿으면 다시 보내지 않는다. 미수락 응답은 저장하지 않는다. 탐색 사실과 도구 관찰은 남는다.

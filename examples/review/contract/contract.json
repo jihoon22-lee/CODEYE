@@ -2,7 +2,7 @@
   "schema_version": "0.7",
   "pack": {
     "id": "review",
-    "version": "2.7.0"
+    "version": "2.7.1"
   },
   "snapshot_manifest_digest": "6666666666666666666666666666666666666666666666666666666666666666",
   "run_id": "0195f3a0-0000-7000-8000-000000000025",
@@ -13,12 +13,12 @@
     {
       "source": "review.documents",
       "state": "accepted",
-      "sha256": "76739854ac944310d93883524913125644569386483205b7133f10002e824943"
+      "sha256": "2e1818b039086eb9131fecca55b0a477c8327d6c90f29e4860ea8f51ea9f306c"
     },
     {
       "source": "review.investigate",
       "state": "accepted",
-      "sha256": "7a8b663f678a18c1ca42ccf1a9a67ab2cdda998d1ab4c5cb07b29dd690b88977"
+      "sha256": "31dca8205e59dc486fb668c2f713a835c00386953bcd7871070fe50ddf9effe9"
     }
   ],
   "evidence": [
@@ -64,8 +64,8 @@
       "model": "fake/scripted",
       "opencode_version": "1.19.5",
       "pack_id": "review",
-      "pack_version": "2.7.0",
-      "pack_sha256": "36b45329cc76f67f4c23ae978932b93126b0cd1fbf667613fcefa9677b3d3288",
+      "pack_version": "2.7.1",
+      "pack_sha256": "c2e3882125cf3dbb0981a58b8e727ab4fe38acd365efc8132d1807bf955ef265",
       "pack_files": [
         "00-core.md",
         "contract.md",
