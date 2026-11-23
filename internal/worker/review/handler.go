@@ -209,9 +209,19 @@ type roleStage struct {
 	scopeUp      record.Upstream
 	sliceReserve int
 	// lastChance is set by exchange while parse reads an output that gets
-	// no further format repair.
+	// no further format repair: parse then resolves faults of form (fixes
+	// or leaves out the item, docs/REVIEW.md#출력-오류-분류) and lists their
+	// codes in degraded. Before that, parse names every fault and sets
+	// repairable when all of them are of form.
 	lastChance bool
+	degraded   []string
+	repairable bool
 }
+
+// limRepairNotSent: the format repair could not be sent (call budget,
+// request size or its input) and the first output was kept with its faults
+// of form resolved.
+const limRepairNotSent = "output_repair_not_sent"
 
 // limit is the bounds of the handler's request budget.
 func (s *roleStage) limit() limits { return s.h.Budget.limits() }
@@ -278,28 +288,60 @@ func (s *roleStage) requestRules() string {
 }
 
 const requestRules = "\nUse only the provided input. No code execution, test runs, reproduction or external access: never claim any. " +
-	"Source excerpts show each line as \"<line>| <text>\"; the numbers are not part of the source. Cite only evidence and observation IDs given in this input; " +
-	"cite a code or test excerpt as \"<evidence id>:<start>-<end>\" (or \"<evidence id>:<line>\") with the lines that show the point, inside that excerpt and at most 80 lines; " +
-	"an excerpt of more than 80 lines must be cited with its lines. Add no paths or other fields. " +
+	"Source excerpts show each line as \"<line>| <text>\"; the numbers are not part of the source. Cite only evidence and observation IDs given in this input. " +
+	citationRule + " Add no paths or other fields. " +
 	"Keep every text field under %d characters of concise Korean prose (a mechanism under %d)."
 
-const repairRules = "\nFormat repair: your previous output was rejected with the platform error codes in input.repair.output_errors. Return the complete result again in the same contract, citing only IDs from this input."
+// citationRule is how every role cites code and test lines (record.MaxCitedLines,
+// record.WholeCitationLines); the example has the format of a request's evidence IDs.
+const citationRule = "Cite a code or test excerpt as \"<evidence id>:<start>-<end>\" (one line: \"<evidence id>:<line>\"), for example \"ev_5f0c2a9e1b7d4c3a8e6f2b10:120-134\": " +
+	"the lines that show the point, inside that excerpt's start_line..end_line and at most 80 lines. " +
+	"An excerpt of more than 80 lines (end_line - start_line + 1 > 80) is citable only with such a range: its ID alone is rejected. " +
+	"Cite a document excerpt by its ID alone."
+
+const repairRules = "\nFormat repair: your previous output was rejected with the platform error codes in input.repair.output_errors; " +
+	"input.repair.items names each rejected item by list, 1-based index and field, with the cited evidence_id when the fault is a citation. " +
+	"Return the complete result again in the same contract, citing only IDs from this input and an excerpt of more than 80 lines only as \"<evidence id>:<start>-<end>\"."
 
 // outputRepair carries fixed codes and, for document scope failures, choices
-// derived from the excerpts already sent to the model; for rejected contract
-// comparisons, the 1-based position, field and code of each.
+// derived from the excerpts already sent to the model; items names each
+// rejected item of a list.
 type outputRepair struct {
-	OutputErrors        []string             `json:"output_errors"`
-	DocumentScopes      []documentScopeIssue `json:"document_scopes,omitempty"`
-	ContractComparisons []comparisonIssue    `json:"contract_comparisons,omitempty"`
+	OutputErrors   []string             `json:"output_errors"`
+	DocumentScopes []documentScopeIssue `json:"document_scopes,omitempty"`
+	Items          []itemIssue          `json:"items,omitempty"`
 }
 
-// comparisonIssue is one rejection of a contract comparison: its 1-based
-// position in contract_comparisons, the field and the fixed code.
-type comparisonIssue struct {
+// itemIssue is one fault of an item of the output: its list, 1-based
+// position, field, the sent excerpt the field cites when the fault is a
+// citation (an ID the request did not hold is never echoed) and the fixed
+// code. No model text.
+type itemIssue struct {
+	List  string `json:"list"`
 	Index int    `json:"index"`
 	Field string `json:"field"`
+	ID    string `json:"evidence_id,omitempty"`
 	Error string `json:"error"`
+}
+
+// fitItems builds a repair request with as many of issues as the request
+// budget leaves room for (all, or a prefix, or none).
+func (s *roleStage) fitItems(repair *outputRepair, issues []itemIssue, instructions string, build func(*outputRepair) ([]byte, error)) ([]byte, error) {
+	if repair == nil || len(issues) == 0 {
+		return build(repair)
+	}
+	for n := len(issues); n > 0; n-- {
+		r := *repair
+		r.Items = issues[:n]
+		body, err := build(&r)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := s.fits(instructions, body, false); ok {
+			return body, nil
+		}
+	}
+	return build(repair)
 }
 
 // fits reports whether the request text fits the budget, keeping room for
@@ -323,13 +365,41 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 	if s.role == record.StageContract {
 		maxCalls = record.ContractMaxCalls
 	}
+	// fallback is the latest rejected output whose faults are all of form
+	// (s.repairable after its parse) and fallbackCall its call: once no
+	// further repair can arrive, it is accepted with those faults resolved
+	// (docs/REVIEW.md#출력-오류-분류).
+	var fallback json.RawMessage
+	fallbackCall := -1
+	degrade := func(lim string) bool {
+		if fallback == nil {
+			return false
+		}
+		s.lastChance, s.degraded = true, nil
+		if errs := parse(fallback); len(errs) != 0 {
+			return false
+		}
+		s.rec.Calls[fallbackCall].Outcome = callAccepted
+		s.rec.Limitations = addLim(s.rec.Limitations, record.LimOutputDegraded)
+		if lim != "" {
+			s.rec.Limitations = addLim(s.rec.Limitations, lim)
+		}
+		return true
+	}
+	// end fails the stage unless the form-only fallback can stand.
+	end := func(res analysis.TaskResult, lim string) *analysis.TaskResult {
+		if res.Status != domain.TaskCancelled && s.ctx.Err() == nil && degrade(lim) {
+			return nil
+		}
+		return s.fail(res)
+	}
 	for attempt := 1; attempt <= maxCalls; attempt++ {
 		if s.ctx.Err() != nil {
 			return s.fail(result(domain.TaskCancelled, "cancelled"))
 		}
 		query, err := input(repair)
 		if err != nil {
-			return s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+			return end(result(domain.TaskFailed, "review_input_unavailable"), limRepairNotSent)
 		}
 		text := instructions
 		if repair != nil {
@@ -338,10 +408,10 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 		q := opencode.Request{Role: s.role, Scratch: s.j.Scratch, SnapshotDigest: s.j.Snapshot.Digest, Instructions: text, Input: query, ProtectedRoots: []string{s.j.Snapshot.SnapshotDir}}
 		size := len(opencode.Prompt(q))
 		if size > s.limit().request {
-			return s.fail(result(domain.TaskFailed, reasonInputTooLarge))
+			return end(result(domain.TaskFailed, reasonInputTooLarge), limRepairNotSent)
 		}
 		if r := s.reserveCall(); r != nil {
-			return s.fail(*r)
+			return end(*r, limRepairNotSent)
 		}
 		reply := s.h.Caller.Review(s.ctx, s.runner, q)
 		call := s.recordCall(reply, size, attempt)
@@ -360,24 +430,30 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 					continue
 				}
 			}
-			return s.fail(failure(reply))
+			return end(failure(reply), "")
 		}
 		notJSON := reply.Reason != ""
 		errs := []string{"output_not_json"}
 		if !notJSON {
-			// The format repair is spent (or no call is left): a role may
-			// now leave out optional items that are still invalid.
-			s.lastChance = repaired || attempt == maxCalls
+			// The format repair is spent (or no call is left): parse now
+			// resolves faults of form instead of naming them.
+			s.lastChance, s.degraded, s.repairable = repaired || attempt == maxCalls, nil, false
 			errs = parse(reply.Output)
 		}
 		if len(errs) == 0 {
-			call.Outcome = callAccepted
+			call.Outcome, call.OutputErrors = callAccepted, nonNil(addLim(nil, s.degraded...))
+			if len(s.degraded) > 0 {
+				s.rec.Limitations = addLim(s.rec.Limitations, record.LimOutputDegraded)
+			}
 			s.rec.Calls = append(s.rec.Calls, call)
 			return nil
 		}
 		call.Outcome, call.OutputErrors = callRejected, addLim(nil, errs...)
 		s.rec.Calls = append(s.rec.Calls, call)
 		s.noteExecutionClaim(call)
+		if !notJSON && s.repairable {
+			fallback, fallbackCall = reply.Output, len(s.rec.Calls)-1
+		}
 		// One repair of a rejected output, and one retry of a reply that was
 		// not JSON at all; the retry keeps the earlier repair's codes.
 		if notJSON {
@@ -397,7 +473,7 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 		}
 		repair = &outputRepair{OutputErrors: call.OutputErrors}
 	}
-	return s.fail(result(domain.TaskFailed, reasonOutputInvalid))
+	return end(result(domain.TaskFailed, reasonOutputInvalid), "")
 }
 
 func (s *roleStage) recordCall(reply opencode.Reply, size, attempt int) record.Call {

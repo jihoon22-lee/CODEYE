@@ -199,78 +199,130 @@ func (s *roleStage) environment() analysis.TaskResult {
 	}
 	in = withRequirements(sent)
 	var notes []record.EnvironmentNote
+	var issues []itemIssue
+	var outputLims []string
+	// noteProblems are the faults of one note; dup marks a module an earlier
+	// note already covers.
+	noteProblems := func(n record.EnvironmentNote, dup bool) []record.FieldProblem {
+		var out []record.FieldProblem
+		add := func(field, code string) { out = append(out, record.FieldProblem{Field: field, Code: code}) }
+		for _, f := range []struct{ field, text string }{{"affected_checks", n.AffectedChecks}, {"still_checkable", n.StillCheckable}, {"needed_observation", n.NeededObservation}} {
+			for _, code := range s.textErrors(f.text) {
+				add(f.field, code)
+			}
+		}
+		if n.RequirementIDs == nil || n.EvidenceIDs == nil {
+			add("requirement_ids", "item_schema_invalid")
+			return out
+		}
+		if !slices.Contains(gaps, n.Module) {
+			add("module", "module_out_of_scope")
+			return out
+		}
+		if dup {
+			add("module", "module_duplicate")
+		}
+		own := byModule[n.Module]
+		// citedReq: requirement IDs of the note; cited: evidence IDs of
+		// the cited requirements of this module.
+		citedReq, cited := map[string]bool{}, map[string]bool{}
+		for _, id := range n.RequirementIDs {
+			r, ok := reqs[id]
+			switch {
+			case !ok:
+				add("requirement_ids", "requirement_id_unknown")
+			case r.Module != n.Module:
+				add("requirement_ids", "requirement_of_other_module")
+			case citedReq[id]:
+				add("requirement_ids", "requirement_id_duplicate")
+			default:
+				cited[r.EvidenceID] = true
+			}
+			citedReq[id] = true
+		}
+		if len(own) > 0 && len(n.RequirementIDs) == 0 {
+			add("requirement_ids", "requirement_missing")
+		}
+		if (len(n.RequirementIDs) > 0) != (len(n.EvidenceIDs) > 0) {
+			add("evidence_ids", "evidence_missing")
+		}
+		if len(n.EvidenceIDs) > 0 {
+			for _, code := range idErrors(n.EvidenceIDs, catalog, 4, "manifest") {
+				add("evidence_ids", code)
+			}
+		}
+		for _, id := range n.EvidenceIDs {
+			if _, ok := catalog[id]; ok && !cited[id] {
+				add("evidence_ids", "evidence_of_other_requirement")
+			}
+		}
+		return out
+	}
 	parse := func(raw json.RawMessage) []string {
+		issues = nil
 		var out struct {
 			Notes []record.EnvironmentNote `json:"notes"`
 		}
 		if errs := decodeOutput(raw, &out, "notes"); errs != nil {
 			return errs
 		}
-		var errs []string
+		var f outputFaults
 		if len(out.Notes) == 0 {
-			errs = addLim(errs, "no_items")
+			f.output("no_items")
 		}
-		if len(out.Notes) > len(gaps) {
-			errs = addLim(errs, "too_many_items")
-		}
+		var kept []record.EnvironmentNote
 		seen := map[string]bool{}
-		for _, n := range out.Notes {
-			errs = addLim(errs, s.textErrors(n.AffectedChecks, n.StillCheckable, n.NeededObservation)...)
-			if n.RequirementIDs == nil || n.EvidenceIDs == nil {
-				errs = addLim(errs, "item_schema_invalid")
-				continue
+		for i, n := range out.Notes {
+			problems := noteProblems(n, seen[n.Module])
+			if len(problems) == 0 && len(kept) == len(gaps) {
+				problems = []record.FieldProblem{{Field: "notes", Code: "too_many_items"}}
 			}
-			if !slices.Contains(gaps, n.Module) {
-				errs = addLim(errs, "module_out_of_scope")
-				continue
+			var codes []string
+			var found []itemIssue
+			for _, p := range problems {
+				codes = addLim(codes, p.Code)
+				found = append(found, itemIssue{List: "notes", Index: i + 1, Field: p.Field, Error: p.Code})
 			}
-			if seen[n.Module] {
-				errs = addLim(errs, "module_duplicate")
-			}
-			seen[n.Module] = true
-			own := byModule[n.Module]
-			// citedReq: requirement IDs of the note; cited: evidence IDs of
-			// the cited requirements of this module.
-			citedReq, cited := map[string]bool{}, map[string]bool{}
-			for _, id := range n.RequirementIDs {
-				r, ok := reqs[id]
-				switch {
-				case !ok:
-					errs = addLim(errs, "requirement_id_unknown")
-				case r.Module != n.Module:
-					errs = addLim(errs, "requirement_of_other_module")
-				case citedReq[id]:
-					errs = addLim(errs, "requirement_id_duplicate")
-				default:
-					cited[r.EvidenceID] = true
+			switch {
+			case len(codes) == 0:
+				seen[n.Module] = true
+				kept = append(kept, n)
+				f.item(nil, nil, nil)
+			case s.lastChance && formOnly(codes):
+				// Repeated requirement and evidence IDs go; any other fault
+				// of form leaves the note out.
+				tidy := n
+				tidy.RequirementIDs, tidy.EvidenceIDs = tidyIDs(n.RequirementIDs, len(n.RequirementIDs)), tidyIDs(n.EvidenceIDs, 4)
+				if len(noteProblems(tidy, seen[n.Module])) == 0 && len(kept) < len(gaps) {
+					seen[n.Module] = true
+					kept = append(kept, tidy)
+					f.item(codes, found, []string{limCitationListTrimmed})
+				} else {
+					f.item(codes, found, []string{limEnvironmentNotesOmit})
 				}
-				citedReq[id] = true
-			}
-			if len(own) > 0 && len(n.RequirementIDs) == 0 {
-				errs = addLim(errs, "requirement_missing")
-			}
-			if (len(n.RequirementIDs) > 0) != (len(n.EvidenceIDs) > 0) {
-				errs = addLim(errs, "evidence_missing")
-			}
-			if len(n.EvidenceIDs) > 0 {
-				errs = addLim(errs, idErrors(n.EvidenceIDs, catalog, 4, "manifest")...)
-			}
-			for _, id := range n.EvidenceIDs {
-				if _, ok := catalog[id]; ok && !cited[id] {
-					errs = addLim(errs, "evidence_of_other_requirement")
-				}
+			default:
+				f.item(codes, found, nil)
 			}
 		}
+		if s.lastChance && !f.integrity && len(kept) == 0 {
+			// The record holds at least one note: nothing is left to keep.
+			f.output("no_items")
+		}
+		issues = f.issues
+		errs := s.outcome(&f)
 		if len(errs) == 0 {
-			notes = out.Notes
+			notes, outputLims = kept, f.lims
 		}
 		return errs
 	}
-	input := func(r *outputRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
+	input := func(r *outputRepair) ([]byte, error) {
+		return s.fitItems(r, issues, s.instructions(contract), func(r *outputRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) })
+	}
 	if r := s.exchange(contract, input, parse); r != nil {
 		return *r
 	}
 	s.rec.EnvironmentNotes = notes
+	s.rec.Limitations = addLim(s.rec.Limitations, outputLims...)
 	return s.finish()
 }
 
@@ -516,17 +568,22 @@ func (s *roleStage) documents() analysis.TaskResult {
 		}
 		return ""
 	}
+	var itemIssues []itemIssue
 	parse := func(raw json.RawMessage) []string {
-		issues = nil
+		issues, itemIssues = nil, nil
 		var out docsOutput
 		if errs := decodeOutput(raw, &out, "contracts", "conflicts", "questions", "instruction_notes"); errs != nil {
 			return errs
 		}
-		var errs []string
-		if len(out.Contracts) > 6 || len(out.Conflicts) > 3 || len(out.Questions) > 4 || len(out.InstructionNotes) > 3 || len(out.DocumentQuality) > record.MaxDocumentQuality {
-			return []string{"too_many_items"}
+		var f outputFaults
+		var scopeCodes []string
+		var kept docsOutput
+		if out.InstructionNotes != nil {
+			kept.InstructionNotes = []record.InstructionNote{}
 		}
-		kept := docsOutput{InstructionNotes: out.InstructionNotes, DocumentQuality: out.DocumentQuality}
+		if out.DocumentQuality != nil {
+			kept.DocumentQuality = []record.DocumentQuality{}
+		}
 		acceptedIndices := map[int]int{}
 		narrowed := false
 		checkScope := func(collection string, i int, scope *string, ids []string, statement string, packageAllowed bool) bool {
@@ -541,62 +598,145 @@ func (s *roleStage) documents() analysis.TaskResult {
 					return true
 				}
 			}
-			errs = addLim(errs, code)
+			scopeCodes = addLim(scopeCodes, code)
 			issues = append(issues, issue)
 			return false
 		}
+		// settle decides one item from its faults as given (problems) and,
+		// once the repair is spent, after its evidence lists are tidied
+		// (retry: repeated IDs removed, each list cut to its limit).
+		settle := func(list string, index int, problems []record.FieldProblem, retry func() []record.FieldProblem) bool {
+			var codes []string
+			var found []itemIssue
+			for _, p := range problems {
+				codes = addLim(codes, p.Code)
+				found = append(found, itemIssue{List: list, Index: index, Field: p.Field, Error: p.Code})
+			}
+			switch {
+			case len(codes) == 0:
+				return true
+			case s.lastChance && formOnly(codes) && retry != nil && len(retry()) == 0:
+				f.item(codes, found, []string{limCitationListTrimmed})
+				return true
+			case s.lastChance && formOnly(codes):
+				f.item(codes, found, []string{limDocumentItemsOmitted})
+			default:
+				f.item(codes, found, nil)
+			}
+			return false
+		}
+		within := func(list string, index, limit int) bool {
+			if index <= limit {
+				return true
+			}
+			settle(list, index, []record.FieldProblem{{Field: list, Code: "too_many_items"}}, nil)
+			return false
+		}
+		evidence := func(field string, ids []string, max int) []record.FieldProblem {
+			var out []record.FieldProblem
+			for _, code := range evidenceErrors(field, ids, max) {
+				out = append(out, record.FieldProblem{Field: field, Code: code})
+			}
+			return out
+		}
+		prose := func(field string, texts ...string) []record.FieldProblem {
+			var out []record.FieldProblem
+			for _, code := range s.textErrors(texts...) {
+				out = append(out, record.FieldProblem{Field: field, Code: code})
+			}
+			return out
+		}
 		for i, c := range out.Contracts {
-			row := addLim(s.textErrors(c.Statement), evidenceErrors("contracts_evidence_ids", c.EvidenceIDs, 4)...)
-			errs = addLim(errs, row...)
-			if len(row) == 0 && checkScope("contracts", i, &c.AppliesTo, c.EvidenceIDs, c.Statement, true) {
+			if !within("contracts", i+1, 6) {
+				continue
+			}
+			check := func() []record.FieldProblem {
+				return append(prose("statement", c.Statement), evidence("contracts_evidence_ids", c.EvidenceIDs, 4)...)
+			}
+			if settle("contracts", i+1, check(), func() []record.FieldProblem { c.EvidenceIDs = tidyIDs(c.EvidenceIDs, 4); return check() }) &&
+				checkScope("contracts", i, &c.AppliesTo, c.EvidenceIDs, c.Statement, true) {
 				kept.Contracts = append(kept.Contracts, c)
 				acceptedIndices[i+1] = len(kept.Contracts)
 			}
 		}
 		for i, c := range out.Conflicts {
-			errs = addLim(errs, s.textErrors(c.Summary, c.Impact)...)
-			first := evidenceErrors("conflicts_first_evidence_ids", c.FirstEvidence, 3)
-			second := evidenceErrors("conflicts_second_evidence_ids", c.SecondEvidence, 3)
-			errs = addLim(addLim(errs, first...), second...)
-			ids := slices.Concat(c.FirstEvidence, c.SecondEvidence)
-			if len(first)+len(second) == 0 && checkScope("conflicts", i, &c.Scope, ids, "", false) {
-				kept.Conflicts = append(kept.Conflicts, c)
+			if !within("conflicts", i+1, 3) {
+				continue
 			}
-			for _, a := range c.FirstEvidence {
-				for _, b := range c.SecondEvidence {
-					if catalog[a].Path != "" && catalog[a].DocumentPath() == catalog[b].DocumentPath() {
-						errs = addLim(errs, "conflict_same_document")
+			check := func() []record.FieldProblem {
+				problems := append(prose("summary", c.Summary, c.Impact), evidence("conflicts_first_evidence_ids", c.FirstEvidence, 3)...)
+				problems = append(problems, evidence("conflicts_second_evidence_ids", c.SecondEvidence, 3)...)
+				for _, a := range c.FirstEvidence {
+					for _, b := range c.SecondEvidence {
+						if catalog[a].Path != "" && catalog[a].DocumentPath() == catalog[b].DocumentPath() {
+							problems = append(problems, record.FieldProblem{Field: "second_evidence_ids", Code: "conflict_same_document"})
+						}
 					}
 				}
+				return problems
+			}
+			tidy := func() []record.FieldProblem {
+				c.FirstEvidence, c.SecondEvidence = tidyIDs(c.FirstEvidence, 3), tidyIDs(c.SecondEvidence, 3)
+				return check()
+			}
+			if settle("conflicts", i+1, check(), tidy) && checkScope("conflicts", i, &c.Scope, slices.Concat(c.FirstEvidence, c.SecondEvidence), "", false) {
+				kept.Conflicts = append(kept.Conflicts, c)
 			}
 		}
 		for i, q := range out.Questions {
-			row := addLim(s.textErrors(q.Question), evidenceErrors("questions_evidence_ids", q.EvidenceIDs, 4)...)
-			errs = addLim(errs, row...)
-			if len(row) == 0 && checkScope("questions", i, &q.AppliesTo, q.EvidenceIDs, q.Question, true) {
+			if !within("questions", i+1, 4) {
+				continue
+			}
+			check := func() []record.FieldProblem {
+				return append(prose("question", q.Question), evidence("questions_evidence_ids", q.EvidenceIDs, 4)...)
+			}
+			if settle("questions", i+1, check(), func() []record.FieldProblem { q.EvidenceIDs = tidyIDs(q.EvidenceIDs, 4); return check() }) &&
+				checkScope("questions", i, &q.AppliesTo, q.EvidenceIDs, q.Question, true) {
 				kept.Questions = append(kept.Questions, q)
 			}
 		}
-		for _, n := range out.InstructionNotes {
-			errs = addLim(errs, s.textErrors(n.Note)...)
-			errs = addLim(errs, evidenceErrors("instruction_notes_evidence_ids", n.EvidenceIDs, 3)...)
-		}
-		for _, q := range out.DocumentQuality {
-			errs = addLim(errs, evidenceErrors("document_quality_evidence_ids", q.EvidenceIDs, 4)...)
-			if record.ForeignInsightProse(q.Statement) {
-				errs = addLim(errs, record.InsightLanguageError)
-			} else if !q.ValidWithin(catalog, s.limit().text) {
-				errs = addLim(errs, "document_quality_invalid")
+		for i, n := range out.InstructionNotes {
+			if !within("instruction_notes", i+1, 3) {
+				continue
+			}
+			check := func() []record.FieldProblem {
+				return append(prose("note", n.Note), evidence("instruction_notes_evidence_ids", n.EvidenceIDs, 3)...)
+			}
+			if settle("instruction_notes", i+1, check(), func() []record.FieldProblem { n.EvidenceIDs = tidyIDs(n.EvidenceIDs, 3); return check() }) {
+				kept.InstructionNotes = append(kept.InstructionNotes, n)
 			}
 		}
-		if scopeRepair && len(issues) != 0 &&
-			len(kept.Contracts)+len(kept.Conflicts)+len(kept.Questions)+len(kept.InstructionNotes)+len(kept.DocumentQuality) != 0 &&
-			!slices.ContainsFunc(errs, func(code string) bool { return !documentScopeError(code) }) {
-			s.rec.Limitations = addLim(s.rec.Limitations, record.LimDocumentScopeItemsOmitted)
-			errs = nil
+		for i, q := range out.DocumentQuality {
+			if !within("document_quality", i+1, record.MaxDocumentQuality) {
+				continue
+			}
+			check := func() []record.FieldProblem {
+				problems := evidence("document_quality_evidence_ids", q.EvidenceIDs, 4)
+				if record.ForeignInsightProse(q.Statement) {
+					problems = append(problems, record.FieldProblem{Field: "statement", Code: record.InsightLanguageError})
+				} else if !q.ValidWithin(catalog, s.limit().text) {
+					problems = append(problems, record.FieldProblem{Field: "statement", Code: "document_quality_invalid"})
+				}
+				return problems
+			}
+			if settle("document_quality", i+1, check(), func() []record.FieldProblem { q.EvidenceIDs = tidyIDs(q.EvidenceIDs, 4); return check() }) {
+				kept.DocumentQuality = append(kept.DocumentQuality, q)
+			}
 		}
+		// A scope the platform could not narrow after the scope repair leaves
+		// its item out when other items stand; otherwise it rejects.
+		if len(scopeCodes) > 0 {
+			if scopeRepair && len(kept.Contracts)+len(kept.Conflicts)+len(kept.Questions)+len(kept.InstructionNotes)+len(kept.DocumentQuality) != 0 && !f.integrity {
+				f.optional(scopeCodes, nil, []string{record.LimDocumentScopeItemsOmitted})
+			} else {
+				f.item(scopeCodes, nil, nil)
+			}
+		}
+		itemIssues = f.issues
+		errs := s.outcome(&f)
 		if len(errs) == 0 {
 			accepted = kept
+			s.rec.Limitations = addLim(s.rec.Limitations, f.lims...)
 			var invalid bool
 			selectedWorkflow, invalid = s.workflowSelections(out.WorkflowSelections, in.WorkflowRoutes, offeredRoutes, acceptedIndices, kept.Contracts)
 			if invalid {
@@ -610,7 +750,7 @@ func (s *roleStage) documents() analysis.TaskResult {
 	}
 	input := func(r *outputRepair) ([]byte, error) {
 		scopeRepair = hasPackage && r != nil && slices.ContainsFunc(r.OutputErrors, documentScopeError)
-		return s.fitDocumentRepair(in, r, issues, instructions)
+		return s.fitItems(r, itemIssues, instructions, func(r *outputRepair) ([]byte, error) { return s.fitDocumentRepair(in, r, issues, instructions) })
 	}
 	if r := s.exchange(contract, input, parse); r != nil {
 		return *r
@@ -628,7 +768,7 @@ func (s *roleStage) documents() analysis.TaskResult {
 
 // ---- investigate -----------------------------------------------------------
 
-const investigateContract = `For this role use exactly {"candidates":[{"title":"what goes wrong","condition":"the concrete trigger input or state","mechanism":"how the cited lines produce the failure, step by step","impact":"...","improvement":"fix direction","counterpoint":"what would refute it: actual counterevidence or remaining uncertainty","evidence_ids":["ev_...:12-30"]}],"strengths":[{"title":"specific engineering practice","benefit":"what it prevents or enables","scope":"directory","evidence_ids":["ev_..."]}],"contract_comparisons":[{"contract_index":1,"applies_to":"directory","status":"match|partial|mismatch|unknown","reason":"specific link or missing evidence","document_evidence_ids":["ev_..."],"code_evidence_ids":["ev_...:40-52"]}]}. Return at most %d candidates and 3 strengths; a candidate cites at most 6 evidence IDs. Cite scope.excerpts code or test lines for candidates and scoped implementation code for strengths; an excerpt with "within" has its lines inside the named excerpt. For whole_run only, compare up to 6 documents.contracts, one comparison per contract, using its 1-based index, scope or narrower directory and its evidence_ids copied unchanged, without line ranges. For match, partial or mismatch cite 1-4 distinct code_evidence_ids with the implementation lines inside the scope, as for candidates (an excerpt of more than 80 lines needs a range); for an API documented in its own source file cite lines of the documented declaration's body, not its doc comment. Unknown may cite no code. Slices return no comparisons. Do not claim reproduction or provide attack instructions.`
+const investigateContract = `For this role use exactly {"candidates":[{"title":"what goes wrong","condition":"the concrete trigger input or state","mechanism":"how the cited lines produce the failure, step by step","impact":"...","improvement":"fix direction","counterpoint":"what would refute it: actual counterevidence or remaining uncertainty","evidence_ids":["ev_...:12-30"]}],"strengths":[{"title":"specific engineering practice","benefit":"what it prevents or enables","scope":"directory","evidence_ids":["ev_...:60-75"]}],"contract_comparisons":[{"contract_index":1,"applies_to":"directory","status":"match|partial|mismatch|unknown","reason":"specific link or missing evidence","document_evidence_ids":["ev_..."],"code_evidence_ids":["ev_...:40-52"]}]}. Return at most %d candidates and 3 strengths; a candidate cites at most 6 evidence IDs. Cite scope.excerpts code or test lines for candidates and scoped implementation code for strengths; an excerpt with "within" has its lines inside the named excerpt. For whole_run only, compare up to 6 documents.contracts, one comparison per contract, using its 1-based index, scope or narrower directory and its evidence_ids copied unchanged, without line ranges. For match, partial or mismatch cite 1-4 distinct code_evidence_ids with the implementation lines inside the scope, as for candidates (an excerpt of more than 80 lines needs a range); for an API documented in its own source file cite lines of the documented declaration's body, not its doc comment. Unknown may cite no code. Slices return no comparisons. Do not claim reproduction or provide attack instructions.`
 
 type investigateScope struct {
 	WholeRun        bool                    `json:"whole_run"`
@@ -886,14 +1026,15 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	}
 	var candidates []record.Candidate
 	var strengths []record.Strength
-	var strengthsOmitted, comparisonsOmitted bool
+	var strengthsOmitted bool
 	var comparisons []record.ContractComparison
-	var comparisonIssues []comparisonIssue
+	var issues []itemIssue
+	var outputLims []string
 	var probe *record.ContractProbe
 	var probeObservation string
 	var cite *citer
 	parse := func(raw json.RawMessage) []string {
-		comparisonIssues = nil
+		issues = nil
 		var out struct {
 			Candidates          []record.CandidateText      `json:"candidates"`
 			Strengths           []record.Strength           `json:"strengths"`
@@ -903,78 +1044,71 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		if errs := decodeOutput(raw, &out, "candidates"); errs != nil {
 			return errs
 		}
-		var errs []string
-		if len(out.Candidates) > maxCandidates {
-			errs = addLim(errs, "too_many_items")
-		}
+		var f outputFaults
 		reply := newCiter(s.j.Snapshot.Digest, sent, docEv)
 		var list []record.Candidate
 		for i, c := range out.Candidates {
+			var schema []record.FieldProblem
 			if c.ID != "" {
-				errs = addLim(errs, "item_schema_invalid")
+				schema = append(schema, record.FieldProblem{Field: "id", Code: "item_schema_invalid"})
 			}
-			var citeErrs []string
-			c.Evidence, _, citeErrs = reply.resolve(c.Evidence, citeNarrow)
-			errs = addLim(errs, citeErrs...)
-			errs = addLim(errs, s.candidateErrors(c, reply.catalog(), true)...)
-			c.ID = fmt.Sprintf("investigate_%d", i+1)
-			list = append(list, record.Candidate{CandidateText: c, Origin: record.StageInvestigate})
+			r := s.checkCandidate(c, "candidates", i+1, reply, true, s.lastChance, limCandidateOmitted, func([]string) []record.FieldProblem { return schema })
+			f.item(r.codes, r.issues, r.lims)
+			if r.keep && len(list) == maxCandidates {
+				f.item([]string{"too_many_items"}, []itemIssue{{List: "candidates", Index: i + 1, Error: "too_many_items"}}, []string{limCandidateOmitted})
+				continue
+			}
+			if r.keep {
+				r.text.ID = fmt.Sprintf("investigate_%d", len(list)+1)
+				list = append(list, record.Candidate{CandidateText: r.text, Origin: record.StageInvestigate})
+			}
 		}
+		// Strengths are optional and never named in a repair: a citation of
+		// form only (a malformed or too long range, a repeated or surplus
+		// ID) is resolved at once (citer.degrade); any other fault leaves
+		// the strength out (review_strength_omitted).
 		var supported []record.Strength
+		var strengthLims []string
 		for _, x := range out.Strengths {
 			if len(supported) == record.MaxReviewStrengths {
 				break
 			}
-			var citeErrs []string
-			x.EvidenceIDs, _, citeErrs = reply.resolve(x.EvidenceIDs, citeOptional)
+			var citeLims, citeErrs []string
+			x.EvidenceIDs, citeLims, citeErrs = reply.degrade(x.EvidenceIDs, citeOptional, 4, nil)
 			cited := reply.catalog()
 			if len(citeErrs) == 0 && x.ValidWithin(cited, s.limit().text) && s.existingDir(x.Scope) && slices.ContainsFunc(x.EvidenceIDs, func(id string) bool {
 				return strengthImplementation(cited[id])
 			}) {
 				supported = append(supported, x)
+				strengthLims = addLim(strengthLims, citeLims...)
 			}
 		}
+		f.lims = addLim(f.lims, strengthLims...)
 		// Comparisons are optional: each is checked on its own and, once the
-		// format repair is spent, one still invalid is left out instead of
-		// rejecting the candidates with it.
+		// format repair is spent, one still invalid after its citations are
+		// resolved is left out instead of rejecting the candidates with it.
 		var kept []record.ContractComparison
-		var comparisonErrs []string
 		seen := map[int]bool{}
 		for i := range out.ContractComparisons {
 			x := out.ContractComparisons[i]
-			var citeErrs []string
-			x.CodeEvidenceIDs, _, citeErrs = reply.resolve(x.CodeEvidenceIDs, citeNarrow)
-			problems := s.comparisonProblems(x, citeErrs, reply.catalog(), in.Documents.Contracts, javaBindings, links.rustAPIs, seen)
-			if i >= record.MaxContractComparisons {
-				problems = append(problems, record.FieldProblem{Field: "contract_comparisons", Code: record.CompareTooMany})
-			}
-			if len(problems) == 0 {
-				seen[x.ContractIndex] = true
-				kept = append(kept, x)
-				continue
-			}
-			for _, p := range problems {
-				comparisonErrs = addLim(comparisonErrs, p.Code)
-				comparisonIssues = append(comparisonIssues, comparisonIssue{Index: i + 1, Field: p.Field, Error: p.Code})
+			r := s.checkComparison(x, i+1, reply, in.Documents.Contracts, javaBindings, links.rustAPIs, seen, s.lastChance)
+			f.optional(r.codes, r.issues, r.lims)
+			if r.keep {
+				seen[r.comparison.ContractIndex] = true
+				kept = append(kept, r.comparison)
 			}
 		}
-		omitted := false
-		if len(comparisonErrs) > 0 {
-			if s.lastChance && len(errs) == 0 {
-				omitted = true
-			} else {
-				errs = addLim(errs, comparisonErrs...)
-			}
-		}
+		issues = f.issues
+		errs := s.outcome(&f)
 		if len(errs) == 0 {
-			candidates, strengths, comparisons, cite = list, supported, kept, reply
-			strengthsOmitted, comparisonsOmitted = len(supported) != len(out.Strengths), omitted
+			candidates, strengths, comparisons, cite, outputLims = list, supported, kept, reply, f.lims
+			strengthsOmitted = len(supported) != len(out.Strengths)
 			probe, probeObservation = selectContractProbe(out.ContractProbe, navigation, comparisons, in)
 		}
 		return errs
 	}
 	input := func(r *outputRepair) ([]byte, error) {
-		return s.fitComparisonRepair(in, r, comparisonIssues, s.instructions(contract))
+		return s.fitItems(r, issues, s.instructions(contract), func(r *outputRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) })
 	}
 	if r := s.exchange(contract, input, parse); r != nil {
 		return *r
@@ -996,9 +1130,7 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	if strengthsOmitted {
 		s.rec.Limitations = addLim(s.rec.Limitations, "review_strength_omitted")
 	}
-	if comparisonsOmitted {
-		s.rec.Limitations = addLim(s.rec.Limitations, record.LimContractComparisonOmitted)
-	}
+	s.rec.Limitations = addLim(s.rec.Limitations, outputLims...)
 	if probe != nil {
 		for i := range s.rec.ContractComparisons {
 			resolveContractProbeReason(&s.rec.ContractComparisons[i], *probe, navigation, in)
@@ -1170,21 +1302,40 @@ func (s *roleStage) interpret() analysis.TaskResult {
 	var candidates []record.Candidate
 	var limits []record.InterpretationLimit
 	var cite *citer
-	obsErrs := func(ids []string) []string {
+	var issues []itemIssue
+	var outputLims []string
+	obsErrs := func(ids []string) []record.FieldProblem {
 		if len(ids) == 0 || len(ids) > 4 {
-			return []string{"observation_ids_invalid"}
+			return []record.FieldProblem{{Field: "observation_ids", Code: "observation_ids_invalid"}}
 		}
-		var errs []string
+		var out []record.FieldProblem
 		for i, id := range ids {
 			if _, ok := given[id]; !ok {
-				errs = addLim(errs, "observation_id_unknown")
+				out = append(out, record.FieldProblem{Field: "observation_ids", Code: "observation_id_unknown"})
 			} else if slices.Contains(ids[:i], id) {
-				errs = addLim(errs, "observation_id_duplicate")
+				out = append(out, record.FieldProblem{Field: "observation_ids", Code: "observation_id_duplicate"})
 			}
 		}
-		return errs
+		return out
+	}
+	// distinct drops a repeated observation ID once the repair is spent;
+	// repeated reports whether it did (the call still names the fault).
+	distinct := func(ids []string) (kept []string, repeated bool) {
+		if !s.lastChance {
+			return ids, false
+		}
+		seen := map[string]bool{}
+		kept = ids[:0:0]
+		for _, id := range ids {
+			if !seen[id] {
+				seen[id] = true
+				kept = append(kept, id)
+			}
+		}
+		return kept, len(kept) != len(ids)
 	}
 	parse := func(raw json.RawMessage) []string {
+		issues = nil
 		var out struct {
 			Hypotheses []hypothesis                 `json:"hypotheses"`
 			Limits     []record.InterpretationLimit `json:"limits"`
@@ -1192,47 +1343,93 @@ func (s *roleStage) interpret() analysis.TaskResult {
 		if errs := decodeOutput(raw, &out, "hypotheses", "limits"); errs != nil {
 			return errs
 		}
-		var errs []string
-		if len(out.Hypotheses) > 2 || len(out.Limits) > 3 {
-			errs = addLim(errs, "too_many_items")
-		}
+		var f outputFaults
 		if len(out.Hypotheses)+len(out.Limits) == 0 {
-			errs = addLim(errs, "no_items")
+			f.output("no_items")
 		}
 		var list []record.Candidate
 		reply := newCiter(s.j.Snapshot.Digest, sent)
 		for i, h := range out.Hypotheses {
-			ids, base, citeErrs := reply.resolve(h.Evidence, citeNarrow)
-			c := record.CandidateText{Title: h.Title, Condition: h.Condition, Mechanism: h.Mechanism, Impact: h.Impact, Improvement: h.Improvement, Counterpoint: h.Counterpoint, Evidence: ids}
-			errs = addLim(errs, citeErrs...)
-			errs = addLim(errs, s.candidateErrors(c, reply.catalog(), true)...)
-			errs = addLim(errs, obsErrs(h.ObservationIDs)...)
-			at := false
-			for _, oid := range h.ObservationIDs {
-				for _, eid := range given[oid].EvidenceIDs {
-					at = at || slices.Contains(base, eid)
+			obs, repeated := distinct(h.ObservationIDs)
+			c := record.CandidateText{Title: h.Title, Condition: h.Condition, Mechanism: h.Mechanism, Impact: h.Impact, Improvement: h.Improvement, Counterpoint: h.Counterpoint, Evidence: h.Evidence}
+			r := s.checkCandidate(c, "hypotheses", i+1, reply, true, s.lastChance, limInterpretItemsOmitted, func(base []string) []record.FieldProblem {
+				problems := obsErrs(obs)
+				at := false
+				for _, oid := range obs {
+					for _, eid := range given[oid].EvidenceIDs {
+						at = at || slices.Contains(base, eid)
+					}
+				}
+				if !at {
+					problems = append(problems, record.FieldProblem{Field: "evidence_ids", Code: "evidence_not_at_observation"})
+				}
+				return problems
+			})
+			if repeated {
+				r.codes = addLim(r.codes, "observation_id_duplicate")
+				if r.keep {
+					r.lims = addLim(r.lims, limCitationListTrimmed)
 				}
 			}
-			if !at {
-				errs = addLim(errs, "evidence_not_at_observation")
+			f.item(r.codes, r.issues, r.lims)
+			if r.keep && len(list) == 2 {
+				f.item([]string{"too_many_items"}, []itemIssue{{List: "hypotheses", Index: i + 1, Error: "too_many_items"}}, []string{limInterpretItemsOmitted})
+				continue
 			}
-			c.ID = fmt.Sprintf("interpret_%d", i+1)
-			list = append(list, record.Candidate{CandidateText: c, Origin: record.StageInterpret, ObservationIDs: h.ObservationIDs})
+			if r.keep {
+				r.text.ID = fmt.Sprintf("interpret_%d", len(list)+1)
+				list = append(list, record.Candidate{CandidateText: r.text, Origin: record.StageInterpret, ObservationIDs: obs})
+			}
 		}
-		for _, l := range out.Limits {
-			errs = addLim(errs, s.textErrors(l.Statement)...)
-			errs = addLim(errs, obsErrs(l.ObservationIDs)...)
+		var kept []record.InterpretationLimit
+		for i, l := range out.Limits {
+			var lims, codes []string
+			var found []itemIssue
+			var repeated bool
+			l.ObservationIDs, repeated = distinct(l.ObservationIDs)
+			for _, code := range s.textErrors(l.Statement) {
+				codes = addLim(codes, code)
+				found = append(found, itemIssue{List: "limits", Index: i + 1, Field: "statement", Error: code})
+			}
+			for _, p := range obsErrs(l.ObservationIDs) {
+				codes = addLim(codes, p.Code)
+				found = append(found, itemIssue{List: "limits", Index: i + 1, Field: p.Field, Error: p.Code})
+			}
+			switch {
+			case len(codes) == 0 && len(kept) == 3:
+				codes, found, lims = []string{"too_many_items"}, []itemIssue{{List: "limits", Index: i + 1, Error: "too_many_items"}}, []string{limInterpretItemsOmitted}
+			case len(codes) == 0:
+				kept = append(kept, l)
+				if repeated {
+					lims = []string{limCitationListTrimmed}
+				}
+			case s.lastChance && formOnly(codes):
+				lims = []string{limInterpretItemsOmitted}
+			}
+			if repeated {
+				codes = addLim(codes, "observation_id_duplicate")
+			}
+			f.item(codes, found, lims)
 		}
+		if s.lastChance && !f.integrity && len(list)+len(kept) == 0 {
+			// The record holds at least one item: nothing is left to keep.
+			f.output("no_items")
+		}
+		issues = f.issues
+		errs := s.outcome(&f)
 		if len(errs) == 0 {
-			candidates, limits, cite = list, out.Limits, reply
+			candidates, limits, cite, outputLims = list, kept, reply, f.lims
 		}
 		return errs
 	}
-	input := func(r *outputRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) }
+	input := func(r *outputRepair) ([]byte, error) {
+		return s.fitItems(r, issues, s.instructions(interpretContract), func(r *outputRepair) ([]byte, error) { x := in; x.Repair = r; return marshal(x) })
+	}
 	if r := s.exchange(interpretContract, input, parse); r != nil {
 		return *r
 	}
 	s.rec.Candidates, s.rec.Limits = candidates, limits
+	s.rec.Limitations = addLim(s.rec.Limitations, outputLims...)
 	if cite != nil {
 		var ids [][]string
 		for _, c := range candidates {

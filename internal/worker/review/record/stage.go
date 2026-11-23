@@ -847,7 +847,7 @@ func checkCalls(r Record) error {
 	if len(r.Calls) > RoleMaxCalls || (r.Stage == StageContract && len(r.Calls) > ContractMaxCalls) {
 		return invalid("too many calls")
 	}
-	accepted := false
+	accepted, degraded := false, slices.Contains(r.Limitations, LimOutputDegraded)
 	for i, c := range r.Calls {
 		if c.Role != r.Stage || c.Attempt != i+1 || !ValidCode(c.Outcome) || c.PackID != r.Pack.ID || c.PackVersion != r.Pack.Version ||
 			!hex64.MatchString(c.PackDigest) || len(c.PackFiles) == 0 || len(c.PackFiles) > 24 || c.RequestBytes < 0 || c.OutputErrors == nil || !codes(c.OutputErrors) ||
@@ -869,8 +869,10 @@ func checkCalls(r Record) error {
 		}
 		primaryLast := last || (i == len(r.Calls)-2 && r.Calls[i+1].Purpose == WorkflowSelectionPurpose)
 		// A verifier accepts candidates per item, so both of its calls may
-		// carry accepted items; any other stage accepts one primary output.
-		if ok && !extra && r.Stage != StageVerify && (accepted || len(c.OutputErrors) != 0 || !primaryLast) {
+		// carry accepted items; any other stage accepts one primary output,
+		// the last one unless the platform degraded an earlier output after
+		// the later calls failed (LimOutputDegraded).
+		if ok && !extra && r.Stage != StageVerify && (accepted || (!degraded && (len(c.OutputErrors) != 0 || !primaryLast))) {
 			return invalid("call sequence")
 		}
 		accepted = accepted || ok

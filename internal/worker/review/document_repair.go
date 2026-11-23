@@ -97,7 +97,9 @@ func (s *roleStage) fitDocumentRepair(in docsInput, repair *outputRepair, issues
 		return marshal(in)
 	}
 	for n := len(issues); n > 0; n-- {
-		in.Repair = &outputRepair{OutputErrors: repair.OutputErrors, DocumentScopes: issues[:n]}
+		r := *repair
+		r.DocumentScopes = issues[:n]
+		in.Repair = &r
 		body, err := marshal(in)
 		if err != nil {
 			return nil, err

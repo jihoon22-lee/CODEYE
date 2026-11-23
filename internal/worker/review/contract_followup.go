@@ -11,7 +11,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
-const contractOutput = `Return exactly {"contract_comparisons":[{"contract_index":<input.prior.contract_index>,"applies_to":"<input.prior.applies_to>","status":"match|partial|mismatch|unknown","reason":"...","document_evidence_ids":["ev_..."],"code_evidence_ids":["ev_..."]}]}. Copy the prior index, scope and document IDs exactly. Cite newly read implementation for any status other than unknown. For partial only, add "partial_support":{"matching":{"condition":"...","evidence_id":"ev_..."},"violating":{"condition":"...","evidence_id":"ev_..."}} inside the comparison. Give distinct conditions and distinct cited implementation excerpts; each must show the stated matching or violating outcome. One confirmed condition and a second unresolved condition leave the contract unknown; mention the confirmed part and cite it if new. A test excerpt is supporting evidence and does not establish an implementation or executed result. For unknown, an empty code_evidence_ids array is allowed.`
+const contractOutput = `Return exactly {"contract_comparisons":[{"contract_index":<input.prior.contract_index>,"applies_to":"<input.prior.applies_to>","status":"match|partial|mismatch|unknown","reason":"...","document_evidence_ids":["ev_..."],"code_evidence_ids":["ev_...:40-52"]}]}. Copy the prior index, scope and document IDs exactly. Cite newly read implementation for any status other than unknown. For partial only, add "partial_support":{"matching":{"condition":"...","evidence_id":"ev_...:40-44"},"violating":{"condition":"...","evidence_id":"ev_...:48-52"}} inside the comparison. Give distinct conditions and distinct cited implementation excerpts; each must show the stated matching or violating outcome. One confirmed condition and a second unresolved condition leave the contract unknown; mention the confirmed part and cite it if new. A test excerpt is supporting evidence and does not establish an implementation or executed result. For unknown, an empty code_evidence_ids array is allowed.`
 
 const (
 	maxContractExcerpts         = 12
@@ -299,11 +299,12 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 	}
 	s.setEvidence(sent)
 	catalog := catalogOf(s.rec.Evidence)
+	var issues []itemIssue
 	input := func(repair *outputRepair) ([]byte, error) {
-		in.Repair = repair
-		return marshal(in)
+		return s.fitItems(repair, issues, instructions, func(r *outputRepair) ([]byte, error) { in.Repair = r; return marshal(in) })
 	}
 	parse := func(raw json.RawMessage) []string {
+		issues = nil
 		var out struct {
 			Comparisons []contractModelComparison `json:"contract_comparisons"`
 		}
@@ -314,33 +315,62 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 			return []string{"contract_comparison_invalid"}
 		}
 		x := out.Comparisons[0]
+		name := func(field, id, code string) {
+			issues = append(issues, itemIssue{List: "contract_comparisons", Index: 1, Field: field, ID: id, Error: code})
+		}
 		if errs := s.textErrors(x.Reason); len(errs) > 0 {
+			for _, code := range errs {
+				name("reason", "", code)
+			}
 			return errs
 		}
 		// A cited range is checked against the sent window and the
-		// window's own ID kept: the follow-up compares whole windows.
+		// window's own ID kept: the follow-up compares whole windows. A
+		// range of the wrong form names its window too, so after the repair
+		// it stands for that window like any range (docs/REVIEW.md#출력-오류-분류).
 		reply := newCiter(s.j.Snapshot.Digest, sent)
-		var citeErrs []string
-		x.CodeEvidenceIDs, _, citeErrs = reply.resolve(x.CodeEvidenceIDs, citeStrip)
+		var citeIssues []citeIssue
+		var fields []string
+		x.CodeEvidenceIDs, _, citeIssues = reply.resolveIssues(x.CodeEvidenceIDs, citeStrip)
+		for range citeIssues {
+			fields = append(fields, "code_evidence_ids")
+		}
 		if p := x.PartialSupport; p != nil {
-			ids, _, errs := reply.resolve([]string{p.Matching.EvidenceID, p.Violating.EvidenceID}, citeStrip)
-			citeErrs = addLim(citeErrs, errs...)
+			ids, _, more := reply.resolveIssues([]string{p.Matching.EvidenceID, p.Violating.EvidenceID}, citeStrip)
+			for _, is := range more {
+				fields = append(fields, []string{"partial_support.matching", "partial_support.violating"}[is.pos])
+			}
+			citeIssues = append(citeIssues, more...)
 			support := *p
 			support.Matching.EvidenceID, support.Violating.EvidenceID = ids[0], ids[1]
 			x.PartialSupport = &support
 		}
-		if len(citeErrs) > 0 {
+		var citeErrs []string
+		for i, is := range citeIssues {
+			citeErrs = addLim(citeErrs, is.code)
+			name(fields[i], is.id, is.code)
+		}
+		named := !slices.ContainsFunc(citeIssues, func(is citeIssue) bool { return is.id == "" })
+		if len(citeErrs) > 0 && (!s.lastChance || !formOnly(citeErrs) || !named) {
+			s.repairable = formOnly(citeErrs) && named
 			return citeErrs
 		}
 		if record.ForeignInsightProse(x.Reason) {
+			name("reason", "", record.InsightLanguageError)
 			return []string{record.InsightLanguageError}
 		}
 		proposed := s.rec
 		proposed.ContractComparisons = []record.ContractComparison{x.ContractComparison}
 		proposed.PartialSupport = x.PartialSupport
 		if !record.ValidateContractFollowup(proposed, doc, inv) || !javaAPIComparisonValid(x.ContractComparison, javaBindings, catalog) {
+			// Name what the comparison rules find; the follow-up's own rules
+			// decide, so the generic code stays when they find nothing.
+			for _, p := range x.ContractComparison.Problems(catalog, s.limit().text) {
+				name(p.Field, "", p.Code)
+			}
 			return []string{"contract_comparison_invalid"}
 		}
+		s.degraded = citeErrs
 		if x.Status == "partial" {
 			a, b := x.PartialSupport.Matching.EvidenceID, x.PartialSupport.Violating.EvidenceID
 			if !runtimeImplementation[a] || !runtimeImplementation[b] || (!validImplementation[a] && !validImplementation[b]) {

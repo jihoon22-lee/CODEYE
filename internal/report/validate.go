@@ -66,6 +66,9 @@ func ValidateReport(r Report) error {
 	if !aiStatuses[r.Coverage.AIReview.Status] || (r.Coverage.AIReview.Reason == nil) != (r.Coverage.AIReview.Status == AIReviewPerformed || r.Coverage.AIReview.Status == AIReviewNotRequested) {
 		return invalidf("ai_review is inconsistent")
 	}
+	if err := validIncompleteVerify(r); err != nil {
+		return err
+	}
 	if want := ComputeSummary(r.Findings, r.Observations); !reflect.DeepEqual(want, r.Summary) {
 		return invalidf("summary counts differ from findings/observations")
 	}

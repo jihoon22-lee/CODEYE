@@ -16,13 +16,43 @@ import (
 // already sent, or one an earlier record holds, is that excerpt). Findings
 // and report excerpts then point at the cited lines, not at a whole file.
 // A range outside the excerpt, a malformed range or a long excerpt cited
-// without one is an output error the repair request names.
+// without one is an output error the repair request names. Lines the
+// request did not send are an integrity error; the other faults are of form
+// only (the excerpt is real and was sent), and an item kept after the
+// repair resolves them with degrade.
 
 // Output error codes of citations.
 const (
+	// errCitationInvalid: a malformed range, one longer than
+	// record.MaxCitedLines or a range on a document excerpt (form).
 	errCitationInvalid = "citation_range_invalid"
+	// errCitationMissing: a long code or test excerpt cited without a range (form).
 	errCitationMissing = "citation_range_missing"
+	// errCitationOutside: a range with lines the excerpt does not hold (integrity).
+	errCitationOutside = "citation_range_outside"
 )
+
+// Limitations of a citation the platform resolved after the repair.
+const (
+	// limCitationUnspecified: the citation stands for the whole sent excerpt
+	// it names; the lines were checked against the snapshot, only the
+	// precision of the range is lost.
+	limCitationUnspecified = "citation_range_unspecified"
+	// limCitationFromCandidate: a verify citation of a long excerpt without
+	// a usable range stands for the candidate's own cited range inside it.
+	limCitationFromCandidate = "citation_range_from_candidate"
+	// limCitationListTrimmed: repeated IDs were removed or the list was cut
+	// to its limit, keeping the first ones.
+	limCitationListTrimmed = "citation_list_trimmed"
+)
+
+// citeIssue is one citation of a list not accepted as given: its position
+// in the list, the sent excerpt it names ("" when none) and the code.
+type citeIssue struct {
+	pos  int
+	id   string
+	code string
+}
 
 // citationMode is how one evidence list is resolved.
 type citationMode int
@@ -66,15 +96,33 @@ func newCiter(snapshot string, sent ...[]record.Excerpt) *citer {
 // its ID), the IDs of the excerpts cited (base) and error codes. An
 // unknown ID is kept so the caller's ID check reports it.
 func (c *citer) resolve(list []string, mode citationMode) (ids, base, errs []string) {
+	ids, base, issues := c.resolveIssues(list, mode)
+	for _, is := range issues {
+		errs = addLim(errs, is.code)
+	}
+	return ids, base, errs
+}
+
+// resolveIssues is resolve with each fault and the sent excerpt it names.
+// A citation naming a sent excerpt resolves to that excerpt's ID even when
+// its range is malformed, so only an ID the request did not hold reaches
+// the caller's ID check as unknown.
+func (c *citer) resolveIssues(list []string, mode citationMode) (ids, base []string, issues []citeIssue) {
 	if list == nil {
 		return nil, nil, nil
 	}
 	ids, base = make([]string, 0, len(list)), make([]string, 0, len(list))
-	for _, raw := range list {
+	for i, raw := range list {
 		cit, ok := record.ParseCitation(raw)
 		if !ok {
+			prefix, _, _ := strings.Cut(raw, ":")
+			if e, sent := c.sent[strings.TrimSpace(prefix)]; sent {
+				ids, base = append(ids, e.ID), append(base, e.ID)
+				issues = append(issues, citeIssue{i, e.ID, errCitationInvalid})
+				continue
+			}
 			ids, base = append(ids, raw), append(base, raw)
-			errs = addLim(errs, errCitationInvalid)
+			issues = append(issues, citeIssue{i, "", errCitationInvalid})
 			continue
 		}
 		e, known := c.sent[cit.ID]
@@ -86,14 +134,19 @@ func (c *citer) resolve(list []string, mode citationMode) (ids, base, errs []str
 		source := e.Kind == "code" || e.Kind == "test"
 		if !cit.Ranged {
 			if mode == citeNarrow && source && e.Origin != record.OriginCited && e.End-e.Start+1 > record.WholeCitationLines {
-				errs = addLim(errs, errCitationMissing)
+				issues = append(issues, citeIssue{i, e.ID, errCitationMissing})
 			}
 			ids = append(ids, e.ID)
 			continue
 		}
-		if !source || cit.Start < e.Start || cit.End > e.End || cit.End-cit.Start+1 > record.MaxCitedLines {
+		if cit.Start < e.Start || cit.End > e.End {
 			ids = append(ids, e.ID)
-			errs = addLim(errs, errCitationInvalid)
+			issues = append(issues, citeIssue{i, e.ID, errCitationOutside})
+			continue
+		}
+		if !source || cit.End-cit.Start+1 > record.MaxCitedLines {
+			ids = append(ids, e.ID)
+			issues = append(issues, citeIssue{i, e.ID, errCitationInvalid})
 			continue
 		}
 		if mode == citeStrip {
@@ -112,7 +165,69 @@ func (c *citer) resolve(list []string, mode citationMode) (ids, base, errs []str
 		}
 		ids = append(ids, n.ID)
 	}
-	return ids, base, errs
+	return ids, base, issues
+}
+
+// degrade resolves the list of an item the platform keeps after the format
+// repair (docs/REVIEW.md#출력-오류-분류). A citation whose only fault is its
+// form keeps the sent excerpt it names: the ranges of hints that lie inside
+// that excerpt (a verify item's candidate citations), otherwise the whole
+// excerpt. Repeated IDs go and the list keeps its first limit known IDs;
+// an ID the request did not hold stays for the caller's check. lims names
+// what was done; errs holds the faults that are not of form (lines outside
+// the excerpt, a malformed citation of an unknown ID).
+func (c *citer) degrade(list []string, mode citationMode, limit int, hints []string) (ids, lims, errs []string) {
+	resolved, _, issues := c.resolveIssues(list, mode)
+	if resolved == nil {
+		return nil, nil, nil
+	}
+	catalog := c.catalog()
+	replace := map[int][]string{}
+	for _, is := range issues {
+		if is.id == "" || is.code == errCitationOutside {
+			errs = addLim(errs, is.code)
+			continue
+		}
+		e := c.sent[is.id]
+		var inside []string
+		for _, h := range hints {
+			x, ok := catalog[h]
+			if ok && h != e.ID && x.Path == e.Path && x.SHA256 == e.SHA256 && e.Start <= x.Start && x.End <= e.End {
+				inside = append(inside, h)
+			}
+		}
+		if len(inside) > 0 {
+			replace[is.pos] = inside
+			lims = addLim(lims, limCitationFromCandidate)
+		} else {
+			lims = addLim(lims, limCitationUnspecified)
+		}
+	}
+	ids = make([]string, 0, len(resolved))
+	seen, known, trimmed := map[string]bool{}, 0, false
+	for i, id := range resolved {
+		group := []string{id}
+		if r, ok := replace[i]; ok {
+			group = r
+		}
+		for _, x := range group {
+			_, isKnown := catalog[x]
+			switch {
+			case seen[x] || (isKnown && known == limit):
+				trimmed = true
+			case isKnown:
+				known++
+				fallthrough
+			default:
+				seen[x] = true
+				ids = append(ids, x)
+			}
+		}
+	}
+	if trimmed {
+		lims = addLim(lims, limCitationListTrimmed)
+	}
+	return ids, lims, errs
 }
 
 // catalog is the sent excerpts and every narrowed range, by ID.

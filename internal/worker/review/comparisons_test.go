@@ -116,90 +116,109 @@ func clampComparison(in investigateInput, code ...string) record.ContractCompari
 		DocumentEvidenceIDs: slices.Clone(in.Documents.Contracts[0].EvidenceIDs), CodeEvidenceIDs: code}
 }
 
+// cmpIssue is the repair item of a comparison fault.
+func cmpIssue(index int, field, code string) itemIssue {
+	return itemIssue{List: "contract_comparisons", Index: index, Field: field, Error: code}
+}
+
+// hasIssue reports an item of list equal to want; want without an evidence
+// ID matches any.
+func hasIssue(list []itemIssue, want itemIssue) bool {
+	return slices.ContainsFunc(list, func(x itemIssue) bool {
+		if want.ID == "" {
+			x.ID = ""
+		}
+		return x == want
+	})
+}
+
 // Every rule of a comparison has its own code, named in output_errors and,
 // with the comparison's 1-based position and field, in the repair block. A
 // comparison still invalid after the repair is left out with
 // contract_comparison_omitted; the candidate and the required review stay,
-// and the report shows the contract unchecked with that gap.
+// and the report shows the contract unchecked with that gap. A comparison
+// whose only faults are in the form of its code citations is kept after the
+// repair with them resolved (resolved: the limitations recorded).
 func TestComparisonRejectionCodes(t *testing.T) {
 	readme := record.Contract{Statement: "Clamp는 음수 입력에서 0을 반환한다.", AppliesTo: "."}
 	for _, c := range []struct {
 		name     string
 		contract record.Contract
 		build    func(in investigateInput, unit string) []record.ContractComparison
-		want     comparisonIssue
+		want     itemIssue
+		resolved []string
 	}{
 		{"index past the contracts", readme, func(in investigateInput, u string) []record.ContractComparison {
 			x := clampComparison(in, u+":105-107")
 			x.ContractIndex = 2
 			return []record.ContractComparison{x}
-		}, comparisonIssue{1, "contract_index", record.CompareIndexInvalid}},
+		}, cmpIssue(1, "contract_index", record.CompareIndexInvalid), nil},
 		{"contract compared twice", readme, func(in investigateInput, u string) []record.ContractComparison {
 			return []record.ContractComparison{clampComparison(in, u+":105-107"), clampComparison(in, u+":106-106")}
-		}, comparisonIssue{2, "contract_index", record.CompareIndexDuplicate}},
+		}, cmpIssue(2, "contract_index", record.CompareIndexDuplicate), nil},
 		{"scope not a directory", readme, func(in investigateInput, u string) []record.ContractComparison {
 			x := clampComparison(in, u+":105-107")
 			x.AppliesTo = "pkg/missing"
 			return []record.ContractComparison{x}
-		}, comparisonIssue{1, "applies_to", record.CompareScopeInvalid}},
+		}, cmpIssue(1, "applies_to", record.CompareScopeInvalid), nil},
 		{"scope wider than the contract", record.Contract{Statement: readme.Statement, AppliesTo: "pkg/limit"}, func(in investigateInput, u string) []record.ContractComparison {
 			return []record.ContractComparison{clampComparison(in, u+":105-107")}
-		}, comparisonIssue{1, "applies_to", record.CompareScopeOutside}},
+		}, cmpIssue(1, "applies_to", record.CompareScopeOutside), nil},
 		{"status", readme, func(in investigateInput, u string) []record.ContractComparison {
 			x := clampComparison(in, u+":105-107")
 			x.Status = "consistent"
 			return []record.ContractComparison{x}
-		}, comparisonIssue{1, "status", record.CompareStatusInvalid}},
+		}, cmpIssue(1, "status", record.CompareStatusInvalid), nil},
 		{"empty reason", readme, func(in investigateInput, u string) []record.ContractComparison {
 			x := clampComparison(in, u+":105-107")
 			x.Reason = ""
 			return []record.ContractComparison{x}
-		}, comparisonIssue{1, "reason", record.CompareReasonInvalid}},
+		}, cmpIssue(1, "reason", record.CompareReasonInvalid), nil},
 		{"reason not in Korean", readme, func(in investigateInput, u string) []record.ContractComparison {
 			x := clampComparison(in, u+":105-107")
 			x.Reason = "負數輸入時返回零值"
 			return []record.ContractComparison{x}
-		}, comparisonIssue{1, "reason", record.InsightLanguageError}},
+		}, cmpIssue(1, "reason", record.InsightLanguageError), nil},
 		{"reason claims a run", readme, func(in investigateInput, u string) []record.ContractComparison {
 			x := clampComparison(in, u+":105-107")
 			x.Reason = "테스트를 실행해 음수 입력의 결과를 재현했다."
 			return []record.ContractComparison{x}
-		}, comparisonIssue{1, "reason", record.ErrExecutionClaim}},
+		}, cmpIssue(1, "reason", record.ErrExecutionClaim), nil},
 		{"document cited with a range", readme, func(in investigateInput, u string) []record.ContractComparison {
 			x := clampComparison(in, u+":105-107")
 			x.DocumentEvidenceIDs = []string{x.DocumentEvidenceIDs[0] + ":3-3"}
 			return []record.ContractComparison{x}
-		}, comparisonIssue{1, "document_evidence_ids", record.CompareDocumentsChanged}},
+		}, cmpIssue(1, "document_evidence_ids", record.CompareDocumentsChanged), nil},
 		{"match without code", readme, func(in investigateInput, u string) []record.ContractComparison {
 			return []record.ContractComparison{clampComparison(in)}
-		}, comparisonIssue{1, "code_evidence_ids", record.CompareCodeMissing}},
+		}, cmpIssue(1, "code_evidence_ids", record.CompareCodeMissing), nil},
 		{"unknown code ID", readme, func(in investigateInput, u string) []record.ContractComparison {
 			return []record.ContractComparison{clampComparison(in, "ev_"+strings.Repeat("0", 24))}
-		}, comparisonIssue{1, "code_evidence_ids", record.CompareCodeInvalid}},
+		}, cmpIssue(1, "code_evidence_ids", record.CompareCodeInvalid), nil},
 		{"same range twice", readme, func(in investigateInput, u string) []record.ContractComparison {
 			return []record.ContractComparison{clampComparison(in, u+":105-107", u+":105-107")}
-		}, comparisonIssue{1, "code_evidence_ids", record.CompareCodeDuplicate}},
+		}, cmpIssue(1, "code_evidence_ids", record.CompareCodeDuplicate), []string{limCitationListTrimmed}},
 		{"five ranges", readme, func(in investigateInput, u string) []record.ContractComparison {
 			return []record.ContractComparison{clampComparison(in, u+":4-4", u+":10-10", u+":20-20", u+":30-30", u+":105-107")}
-		}, comparisonIssue{1, "code_evidence_ids", record.CompareCodeTooMany}},
+		}, cmpIssue(1, "code_evidence_ids", record.CompareCodeTooMany), []string{limCitationListTrimmed}},
 		{"code outside the scope", record.Contract{Statement: readme.Statement, AppliesTo: "pkg/limit"}, func(in investigateInput, u string) []record.ContractComparison {
 			x := clampComparison(in, unitOf(t, in, "cmd/limit/main.go").ID+":5-5")
 			x.AppliesTo = "pkg/limit"
 			return []record.ContractComparison{x}
-		}, comparisonIssue{1, "code_evidence_ids", record.CompareCodeOutsideScope}},
+		}, cmpIssue(1, "code_evidence_ids", record.CompareCodeOutsideScope), nil},
 		{"range longer than 80 lines", readme, func(in investigateInput, u string) []record.ContractComparison {
 			return []record.ContractComparison{clampComparison(in, u+":4-109")}
-		}, comparisonIssue{1, "code_evidence_ids", record.CompareCodeRangeInvalid}},
+		}, cmpIssue(1, "code_evidence_ids", record.CompareCodeRangeInvalid), []string{limCitationUnspecified}},
 		{"long unit without a range", readme, func(in investigateInput, u string) []record.ContractComparison {
 			return []record.ContractComparison{clampComparison(in, u)}
-		}, comparisonIssue{1, "code_evidence_ids", record.CompareCodeRangeMissing}},
+		}, cmpIssue(1, "code_evidence_ids", record.CompareCodeRangeMissing), []string{limCitationUnspecified}},
 		{"seven comparisons", readme, func(in investigateInput, u string) []record.ContractComparison {
 			var out []record.ContractComparison
 			for range 7 {
 				out = append(out, clampComparison(in, u+":105-107"))
 			}
 			return out
-		}, comparisonIssue{7, "contract_comparisons", record.CompareTooMany}},
+		}, cmpIssue(7, "contract_comparisons", record.CompareTooMany), nil},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			run := runComparisons(t, limitTree(), "README.md", c.contract, Budget{}, func(in investigateInput) map[string]any {
@@ -207,6 +226,10 @@ func TestComparisonRejectionCodes(t *testing.T) {
 				return map[string]any{"candidates": []record.CandidateText{billingCandidate("음수 처리", u.ID+":105-107")},
 					"contract_comparisons": c.build(in, u.ID)}
 			})
+			if c.resolved != nil {
+				requireComparisonResolved(t, run, c.want, c.resolved)
+				return
+			}
 			requireComparisonOmitted(t, run, c.want)
 		})
 	}
@@ -215,15 +238,9 @@ func TestComparisonRejectionCodes(t *testing.T) {
 // requireComparisonOmitted checks the repair named want, the repaired
 // output (the same, still invalid) left the comparison out, and the report
 // shows the contract unchecked with the gap while the review counts.
-func requireComparisonOmitted(t *testing.T, run comparisonRun, want comparisonIssue) {
+func requireComparisonOmitted(t *testing.T, run comparisonRun, want itemIssue) {
 	t.Helper()
-	if s := run.results["review.investigate"]; s.Status != domain.TaskSucceeded {
-		t.Fatalf("investigate %+v", s)
-	}
-	if len(run.repairs) != 2 || run.repairs[0] != nil || run.repairs[1] == nil ||
-		!slices.Contains(run.repairs[1].OutputErrors, want.Error) || !slices.Contains(run.repairs[1].ContractComparisons, want) {
-		t.Fatalf("repair blocks %+v, want %+v", run.repairs, want)
-	}
+	requireComparisonRepaired(t, run, want)
 	if calls := run.inv.Calls; len(calls) != 2 || !slices.Contains(calls[0].OutputErrors, want.Error) || calls[1].Outcome != record.OutcomeAccepted {
 		t.Fatalf("calls %+v", calls)
 	}
@@ -240,6 +257,53 @@ func requireComparisonOmitted(t *testing.T, run comparisonRun, want comparisonIs
 		return g.Section == report.SectionDocuments && g.Code == record.LimContractComparisonOmitted
 	}) {
 		t.Fatalf("report gaps %+v", run.report.Gaps)
+	}
+}
+
+// requireComparisonRepaired checks the investigation succeeded and its one
+// repair named want.
+func requireComparisonRepaired(t *testing.T, run comparisonRun, want itemIssue) {
+	t.Helper()
+	if s := run.results["review.investigate"]; s.Status != domain.TaskSucceeded {
+		t.Fatalf("investigate %+v", s)
+	}
+	if len(run.repairs) != 2 || run.repairs[0] != nil || run.repairs[1] == nil ||
+		!slices.Contains(run.repairs[1].OutputErrors, want.Error) || !hasIssue(run.repairs[1].Items, want) {
+		t.Fatalf("repair blocks %+v, want %+v", run.repairs, want)
+	}
+}
+
+// requireComparisonResolved checks the repair named want, the repaired
+// output (the same) kept the comparison with its citations resolved and
+// the limitations lims, and the report shows the contract compared.
+func requireComparisonResolved(t *testing.T, run comparisonRun, want itemIssue, lims []string) {
+	t.Helper()
+	requireComparisonRepaired(t, run, want)
+	calls := run.inv.Calls
+	if len(calls) != 2 || calls[1].Outcome != record.OutcomeAccepted || !slices.Contains(calls[1].OutputErrors, want.Error) {
+		t.Fatalf("calls %+v", calls)
+	}
+	if len(run.inv.ContractComparisons) != 1 || slices.Contains(run.inv.Limitations, record.LimContractComparisonOmitted) ||
+		!slices.Contains(run.inv.Limitations, record.LimOutputDegraded) {
+		t.Fatalf("comparisons %+v, limitations %v", run.inv.ContractComparisons, run.inv.Limitations)
+	}
+	for _, lim := range lims {
+		if !slices.Contains(run.inv.Limitations, lim) {
+			t.Fatalf("limitations %v, want %s", run.inv.Limitations, lim)
+		}
+	}
+	x, catalog := run.inv.ContractComparisons[0], catalogOf(run.inv.Evidence)
+	if len(x.CodeEvidenceIDs) == 0 || len(x.CodeEvidenceIDs) > record.MaxComparisonCodeEvidence {
+		t.Fatalf("comparison %+v", x)
+	}
+	for i, id := range x.CodeEvidenceIDs {
+		if _, ok := catalog[id]; !ok || slices.Contains(x.CodeEvidenceIDs[:i], id) {
+			t.Fatalf("comparison cites %v", x.CodeEvidenceIDs)
+		}
+	}
+	requireReviewCounted(t, run.report)
+	if d := run.report.Documents; d == nil || len(d.Comparisons) != 1 || d.Comparisons[0].Status != "match" {
+		t.Fatalf("report comparisons %+v", d)
 	}
 }
 
@@ -261,7 +325,7 @@ func TestComparisonSliceAndAPIBodyCodes(t *testing.T) {
 				DocumentEvidenceIDs: in.Documents.Contracts[0].EvidenceIDs, CodeEvidenceIDs: []string{fmt.Sprintf("%s:%d-%d", u.ID, 23, 23)}}
 			return map[string]any{"candidates": []record.CandidateText{billingCandidate("널 처리", fmt.Sprintf("%s:14-17", u.ID))}, "contract_comparisons": []record.ContractComparison{x}}
 		})
-	requireComparisonOmitted(t, run, comparisonIssue{1, "code_evidence_ids", record.CompareCodeOutsideAPI})
+	requireComparisonOmitted(t, run, cmpIssue(1, "code_evidence_ids", record.CompareCodeOutsideAPI))
 	// The whole short file holds the Javadoc: as the only code evidence it
 	// is the document itself.
 	run = runComparisons(t, map[string]string{javaDocSource: javaDocBody}, javaDocSource,
@@ -272,7 +336,7 @@ func TestComparisonSliceAndAPIBodyCodes(t *testing.T) {
 				DocumentEvidenceIDs: in.Documents.Contracts[0].EvidenceIDs, CodeEvidenceIDs: []string{u.ID}}
 			return map[string]any{"candidates": []record.CandidateText{billingCandidate("널 처리", fmt.Sprintf("%s:14-17", u.ID))}, "contract_comparisons": []record.ContractComparison{x}}
 		})
-	requireComparisonOmitted(t, run, comparisonIssue{1, "code_evidence_ids", record.CompareCodeIsDocument})
+	requireComparisonOmitted(t, run, cmpIssue(1, "code_evidence_ids", record.CompareCodeIsDocument))
 }
 
 // inSourceTree is a project whose API is documented in its own source file:
@@ -381,10 +445,11 @@ func TestComparisonTwoRangesOfOneUnit(t *testing.T) {
 	requireReviewCounted(t, run.report)
 }
 
-// Whether a comparison may be left out depends on whether the format repair
-// is spent, not on whether the request carries a repair block: after a
-// reply that is not JSON the repair is still unused; after a repair spent
-// on a candidate a newly invalid comparison is left out.
+// Whether a comparison is resolved depends on whether the format repair is
+// spent, not on whether the request carries a repair block: after a reply
+// that is not JSON the repair is still unused (the comparison is named in a
+// repair first); after a repair spent on a candidate a newly faulty
+// citation is resolved.
 func TestComparisonOmittedOnlyOnceTheRepairIsSpent(t *testing.T) {
 	readme := record.Contract{Statement: "Clamp는 음수 입력에서 0을 반환한다.", AppliesTo: "."}
 	t.Run("not JSON first", func(t *testing.T) {
@@ -399,8 +464,8 @@ func TestComparisonOmittedOnlyOnceTheRepairIsSpent(t *testing.T) {
 				"contract_comparisons": []record.ContractComparison{clampComparison(in, u.ID)}})
 		})
 		calls := run.inv.Calls
-		if len(calls) != 3 || calls[2].Outcome != record.OutcomeAccepted || !slices.Contains(calls[1].OutputErrors, record.CompareCodeRangeMissing) ||
-			len(run.inv.ContractComparisons) != 0 || !slices.Contains(run.inv.Limitations, record.LimContractComparisonOmitted) {
+		if len(calls) != 3 || calls[1].Outcome != "output_rejected" || calls[2].Outcome != record.OutcomeAccepted || !slices.Contains(calls[1].OutputErrors, record.CompareCodeRangeMissing) ||
+			len(run.inv.ContractComparisons) != 1 || !slices.Contains(run.inv.Limitations, limCitationUnspecified) {
 			t.Fatalf("calls %+v comparisons %+v limitations %v", calls, run.inv.ContractComparisons, run.inv.Limitations)
 		}
 	})
@@ -414,20 +479,26 @@ func TestComparisonOmittedOnlyOnceTheRepairIsSpent(t *testing.T) {
 			return map[string]any{"candidates": []record.CandidateText{billingCandidate("음수 처리", u.ID+":105-107")},
 				"contract_comparisons": []record.ContractComparison{clampComparison(in, u.ID)}}
 		})
+		// The repair's comparison cites the long unit without a range: it
+		// stands for the whole unit.
 		calls := run.inv.Calls
 		if len(calls) != 2 || !slices.Equal(calls[0].OutputErrors, []string{errCitationMissing}) || calls[1].Outcome != record.OutcomeAccepted ||
-			len(run.inv.Candidates) != 1 || len(run.inv.ContractComparisons) != 0 || !slices.Contains(run.inv.Limitations, record.LimContractComparisonOmitted) {
+			len(run.inv.Candidates) != 1 || len(run.inv.ContractComparisons) != 1 || slices.Contains(run.inv.Limitations, record.LimContractComparisonOmitted) ||
+			!slices.Contains(run.inv.Limitations, limCitationUnspecified) {
 			t.Fatalf("calls %+v comparisons %+v limitations %v", calls, run.inv.ContractComparisons, run.inv.Limitations)
 		}
 	})
-	t.Run("candidate still invalid", func(t *testing.T) {
+	t.Run("candidate still without a range", func(t *testing.T) {
 		run := runComparisons(t, limitTree(), "README.md", readme, Budget{}, func(in investigateInput) map[string]any {
 			u := unitOf(t, in, limitPath)
 			return map[string]any{"candidates": []record.CandidateText{billingCandidate("음수 처리", u.ID)},
 				"contract_comparisons": []record.ContractComparison{clampComparison(in, u.ID)}}
 		})
-		if s := run.results["review.investigate"]; s.Status != domain.TaskFailed || s.Reason != reasonOutputInvalid {
-			t.Fatalf("a candidate error must still fail the role: %+v", s)
+		// A candidate whose location has no usable range after the repair is
+		// left out; the role and its comparison stay.
+		if s := run.results["review.investigate"]; s.Status != domain.TaskSucceeded || len(run.inv.Candidates) != 0 ||
+			!slices.Contains(run.inv.Limitations, limCandidateOmitted) || len(run.inv.ContractComparisons) != 1 {
+			t.Fatalf("investigate %+v, candidates %d, comparisons %+v, limitations %v", s, len(run.inv.Candidates), run.inv.ContractComparisons, run.inv.Limitations)
 		}
 	})
 }
@@ -472,10 +543,10 @@ func TestComparisonRepairFitsTheSmallestRequest(t *testing.T) {
 	if s := results["review.investigate"]; s.Status != domain.TaskSucceeded {
 		t.Fatalf("investigate %+v", s)
 	}
-	if repaired == nil || len(repaired.ContractComparisons) == 0 || len(sizes) != 2 || slices.Max(sizes) > b.limits().request {
+	if repaired == nil || len(repaired.Items) == 0 || len(sizes) != 2 || slices.Max(sizes) > b.limits().request {
 		t.Fatalf("repair %+v, request sizes %v (limit %d)", repaired, sizes, b.limits().request)
 	}
-	t.Logf("repair block named %d of the rejections; requests %v bytes", len(repaired.ContractComparisons), sizes)
+	t.Logf("repair block named %d of the rejections; requests %v bytes", len(repaired.Items), sizes)
 }
 
 // A comparison's cited range is an investigate excerpt like a strength's:
@@ -585,16 +656,19 @@ func TestContractFollowupReadsARangedPriorComparison(t *testing.T) {
 }
 
 // dryRunUpstream answers role with scripts/fake_model_upstream.py, the
-// placeholder upstream of dry runs.
-func dryRunUpstream(t *testing.T, python, role string, q opencode.Request) opencode.Reply {
+// placeholder upstream of dry runs; rates are its --shape-errors and
+// --integrity-errors (none: 0).
+func dryRunUpstream(t *testing.T, python, role string, q opencode.Request, rates ...float64) opencode.Reply {
 	t.Helper()
 	dir, err := filepath.Abs(filepath.Join("..", "..", "..", "scripts"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	rates = append(rates, 0, 0)
 	cmd := exec.CommandContext(t.Context(), python, "-I", "-B", "-c",
-		"import json, sys\nsys.path.insert(0, sys.argv[1])\nimport fake_model_upstream as f\nprint(json.dumps(f.result_for(sys.argv[2], json.load(sys.stdin.buffer))))",
-		dir, role)
+		"import json, sys\nsys.path.insert(0, sys.argv[1])\nimport fake_model_upstream as f\n"+
+			"print(json.dumps(f.result_for(sys.argv[2], json.load(sys.stdin.buffer), None, float(sys.argv[3]), float(sys.argv[4]))))",
+		dir, role, fmt.Sprint(rates[0]), fmt.Sprint(rates[1]))
 	cmd.Stdin = bytes.NewReader(q.Input)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -609,8 +683,8 @@ func dryRunUpstream(t *testing.T, python, role string, q opencode.Request) openc
 // checks: an in-source document is compared on one body line of the
 // documented declaration, kept as a cited range, on the first call; an
 // even-numbered contract citing a long unit without a range is rejected,
-// repaired with its position and field, then left out with
-// contract_comparison_omitted, and the report shows that contract unchecked.
+// repaired with its position, field and excerpt, then kept standing for the
+// whole unit (citation_range_unspecified), and the report shows it compared.
 func TestDryRunUpstreamComparisons(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("dry runs with scripts/fake_model_upstream.py are a Linux procedure")
@@ -643,14 +717,19 @@ func TestDryRunUpstreamComparisons(t *testing.T) {
 			}
 			requireReviewCounted(t, r)
 			if c.implementation == "" {
-				want := comparisonIssue{Index: 2, Field: "code_evidence_ids", Error: record.CompareCodeRangeMissing}
-				if len(repairs) != 2 || repairs[1] == nil || !slices.Equal(repairs[1].ContractComparisons, []comparisonIssue{want}) ||
-					len(inv.ContractComparisons) != 1 || inv.ContractComparisons[0].ContractIndex != 1 ||
-					!slices.Contains(inv.Limitations, record.LimContractComparisonOmitted) {
+				// The second contract cites the long unit without a range on
+				// both calls: after the repair it stands for the whole unit.
+				want := cmpIssue(2, "code_evidence_ids", record.CompareCodeRangeMissing)
+				if len(repairs) != 2 || repairs[1] == nil || len(repairs[1].Items) != 1 || !hasIssue(repairs[1].Items, want) || repairs[1].Items[0].ID == "" ||
+					len(inv.ContractComparisons) != 2 || slices.Contains(inv.Limitations, record.LimContractComparisonOmitted) ||
+					!slices.Contains(inv.Limitations, limCitationUnspecified) || !slices.Contains(inv.Limitations, record.LimOutputDegraded) {
 					t.Fatalf("repairs %+v, comparisons %+v, limitations %v", repairs, inv.ContractComparisons, inv.Limitations)
 				}
-				if d := r.Documents; d == nil || len(d.Comparisons) != 2 || d.Comparisons[0].Status != "match" || d.Comparisons[1].Status != "unknown" ||
-					!slices.ContainsFunc(r.Gaps, func(g report.Gap) bool { return g.Code == record.LimContractComparisonOmitted }) {
+				if unit := catalogOf(inv.Evidence)[inv.ContractComparisons[1].CodeEvidenceIDs[0]]; unit.Start != 1 || unit.End-unit.Start+1 <= record.WholeCitationLines {
+					t.Fatalf("resolved comparison cites %+v", unit)
+				}
+				if d := r.Documents; d == nil || len(d.Comparisons) != 2 || d.Comparisons[0].Status != "match" || d.Comparisons[1].Status != "match" ||
+					slices.ContainsFunc(r.Gaps, func(g report.Gap) bool { return g.Code == record.LimContractComparisonOmitted }) {
 					t.Fatalf("report comparisons %+v, gaps %+v", r.Documents, r.Gaps)
 				}
 				return

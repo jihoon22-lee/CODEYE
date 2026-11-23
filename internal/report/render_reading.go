@@ -406,7 +406,8 @@ func (v secView) reviewFindingParts(findings []Finding) []secPart {
 
 func hasCodeReviewEvidence(section *CodeReviewSection) bool {
 	return len(section.FindingIDs)+len(section.Strengths) > 0 || slices.ContainsFunc(section.Roles, func(role AIReviewTask) bool {
-		return role.Result == "accepted" && (role.Key == "review.investigate" || role.Key == "review.verify")
+		return (role.Result == "accepted" && role.Key == "review.investigate") ||
+			((role.Result == "accepted" || role.Result == ResultAcceptedIncomplete) && role.Key == "review.verify")
 	}) || section.Ledger != nil && slices.ContainsFunc(section.Ledger.Modules, func(module LedgerModule) bool {
 		return module.FilesWithCompletedReview > 0
 	})

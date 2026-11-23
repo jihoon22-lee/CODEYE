@@ -46,8 +46,8 @@ func TestCitationNarrowsToSnapshotRange(t *testing.T) {
 		whole.ID:              errCitationMissing, // 120 lines, no range
 		whole.ID + ":0-3":     errCitationInvalid, // malformed
 		whole.ID + ":9-3":     errCitationInvalid, // reversed
-		whole.ID + ":100-130": errCitationInvalid, // past the excerpt
-		short.ID + ":11":      errCitationInvalid, // past the excerpt
+		whole.ID + ":100-130": errCitationOutside, // past the excerpt
+		short.ID + ":11":      errCitationOutside, // past the excerpt
 		whole.ID + ":1-81":    errCitationInvalid, // longer than one citation
 	} {
 		if _, _, errs := newCiter(snapshot, []record.Excerpt{whole, short}).resolve([]string{raw}, citeNarrow); !slices.Equal(errs, []string{code}) {

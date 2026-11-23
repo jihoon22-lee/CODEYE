@@ -269,8 +269,10 @@ func nonNilCandidates(l []record.Candidate) []record.Candidate {
 
 // composeReviews joins the review stage records: lineage, call
 // provenance (with the pack identity), exposed files and findings. Findings
-// carry verifier verdicts only from a succeeded verify task with an accepted
-// record; otherwise the accepted candidates stay unreviewed.
+// carry verifier verdicts from a verify task with an accepted record that
+// succeeded or ended incomplete (verifyIncomplete: the candidates it did not
+// verify are unreviewed with their reason); otherwise the accepted
+// candidates stay unreviewed.
 func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) {
 	obs := map[string]Observation{}
 	for _, o := range r.Observations {
@@ -332,7 +334,10 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 	var candidates []record.Candidate
 	verdicts := map[string]record.Verification{}
 	evidence := map[string]record.Excerpt{}
-	if v := states["review.verify"]; reviewAccepted(v) {
+	if v := states["review.verify"]; verdictsUsable("review.verify", v) {
+		if verifyIncomplete("review.verify", v) {
+			limits.add(LimReviewVerificationIncomplete)
+		}
 		rec := v.reviewResult.Record
 		candidates = rec.Candidates
 		for _, x := range rec.Verifications {
@@ -359,7 +364,10 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 		verdicts, evidence := map[string]record.Verification{}, map[string]record.Excerpt{}
 		var from *record.Record
 		switch {
-		case reviewAccepted(ver):
+		case verdictsUsable("review.verify."+key, ver):
+			if verifyIncomplete("review.verify."+key, ver) {
+				limits.add(LimReviewVerificationIncomplete)
+			}
 			from = ver.reviewResult.Record
 			for _, x := range from.Verifications {
 				verdicts[x.CandidateID] = x

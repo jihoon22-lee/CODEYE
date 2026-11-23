@@ -23,7 +23,19 @@ of the code excerpt holding it; another contract on the first code excerpt in
 its scope, cited as candidates are. An even-numbered contract with a code
 excerpt longer than the citation limit in its scope cites that excerpt without
 a range, which the product rejects; the same answer after the format repair
-lets the product drop that comparison alone (`contract_comparison_omitted`).
+stands for the whole excerpt (`citation_range_unspecified`).
+
+`--shape-errors RATE` (0 to 1, default 0: replies unchanged) makes a share of
+the items carry a fault of form on every call, the format repair included, so
+the product's repair-then-resolve path runs: a verdict cites the long excerpt
+holding its candidate's range without a range (`citation_range_missing`), a
+candidate, document contract or environment note repeats an ID, an
+interpretation limit repeats its observation ID. `--integrity-errors RATE`
+makes a share of the verdicts cite an evidence ID the request did not hold
+(`evidence_id_unknown`), which the product keeps rejecting: the candidate is
+quarantined and the verify task ends incomplete. The choice of an item depends
+on its role, the snapshot digest and the item (candidate ID or position), not
+on the repair block, so the repair of an item gets the same fault.
 
 Modes: `normal` (small usage), `expensive` (usage at the relay's bounds, to
 exhaust a small ledger cap quickly), `fail` (HTTP 500, charged in full by the relay),
@@ -44,6 +56,7 @@ Stdlib only.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import http.server
 import json
 import os
@@ -103,6 +116,39 @@ def _candidates(node, out):
     elif isinstance(node, list):
         for value in node:
             _candidates(value, out)
+
+
+def _pick(rate: float, role: str, review_input, item) -> bool:
+    """Whether the item gets an injected fault: a deterministic share rate of
+    the items, keyed by role, snapshot digest and item."""
+    if rate <= 0:
+        return False
+    snapshot = ""
+    if isinstance(review_input, dict):
+        scope = review_input.get("scope")
+        snapshot = str((scope if isinstance(scope, dict) else review_input).get("snapshot_manifest_digest", ""))
+    digest = hashlib.sha256(f"{role}\x00{snapshot}\x00{item}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") < rate * 2**64
+
+
+def _holder(review_input, ident: str) -> str | None:
+    """The id of a code excerpt longer than CITED_LINES that the request sends
+    and that holds the excerpt ident's lines: citing it alone is the fault
+    citation_range_missing."""
+    excerpts = []
+    scope = review_input.get("scope") if isinstance(review_input, dict) else None
+    if isinstance(scope, dict):
+        excerpts = [e for e in scope.get("excerpts") or [] if isinstance(e, dict)]
+    inner = next((e for e in excerpts if e.get("id") == ident), None)
+    if inner is None:
+        return None
+    for e in excerpts:
+        if (e.get("id") != ident and e.get("path") == inner.get("path") and e.get("origin") != "cited"
+                and isinstance(e.get("start_line"), int) and isinstance(e.get("end_line"), int)
+                and e["end_line"] - e["start_line"] + 1 > CITED_LINES
+                and e["start_line"] <= inner.get("start_line", 0) and inner.get("end_line", 0) <= e["end_line"]):
+            return e["id"]
+    return None
 
 
 def _under(path: str, scope: str) -> bool:
@@ -170,7 +216,7 @@ def _comparisons(data: dict) -> list[dict]:
     return out
 
 
-def result_for(role: str, review_input, echo: str | None = None) -> dict:
+def result_for(role: str, review_input, echo: str | None = None, shape: float = 0.0, integrity: float = 0.0) -> dict:
     evidence: dict[str, str] = {}
     cited: dict[str, str] = {}
     _evidence(review_input, evidence, cited)
@@ -184,6 +230,8 @@ def result_for(role: str, review_input, echo: str | None = None) -> dict:
         return {"sum": a + b} if isinstance(a, int) and isinstance(b, int) else {}
     if role == "investigate":
         data = review_input if isinstance(review_input, dict) else {}
+        if code and _pick(shape, role, review_input, 0):
+            candidate["evidence_ids"] = code[:1] * 2  # evidence_id_duplicate
         out = {"candidates": [candidate] if code else []}
         if isinstance(data.get("scope"), dict) and data["scope"].get("whole_run") is True:
             comparisons = _comparisons(data)
@@ -195,9 +243,15 @@ def result_for(role: str, review_input, echo: str | None = None) -> dict:
         _candidates(review_input, found)
         out = []
         for ident, refs in found:
+            cite = refs[:1]
+            if cite and _pick(integrity, role + ".integrity", review_input, ident):
+                cite = ["ev_" + "0" * 24]  # evidence_id_unknown
+            elif cite and _pick(shape, role, review_input, ident):
+                holder = _holder(review_input, cite[0])
+                cite = [holder] if holder else cite * 2  # citation_range_missing, else evidence_id_duplicate
             out.append({"candidate_id": ident, "verdict": "supported", "category": "correctness", "severity": "low",
                         "severity_reason": TEXT, "impact": TEXT, "valid_conditions": [TEXT], "invalid_conditions": [],
-                        "supporting_evidence_ids": refs[:1], "counterevidence_ids": [], "unresolved_assumptions": [],
+                        "supporting_evidence_ids": cite, "counterevidence_ids": [], "unresolved_assumptions": [],
                         "next_verification": [TEXT]})
         return {"verifications": out}
     if role == "documents":
@@ -206,6 +260,9 @@ def result_for(role: str, review_input, echo: str | None = None) -> dict:
                 and isinstance(d.get("evidence_id"), str) and isinstance(d.get("applies_to"), str)]
         docs.sort(key=lambda d: not (d.get("public_api") or d.get("directive_path")))
         contracts = [{"statement": TEXT, "applies_to": d["applies_to"], "evidence_ids": [d["evidence_id"]]} for d in docs[:3]]
+        for index, contract in enumerate(contracts):
+            if _pick(shape, role, review_input, index):
+                contract["evidence_ids"] = contract["evidence_ids"] * 2  # evidence_id_duplicate
         return {"contracts": contracts, "conflicts": [], "questions": [], "instruction_notes": []}
     if role == "environment":  # one note per gap module, citing that module's requirements
         data = review_input if isinstance(review_input, dict) else {}
@@ -213,14 +270,16 @@ def result_for(role: str, review_input, echo: str | None = None) -> dict:
         notes = []
         for module in data.get("gap_modules") or []:
             own = [r for r in reqs if r.get("module") == module]
-            notes.append({"module": module, "requirement_ids": [r.get("id") for r in own if r.get("id")],
+            repeat = 2 if _pick(shape, role, review_input, module) else 1  # requirement_id_duplicate
+            notes.append({"module": module, "requirement_ids": [r.get("id") for r in own if r.get("id")] * repeat,
                           "evidence_ids": sorted({r.get("evidence_id") for r in own if r.get("evidence_id")}),
                           "affected_checks": TEXT, "still_checkable": TEXT, "needed_observation": TEXT})
         return {"notes": notes}
     if role == "interpret":  # at least one item; a limit for the first observation
         data = review_input if isinstance(review_input, dict) else {}
         ids = [o.get("id") for o in data.get("observations") or [] if isinstance(o, dict) and o.get("id")]
-        return {"hypotheses": [], "limits": [{"observation_ids": ids[:1], "statement": TEXT}] if ids else []}
+        repeat = 2 if _pick(shape, role, review_input, 0) else 1  # observation_id_duplicate
+        return {"hypotheses": [], "limits": [{"observation_ids": ids[:1] * repeat, "statement": TEXT}] if ids else []}
     return {}
 
 
@@ -235,7 +294,7 @@ def content_text(content) -> str:
     return ""
 
 
-def reply_text(payload: dict, echo: str | None = None) -> tuple[str, str]:
+def reply_text(payload: dict, echo: str | None = None, shape: float = 0.0, integrity: float = 0.0) -> tuple[str, str]:
     """Return (role, assistant text) for a Responses payload."""
     texts = [content_text(m.get("content", "")) for m in payload.get("input", [])
              if isinstance(m, dict) and m.get("role") == "user"]
@@ -252,13 +311,16 @@ def reply_text(payload: dict, echo: str | None = None) -> tuple[str, str]:
     head = prompt[:found.start()] if found else prompt  # the attachment precedes the prompt
     proofs = PROOF.findall(head)
     proof = proofs[-1] if proofs else ""
-    return role, json.dumps({"workspace_proof": proof, "result": result_for(role, review_input, echo)},
+    return role, json.dumps({"workspace_proof": proof, "result": result_for(role, review_input, echo, shape, integrity)},
                             ensure_ascii=False)
 
 
 class FakeUpstream:
-    def __init__(self, mode: str, dump: Path | None, echo: str | None = None, delay: float = 0.0):
+    def __init__(self, mode: str, dump: Path | None, echo: str | None = None, delay: float = 0.0,
+                 shape: float = 0.0, integrity: float = 0.0):
         self.mode = mode
+        self.shape = shape
+        self.integrity = integrity
         self.delay = delay
         self.dump = dump
         self.echo = echo
@@ -277,7 +339,7 @@ class FakeUpstream:
             return 500, {"error": {"message": "fake failure", "type": "server_error", "code": "fake_failure"}}
         if self.mode == "unauthorized":
             return 401, {"error": {"message": "fake: invalid api key", "type": "invalid_request_error", "code": "invalid_api_key"}}
-        role, text = reply_text(payload, self.echo)
+        role, text = reply_text(payload, self.echo, self.shape, self.integrity)
         messages = payload.get("input", [])
         input_bytes = sum(len(content_text(m.get("content", "")).encode()) for m in messages if isinstance(m, dict))
         cap = int(payload.get("max_output_tokens") or 1)
@@ -359,6 +421,10 @@ def main(argv=None) -> int:
     parser.add_argument("--dump", type=Path, help="write every received payload here (dry-run analysis only)")
     parser.add_argument("--echo-text", help="append this operator text to investigate candidate titles")
     parser.add_argument("--delay-seconds", type=float, default=0.0, help="answer every request this many seconds late")
+    parser.add_argument("--shape-errors", type=float, default=0.0, metavar="RATE",
+                        help="share (0-1) of items answered with a fault of form on every call")
+    parser.add_argument("--integrity-errors", type=float, default=0.0, metavar="RATE",
+                        help="share (0-1) of verdicts citing an evidence id the request did not hold")
     parser.add_argument("--tls-cert", type=Path, help="serve HTTPS with this certificate chain (PEM)")
     parser.add_argument("--tls-key", type=Path, help="the private key of --tls-cert (PEM)")
     args = parser.parse_args(argv)
@@ -373,7 +439,10 @@ def main(argv=None) -> int:
     if not 0 <= args.delay_seconds <= 3600:
         print("--delay-seconds is between 0 and 3600", file=sys.stderr)
         return 2
-    fake = FakeUpstream(args.mode, args.dump, args.echo_text, args.delay_seconds)
+    if not (0 <= args.shape_errors <= 1 and 0 <= args.integrity_errors <= 1):
+        print("--shape-errors and --integrity-errors are between 0 and 1", file=sys.stderr)
+        return 2
+    fake = FakeUpstream(args.mode, args.dump, args.echo_text, args.delay_seconds, args.shape_errors, args.integrity_errors)
     server = make_server(fake)
     if args.tls_cert is not None:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

@@ -29,11 +29,7 @@ func (s *roleStage) comparisonProblems(x record.ContractComparison, citeErrs []s
 		return out
 	}
 	for _, code := range citeErrs {
-		if code == errCitationMissing {
-			add("code_evidence_ids", record.CompareCodeRangeMissing)
-		} else {
-			add("code_evidence_ids", record.CompareCodeRangeInvalid)
-		}
+		add("code_evidence_ids", comparisonCitationCode(code))
 	}
 	if x.ContractIndex < 1 || x.ContractIndex > len(contracts) {
 		add("contract_index", record.CompareIndexInvalid)
@@ -59,25 +55,4 @@ func (s *roleStage) comparisonProblems(x record.ContractComparison, citeErrs []s
 		add("code_evidence_ids", record.CompareCodeOutsideAPI)
 	}
 	return out
-}
-
-// fitComparisonRepair adds the rejected comparisons to a repair request, as
-// many as the request budget leaves room for.
-func (s *roleStage) fitComparisonRepair(in investigateInput, repair *outputRepair, issues []comparisonIssue, instructions string) ([]byte, error) {
-	in.Repair = repair
-	if repair == nil || len(issues) == 0 {
-		return marshal(in)
-	}
-	for n := len(issues); n > 0; n-- {
-		in.Repair = &outputRepair{OutputErrors: repair.OutputErrors, ContractComparisons: issues[:n]}
-		body, err := marshal(in)
-		if err != nil {
-			return nil, err
-		}
-		if _, ok := s.fits(instructions, body, false); ok {
-			return body, nil
-		}
-	}
-	in.Repair = repair
-	return marshal(in)
 }

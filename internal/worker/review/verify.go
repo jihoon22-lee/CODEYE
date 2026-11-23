@@ -1,6 +1,7 @@
 package review
 
 import (
+	"encoding/json"
 	"errors"
 	"slices"
 
@@ -17,11 +18,18 @@ import (
 // investigate and interpret. A non-JSON reply or workspace proof mismatch can
 // be retried once each within record.RoleMaxCalls. An entry citing observation
 // IDs among its evidence is accepted without them when the remaining evidence
-// meets the verdict's rule (evidence_id_dropped on the call). A later call
-// that fails keeps the verdicts already accepted (verification_call_failed).
-const verifyContract = `For this role use exactly {"verifications":[{"candidate_id":"<id of input.candidates>","verdict":"supported|refuted|inconclusive","category":"correctness|error_handling|concurrency|resource_lifecycle|data_integrity|api_contract|security|maintainability|performance|test_gap","severity":"high|medium|low|info","severity_reason":"...","impact":"...","valid_conditions":["..."],"invalid_conditions":["..."],"supporting_evidence_ids":["ev_..."],"counterevidence_ids":["ev_..."],"unresolved_assumptions":["..."],"next_verification":["..."]}]}. Return one verdict per input candidate; each evidence list holds at most 8 distinct IDs and each condition or assumption list at most 4 items. Check callers, ownership, error paths, tests and each contract's scope. Cite only scope.excerpts IDs. Supported needs supporting code/test; refuted needs counterevidence; otherwise use inconclusive. Use observed_test_cases only for the cited assertion. Never claim reproduction. Give 1-3 next_verification items that are reading or review steps, not commands.`
+// meets the verdict's rule (evidence_id_dropped on the call). Once the repair
+// is spent, cannot be sent or fails, an entry whose faults are all of form is
+// resolved and accepted (verifyEntry, docs/REVIEW.md#출력-오류-분류); an
+// integrity fault keeps its candidate quarantined. A later call that fails
+// keeps the verdicts already accepted (verification_call_failed when a
+// candidate stays unreviewed).
+const verifyContract = `For this role use exactly {"verifications":[{"candidate_id":"<id of input.candidates>","verdict":"supported|refuted|inconclusive","category":"correctness|error_handling|concurrency|resource_lifecycle|data_integrity|api_contract|security|maintainability|performance|test_gap","severity":"high|medium|low|info","severity_reason":"...","impact":"...","valid_conditions":["..."],"invalid_conditions":["..."],"supporting_evidence_ids":["ev_...:120-134"],"counterevidence_ids":["ev_...:88-96"],"unresolved_assumptions":["..."],"next_verification":["..."]}]}. Return one verdict per input candidate; each evidence list holds at most 8 distinct IDs and each condition or assumption list at most 4 items. Check callers, ownership, error paths, tests and each contract's scope. Cite only scope.excerpts IDs; for a long excerpt cite the candidate's own range or the lines that show the point, at most 80 lines, never its ID alone. Supported needs supporting code/test; refuted needs counterevidence; otherwise use inconclusive. Use observed_test_cases only for the cited assertion. Never claim reproduction. Give 1-3 next_verification items that are reading or review steps, not commands.`
 
-const verifyRepairRules = "\nFormat repair: your previous output for the candidates listed in input.repair was rejected with the listed platform error codes. Return a verifications entry only for those candidates, citing only IDs from scope.excerpts; accepted_evidence_ids lists every valid ID."
+const verifyRepairRules = "\nFormat repair: your previous output for the candidates in input.repair.candidates was rejected with the listed platform error codes; " +
+	"evidence names each rejected citation by its field and the excerpt it cited. Return a verifications entry only for those candidates. " +
+	"Cite an ID of input.repair.accepted_evidence_ids alone or with a range; cite an excerpt of input.repair.range_required_evidence only as " +
+	"\"<evidence id>:<start>-<end>\" inside its start_line..end_line and at most 80 lines, for example the candidate's own cited range."
 
 type observedTestCase struct {
 	EvidenceID string `json:"evidence_id"`
@@ -352,10 +360,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 	s.setEvidence(recorded)
 	cite := newCiter(s.j.Snapshot.Digest, sent)
 	cite.known = upstreamEvidence
-	ids := make([]string, 0, len(sent))
-	for _, e := range sent {
-		ids = append(ids, e.ID)
-	}
+	ids, rangeIDs := citableIDs(sent)
 	budgetDropped := candidates[verified:]
 	candidatesSent := candidates[:verified]
 	if len(budgetDropped) > 0 {
@@ -367,11 +372,26 @@ func (s *roleStage) verify() analysis.TaskResult {
 	var repair *repairInput
 	repaired, retried, proofRetried := false, false, false
 	// Observation IDs are in the request but are not evidence; an entry that
-	// cites one beside valid evidence may be trimmed (parseVerificationItems).
+	// cites one beside valid evidence may be trimmed (verifyEntry).
 	observationIDs := map[string]bool{}
 	for _, o := range in.Observations {
 		observationIDs[o.ID] = true
 	}
+	// hints are each candidate's own citations: a verdict citing a long
+	// excerpt without a usable range stands for them after the repair.
+	hints := map[string][]string{}
+	for _, c := range candidatesSent {
+		hints[c.ID] = c.Evidence
+	}
+	// held is the latest entry of each pending candidate whose faults are all
+	// of form, with the index of its call: when the repair cannot be sent or
+	// does not answer for it, the platform resolves that entry.
+	type heldEntry struct {
+		raw  []byte
+		call int
+	}
+	held := map[string]heldEntry{}
+	callFailed := false
 	for attempt := 1; attempt <= record.RoleMaxCalls && len(pending) > 0; attempt++ {
 		if s.ctx.Err() != nil {
 			return *s.fail(result(domain.TaskCancelled, "cancelled"))
@@ -388,11 +408,22 @@ func (s *roleStage) verify() analysis.TaskResult {
 		}
 		q := opencode.Request{Role: s.role, Scratch: s.j.Scratch, SnapshotDigest: s.j.Snapshot.Digest, Instructions: text, Input: query, ProtectedRoots: []string{s.j.Snapshot.SnapshotDir}}
 		size := len(opencode.Prompt(q))
+		// A repair that does not fit the request budget or the call budget
+		// is not sent; the verdicts accepted so far and the held entries
+		// stand (output_repair_not_sent).
 		if size > s.limit().request {
-			return *s.fail(result(domain.TaskFailed, reasonInputTooLarge))
+			if len(accepted)+len(held) == 0 {
+				return *s.fail(result(domain.TaskFailed, reasonInputTooLarge))
+			}
+			s.rec.Limitations = addLim(s.rec.Limitations, limRepairNotSent)
+			break
 		}
 		if r := s.reserveCall(); r != nil {
-			return *s.fail(*r)
+			if len(accepted)+len(held) == 0 {
+				return *s.fail(*r)
+			}
+			s.rec.Limitations = addLim(s.rec.Limitations, limRepairNotSent)
+			break
 		}
 		reply := s.h.Caller.Review(s.ctx, s.runner, q)
 		s.rec.Limitations = noteVersion(s.rec.Limitations, reply)
@@ -414,12 +445,13 @@ func (s *roleStage) verify() analysis.TaskResult {
 				}
 			}
 			// A later call that fails (timeout, refusal) keeps the verdicts
-			// already accepted; the rest are quarantined and the task ends
-			// incomplete. Cancellation still fails the whole stage.
-			if len(accepted) == 0 || s.ctx.Err() != nil || call.Outcome == "cancelled" {
+			// already accepted and the held entries; the rest are quarantined
+			// and the task ends incomplete. Cancellation still fails the
+			// whole stage.
+			if len(accepted)+len(held) == 0 || s.ctx.Err() != nil || call.Outcome == "cancelled" {
 				return *s.fail(failure(reply))
 			}
-			s.rec.Limitations = addLim(s.rec.Limitations, "verification_call_failed")
+			callFailed = true
 			break
 		}
 		want := map[string]bool{}
@@ -427,23 +459,31 @@ func (s *roleStage) verify() analysis.TaskResult {
 			want[p.ID] = true
 		}
 		notJSON := reply.Reason != ""
-		got, itemErrs, outputErrs, dropped := map[string]record.Verification{}, map[string][]string{}, []string{"output_not_json"}, []string(nil)
+		items, raws, outputErrs := map[string]verifyItem{}, map[string]json.RawMessage{}, []string{"output_not_json"}
 		if !notJSON {
-			got, itemErrs, outputErrs, dropped = parseVerificationItems(reply.Output, want, cite, observationIDs, s.limit().listText)
+			// The repair's answer is the last chance of its candidates.
+			items, raws, outputErrs = parseVerificationItems(reply.Output, want, cite, observationIDs, s.limit().listText, repaired, hints)
 		}
-		for id, v := range got {
-			if verificationClaimsExecution(v) {
-				delete(got, id)
-				itemErrs[id] = addLim(itemErrs[id], "execution_claim")
-			}
-		}
+		got, itemErrs := map[string]record.Verification{}, map[string][]string{}
+		evidence := map[string][]evidenceIssue{}
 		all := addLim(nil, outputErrs...)
-		for _, errs := range itemErrs {
-			all = addLim(all, errs...)
-		}
-		for _, id := range dropped {
-			if _, ok := got[id]; ok {
-				all = addLim(all, "evidence_id_dropped")
+		for id, it := range items {
+			if it.ok && verificationClaimsExecution(it.v) {
+				it = verifyItem{errs: []string{"execution_claim"}}
+			}
+			all = addLim(all, it.errs...)
+			if it.ok {
+				got[id] = it.v
+				if it.dropped {
+					all = addLim(all, "evidence_id_dropped")
+				}
+				continue
+			}
+			itemErrs[id], evidence[id] = it.errs, it.evidence
+			if it.resolvable {
+				held[id] = heldEntry{raws[id], len(s.rec.Calls)}
+			} else {
+				delete(held, id)
 			}
 		}
 		call.Outcome, call.OutputErrors = callRejected, nonNil(all)
@@ -454,6 +494,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 		s.noteExecutionClaim(call)
 		for id, v := range got {
 			accepted[id] = v
+			delete(held, id)
 		}
 		// A reply that is not JSON says nothing about the items: it gets one
 		// retry of the same request (with the earlier item errors, if any)
@@ -476,29 +517,56 @@ func (s *roleStage) verify() analysis.TaskResult {
 			}
 			repaired = true
 		}
-		prior := map[string][]string{}
+		prior := map[string]repairItem{}
 		if notJSON && repair != nil {
 			for _, item := range repair.Candidates {
-				prior[item.ID] = item.Errors
+				prior[item.ID] = item
 			}
 		}
 		var next []record.Candidate
-		repair = &repairInput{OutputErrors: nonNil(outputErrs), Candidates: []repairItem{}, AcceptedIDs: ids}
+		repair = &repairInput{OutputErrors: nonNil(outputErrs), Candidates: []repairItem{}, AcceptedIDs: ids, RangeRequired: rangeIDs}
 		for _, p := range pending {
 			if _, ok := accepted[p.ID]; ok {
 				continue
 			}
 			next = append(next, p)
-			errs := itemErrs[p.ID]
-			if len(errs) == 0 {
-				errs = prior[p.ID]
+			item := repairItem{ID: p.ID, Errors: itemErrs[p.ID], Evidence: evidence[p.ID]}
+			if len(item.Errors) == 0 {
+				item = prior[p.ID]
+				item.ID = p.ID
 			}
-			if len(errs) == 0 {
-				errs = []string{"verification_missing"}
+			if len(item.Errors) == 0 {
+				item.Errors = []string{"verification_missing"}
 			}
-			repair.Candidates = append(repair.Candidates, repairItem{ID: p.ID, Errors: errs})
+			repair.Candidates = append(repair.Candidates, item)
 		}
 		pending = next
+	}
+	// The held entries of candidates still pending are resolved now that no
+	// repair answers for them (verifyEntry with final); the call each came
+	// from is then accepted.
+	degraded := false
+	for _, p := range pending {
+		h, ok := held[p.ID]
+		if !ok {
+			continue
+		}
+		it := verifyEntry(h.raw, cite, observationIDs, s.limit().listText, true, hints[p.ID])
+		if !it.ok || verificationClaimsExecution(it.v) {
+			continue
+		}
+		accepted[p.ID], degraded = it.v, true
+		c := &s.rec.Calls[h.call]
+		c.Outcome = callAccepted
+		if it.dropped {
+			c.OutputErrors = addLim(c.OutputErrors, "evidence_id_dropped")
+		}
+	}
+	if degraded {
+		pending = slices.DeleteFunc(pending, func(p record.Candidate) bool { _, ok := accepted[p.ID]; return ok })
+	}
+	if callFailed && len(pending) > 0 {
+		s.rec.Limitations = addLim(s.rec.Limitations, "verification_call_failed")
 	}
 	if len(accepted) == 0 {
 		return *s.fail(result(domain.TaskFailed, reasonOutputInvalid))
@@ -522,6 +590,11 @@ func (s *roleStage) verify() analysis.TaskResult {
 		if slices.Contains(v.Limitations, record.LimReproductionRejected) {
 			s.rec.Limitations = addLim(s.rec.Limitations, record.LimReproductionRejected)
 		}
+		for _, lim := range v.Limitations {
+			if slices.Contains(verdictResolutions, lim) {
+				s.rec.Limitations = addLim(s.rec.Limitations, lim, record.LimOutputDegraded)
+			}
+		}
 		s.rec.Verifications[i] = v
 	}
 	var priors []record.Record
@@ -539,9 +612,9 @@ func (s *roleStage) verify() analysis.TaskResult {
 	switch {
 	case res.Status != domain.TaskSucceeded:
 	case len(pending) > 0:
-		res.Status, res.Reason = domain.TaskFailed, "review_output_incomplete"
+		res.Status, res.Reason = domain.TaskFailed, record.ReasonOutputIncomplete
 	case len(budgetDropped) > 0:
-		res.Status, res.Reason = domain.TaskFailed, "review_input_incomplete"
+		res.Status, res.Reason = domain.TaskFailed, record.ReasonInputIncomplete
 	}
 	return res
 }

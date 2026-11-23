@@ -37,6 +37,23 @@ const (
 	LimReproductionRejected = "reproduction_claim_rejected"
 	LimQuarantined          = "verification_quarantined"
 	LimNotCompleted         = "verification_not_completed"
+
+	// LimOutputDegraded marks a record whose accepted output had faults of
+	// form only, resolved by the platform once no further format repair could
+	// arrive (docs/REVIEW.md#출력-오류-분류). Its accepted call keeps those
+	// codes in output_errors, and it may be followed by the calls that
+	// failed to bring a better output.
+	LimOutputDegraded = "review_output_degraded"
+)
+
+// Task reasons of a verify task whose accepted record leaves candidates
+// unreviewed: the model gave no acceptable verdict for some after the repair
+// (ReasonOutputIncomplete), or the request budget could not carry them
+// (ReasonInputIncomplete). The task fails; the report still publishes the
+// accepted verdicts (docs/DECISIONS.md A59).
+const (
+	ReasonOutputIncomplete = "review_output_incomplete"
+	ReasonInputIncomplete  = "review_input_incomplete"
 )
 
 type Excerpt struct {

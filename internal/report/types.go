@@ -22,7 +22,7 @@ const (
 	BuilderID     = "codeye-report"
 	// Stored revisions keep their original builder and schema. Bump this
 	// version when the same accepted inputs would produce a different report.
-	BuilderVersion             = "20"
+	BuilderVersion             = "21"
 	TestCaseResultsSince       = 19
 	AnalysisEvidenceSince      = 17
 	GoTestFailureEvidenceSince = 18

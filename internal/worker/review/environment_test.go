@@ -10,27 +10,29 @@ import (
 
 // The environment role only annotates platform verdicts of the gap modules
 // it was given: a note may not cite a requirement it was not given (another
-// module's), repeat one, cite evidence it was not given or carry a verdict
-// field (strict decoding). Each
-// attempt's codes are recorded, the record keeps no rejected note and the
-// downstream role learns only that the stage failed.
+// module's), cite evidence it was not given or carry a verdict field (strict
+// decoding). Each attempt's codes are recorded, the record keeps no rejected
+// note and the downstream role learns only that the stage failed. A note
+// that repeats a requirement (a fault of form) is kept after the repair
+// with the repetition removed (citation_list_trimmed).
 func TestReviewEnvironmentOutputRules(t *testing.T) {
 	cases := map[string]struct {
 		note func(own envReqInput) map[string]any
 		code string
+		kept bool
 	}{
 		"duplicate requirement": {func(r envReqInput) map[string]any {
 			return map[string]any{"requirement_ids": []string{r.ID, r.ID}, "evidence_ids": []string{r.EvidenceID}}
-		}, "requirement_id_duplicate"},
+		}, "requirement_id_duplicate", true},
 		"requirement of a module without a gap": {func(r envReqInput) map[string]any {
 			return map[string]any{"requirement_ids": []string{r.ID, "go_directive@svc/a/go.mod"}, "evidence_ids": []string{r.EvidenceID}}
-		}, "requirement_id_unknown"},
+		}, "requirement_id_unknown", false},
 		"fabricated evidence": {func(r envReqInput) map[string]any {
 			return map[string]any{"requirement_ids": []string{r.ID}, "evidence_ids": []string{r.EvidenceID, "ev_000000000000000000000000"}}
-		}, "evidence_id_unknown"},
+		}, "evidence_id_unknown", false},
 		"verdict override": {func(r envReqInput) map[string]any {
 			return map[string]any{"requirement_ids": []string{r.ID}, "evidence_ids": []string{r.EvidenceID}, "status": "satisfied"}
-		}, ""},
+		}, "", false},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -55,6 +57,14 @@ func TestReviewEnvironmentOutputRules(t *testing.T) {
 			f := &scriptedCaller{script: script}
 			_, res := runRole(t, j, vetStub{}, f, "1.27.4")
 			env := readRecord(t, j, "environment")
+			if c.kept {
+				if res["review.environment"].Status != domain.TaskSucceeded || len(env.Calls) != 2 || env.Calls[1].Outcome != "accepted" ||
+					!slices.Contains(env.Calls[0].OutputErrors, c.code) || len(env.EnvironmentNotes) != 1 || len(env.EnvironmentNotes[0].RequirementIDs) != 1 ||
+					!slices.Contains(env.Limitations, limCitationListTrimmed) || !slices.Contains(env.Limitations, "review_output_degraded") {
+					t.Fatalf("%+v %+v", res["review.environment"], env)
+				}
+				return
+			}
 			if res["review.environment"].Status != domain.TaskFailed || env.Accepted() || len(env.EnvironmentNotes) != 0 || len(env.Calls) != 2 {
 				t.Fatalf("%+v %+v", res["review.environment"], env)
 			}
