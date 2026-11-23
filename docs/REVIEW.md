@@ -158,8 +158,8 @@
 코드·테스트 발췌의 기본 단위는 파일 전체다([`units.go`](../internal/worker/review/units.go), [`corpus_units.go`](../internal/worker/review/corpus_units.go)). 모델은 한 모듈의 파일과 선언을 함께 읽고 파일 사이의 호출을 따라간다.
 
 - 단위 크기는 줄 번호를 붙인 원문의 JSON 바이트로 잰다. 상한은 [요청 크기](#요청-크기)에서 정한다(기본 42,790바이트, 최소 예산 2,400바이트).
-- 한 단위에 들어가는 파일은 통째로 보낸다. 더 큰 파일은 최상위 선언의 시작(바로 위 주석·데코레이터·attribute 포함)에서 연속한 단위로 나누고, 단위마다 선언을 들어가는 만큼 담는다. Go는 `go/parser`로 경계를 찾고 파싱하지 못하면 중괄호 판별로 돌아간다. C/C++·Java·Kotlin·Scala·C#·Rust·Swift·JavaScript·TypeScript는 문자열·문자·주석을 건너뛰는 중괄호 깊이, Python은 들여쓰기 없는 문장과 그 위의 주석·데코레이터로 판별한다. 한 선언이 단위보다 크면 그 안의 멤버 경계에서 자르고, 경계가 없으면 줄에서 자른다. 외부 파서·cgo는 쓰지 않는다. 판별기는 구문 분석기가 아니므로 비정형 코드에서는 경계가 덜 정확할 수 있다. 그래도 단위는 항상 연속한 줄이고 근거 ID는 실제 줄 범위로 계산한다.
-- 파일 첫 줄에서 시작하지 않는 단위는 그 파일의 머리(package 절·import·include·use 등, 최대 80줄)와 함께 간다. overview는 파일의 단위를 순서대로 보내므로 첫 단위가 머리를 담는다. slice는 머리 줄을 `origin: header` 발췌로 붙이고 그 바이트를 slot 계획에 포함한다.
+- 한 단위에 들어가는 파일은 통째로 보낸다. 더 큰 파일은 최상위 선언의 시작(바로 위 주석·데코레이터·attribute 포함)에서 연속한 단위로 나누고, 단위마다 선언을 들어가는 만큼 담는다. Go는 `go/parser`로 경계를 찾고 파싱하지 못하면 중괄호 판별로 돌아간다. C/C++·Java·Kotlin·Scala·C#·Rust·Swift·JavaScript·TypeScript는 문자열·문자·주석을 건너뛰는 중괄호 깊이, Python은 들여쓰기 없는 문장과 그 위의 주석·데코레이터로 판별한다. JavaScript·TypeScript는 피연산자 자리의 `/`를 정규식 리터럴로 보고 건너뛴다. C/C++는 전처리 줄의 중괄호를 세지 않고, `#if`/`#else`로 갈린 대안 분기는 첫 분기를 지난 깊이로 이어 간다. CRLF 파일의 빈 줄은 문장이 아니다. 한 선언이 단위보다 크면 그 안의 멤버 경계에서 자르고, 경계가 없으면 줄에서 자른다. 외부 파서·cgo는 쓰지 않는다. 판별기는 구문 분석기가 아니므로 비정형 코드에서는 경계가 덜 정확할 수 있다. 그래도 단위는 항상 연속한 줄이고 근거 ID는 실제 줄 범위로 계산한다.
+- 파일 첫 줄에서 시작하지 않는 단위는 그 파일의 머리(package 절·import·include·use 등, 최대 80줄)와 함께 간다. 여러 줄에 걸친 import는 괄호가 닫힐 때까지, `#define`은 줄 끝 `\`가 이어지는 동안 머리에 든다. overview는 파일의 단위를 순서대로 보내므로 첫 단위가 머리를 담는다. slice는 머리 줄을 `origin: header` 발췌로 붙이고 그 바이트를 slot 계획에 포함한다. 같은 slot이 그 파일의 첫 단위도 보내면 머리를 따로 붙이지 않는다. 첫 단위가 머리를 담고, 머리와 정확히 같은 단위이면 같은 근거 ID가 두 번 갈 것이기 때문이다.
 - overview 순서: 문서 계약·호출 근거·진단 등 선택기 발췌를 먼저 두고, 남은 예산을 모듈 순회 순서의 파일 단위로 채운다. 선택기가 보여 주지 않은 파일이 먼저다. 모든 파일의 첫 단위가 어느 파일의 두 번째 단위보다 먼저 들어간다. 파일의 단위는 순서대로 들어가고 들어가지 않는 첫 단위에서 그 파일을 멈춘다. 요청 안에서는 선택기 발췌 뒤에 모듈·디렉터리·경로·시작 줄 순으로 나열해 관련 코드가 함께 간다.
 - 선택기 발췌가 같은 요청의 다른 발췌 안에 있으면 원문을 다시 보내지 않는다. 요청에서 그 발췌는 원문 없이 `within`에 감싸는 발췌의 근거 ID를 가진 참조다. 근거 ID, 출처 표시, 검토 기록은 바뀌지 않고 인용도 그대로 받는다.
 - slice도 같은 단위를 쓴다. `review.scope`는 overview가 보내지 않은 줄을 단위로 나눠 slot에 배정한다. 배정은 overview처럼 너비 우선이다. 모든 파일이 앞 단위를 받기 전에는 어느 파일도 다음 단위를 받지 않는다. 한 파일의 단위는 순서대로 가고 각 단위는 파일 머리와 함께 간다. 범위 산출물의 `limits`는 그 노드의 요청 크기에서 정한 값이고 `max_file_lines`는 `max_file_bytes`와 같다(단위는 바이트로만 제한한다). slot 수와 작업 키는 요청 크기와 무관하게 manifest와 범위로 정한다(A37).
@@ -262,11 +262,12 @@
 | OpenCode 응답 보관 한도 | 524,288바이트 | 출력 토큰 최대치의 8배. 넘으면 `model_output_incomplete` |
 | relay 프로필 | 출력 = 출력 토큰, 문맥 = 요청 바이트 + 16,384 + 출력 토큰 | 관리형 OpenCode 설정이 relay 모델에 선언하는 한도. 토큰은 요청의 1바이트 이상이므로 요청 바이트가 입력 토큰의 상한이다 |
 | QA 예산 relay | 입력 기본 278,528바이트(최대 1,064,960), 출력 기본 16,384 토큰(`--max-output-tokens`, 최대 65,536) | relay가 받는 요청당 메시지 텍스트와 출력. 운영은 [평가](EVALUATION.md)에 있다 |
-| 호출 제한시간 | 600초(1초~30분) | `--model-timeout`. 기본 요청을 읽고 출력 한도까지 쓰는 호출이 멈췄을 때의 상한이며 측정한 지연 시간이 아니다 |
+| 호출 제한시간 | 600초(1초~30분) | `--model-timeout`. 기본 요청을 읽고 출력 한도까지 쓰는 호출이 멈췄을 때의 상한이며 측정한 지연 시간이 아니다. CODEYE가 쓰는 OpenCode provider 설정(relay, 키 파일 provider, 운영자 OpenCode 설정을 옮긴 native provider)은 응답 헤더와 다음 스트림 조각을 이 시간만큼 기다린다(`headerTimeout`·`chunkTimeout`, 밀리초). 설정하지 않으면 OpenCode 1.19.5는 각각 300초에 요청을 끊는다. native provider에 운영자가 정한 값은 그대로 둔다 |
 
 - 요청은 메시지 하나이고 도구 정의를 쓰지 않는다.
 - 보내기 전에 메시지 바이트를 재고, 넘으면 발췌를 뒤에서부터 줄이고 `review_input_trimmed`를 남긴다. 최소 발췌로도 넘으면 task는 `failed`(`review_input_too_large`)다.
 - 예산이 모자라면 목록 뒤쪽이 먼저 빠진다. 첫 순회에서 생태계 이름 순으로 뒤인 언어의 발췌가 여기에 해당한다. 여섯 생태계가 모두 범위에 있으면 언어 지침이 커져 코드 발췌가 줄고, 최대 길이 후보가 많은 verify는 일부 후보를 보내지 못할 수 있다. 합성 최악 입력(모든 서술 필드를 최대 길이로 쓴 후보)에서 최소 예산의 verify는 후보 6개 중 4개를 보내고, 기본과 최대 예산은 모두 보낸다(`TestReviewRequestSizeWorstCase`). 보내지 못한 후보는 `unreviewed`(`verification_budget_exceeded`)다.
+- 서술 필드와 후보 수는 출력 토큰에서만 정한다. 작은 요청 바이트에 큰 출력 토큰을 짝지으면 후보 서술이 verify 요청의 자리를 차지해, 최대 길이로 쓴 후보는 일부만 검증되고 나머지는 `unreviewed`(`verification_budget_exceeded`, task `review_input_incomplete`)로 남는다. 요청 바이트를 줄일 때는 출력 토큰도 함께 줄인다.
 - 비용은 요청과 출력 크기에 비례한다. 요청 바이트를 줄이면 한 번에 읽는 코드가 줄고 남은 줄은 slice로 넘어간다. 출력 토큰을 줄이면 서술과 후보 수가 준다. 호출 수는 `review_max_calls`가 정한다. 실제 비용과 지연 시간은 측정하지 않았다.
 
 ## 모듈 단위 검토 분할
@@ -566,13 +567,14 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 ## 시험
 
 - 회귀: `go test -race ./internal/worker/review/... ./internal/worker/run`. 실제 OpenCode와 가짜 upstream으로 `codeye start`의 키 파일 경로 전체(시작, probe, 검토 단계 수락, 키 거부 사유, 시험하지 않은 버전, 키 미노출)를 `python3 scripts/test_postgres.py --smokes-only --instance-model`이 확인한다(비용 없음). 예시와 부정 입력: `python3 scripts/validate_bundle.py`. 일반 CI는 유료 모델을 호출하지 않으며 scripted caller만 쓴다. scripted caller 결과는 플랫폼 검사의 근거이고 지침 품질의 근거가 아니다.
-- 실모델 시험은 명시적으로 환경을 준 경우에만 실행한다. `CODEYE_TEST_OPENCODE_BIN`과 `CODEYE_TEST_REVIEW_RELAY`(필요하면 `CODEYE_TEST_REVIEW_MODEL`, `CODEYE_TEST_REVIEW_LEDGER`, `CODEYE_TEST_OPENCODE_MODEL`)를 주고 `go test -v -count=1 -run '^TestLiveVerifier$' ./internal/worker/review`처럼 하나씩 실행한다. 대상은 `TestLiveOpenCode`(키 파일은 `CODEYE_TEST_MODEL_CREDENTIAL`), `TestLiveInFlightCancel`(`internal/worker/opencode`)이다. 검토 역할 전체를 실모델로 돌리는 경로는 회귀 파일럿(`scripts/regression_pilot.py --pilot`, [평가](EVALUATION.md))이다. 비용이 든다. 시험 체계는 [시험](TESTING.md)에 있다.
+- 실모델 시험은 명시적으로 환경을 준 경우에만 실행한다. `CODEYE_TEST_OPENCODE_BIN`과 `CODEYE_TEST_REVIEW_RELAY`(필요하면 `CODEYE_TEST_REVIEW_MODEL`, `CODEYE_TEST_REVIEW_LEDGER`, `CODEYE_TEST_OPENCODE_MODEL`)를 주고 `go test -v -count=1 -run '^TestLiveVerifier$' ./internal/worker/review`처럼 하나씩 실행한다. 대상은 `TestLiveOpenCode`(키 파일은 `CODEYE_TEST_MODEL_CREDENTIAL`), `TestLiveInFlightCancel`, `TestLiveRelaySlowAnswer`(`internal/worker/opencode`)이다. `TestLiveRelaySlowAnswer`는 비용 없이 relay 뒤에 `scripts/fake_model_upstream.py --delay-seconds 320`을 두고 `CODEYE_TEST_MODEL_TIMEOUT=400s`로 OpenCode의 기본 300초 대기를 넘는 응답이 검토에 닿는지 본다. 검토 역할 전체를 실모델로 돌리는 경로는 회귀 파일럿(`scripts/regression_pilot.py --pilot`, [평가](EVALUATION.md))이다. 비용이 든다. 시험 체계는 [시험](TESTING.md)에 있다.
 
 ## 한계
 
 - overview는 문서 계약이나 도구 진단에 관련된 줄과 모듈의 파일 전체 또는 선언 단위를 발췌한다. 후속 검토는 아직 전송하지 않은 줄을 다루며 호출·요청·slot 상한이 남은 줄을 결정한다.
 - 모델은 도구를 쓰지 않는다. 요청에 없는 파일을 직접 열거나 검색하지 못하므로 한 요청의 단위 밖에 있는 호출 관계는 verify 확장과 slice로만 보인다.
-- 선언 경계 판별은 Go 외 언어에서 구문 분석이 아니다. 매크로·전처리·비정형 들여쓰기에서는 경계가 덜 정확할 수 있다.
+- 선언 경계 판별은 Go 외 언어에서 구문 분석이 아니다. 매크로·전처리·비정형 들여쓰기에서는 경계가 덜 정확할 수 있다. C/C++ 전처리 분기는 첫 분기의 깊이를 따르므로, 분기마다 중괄호 균형이 다르고 대안 관계도 아닌 코드는 경계를 잃을 수 있다. JavaScript 정규식 리터럴은 앞 문자로 짐작하므로 `)` 뒤의 정규식(`if (x) /re/.test(s)`)은 나눗셈으로 읽는다.
+- 보고서 검증기는 schema 0.7 조사 기록이 HTTP 코드와 테스트를 함께 읽었는지(`workflow_reading`) 보고서 본문만으로 알 수 없다. 0.6 기록은 그 읽기가 있을 때만 쓰였으므로 decoder 이름이 증거였지만, 0.7은 모든 역할이 쓴다. 그래서 문서 대조의 관련 흐름은 0.7 조사 산출물이 수락되었고 세 인용(호출 코드, 변경 코드, 테스트)이 같은 범위의 Go 근거일 때 받는다. 보고서 생성기는 기록의 `workflow_reading`이 있을 때만 관련 흐름을 만들고 문서 기록과 대조한다([보고서 연결](#보고서-연결)).
 - 보고서의 표시용 발췌는 인용의 첫 50줄·1,800바이트까지다. 80줄까지의 인용은 근거 범위 전체가 기록에 남지만 화면에는 앞부분만 보인다([보고서](REPORT.md)).
 - 큰 요청 예산의 실제 모델 품질·지연 시간·비용은 측정하지 않았다. 제한시간 600초와 기본 예산은 추정이며 실제 호출을 보고 다시 정한다(A57).
 - 동적 디스패치와 실제 빌드·런타임 구성이 결정하는 호출은 제공된 발췌와 실행 기록으로 판단한다. 정적으로 연결한 지원 범위는 [파일 사이의 호출 근거](#파일-사이의-호출-근거)에 있다.
