@@ -18,6 +18,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/quota"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/builtin"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/cpp"
 	analyzerpack "github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/python"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/deps"
@@ -370,9 +371,16 @@ func workerHandlersWithCaller(ctx context.Context, h *workerproto.Hello, runner 
 	for i, handler := range hs {
 		if handler.Info().Name == analyzerpack.CompositeName {
 			reviewed := review.Handler{Static: handler, Caller: caller, MaxCalls: h.ReviewMaxCalls}
+			// C/C++ compile DB generation runs after the dependency tasks and
+			// before the analyzers that read it (docs/ANALYZERS.md#compile-db-생성).
+			generated, err := cpp.WrapGeneration(reviewed, cpp.GenerationHandlerConfig{Generate: cpp.GenerateConfig{ToolPath: h.ToolPath},
+				Consumer: !unusable[cpp.CppcheckName] || !unusable[cpp.ClangTidyName] || !unusable[cpp.GCCAnalyzerName]})
+			if err != nil {
+				return nil, nil, err
+			}
 			// Dependency tasks run after discovery and before the analyzers;
 			// review plans only through the static handler and never sees them.
-			fetched, err := deps.Wrap(reviewed, depCfg, deps.Fetchers()...)
+			fetched, err := deps.Wrap(generated, depCfg, deps.Fetchers()...)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -388,7 +396,7 @@ func workerHandlersWithCaller(ctx context.Context, h *workerproto.Hello, runner 
 			testCfg.JSConsumer = true
 			testCfg.PythonConsumers = true
 			testCfg.RustConsumer = true
-			testDeps, err := deps.Wrap(reviewed, testCfg, deps.Fetchers()...)
+			testDeps, err := deps.Wrap(generated, testCfg, deps.Fetchers()...)
 			if err != nil {
 				return nil, nil, err
 			}

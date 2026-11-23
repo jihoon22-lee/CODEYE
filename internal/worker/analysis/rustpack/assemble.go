@@ -43,7 +43,16 @@ const (
 	ReasonLintsDenied          = "lints_denied"
 	ReasonFailed               = "cargo_failed"
 	ReasonNoCrates             = "no_analyzable_crates"
+	// ReasonDocCollision: two workspace crates document to the same output
+	// name, so cargo doc refuses the workspace (a configuration of the
+	// project, not a defect).
+	ReasonDocCollision = "doc_output_collision"
 )
+
+// LimBuildToolPath: the operator's tool path directories followed the
+// toolchain directory on the child PATH, so build scripts could spawn the
+// system C toolchain (cc, ar, as) by name.
+const LimBuildToolPath = "build_scripts_used_toolchain_path"
 
 // Crate (unit) states.
 const (
@@ -103,7 +112,10 @@ type assembleInput struct {
 	ConfigFiles                 []obsdoc.ConfigFile
 	ConfigKnown                 bool
 	Linker                      bool
-	OutOfScope                  func(rel string) bool
+	// ToolPath: the operator's tool path directories followed the toolchain
+	// directory on the child PATH (programs build scripts spawn by name).
+	ToolPath   bool
+	OutOfScope func(rel string) bool
 	// Dependencies is the limitation of a run that read the crates this
 	// attempt fetched (CARGO_HOME of deps.rust); "" for a scratch home.
 	Dependencies string
@@ -682,6 +694,9 @@ func assemble(in assembleInput) obsdoc.Document {
 	if in.Linker {
 		limitations = append(limitations, "linker_from_toolchain_path")
 	}
+	if in.ToolPath {
+		limitations = append(limitations, LimBuildToolPath)
+	}
 	if !in.ConfigKnown {
 		limitations = append(limitations, "repository_config_not_enumerated")
 	}
@@ -738,6 +753,8 @@ func assemble(in assembleInput) obsdoc.Document {
 		fail(domain.TaskFailed, ReasonManifestInvalid, obsdoc.ExitConfigurationError)
 	case facts.BuildScript:
 		fail(domain.TaskFailed, ReasonBuildScript, obsdoc.ExitExecutionError)
+	case facts.DocCollision:
+		fail(domain.TaskFailed, ReasonDocCollision, obsdoc.ExitConfigurationError)
 	}
 	if in.Main != nil && !pack.StreamsComplete(in.Main) {
 		fail(domain.TaskFailed, ReasonOutputTruncated, obsdoc.ExitExecutionError)

@@ -3,6 +3,7 @@ package toolfind
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 )
@@ -66,6 +67,33 @@ func WriteTable(w io.Writer, r Result, home string) error {
 	}
 	if err := tw.Flush(); err != nil {
 		return err
+	}
+	if t := r.ToolchainPath; t != nil {
+		var found, missing []string
+		for _, p := range t.Programs {
+			if p.Status == Found {
+				found = append(found, p.Name)
+			} else {
+				missing = append(missing, p.Name)
+			}
+		}
+		dirs := filepath.SplitList(t.Path)
+		for i := range dirs {
+			dirs[i] = tilde(home, dirs[i])
+		}
+		line := "toolchain path " + strings.Join(dirs, string(filepath.ListSeparator)) + ":"
+		if len(found) > 0 {
+			line += " " + strings.Join(found, ", ") + " found"
+		}
+		if len(missing) > 0 {
+			line += "; " + strings.Join(missing, ", ") + " missing"
+		}
+		if !t.CompileDBGenerationReady() {
+			line += " - C/C++ compile DB generation needs cmake, make or ninja and a C/C++ compiler in agent.toolchain_path"
+		}
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return err
+		}
 	}
 	var extra []string
 	if r.GoModCache != "" {

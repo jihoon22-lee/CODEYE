@@ -97,7 +97,7 @@ func explicitTools(cfg *instance.Config) toolfind.Explicit {
 		return toolfind.Explicit{}
 	}
 	a := cfg.Agent
-	ex := toolfind.Explicit{Go: a.Go, Git: a.Git, GoModCache: a.GoModCache, Tools: a.Tools}
+	ex := toolfind.Explicit{Go: a.Go, Git: a.Git, GoModCache: a.GoModCache, Tools: a.Tools, ToolchainPath: a.ToolchainPath}
 	if a.Model != nil {
 		ex.OpenCode = a.Model.OpenCode
 	}

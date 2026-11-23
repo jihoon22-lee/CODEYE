@@ -250,6 +250,9 @@ builder 9부터 pull request run([pull request 분석](GITHUB.md#pull-request-�
 | `required_tests_not_performed` | `with-tests`가 요청한 테스트 일부 또는 전체에서 확인된 결과가 없다. |
 | `test_execution_unverified` | 성공으로 접수된 테스트 작업의 명령 종료 코드를 확인하지 못했거나 하위 프로세스 정리를 확인하지 못했다. |
 | `run_cancelled`, `run_failed` | 실행이 취소·실패했다. |
+| `compile_db_generated`, `compile_db_generation_partial`, `compile_db_generation_not_allowed`, `cmake_not_found`, `cmake_generator_not_found`, `repository_code_executed` 등 | C/C++ [compile DB 생성](ANALYZERS.md#compile-db-생성) 작업(`compile-db`)의 제약. 이 작업은 관찰 envelope를 쓰지 않으므로 builder가 결과 manifest의 그 task 제약 중 `cmake_*`·`compile_db_*`(`compile_db_generator_cmake` 제외)와 `repository_code_executed`를 보고서 한계로 옮긴다. |
+
+**compile DB 생성 작업.** `compile-db` task는 분석기 task가 아니므로 정적 분석 절의 도구 행이 되지 않는다(산출물이 없다는 `result_missing` 공백도 생기지 않는다). 성공하지 않았으면 분석 공백 `compile_db_not_generated`(절 `static_analysis`, `subject` `compile-db`, `detail`은 task 사유)가 생긴다. 이 task는 이 처리를 더한 worker부터 있으므로, 같은 사실에서 builder 19의 결과가 달라지지 않아 builder 버전은 그대로다.
 
 ### 현재 보고서에 없는 것
 

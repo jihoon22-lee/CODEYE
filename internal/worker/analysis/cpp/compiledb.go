@@ -175,7 +175,10 @@ type Mapping struct {
 	Wrappers        int
 	DirsMissing     int
 	FilesMissing    int
-	RootUnknown     bool
+	// Generated counts include arguments below the build directory of a
+	// compile DB CODEYE generated in this attempt (configured headers).
+	Generated   int
+	RootUnknown bool
 	// Roots counts DBs whose original root was inferred.
 	Roots int
 }
@@ -198,6 +201,7 @@ func (m Mapping) Limitations() []string {
 		}
 	}
 	add(m.DirsMissing > 0, LimIncludeDirsMissing)
+	add(m.Generated > 0, LimGeneratedIncludes)
 	add(m.FilesMissing > 0, LimIncludeFilesMissing)
 	add(m.Wrappers > 0, LimWrappersStripped)
 	excluded := 0

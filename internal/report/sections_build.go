@@ -259,7 +259,7 @@ func (c sectionContext) documents() *DocumentsSection {
 func (c sectionContext) analyzerKeys() []string {
 	var out []string
 	for _, k := range c.keys {
-		if record.AnalyzerTaskKey(k) {
+		if analyzerTask(k) {
 			out = append(out, k)
 		}
 	}

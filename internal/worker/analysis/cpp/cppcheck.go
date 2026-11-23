@@ -133,22 +133,24 @@ func (a *Cppcheck) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	}
 	in := ccInput{Key: task.Key, Layout: l, Mode: modeReduced, Units: l.Sources}
 	doc := cppcheckBase(job, task.Key, l)
-	if len(l.DBs) > 0 {
-		data, cfgFiles, ok := readDBs(job, l)
-		if !ok {
-			return notRun(s, doc, domain.TaskFailed, ReasonSnapshotIntegrity, obsdoc.ExitNotRun)
-		}
-		m, err := MapDBs(l.DBs, data, l.Files, func(rel string) bool { return pack.PathInScope(rel, job.Scope) })
+	src, broken := compileDBs(job, l)
+	if broken != "" {
+		return notRun(s, doc, domain.TaskFailed, broken, obsdoc.ExitNotRun)
+	}
+	if len(src.DBs) > 0 {
+		m, err := MapDBs(src.DBs, src.Data, l.Files, func(rel string) bool { return pack.PathInScope(rel, job.Scope) })
 		if err != nil {
 			return notRun(s, doc, domain.TaskFailed, ReasonCompileDBUnreadable, obsdoc.ExitNotRun)
 		}
-		in.Mode, in.Mapping, in.ConfigFiles = modeCompileDB, &m, cfgFiles
+		in.Mode, in.Mapping, in.ConfigFiles = modeCompileDB, &m, src.ConfigFiles
+		in.Layout.DBs = src.DBs
 		in.Units = nil
 		for _, u := range m.Units {
 			in.Units = append(in.Units, u.Rel)
 		}
 	}
 	applyCppcheckMode(&doc, in)
+	src.apply(&doc)
 	if len(in.Units) == 0 {
 		return notRun(s, doc, domain.TaskUnsupported, ReasonNoTranslationUnits, obsdoc.ExitNotRun)
 	}

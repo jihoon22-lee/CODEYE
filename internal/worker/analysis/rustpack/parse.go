@@ -425,6 +425,7 @@ type StderrFacts struct {
 	Linker          bool
 	ManifestInvalid bool
 	BuildScript     bool
+	DocCollision    bool // cargo doc: two crates share an output file name
 	CompileError    bool
 	Lines           int
 	Other           int
@@ -474,6 +475,8 @@ func ClassifyStderr(stderr []byte) StderrFacts {
 			f.ManifestInvalid = true
 		case strings.Contains(l, "failed to run custom build command"):
 			f.BuildScript = true
+		case strings.Contains(l, "document output filename collision"):
+			f.DocCollision = true
 		case strings.Contains(l, "requires rustc ") && strings.Contains(l, "or newer"), strings.Contains(l, "is not supported by the following packages"),
 			strings.Contains(l, "can't find crate for `std`"), strings.Contains(l, "can't find crate for `core`"):
 			f.Toolchain = true

@@ -66,7 +66,7 @@
 
 ### 빌드 문맥과 추가 분석 입력
 
-C/C++·Java의 빌드 문맥(compile DB, classpath)을 분석기에 주고, 외부 도구 결과를 SARIF로 받는 어댑터와 파일 안의 입력→위험한 사용처 패턴 엔진을 더한다.
+Java 빌드 문맥(Maven·Gradle 의존성까지 포함한 classpath)을 분석기에 주고, CMake 밖의 C/C++ build 설명(Meson, autotools `configure`, `bear`로 감싼 make)에서 compile DB를 만들고, 외부 도구 결과를 SARIF로 받는 어댑터와 파일 안의 입력→위험한 사용처 패턴 엔진을 더한다. CMake 프로젝트의 compile DB 생성, 허가받은 Rust build script의 시스템 C 도구 경로, dependency-cruiser 외부 대상 해석은 [compile DB 생성](ANALYZERS.md#compile-db-생성)·[Rust 환경](ANALYZERS.md#rust-환경)에 반영했다.
 
 완료 조건:
 - 해당 언어 사례의 tools 조건 위치 지표와 분석기 공백 task 변화를 기록한다.

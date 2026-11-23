@@ -124,6 +124,9 @@ func TestClassifyStderrOnCapturedBytes(t *testing.T) {
 		"error: failed to parse manifest at `/w/Cargo.toml`\n":                                             func(f StderrFacts) bool { return f.ManifestInvalid },
 		"error: the lock file /w/Cargo.lock needs to be updated but --locked was passed to prevent this\n": func(f StderrFacts) bool { return f.LockOutdated },
 		"warning: user-defined alias `check` is ignored, because it is shadowed by a built-in command\n":   func(f StderrFacts) bool { return f.Lines == 1 && f.Other == 0 && !f.Dependency },
+		// The first line cargo 1.99 doc prints for a workspace whose crates
+		// share a library name.
+		"error: document output filename collision\n": func(f StderrFacts) bool { return f.DocCollision && !f.BuildScript },
 	} {
 		if f := ClassifyStderr([]byte(in)); !check(f) {
 			t.Errorf("%q: %+v", in, f)
@@ -380,13 +383,22 @@ func TestFindLinker(t *testing.T) {
 	if FindLinker("") != "" || FindLinker(a) != "" {
 		t.Fatal("a linker was invented")
 	}
-	// The linker is passed by absolute path as the host target's linker and the
-	// tool path is never the child's PATH.
+	// The linker is passed by absolute path as the host target's linker. The
+	// cargo runs execute build scripts, which spawn cc, ar and (through the
+	// driver) as by name: the tool path follows the toolchain directory on
+	// PATH. cargo fetch runs no build script and keeps the toolchain only.
 	an := replayAnalyzer(t, KindCheck)
 	an.linker = filepath.Join(b, "cc")
+	an.toolDirs = BuildToolDirs(list+string(os.PathListSeparator)+an.tcDir+string(os.PathListSeparator)+filepath.Join(a, "missing")+string(os.PathListSeparator)+b, an.tcDir)
+	if !slices.Equal(an.toolDirs, []string{a, b}) {
+		t.Fatalf("tool dirs %v", an.toolDirs)
+	}
 	env := an.env("/h", "/t", "x86_64-unknown-linux-gnu")
-	if env["CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER"] != an.linker || env["PATH"] != an.tcDir || strings.Contains(env["PATH"], b) {
+	if env["CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER"] != an.linker || env["PATH"] != strings.Join([]string{an.tcDir, a, b}, string(os.PathListSeparator)) {
 		t.Fatalf("env %v", env)
+	}
+	if env := an.FetchEnv("/h", "/t", "x86_64-unknown-linux-gnu"); env["PATH"] != an.tcDir {
+		t.Fatalf("fetch env %v", env)
 	}
 	if env := an.env("/h", "/t", ""); len(env) > 0 && env["CARGO_BUILD_TARGET"] != "" {
 		t.Fatalf("target pinned before the host is known: %v", env)

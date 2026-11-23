@@ -108,6 +108,9 @@ type Result struct {
 	// the agent then needs --python-both-type-checkers.
 	PythonBothTypeCheckers bool   `json:"python_both_type_checkers"`
 	Tools                  []Tool `json:"tools"`
+	// ToolchainPath lists the programs the agent's toolchain path offers
+	// (absent on Windows without a configured path).
+	ToolchainPath *ToolchainPath `json:"toolchain_path,omitempty"`
 }
 
 // Tool returns the entry named name.
@@ -142,6 +145,8 @@ type Explicit struct {
 	OpenCode   string
 	// Tools are agent.tools: analyzer tool flag names and "node".
 	Tools map[string]string
+	// ToolchainPath is agent.toolchain_path ("" is the default path).
+	ToolchainPath string
 }
 
 func (e Explicit) Path(name string) string {
@@ -230,7 +235,7 @@ func Detect(ctx context.Context, opts Options) Result {
 	d.run(append(append([]string{}, jsManagerNames...), pythonManagerNames[0]))
 	d.run(pythonManagerNames[1:])
 
-	res := Result{SchemaVersion: SchemaVersion, DetectedAt: now().UTC().Truncate(time.Second)}
+	res := Result{SchemaVersion: SchemaVersion, DetectedAt: now().UTC().Truncate(time.Second), ToolchainPath: LookToolchainPath(opts.Explicit.ToolchainPath)}
 	for _, name := range order {
 		res.Tools = append(res.Tools, d.found[name])
 	}

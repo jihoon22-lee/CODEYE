@@ -119,6 +119,8 @@ func placeLockfile(src, moduleDir string) (func(), error) {
 func (a *Analyzer) FetchEnv(home, target, host string) map[string]string {
 	env := a.env(home, target, host)
 	delete(env, "CARGO_NET_OFFLINE")
+	// cargo fetch runs no build script; the toolchain directory is enough.
+	env["PATH"] = a.tcDir
 	return env
 }
 
