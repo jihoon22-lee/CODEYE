@@ -326,7 +326,7 @@ TC-267의 위치 시험은 같은 이름이 앞선 조사에 들어간 설정 �
 | TC | 조건 | 기대 결과 | 요구 |
 |---|---|---|---|
 | TC-160 | 지원 언어 소스 없이 문서·manifest만 있는 스냅샷, 모델 입력이 될 파일이 없는 스냅샷, 범위 밖 파일, gitleaks 미설정 | 모델 입력 파일(지원 언어 소스·안내 문서·모듈 manifest)이 범위에 있으면 gitleaks를 계획하고 아니면 계획하지 않는다. 미설정이면 `unsupported`(`tool_not_configured`)로 공백이 보인다. 비밀값 작업만 있는 보고서도 `static_analysis_not_planned`다. | REQ-009; NFR-008 |
-| TC-161 | 무작위 트리와 항목 순서, 400파일 한도 사례, `fixtures/modules/slices/input` | 적격 파일마다 overview 접두·slice·계획 안 함 중 정확히 한 곳이다. slice는 범위 산출물의 상한(최소 예산에서 8개·12,000바이트)·모듈 8개 이하이고 96개를 넘지 않으며, 계획의 순회 순서로 너비가 깊이보다 먼저다(실행 때 배정은 모듈 사이 너비 우선, 모듈 안 파일 깊이 우선이다). 항목 순서가 바뀌어도 계획이 같다. coverage fixture의 계획은 입력 밖의 기대값(`expected-plan.json`)과 같다. | REQ-009,027 |
+| TC-161 | 무작위 트리와 항목 순서, 400파일 한도 사례, `fixtures/modules/slices/input` | 적격 파일마다 overview 접두·slice·계획 안 함 중 정확히 한 곳이다. slice는 범위 산출물의 상한(최소 예산에서 8개·12,000바이트)·모듈 8개 이하이고 96개를 넘지 않으며, 순회 순서로 너비가 깊이보다 먼저다. 항목 순서가 바뀌어도 계획이 같다. coverage fixture의 계획은 입력 밖의 기대값(`expected-plan.json`)과 같다. | REQ-009,027 |
 | TC-162 | 0~4,000바이트의 무작위 파일(JSON이 escape하는 문자·제어 문자·다바이트 문자) | 파일 상한 `min(2400, 6 × size + 2)`는 실제 JSON 발췌 바이트보다 작지 않다. | REQ-009 |
 | TC-163 | 회귀 집합과 기존 fixture처럼 모든 적격 파일이 overview에 들어가는 저장소 | `review.scope`를 계획하고, 파일의 모든 줄을 조사했다면 추가 모델 요청 없이 남는 slot을 `no_review_scope`로 끝낸다. 일반 역할의 요청 바이트는 고정한다(`TestGoReviewInputsUnchanged`, `TestReviewExampleRecords`). | REQ-009,027; NFR-007 |
 | TC-164 | 기록 0.3과 범위 산출물 0.1: slice 없는 0.3, slice 있는 0.2, 범위 밖 key, 모듈 9개, interpret 단계·후보, 0.2 기록의 slice upstream, 두 곳에 있는 파일, 정렬되지 않은 `offered`, `offered`와 다른 `covered_by_overview`, 모듈 수 불일치, 목록 밖 선별 상태, 제한 코드 없는 `not_screened` 산출물, 상한 208 | Go decoder와 JSON schema·`validate_bundle.py`가 모두 거부한다. 0.2 기록의 바이트는 그대로다. 예시는 coverage fixture로 다시 만든 바이트와 같다. | REQ-011,027 |

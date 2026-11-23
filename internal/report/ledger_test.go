@@ -137,7 +137,8 @@ func TestLedgerValidation(t *testing.T) {
 			r.CodeReview.Ledger.PrimarySlotsBudgetExhausted = 0
 		},
 		"more refused primary slots than refused slots": func(r *Report) {
-			r.CodeReview.Ledger.PrimarySlotsBudgetExhausted = 4
+			// The example refuses every primary slot it cannot admit.
+			r.CodeReview.Ledger.PrimarySlotsBudgetExhausted++
 		},
 		"fewer calls than listed": func(r *Report) { n := 1; r.CodeReview.Ledger.CallsUsed = &n },
 		"request bytes differ":    func(r *Report) { n := 1; r.CodeReview.Ledger.RequestBytesSent = &n },

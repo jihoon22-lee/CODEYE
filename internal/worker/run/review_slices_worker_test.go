@@ -251,7 +251,7 @@ func TestReviewSlicesThroughTheWorker(t *testing.T) {
 		for _, want := range []string{"review.investigate=succeeded/true", "review.verify=succeeded/true", "review.scope=succeeded/false",
 			"review.investigate.s001=succeeded/false", "review.verify.s001=succeeded/false",
 			"review.investigate.s006=budget_exhausted/false:review_budget_exhausted", "review.verify.s006=budget_exhausted/false:review_budget_exhausted",
-			"review.investigate.s009=skipped_policy/false:no_review_scope", "review.verify.s009=skipped_policy/false:no_review_scope"} {
+			"review.investigate.s010=skipped_policy/false:no_review_scope", "review.verify.s010=skipped_policy/false:no_review_scope"} {
 			if !strings.Contains(joined, want) {
 				t.Fatalf("missing %s in %v", want, rows)
 			}

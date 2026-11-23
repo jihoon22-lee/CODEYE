@@ -416,14 +416,15 @@ func windowKey(f record.ScopeFile) string { return f.Path + "\x00" + strconv.Ito
 // headerKey keys the header cost of a window that does not start its file.
 func headerKey(f record.ScopeFile) string { return windowKey(f) + "\x00header" }
 
-// scheduleCoverageWithin fills the slots in priority order. Each
-// unrepresented module first gets the units of its best file, then every
-// other file follows with all its units together, so a file split into
-// units travels in one slot or consecutive slots and a slot holds whole
-// directories in path order. Never mix path classes or pull-request tiers
-// in one request. Each window costs its numbered size (costs, by
-// windowKey; its planned bytes without one) plus its file's header once
-// per slot, within the artifact's limits.
+// scheduleCoverageWithin fills the slots in priority order, breadth first
+// like the overview's packing (packUnits): each unrepresented module first
+// gets the first unit of its best file, then every file the overview did
+// not show gets its first unit, then the remaining units go round by round,
+// so no file gets its next unit before every file has had its earlier one.
+// A file's units stay in order, each with the file's header. Never mix path
+// classes or pull-request tiers in one request. Each window costs its
+// numbered size (costs, by windowKey; its planned bytes without one) plus
+// its file's header once per slot, within the artifact's limits.
 func scheduleCoverageWithin(doc *record.ScopeDoc, cursors []*coverageCursor, offered map[string][]record.Excerpt, costs map[string]int) {
 	slices.SortFunc(cursors, func(a, b *coverageCursor) int {
 		return cmp.Or(cmp.Compare(a.tier, b.tier), cmp.Compare(a.file.Class, b.file.Class),
@@ -444,8 +445,6 @@ func scheduleCoverageWithin(doc *record.ScopeDoc, cursors []*coverageCursor, off
 		for _, c := range tier {
 			if !represented[c.file.Module] && writer.add(c) {
 				represented[c.file.Module] = true
-				for writer.add(c) {
-				}
 			}
 		}
 		for _, class := range []string{record.ClassPrimary, record.ClassSecondary} {
@@ -455,17 +454,24 @@ func scheduleCoverageWithin(doc *record.ScopeDoc, cursors []*coverageCursor, off
 	}
 }
 
-// fillCoverageClass adds the files of one class, the files the overview did
-// not show before the rest of those it showed in part, each with all its
-// remaining units.
+// fillCoverageClass adds the files of one class: first one unit of each
+// file the overview did not show and no slot holds yet, then the remaining
+// units of every file round by round.
 func fillCoverageClass(writer *coverageSlotWriter, tier []*coverageCursor, offered map[string][]record.Excerpt, class string) {
-	for _, shown := range []bool{false, true} {
+	for _, c := range tier {
+		if c.file.Class == class && !c.assigned && len(offered[c.file.Path]) == 0 {
+			writer.add(c)
+		}
+	}
+	for {
+		added := false
 		for _, c := range tier {
-			if c.file.Class != class || (len(offered[c.file.Path]) > 0) != shown {
-				continue
+			if c.file.Class == class && writer.add(c) {
+				added = true
 			}
-			for writer.add(c) {
-			}
+		}
+		if !added {
+			return
 		}
 	}
 }

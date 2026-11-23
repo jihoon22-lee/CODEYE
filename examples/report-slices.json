@@ -14,8 +14,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000707",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "f9fbea9d3f0c8f70ae2c0b0f9e9dedf63c9ed31704ab43e91d101aefa1d3b1e4",
-      "size_bytes": 52253,
+      "sha256": "f59a4ce9693c8ebbd8ec5b80ed5d5f1c27a05fd6e936952e7947b45885f8abe7",
+      "size_bytes": 52273,
       "task_key": null
     },
     {
@@ -374,8 +374,8 @@
       "id": "0195f3a0-0000-7000-8000-00000000063b",
       "media_type": "application/vnd.codeye.review-scope+json",
       "role": "other",
-      "sha256": "c6877fdd4a63cdc9a59003d91cbc1d78c01472987f7961423f08ebf1bdbf2a26",
-      "size_bytes": 21410,
+      "sha256": "aaf04c34bff48422d2eee95af78f92f9307ed20178e1837ffbc4a83630577d31",
+      "size_bytes": 21574,
       "task_key": "review.scope"
     },
     {
@@ -383,8 +383,8 @@
       "id": "0195f3a0-0000-7000-8000-00000000063d",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "0cea7d7257b7530d995286d225360fb74d85a3dd22d0cb0e985b7e1bf846d89f",
-      "size_bytes": 4350,
+      "sha256": "f63cd01ad79f3a073d6936f5597c244788a8344a72eeab4a3cdfe6c511eaeb04",
+      "size_bytes": 3153,
       "task_key": "review.investigate.s001"
     },
     {
@@ -392,8 +392,8 @@
       "id": "0195f3a0-0000-7000-8000-00000000063f",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "22c96b003987fcdb400cd956edf35d59074a94a91f3f0c8de21a19c7d59b1a20",
-      "size_bytes": 4975,
+      "sha256": "8ce7e70e0eb4821f773452f583656440a06afb61d322b3cd6219f1f2ea61691f",
+      "size_bytes": 3778,
       "task_key": "review.verify.s001"
     },
     {
@@ -401,8 +401,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000641",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "8d7731b3a62eadc2d07320f9d63faf783a6b2e413208626545519fdb33809856",
-      "size_bytes": 4335,
+      "sha256": "fba28f1068641322c80d584f5cca02d426ed0de694ea08e27ac97803525231f5",
+      "size_bytes": 3146,
       "task_key": "review.investigate.s002"
     },
     {
@@ -410,8 +410,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000643",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "80596b4a806540b5f66854230bd973e5b7fef02eb960dee6a47fec17421bfa6d",
-      "size_bytes": 4960,
+      "sha256": "311e4e56ee3365d8c1a69525155d6ca4707d0039d67e1af8584ce89736c6eeda",
+      "size_bytes": 3771,
       "task_key": "review.verify.s002"
     },
     {
@@ -419,8 +419,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000645",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "29a5b9d9b932f7eaf98bd487805a7d8298db5e618051896823280d3fcf930804",
-      "size_bytes": 4338,
+      "sha256": "08b916418a3224b39194c8ca02503c96f929da8659aaa2ba6e553c49ec82e14b",
+      "size_bytes": 3143,
       "task_key": "review.investigate.s003"
     },
     {
@@ -428,8 +428,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000647",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "472dd58143d678e4d01d4d40ac2f22ad897758e47d524abe0bb512e0403b0715",
-      "size_bytes": 4963,
+      "sha256": "d9fdac521a2bb3019e5de42d56b6e0b099d4f965ac9ee6ce5cd006d5477aee4e",
+      "size_bytes": 3768,
       "task_key": "review.verify.s003"
     },
     {
@@ -437,8 +437,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000649",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "e5923a28555faff0172af163d50b7fbab0e24d2aea0219c3420264ab1fd7992b",
-      "size_bytes": 4329,
+      "sha256": "dcefb569468ff4cf6ed9618c1739a779e38a6d3255270fd01afa8d137f74b7e3",
+      "size_bytes": 3154,
       "task_key": "review.investigate.s004"
     },
     {
@@ -446,8 +446,8 @@
       "id": "0195f3a0-0000-7000-8000-00000000064b",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "8c8796dfbe05bcabc383b02dc50b8d00d32f864e487262f36bc935b3d2aafe30",
-      "size_bytes": 4954,
+      "sha256": "ce93f455c63288ea45e19bd517755765a528348e6aaae4242624baa30fe71565",
+      "size_bytes": 3779,
       "task_key": "review.verify.s004"
     },
     {
@@ -455,8 +455,8 @@
       "id": "0195f3a0-0000-7000-8000-00000000064d",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "6643655d1bf18a2cdc8dd6b7e97d504322ce30d0c72e9f4b289fbb0be23a93c0",
-      "size_bytes": 4335,
+      "sha256": "bff8bebcff8ae1345764c6f228c6b59d65a7f8bee1f30180563ce017c9fa1bb7",
+      "size_bytes": 3809,
       "task_key": "review.investigate.s005"
     },
     {
@@ -464,8 +464,8 @@
       "id": "0195f3a0-0000-7000-8000-00000000064f",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "7cf0223c842f31d9cd367b9ebb7aa2575fb95f437b947118797f714f68a701a7",
-      "size_bytes": 4960,
+      "sha256": "66c8d2e7c447a90db42e4013fd8afbd0a699300ba6f580e3d92c214caf7d21a6",
+      "size_bytes": 4434,
       "task_key": "review.verify.s005"
     }
   ],
@@ -479,21 +479,21 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "3a0427e423cb1ea1aa464a47b68fb2e98bfb50140e305026bf85484598d6aff9",
+    "input_digest": "6a9950cadf42a196ef7e13ca067a9745b32e2e6de0ccb8dda1e6992e2289a443",
     "result_manifest_artifact_id": null,
     "version": "20"
   },
   "code_review": {
     "accepted_calls": 14,
     "calls": 14,
-    "exposed_files": 32,
+    "exposed_files": 42,
     "finding_ids": [
       "review_investigate_1",
+      "review_s005_investigate_1",
       "review_s001_investigate_1",
       "review_s002_investigate_1",
       "review_s003_investigate_1",
-      "review_s004_investigate_1",
-      "review_s005_investigate_1"
+      "review_s004_investigate_1"
     ],
     "interpretation_limits": [],
     "inventory_files": 44,
@@ -510,18 +510,12 @@
           "total_lines": 20
         },
         {
-          "investigation": "not_requested",
+          "investigation": "accepted",
           "module_id": "go:api",
           "path": "api/handler_test.go",
-          "remaining": [
-            {
-              "end_line": 14,
-              "reason": "review_budget_exhausted",
-              "start_line": 1
-            }
-          ],
-          "reviewed_lines": 0,
-          "sent_lines": 0,
+          "remaining": [],
+          "reviewed_lines": 14,
+          "sent_lines": 14,
           "total_lines": 14
         },
         {
@@ -537,15 +531,9 @@
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/bucket.go",
-          "remaining": [
-            {
-              "end_line": 89,
-              "reason": "review_budget_exhausted",
-              "start_line": 72
-            }
-          ],
-          "reviewed_lines": 71,
-          "sent_lines": 71,
+          "remaining": [],
+          "reviewed_lines": 89,
+          "sent_lines": 89,
           "total_lines": 89
         },
         {
@@ -567,315 +555,429 @@
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/codec.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/compact.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/cursor.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/delete.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/encode.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/evict.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/flush.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/get.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/index.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/iter.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/journal.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/lock.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/merge.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/meta.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/open.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/page.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/put.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/range.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/recover.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/scan.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
-          "investigation": "not_requested",
+          "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/segment.go",
           "remaining": [
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 1
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 0,
-          "sent_lines": 0,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
-          "investigation": "not_requested",
+          "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/snapshot.go",
           "remaining": [
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 1
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 0,
-          "sent_lines": 0,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
-          "investigation": "not_requested",
+          "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/split.go",
           "remaining": [
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 1
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 0,
-          "sent_lines": 0,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
-          "investigation": "not_requested",
+          "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/stats.go",
           "remaining": [
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 1
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 0,
-          "sent_lines": 0,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
-          "investigation": "not_requested",
+          "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/sync.go",
           "remaining": [
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 1
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 0,
-          "sent_lines": 0,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
-          "investigation": "not_requested",
+          "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/tombstone.go",
           "remaining": [
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 1
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 0,
-          "sent_lines": 0,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
-          "investigation": "not_requested",
+          "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/txn.go",
           "remaining": [
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 1
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 0,
-          "sent_lines": 0,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
-          "investigation": "not_requested",
+          "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/wal.go",
           "remaining": [
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 1
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 0,
-          "sent_lines": 0,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
-          "investigation": "not_requested",
+          "investigation": "accepted",
           "module_id": "javascript:web",
           "path": "web/src/client.test.ts",
-          "remaining": [
-            {
-              "end_line": 5,
-              "reason": "review_budget_exhausted",
-              "start_line": 1
-            }
-          ],
-          "reviewed_lines": 0,
-          "sent_lines": 0,
+          "remaining": [],
+          "reviewed_lines": 5,
+          "sent_lines": 5,
           "total_lines": 5
         },
         {
@@ -915,18 +1017,12 @@
           "total_lines": 19
         },
         {
-          "investigation": "not_requested",
+          "investigation": "accepted",
           "module_id": "python:worker",
           "path": "worker/tests/test_jobs.py",
-          "remaining": [
-            {
-              "end_line": 5,
-              "reason": "review_budget_exhausted",
-              "start_line": 1
-            }
-          ],
-          "reviewed_lines": 0,
-          "sent_lines": 0,
+          "remaining": [],
+          "reviewed_lines": 5,
+          "sent_lines": 5,
           "total_lines": 5
         }
       ],
@@ -934,48 +1030,48 @@
       "max_request_bytes": 40000,
       "modules": [
         {
-          "bytes_sent": 678,
+          "bytes_sent": 945,
           "class": "primary",
           "discovered": true,
-          "files_accepted": 2,
-          "files_budget_exhausted": 1,
+          "files_accepted": 3,
+          "files_budget_exhausted": 0,
           "files_eligible": 3,
           "files_not_planned": 0,
           "files_not_sent": 0,
-          "files_requested": 2,
-          "files_sent_to_model": 2,
+          "files_requested": 3,
+          "files_sent_to_model": 3,
           "files_truncated": 0,
           "files_unreadable": 0,
-          "files_with_completed_review": 1,
+          "files_with_completed_review": 2,
           "files_withheld": 0,
           "module_id": "go:api",
           "slices": [
             {
-              "reason": "review_budget_exhausted",
-              "status": "budget_exhausted",
-              "task_key": "review.investigate.s008"
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s005"
             },
             {
-              "reason": "review_budget_exhausted",
-              "status": "budget_exhausted",
-              "task_key": "review.verify.s008"
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s005"
             }
           ]
         },
         {
-          "bytes_sent": 47175,
+          "bytes_sent": 51812,
           "class": "primary",
           "discovered": true,
-          "files_accepted": 22,
-          "files_budget_exhausted": 8,
+          "files_accepted": 30,
+          "files_budget_exhausted": 0,
           "files_eligible": 30,
           "files_not_planned": 0,
           "files_not_sent": 0,
-          "files_requested": 22,
-          "files_sent_to_model": 22,
-          "files_truncated": 2,
+          "files_requested": 30,
+          "files_sent_to_model": 30,
+          "files_truncated": 29,
           "files_unreadable": 0,
-          "files_with_completed_review": 5,
+          "files_with_completed_review": 4,
           "files_withheld": 0,
           "module_id": "go:store",
           "slices": [
@@ -1058,20 +1154,30 @@
               "reason": "review_budget_exhausted",
               "status": "budget_exhausted",
               "task_key": "review.verify.s008"
+            },
+            {
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.investigate.s009"
+            },
+            {
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.verify.s009"
             }
           ]
         },
         {
-          "bytes_sent": 394,
+          "bytes_sent": 559,
           "class": "primary",
           "discovered": true,
-          "files_accepted": 2,
-          "files_budget_exhausted": 1,
+          "files_accepted": 3,
+          "files_budget_exhausted": 0,
           "files_eligible": 3,
           "files_not_planned": 0,
           "files_not_sent": 0,
-          "files_requested": 2,
-          "files_sent_to_model": 2,
+          "files_requested": 3,
+          "files_sent_to_model": 3,
           "files_truncated": 0,
           "files_unreadable": 0,
           "files_with_completed_review": 0,
@@ -1079,28 +1185,28 @@
           "module_id": "javascript:web",
           "slices": [
             {
-              "reason": "review_budget_exhausted",
-              "status": "budget_exhausted",
-              "task_key": "review.investigate.s008"
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s005"
             },
             {
-              "reason": "review_budget_exhausted",
-              "status": "budget_exhausted",
-              "task_key": "review.verify.s008"
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s005"
             }
           ]
         },
         {
-          "bytes_sent": 546,
+          "bytes_sent": 635,
           "class": "primary",
           "discovered": true,
-          "files_accepted": 2,
-          "files_budget_exhausted": 1,
+          "files_accepted": 3,
+          "files_budget_exhausted": 0,
           "files_eligible": 3,
           "files_not_planned": 0,
           "files_not_sent": 0,
-          "files_requested": 2,
-          "files_sent_to_model": 2,
+          "files_requested": 3,
+          "files_sent_to_model": 3,
           "files_truncated": 0,
           "files_unreadable": 0,
           "files_with_completed_review": 0,
@@ -1108,20 +1214,20 @@
           "module_id": "python:worker",
           "slices": [
             {
-              "reason": "review_budget_exhausted",
-              "status": "budget_exhausted",
-              "task_key": "review.investigate.s008"
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.investigate.s005"
             },
             {
-              "reason": "review_budget_exhausted",
-              "status": "budget_exhausted",
-              "task_key": "review.verify.s008"
+              "reason": null,
+              "status": "succeeded",
+              "task_key": "review.verify.s005"
             }
           ]
         }
       ],
-      "primary_slots_budget_exhausted": 3,
-      "request_bytes_sent": 398851,
+      "primary_slots_budget_exhausted": 4,
+      "request_bytes_sent": 398722,
       "scope": {
         "key": "review.scope",
         "result": "accepted",
@@ -1131,7 +1237,7 @@
     },
     "pack_id": "review",
     "pack_version": "2.7.0",
-    "request_bytes": 398851,
+    "request_bytes": 398722,
     "roles": [
       {
         "key": "review.investigate",
@@ -1158,8 +1264,8 @@
     ],
     "stage": {
       "counts": {
-        "budget_exhausted": 6,
-        "skipped_policy": 178
+        "budget_exhausted": 8,
+        "skipped_policy": 176
       },
       "reasons": [
         "no_review_scope",
@@ -1237,9 +1343,9 @@
         },
         {
           "key": "review.investigate.s009",
-          "reason": "no_review_scope",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "reason": "review_budget_exhausted",
+          "result": "not_succeeded",
+          "task_status": "budget_exhausted"
         },
         {
           "key": "review.investigate.s010",
@@ -1813,9 +1919,9 @@
         },
         {
           "key": "review.verify.s009",
-          "reason": "no_review_scope",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "reason": "review_budget_exhausted",
+          "result": "not_succeeded",
+          "task_status": "budget_exhausted"
         },
         {
           "key": "review.verify.s010",
@@ -2361,7 +2467,7 @@
       "status": "performed"
     },
     "inventory_files": 44,
-    "llm_exposed_files": 32,
+    "llm_exposed_files": 42,
     "notes": [
       "inventory_counts_all_included_files",
       "tests_not_planned",
@@ -2419,7 +2525,7 @@
         "pack_id": "review",
         "pack_sha256": "78d9b39915a394180ea53957c0f55b81ddad88791bc13224cb16d15a900efbfa",
         "pack_version": "2.7.0",
-        "request_sha256": "f9e1a4d38461cec170c48c4d8c2a8cde61e4ceb05417e4b7b2408179bf249253",
+        "request_sha256": "d71bdce78a380e40a26718d70841b031d27709b7fa72deb78d8e3887422a807a",
         "role": "investigate",
         "task_key": "review.investigate.s001"
       },
@@ -2430,7 +2536,7 @@
         "pack_id": "review",
         "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
         "pack_version": "2.7.0",
-        "request_sha256": "452b84450064adacb35084061dce2f9f6ebd0053bfa3ef87e3c958b352213d86",
+        "request_sha256": "c05b50bb30e332f2d79c1cb4fa7b381782dd4ca6e15dffa4e90f726c60e84a82",
         "role": "verify",
         "task_key": "review.verify.s001"
       },
@@ -2441,7 +2547,7 @@
         "pack_id": "review",
         "pack_sha256": "78d9b39915a394180ea53957c0f55b81ddad88791bc13224cb16d15a900efbfa",
         "pack_version": "2.7.0",
-        "request_sha256": "66d8bd0fdafc56c8b31eaf9c707fad3525b42c4607d849fdbea5b6dc95789543",
+        "request_sha256": "61b16df98a16a1bed7ac54063da47ed9635599b4503a8e75653c3e998fe6cc7e",
         "role": "investigate",
         "task_key": "review.investigate.s002"
       },
@@ -2452,7 +2558,7 @@
         "pack_id": "review",
         "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
         "pack_version": "2.7.0",
-        "request_sha256": "8e5dfb3abbb43da3a366eae1444bc946ffb227704da71ddd8eb0cc4e4b699c7a",
+        "request_sha256": "4a250618509835169c98bf2d4e614c6fff2e96f1bf90718789f1834f80506277",
         "role": "verify",
         "task_key": "review.verify.s002"
       },
@@ -2463,7 +2569,7 @@
         "pack_id": "review",
         "pack_sha256": "78d9b39915a394180ea53957c0f55b81ddad88791bc13224cb16d15a900efbfa",
         "pack_version": "2.7.0",
-        "request_sha256": "eec2e9699aef073cedc28fbc4c74a4ac0911087b43d2ae10cb8cd3a240318aba",
+        "request_sha256": "8a64c4e1c535a9e137eaf62c640be3157333898cf13e851315f1fca8113576c3",
         "role": "investigate",
         "task_key": "review.investigate.s003"
       },
@@ -2474,7 +2580,7 @@
         "pack_id": "review",
         "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
         "pack_version": "2.7.0",
-        "request_sha256": "49226c3c8d365d05f41ea1801215ddd42bbb4309d2379aeff42b6b0b2eb5d946",
+        "request_sha256": "86674ab25cedbf5459227e52dca3330ce01ea9529acbc02cb2c3ab397d90bacd",
         "role": "verify",
         "task_key": "review.verify.s003"
       },
@@ -2485,7 +2591,7 @@
         "pack_id": "review",
         "pack_sha256": "78d9b39915a394180ea53957c0f55b81ddad88791bc13224cb16d15a900efbfa",
         "pack_version": "2.7.0",
-        "request_sha256": "89ce3819d77b0f6e1de6fb98b91f7cfcadbb0349220557c28ffc105a8d25b793",
+        "request_sha256": "44828f598e42dfa1f594564f466669fc4c6048aebd0924391f69e67f7f899e1d",
         "role": "investigate",
         "task_key": "review.investigate.s004"
       },
@@ -2496,7 +2602,7 @@
         "pack_id": "review",
         "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
         "pack_version": "2.7.0",
-        "request_sha256": "d3ee051258f417b55b32cbc837ea957d3749071bccd45cfef28feccacae50087",
+        "request_sha256": "592ae296d1af06d23c42565d797ae2301bcfcc5cd63820401f88e477876bbb22",
         "role": "verify",
         "task_key": "review.verify.s004"
       },
@@ -2507,7 +2613,7 @@
         "pack_id": "review",
         "pack_sha256": "78d9b39915a394180ea53957c0f55b81ddad88791bc13224cb16d15a900efbfa",
         "pack_version": "2.7.0",
-        "request_sha256": "36e30b7a258d144c6d975b8c8578ab7c6cf753a88af3a22e04d3e62fb1105855",
+        "request_sha256": "492dd932931171bdc1cd0877ee068fedf79e270671fb70e1f0e3b1e36c2c1cde",
         "role": "investigate",
         "task_key": "review.investigate.s005"
       },
@@ -2518,7 +2624,7 @@
         "pack_id": "review",
         "pack_sha256": "3502a62183048c5b3bbe775b90fe45e172f22af838003582e7be2ef4d2e49a27",
         "pack_version": "2.7.0",
-        "request_sha256": "de0ff71d4420278b064226f0de9e5c1b0b655fd711db0ea090376e17f098f8ed",
+        "request_sha256": "e2a021ef7af3d5d9d2124408ec1a70b33bd7b530354bccc1b35c2785b468c9e2",
         "role": "verify",
         "task_key": "review.verify.s005"
       }
@@ -3561,6 +3667,96 @@
         {
           "assertion": "설정 주소 검증 누락",
           "evidence_ids": [
+            "ev_1e0dc6fad5ef460d4a8467a8"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "빈 주소가 검사 없이 연결에 쓰인다.",
+          "evidence_ids": [
+            "ev_1e0dc6fad5ef460d4a8467a8"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+          "evidence_ids": [
+            "ev_1e0dc6fad5ef460d4a8467a8"
+          ],
+          "kind": "inferred"
+        }
+      ],
+      "conditions": [
+        {
+          "evidence_ids": [
+            "ev_1e0dc6fad5ef460d4a8467a8"
+          ],
+          "statement": "주소가 비어 있는 경우",
+          "status": "assumed"
+        }
+      ],
+      "counterevidence_ids": [],
+      "disposition": "open",
+      "evidence": [
+        {
+          "blob_sha256": "ca753b233587c9ff67892275eeac14362812d2b12209298a73bd67464a0dadf6",
+          "description": "고정 스냅샷의 test 발췌 위치",
+          "id": "ev_1e0dc6fad5ef460d4a8467a8",
+          "kind": "code",
+          "location": {
+            "end_line": 14,
+            "path": "api/handler_test.go",
+            "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
+            "start_line": 1
+          }
+        }
+      ],
+      "fingerprint": "fp2:11b687bfb932cdb4623572cdf83f5879e7ba12df53898cf62f273a4e8a822cf7",
+      "fingerprint_basis": {
+        "analyzer": "review",
+        "context": "unavailable",
+        "move_key": "",
+        "paths": [
+          "api/handler_test.go"
+        ],
+        "producer": "model",
+        "rule": "candidate:error_handling",
+        "scheme": "fp2",
+        "symbols": []
+      },
+      "id": "review_s005_investigate_1",
+      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
+      "limitations": [
+        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
+      ],
+      "locations": [
+        {
+          "end_line": 14,
+          "path": "api/handler_test.go",
+          "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
+          "start_line": 1
+        }
+      ],
+      "observation_ids": [],
+      "recommendation": {
+        "summary": "주소를 검사한다.",
+        "tradeoffs": []
+      },
+      "schema_version": "0.1",
+      "severity": "medium",
+      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
+      "title": "설정 주소 검증 누락",
+      "validation": "inconclusive",
+      "verification": [
+        "Forward의 호출자와 결제 경로를 읽는다."
+      ]
+    },
+    {
+      "category": "error_handling",
+      "claims": [
+        {
+          "assertion": "설정 주소 검증 누락",
+          "evidence_ids": [
             "ev_2869a1711ebab54a8cdb5f82"
           ],
           "kind": "inferred"
@@ -3651,21 +3847,21 @@
         {
           "assertion": "설정 주소 검증 누락",
           "evidence_ids": [
-            "ev_dcd1cf0fa465f97189b98384"
+            "ev_dff01031983cb5ed4eeb01d8"
           ],
           "kind": "inferred"
         },
         {
           "assertion": "빈 주소가 검사 없이 연결에 쓰인다.",
           "evidence_ids": [
-            "ev_dcd1cf0fa465f97189b98384"
+            "ev_dff01031983cb5ed4eeb01d8"
           ],
           "kind": "inferred"
         },
         {
           "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
           "evidence_ids": [
-            "ev_dcd1cf0fa465f97189b98384"
+            "ev_dff01031983cb5ed4eeb01d8"
           ],
           "kind": "inferred"
         }
@@ -3673,7 +3869,7 @@
       "conditions": [
         {
           "evidence_ids": [
-            "ev_dcd1cf0fa465f97189b98384"
+            "ev_dff01031983cb5ed4eeb01d8"
           ],
           "statement": "주소가 비어 있는 경우",
           "status": "assumed"
@@ -3683,25 +3879,25 @@
       "disposition": "open",
       "evidence": [
         {
-          "blob_sha256": "eb60ec8caf4fda328a1e59584a3a508ef5b17ff0ae5a5a5cd358ba25f5cabae8",
+          "blob_sha256": "77252f002872da47ace9a0d0439b028bb7c2405761ba9d6f43a262ea311e5dee",
           "description": "고정 스냅샷의 code 발췌 위치",
-          "id": "ev_dcd1cf0fa465f97189b98384",
+          "id": "ev_dff01031983cb5ed4eeb01d8",
           "kind": "code",
           "location": {
             "end_line": 71,
-            "path": "store/encode.go",
+            "path": "store/flush.go",
             "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
             "start_line": 1
           }
         }
       ],
-      "fingerprint": "fp2:4f94e127ea6b0b33088b6decb8717c4241bde1f3b3eb8f9e37e8260ab92df8c8",
+      "fingerprint": "fp2:56440864f938f95574f94ea215a9b0219b67ecec19f41139504869283472b1b9",
       "fingerprint_basis": {
         "analyzer": "review",
         "context": "unavailable",
         "move_key": "",
         "paths": [
-          "store/encode.go"
+          "store/flush.go"
         ],
         "producer": "model",
         "rule": "candidate:error_handling",
@@ -3716,97 +3912,7 @@
       "locations": [
         {
           "end_line": 71,
-          "path": "store/encode.go",
-          "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
-          "start_line": 1
-        }
-      ],
-      "observation_ids": [],
-      "recommendation": {
-        "summary": "주소를 검사한다.",
-        "tradeoffs": []
-      },
-      "schema_version": "0.1",
-      "severity": "medium",
-      "severity_reason": "재시도 범위가 문서 계약과 어긋날 수 있다.",
-      "title": "설정 주소 검증 누락",
-      "validation": "inconclusive",
-      "verification": [
-        "Forward의 호출자와 결제 경로를 읽는다."
-      ]
-    },
-    {
-      "category": "error_handling",
-      "claims": [
-        {
-          "assertion": "설정 주소 검증 누락",
-          "evidence_ids": [
-            "ev_48d807aa5ef93941c3513053"
-          ],
-          "kind": "inferred"
-        },
-        {
-          "assertion": "빈 주소가 검사 없이 연결에 쓰인다.",
-          "evidence_ids": [
-            "ev_48d807aa5ef93941c3513053"
-          ],
-          "kind": "inferred"
-        },
-        {
-          "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
-          "evidence_ids": [
-            "ev_48d807aa5ef93941c3513053"
-          ],
-          "kind": "inferred"
-        }
-      ],
-      "conditions": [
-        {
-          "evidence_ids": [
-            "ev_48d807aa5ef93941c3513053"
-          ],
-          "statement": "주소가 비어 있는 경우",
-          "status": "assumed"
-        }
-      ],
-      "counterevidence_ids": [],
-      "disposition": "open",
-      "evidence": [
-        {
-          "blob_sha256": "c81d385a0a4cad23c363de433ca119f871ca6b26184585b441c5a470221850d5",
-          "description": "고정 스냅샷의 code 발췌 위치",
-          "id": "ev_48d807aa5ef93941c3513053",
-          "kind": "code",
-          "location": {
-            "end_line": 71,
-            "path": "store/index.go",
-            "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
-            "start_line": 1
-          }
-        }
-      ],
-      "fingerprint": "fp2:6f9b1628c59b2d3735f2eb49805c5b5f775bf58f54149979de5b941b54b7cee1",
-      "fingerprint_basis": {
-        "analyzer": "review",
-        "context": "unavailable",
-        "move_key": "",
-        "paths": [
-          "store/index.go"
-        ],
-        "producer": "model",
-        "rule": "candidate:error_handling",
-        "scheme": "fp2",
-        "symbols": []
-      },
-      "id": "review_s003_investigate_1",
-      "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
-      "limitations": [
-        "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
-      ],
-      "locations": [
-        {
-          "end_line": 71,
-          "path": "store/index.go",
+          "path": "store/flush.go",
           "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
           "start_line": 1
         }
@@ -3888,7 +3994,7 @@
         "scheme": "fp2",
         "symbols": []
       },
-      "id": "review_s004_investigate_1",
+      "id": "review_s003_investigate_1",
       "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
       "limitations": [
         "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
@@ -3921,21 +4027,21 @@
         {
           "assertion": "설정 주소 검증 누락",
           "evidence_ids": [
-            "ev_130dd22aa5bbfb36e1f0be52"
+            "ev_971cc54b80197c7dd76a7390"
           ],
           "kind": "inferred"
         },
         {
           "assertion": "빈 주소가 검사 없이 연결에 쓰인다.",
           "evidence_ids": [
-            "ev_130dd22aa5bbfb36e1f0be52"
+            "ev_971cc54b80197c7dd76a7390"
           ],
           "kind": "inferred"
         },
         {
           "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
           "evidence_ids": [
-            "ev_130dd22aa5bbfb36e1f0be52"
+            "ev_971cc54b80197c7dd76a7390"
           ],
           "kind": "inferred"
         }
@@ -3943,7 +4049,7 @@
       "conditions": [
         {
           "evidence_ids": [
-            "ev_130dd22aa5bbfb36e1f0be52"
+            "ev_971cc54b80197c7dd76a7390"
           ],
           "statement": "주소가 비어 있는 경우",
           "status": "assumed"
@@ -3953,32 +4059,32 @@
       "disposition": "open",
       "evidence": [
         {
-          "blob_sha256": "c0792bbaba93ac809a2aa1e68bad58368342130f6d2f44a0100b1c37c41e6d15",
+          "blob_sha256": "5fdd39435bb0af44c3e37a506ac0fd9b6900a7c095e48d91063d9c37301e4e15",
           "description": "고정 스냅샷의 code 발췌 위치",
-          "id": "ev_130dd22aa5bbfb36e1f0be52",
+          "id": "ev_971cc54b80197c7dd76a7390",
           "kind": "code",
           "location": {
             "end_line": 71,
-            "path": "store/put.go",
+            "path": "store/recover.go",
             "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
             "start_line": 1
           }
         }
       ],
-      "fingerprint": "fp2:21924a34c8c80e7c623c5cdc7a2037ed7055cbc06f4c35071e045a4c943d9e4f",
+      "fingerprint": "fp2:1d896258ad5fa921b00110eabc033601ff3c8d6affd65978fd5f162648b75d32",
       "fingerprint_basis": {
         "analyzer": "review",
         "context": "unavailable",
         "move_key": "",
         "paths": [
-          "store/put.go"
+          "store/recover.go"
         ],
         "producer": "model",
         "rule": "candidate:error_handling",
         "scheme": "fp2",
         "symbols": []
       },
-      "id": "review_s005_investigate_1",
+      "id": "review_s004_investigate_1",
       "impact": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
       "limitations": [
         "Forward의 실제 호출자를 발췌에서 확인하지 못했다."
@@ -3986,7 +4092,7 @@
       "locations": [
         {
           "end_line": 71,
-          "path": "store/put.go",
+          "path": "store/recover.go",
           "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
           "start_line": 1
         }
@@ -4053,25 +4159,7 @@
       "code": "review_scope_budget_exhausted",
       "detail": null,
       "section": "code_review",
-      "subject": "go:api"
-    },
-    {
-      "code": "review_scope_budget_exhausted",
-      "detail": null,
-      "section": "code_review",
       "subject": "go:store"
-    },
-    {
-      "code": "review_scope_budget_exhausted",
-      "detail": null,
-      "section": "code_review",
-      "subject": "javascript:web"
-    },
-    {
-      "code": "review_scope_budget_exhausted",
-      "detail": null,
-      "section": "code_review",
-      "subject": "python:worker"
     },
     {
       "code": "tests_not_run",
@@ -4116,18 +4204,13 @@
   "overview": {
     "attention": [
       {
-        "code": "review_scope_not_sent",
-        "count": 11,
-        "section": "code_review"
-      },
-      {
         "code": "pending_candidates",
         "count": 6,
         "section": "code_review"
       },
       {
         "code": "analysis_gaps",
-        "count": 12,
+        "count": 9,
         "section": "gaps"
       }
     ],
@@ -4193,8 +4276,8 @@
         "counts": {
           "actionable": 0,
           "calls": 14,
-          "files_not_sent_to_model": 11,
-          "files_sent_to_model": 28,
+          "files_not_sent_to_model": 0,
+          "files_sent_to_model": 39,
           "findings": 6,
           "pending": 6,
           "refuted": 0
@@ -4204,7 +4287,7 @@
       },
       {
         "counts": {
-          "gaps": 12
+          "gaps": 9
         },
         "key": "gaps",
         "state": null
@@ -4387,10 +4470,10 @@
     "pending_candidates": 6,
     "priorities": [
       "review_investigate_1",
+      "review_s005_investigate_1",
       "review_s001_investigate_1",
       "review_s002_investigate_1",
-      "review_s003_investigate_1",
-      "review_s004_investigate_1"
+      "review_s003_investigate_1"
     ],
     "raw_observations": 0,
     "refuted_findings": 0,
@@ -4541,9 +4624,9 @@
     {
       "id": "0195f3a0-0000-7000-8000-000000000656",
       "key": "review.investigate.s009",
-      "reason": "no_review_scope",
+      "reason": "review_budget_exhausted",
       "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "budget_exhausted"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000658",
@@ -5227,9 +5310,9 @@
     {
       "id": "0195f3a0-0000-7000-8000-000000000657",
       "key": "review.verify.s009",
-      "reason": "no_review_scope",
+      "reason": "review_budget_exhausted",
       "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "budget_exhausted"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000659",

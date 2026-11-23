@@ -29,7 +29,7 @@
     {
       "source": "review.scope",
       "state": "accepted",
-      "sha256": "599df7250afecc6769899db7cbeb2f58a662992b96514874e8a70e8195e61384"
+      "sha256": "483744f679860f751c93e5694c9160e6621ee429ef5767569762bc95525f6a03"
     }
   ],
   "evidence": [
@@ -43,47 +43,11 @@
       "origin": "context"
     },
     {
-      "id": "ev_be3077dd74fd0d00e4ed9a64",
-      "path": "store/codec.go",
-      "sha256": "93f73314c5264c8dadf0f380e68a37ee6af6c6707019a72f9427661d1906b3d5",
-      "start_line": 1,
-      "end_line": 1,
-      "kind": "code",
-      "origin": "header"
-    },
-    {
-      "id": "ev_5c45d946ae6f896435baf712",
-      "path": "store/codec.go",
-      "sha256": "93f73314c5264c8dadf0f380e68a37ee6af6c6707019a72f9427661d1906b3d5",
-      "start_line": 72,
-      "end_line": 89,
-      "kind": "code",
-      "origin": "context"
-    },
-    {
       "id": "ev_731e6c4c83c8a55e596ad12c",
       "path": "store/compact.go",
       "sha256": "9ef0eca20bf12061ae2ba03f38fb9f80ed32c06bcec3fc20ddb98cd99950834b",
       "start_line": 1,
       "end_line": 71,
-      "kind": "code",
-      "origin": "context"
-    },
-    {
-      "id": "ev_688f783247be6c91d4b33b75",
-      "path": "store/compact.go",
-      "sha256": "9ef0eca20bf12061ae2ba03f38fb9f80ed32c06bcec3fc20ddb98cd99950834b",
-      "start_line": 1,
-      "end_line": 1,
-      "kind": "code",
-      "origin": "header"
-    },
-    {
-      "id": "ev_4f23f5aa829edf513e002ab6",
-      "path": "store/compact.go",
-      "sha256": "9ef0eca20bf12061ae2ba03f38fb9f80ed32c06bcec3fc20ddb98cd99950834b",
-      "start_line": 72,
-      "end_line": 89,
       "kind": "code",
       "origin": "context"
     },
@@ -97,24 +61,6 @@
       "origin": "context"
     },
     {
-      "id": "ev_dc1b672f2f4fc8af0e16c120",
-      "path": "store/cursor.go",
-      "sha256": "b307d1f015fdc13f26705796d2322bec07cb8dd601edc08e2c8e6903437ef44b",
-      "start_line": 1,
-      "end_line": 1,
-      "kind": "code",
-      "origin": "header"
-    },
-    {
-      "id": "ev_65b42afb7cf3a83786e6f74f",
-      "path": "store/cursor.go",
-      "sha256": "b307d1f015fdc13f26705796d2322bec07cb8dd601edc08e2c8e6903437ef44b",
-      "start_line": 72,
-      "end_line": 89,
-      "kind": "code",
-      "origin": "context"
-    },
-    {
       "id": "ev_60a92d48ea2d7c71a0f70278",
       "path": "store/delete.go",
       "sha256": "e255a7f3035e20a9b0e4963822b7dc87600b48cc4c0051c18f7be3fec2e31340",
@@ -124,20 +70,20 @@
       "origin": "context"
     },
     {
-      "id": "ev_cb33267709369d77cc4f3a5b",
-      "path": "store/delete.go",
-      "sha256": "e255a7f3035e20a9b0e4963822b7dc87600b48cc4c0051c18f7be3fec2e31340",
+      "id": "ev_82e5ccc5c37f568f4e9d1b10",
+      "path": "store/encode.go",
+      "sha256": "eb60ec8caf4fda328a1e59584a3a508ef5b17ff0ae5a5a5cd358ba25f5cabae8",
       "start_line": 1,
-      "end_line": 1,
+      "end_line": 71,
       "kind": "code",
-      "origin": "header"
+      "origin": "context"
     },
     {
-      "id": "ev_33210b75563199f7dad3d8f2",
-      "path": "store/delete.go",
-      "sha256": "e255a7f3035e20a9b0e4963822b7dc87600b48cc4c0051c18f7be3fec2e31340",
-      "start_line": 72,
-      "end_line": 89,
+      "id": "ev_97162f6e0195228ea88bb808",
+      "path": "store/evict.go",
+      "sha256": "bb412f06b5b14efeaa375079e027df3bd5d6c4e766872e647d93c10e96702db7",
+      "start_line": 1,
+      "end_line": 71,
       "kind": "code",
       "origin": "context"
     },
@@ -187,10 +133,10 @@
         "languages/python.md",
         "pack.yaml"
       ],
-      "request_sha256": "ebc7282068a1dc5a647d290ed8c72709be255875a47af74e8e1da12b0a6b1e07",
-      "request_bytes": 32719,
+      "request_sha256": "805c04b212d54805d0324d08286a5b898d9faaabc4be0c980edab4798fc1aa0c",
+      "request_bytes": 33117,
       "usage": {
-        "input": 16191,
+        "input": 16589,
         "output": 50
       },
       "attempt": 1,
