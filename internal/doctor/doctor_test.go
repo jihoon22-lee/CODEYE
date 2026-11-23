@@ -137,7 +137,10 @@ func TestCollectReportsGapsHonestlyAndCleansDisk(t *testing.T) {
 	if err := json.Unmarshal(b.Bytes(), &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if len(decoded.Checks) != len(report.Checks) || len(decoded.Checks) != 11 {
+	if c := checkOf(t, report, "build_tools"); c.Status != "unavailable" || c.Reason != "build_tools_missing" || c.Blocking {
+		t.Fatalf("build tools %+v", c)
+	}
+	if len(decoded.Checks) != len(report.Checks) || len(decoded.Checks) != 12 {
 		t.Fatalf("got %d checks", len(decoded.Checks))
 	}
 	b.Reset()

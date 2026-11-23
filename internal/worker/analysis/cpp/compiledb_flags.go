@@ -145,13 +145,17 @@ func mapFlags(args []string, dir, root, fileArg, fileAbs string, files map[strin
 				m.Dropped[DropIncludeOutside]++
 				break
 			}
+			generated := underGeneratedBuild(rel)
+			if generated {
+				m.Generated++
+			}
 			if pf.file {
-				if _, exists := files[rel]; !exists {
+				if _, exists := files[rel]; !exists && !generated {
 					m.FilesMissing++
 				}
 				u.Args = append(u.Args, Arg{Flag: pf.name, Path: rel})
 			} else {
-				if !dirs[rel] {
+				if !dirs[rel] && !generated {
 					m.DirsMissing++
 				}
 				u.Args = append(u.Args, Arg{Flag: pf.name, Path: rel, Joined: true})

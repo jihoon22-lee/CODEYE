@@ -65,6 +65,11 @@
       "reason": "configured_tools_usable"
     },
     {
+      "id": "build_tools",
+      "status": "available",
+      "reason": "compile_db_generation_ready"
+    },
+    {
       "id": "database",
       "status": "not_configured",
       "reason": "database_url_missing"

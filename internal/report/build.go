@@ -111,6 +111,9 @@ func Build(in Input, reg *Registry) (Report, error) {
 			mt := &rm.Tasks[i]
 			st := states[mt.Key]
 			st.manifest = mt
+			for _, l := range buildContextLimitations(mt) {
+				lim.add(l)
+			}
 			if string(mt.Status) != st.facts.Status {
 				lim.add(LimTaskStatusMismatch + ":" + mt.Key)
 			}
@@ -380,7 +383,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 		st := states[k]
 		// The secrets task screens model inputs and is planned for a
 		// snapshot of documents alone; it is no static analysis of the code.
-		if record.AnalyzerTaskKey(k) && !obsdoc.IsSecretTask(k) {
+		if analyzerTask(k) && !obsdoc.IsSecretTask(k) {
 			analyzerPlanned = true
 		}
 		// A static analysis gap is visible and makes the report partial

@@ -96,7 +96,7 @@ SQLite·PostgreSQL 이중 저장 계층, Redis, Kafka, Kubernetes, 벡터 DB를 
 | acquire | snapshot, source SHA, manifest | 접근 실패·불안정 복사면 failed | 구현 |
 | plan | task 목록(key·필수 여부·단계·가중치) | 미지원 검사는 사유를 기록 | 구현(DAG 필드는 일부) |
 | discover | 모듈 지도·환경 사실·문서 맥락 | 문서 없음은 정상, 읽지 못한 범위 표시 | 구현 |
-| prepare | 실행 사본·런타임·도구 manifest, 모듈별 의존성 기록 | 의존성 준비 실패는 그 task만 끝내고 분석 계속 | Go·Rust·JS/TS·Python 의존성 받기 구현, C/C++ 의존성과 빌드는 설계 계약(미구현) |
+| prepare | 실행 사본·런타임·도구 manifest, 모듈별 의존성 기록 | 의존성 준비 실패는 그 task만 끝내고 분석 계속 | Go·Rust·JS/TS·Python 의존성 받기 구현, C/C++는 CMake configure로 compile DB만 만든다(저장소 코드 실행 허가 필요). C/C++ 의존성 받기와 빌드는 설계 계약(미구현) |
 | analyze | 도구 observation, 맥락 중심 가설 | task별 제한시간과 부분 실패 | 구현 |
 | verify | 지지·기각·보류와 반대 근거 | 예산 종료 시 미검증 유지 | 구현 |
 | test | 기존 테스트 실행 기록, 케이스별 결과와 확인된 소스 위치 | 미실행·실패·시간 초과 사유를 기록 | `with-tests`에서 구현, Linux 전용 loopback 필요 |
@@ -329,7 +329,7 @@ lease·만료·정리 보고의 프로토콜은 [실행](EXECUTION.md)에 있다
 
 ### 프로젝트 환경 준비
 
-Go 모듈·Rust crate·JS/TS 패키지·Python wheel 의존성 받기와 `with-tests`의 기존 테스트 실행을 제공한다. C/C++ 의존성 받기와 별도 빌드 전용 단계는 설계 계약이다. [의존성 준비](#의존성-준비) · [기존 테스트 실행](EXECUTION.md#기존-테스트-실행)
+Go 모듈·Rust crate·JS/TS 패키지·Python wheel 의존성 받기와 `with-tests`의 기존 테스트 실행을 제공한다. C/C++는 저장소 코드 실행 허가가 있을 때 CMake configure로 compile DB를 만드는 `compile-db` 작업([compile DB 생성](ANALYZERS.md#compile-db-생성))만 있다. C/C++ 의존성 받기와 target을 build하는 단계는 설계 계약이다. [의존성 준비](#의존성-준비) · [기존 테스트 실행](EXECUTION.md#기존-테스트-실행)
 
 - 프로젝트 요구 환경, 확보한 환경, 차이, 분석 영향을 따로 저장한다. 모노레포는 모듈별로 다른 언어·버전을 허용한다. 같은 프로젝트의 두 버전 환경을 전역 PATH 수정으로 충돌시키지 않는다.
 - 버전 선택 우선순위는 명시된 프로젝트 제약 → lockfile → 검출된 호환 런타임 → 운영자 카탈로그다. 적합한 버전이 없으면 임의 최신 버전으로 바꾸지 않는다. 버전이 맞지 않아도 가능한 텍스트 검사는 계속하되 의미 분석·테스트의 유효 범위를 표시한다.

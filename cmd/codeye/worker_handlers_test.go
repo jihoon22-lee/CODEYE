@@ -244,3 +244,47 @@ func TestWorkerHandlersRunDependencyContracts(t *testing.T) {
 		t.Fatalf("missing dependency contract tasks %v", remaining)
 	}
 }
+
+// The C/C++ compile DB generation sits after discovery and before the
+// analyzers in both the deep-review and with-tests chains, and is not
+// planned when no C/C++ analyzer can run.
+func TestWorkerHandlersPlanCompileDBGeneration(t *testing.T) {
+	files := map[string]string{"CMakeLists.txt": "project(x C)\nadd_library(x x.c)\n", "x.c": "int x(void) { return 0; }\n"}
+	keysOf := func(t *testing.T, h analysis.Handler) []string {
+		t.Helper()
+		fx := packtest.NewFixture(t, "", files, domain.Scope{})
+		plan, err := h.Plan(context.Background(), fx.Job)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var keys []string
+		for _, p := range plan {
+			keys = append(keys, p.Key)
+		}
+		return keys
+	}
+	hs, _, err := workerHandlers(context.Background(), &workerproto.Hello{ScratchRoot: t.TempDir(), AdvertiseWithoutBaseline: true}, &executor.Executor{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range hs {
+		if keys := keysOf(t, h); slices.Contains(keys, "compile-db") {
+			t.Fatalf("%s: generation planned without a usable C/C++ analyzer: %v", h.Info().Capability, keys)
+		}
+	}
+	cppcheck := os.Getenv("CODEYE_TEST_CPPCHECK")
+	if cppcheck == "" {
+		t.Skip("set CODEYE_TEST_CPPCHECK for the planned chain")
+	}
+	hs, _, err = workerHandlers(context.Background(), &workerproto.Hello{ScratchRoot: t.TempDir(), AnalyzerTools: map[string]string{"cppcheck": cppcheck}}, &executor.Executor{})
+	if err != nil || len(hs) != 2 {
+		t.Fatalf("handlers %d %v", len(hs), err)
+	}
+	for _, h := range hs {
+		keys := keysOf(t, h)
+		gen, check, env := slices.Index(keys, "compile-db"), slices.Index(keys, "cppcheck"), slices.Index(keys, "env.discover")
+		if gen < 0 || check < gen || env > gen {
+			t.Fatalf("%s: plan order %v", h.Info().Capability, keys)
+		}
+	}
+}

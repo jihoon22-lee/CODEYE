@@ -123,7 +123,7 @@ CODEYE 웹 계정은 프로젝트를 열거나 실행할 권한을 정한다. �
 | Go | go vet, Staticcheck, errcheck의 무시된 오류, gofmt, 패키지 의존 관계 | go test, 선택한 하위 테스트·race 검사 |
 | Python | Ruff, mypy·Pyright, Bandit, 선언된 Import Linter 계약 | unittest·pytest |
 | JavaScript·TypeScript | ESLint, tsc, dependency-cruiser 기반 패키지 순환·의존 규칙 | npm 스크립트, Jest·Vitest·node:test·Playwright 결과 |
-| C/C++ | Cppcheck, clang-tidy. C 소스에는 GCC 분석기의 파일 디스크립터 검사도 적용 가능 | CMake·CTest. GoogleTest·Catch2 등은 CTest 등록 방식에 따라 결과를 읽는다. |
+| C/C++ | Cppcheck, clang-tidy. C 소스에는 GCC 분석기의 파일 디스크립터 검사도 적용 가능. 저장소에 `compile_commands.json`이 없으면 build 스크립트 실행을 허용한 프로젝트에서 CMake configure로 만들어 쓴다(서비스 머신에 cmake·make 필요) | CMake·CTest. GoogleTest·Catch2 등은 CTest 등록 방식에 따라 결과를 읽는다. |
 | Rust | Cargo·Clippy와 rustdoc의 API 문서 참조 검사 | Cargo 단위·통합·문서 테스트, 선택한 cargo-nextest |
 
 분석 노드에 설치한 도구, 프로젝트 설정, 읽을 수 있는 의존성이 실제 범위를 결정한다. 런타임에서만 결정되는 호출이나 다른 빌드 구성의 동작은 코드에서 확인한 경로와 구분한다. [도구와 규칙](ANALYZERS.md) · [테스트 실행 조건](EXECUTION.md#기존-테스트-실행)

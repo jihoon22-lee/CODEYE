@@ -160,10 +160,26 @@ func (a *Analyzer) runCruiser(ctx context.Context, run *anypack.Run, runner exec
 	parseCruiser(run, files, doc, outcome, res.Stdout.Data)
 }
 
+// cruiseModule is one entry of the cruiser's module list. Besides the cruised
+// sources the list holds the dependency targets that were not followed: Node
+// core modules ("fs"), packages that did not resolve (nothing is installed
+// in the staged project) and paths the doNotFollow option stops at
+// (`../package.json`). Those carry coreModule, couldNotResolve,
+// matchesDoNotFollow or followable=false (dependency-cruiser 18.8).
 type cruiseModule struct {
-	Source        string
-	Dependencies  []struct{ CouldNotResolve bool }
-	CouldNotParse bool
+	Source             string
+	Dependencies       []struct{ CouldNotResolve bool }
+	CouldNotParse      bool
+	CoreModule         bool
+	CouldNotResolve    bool
+	MatchesDoNotFollow bool
+	Followable         *bool
+}
+
+// target reports a module entry that is a dependency target, not a cruised
+// source.
+func (m cruiseModule) target() bool {
+	return m.CoreModule || m.CouldNotResolve || m.MatchesDoNotFollow || m.Followable != nil && !*m.Followable
 }
 
 type cruiseViolation struct {
@@ -184,21 +200,36 @@ func parseCruiser(run *anypack.Run, files []source.Entry, doc *obsdoc.Document, 
 		parseFailure(doc, outcome)
 		return
 	}
-	if len(result.Modules) == 0 {
-		outcome.Fail(domain.TaskUnsupported, "dependency_cruiser_no_parsed_sources", obsdoc.ExitConfigurationError)
-		return
-	}
 	selected := map[string]source.Entry{}
 	seen := map[string]bool{}
 	for _, f := range files {
 		selected[f.Path] = f
 	}
+	var cruised []cruiseModule
+	// targets are the listed import targets that were not followed; a rule
+	// may forbid exactly those (a core module, an external package).
+	targets := map[string]bool{}
 	for _, m := range result.Modules {
-		if _, ok := selected[m.Source]; !ok || seen[m.Source] {
+		_, ok := selected[m.Source]
+		if !ok && m.target() {
+			// Not a source: a core module, an unresolved package or a path
+			// doNotFollow stops at. It is counted, never analyzed.
+			doc.Coverage.Units["dependency_targets_not_followed"]++
+			targets[m.Source] = true
+			continue
+		}
+		if !ok || seen[m.Source] {
 			parseFailure(doc, outcome)
 			return
 		}
 		seen[m.Source] = true
+		cruised = append(cruised, m)
+	}
+	if len(cruised) == 0 {
+		outcome.Fail(domain.TaskUnsupported, "dependency_cruiser_no_parsed_sources", obsdoc.ExitConfigurationError)
+		return
+	}
+	for _, m := range cruised {
 		if m.CouldNotParse {
 			outcome.Fail(domain.TaskFailed, "dependency_cruiser_source_unparsed", obsdoc.ExitConfigurationError)
 			continue
@@ -223,12 +254,21 @@ func parseCruiser(run *anypack.Run, files []source.Entry, doc *obsdoc.Document, 
 			parseFailure(doc, outcome)
 			return
 		}
-		if !seen[v.From] || (v.To != "" && v.To != v.From && !seen[v.To]) {
+		if !seen[v.From] || (v.To != "" && v.To != v.From && !seen[v.To] && !targets[v.To]) {
+			// The violation is reported but cannot be tied to a cruised
+			// source; the report must show that it is not represented.
 			doc.Coverage.Units["dependency_violation_unmapped"]++
 			continue
 		}
-		line := cruiseLocation(run.Job.Snapshot.SnapshotDir, selected[v.From], v.UnresolvedTo)
+		literal := v.UnresolvedTo
+		if literal == "" && targets[v.To] {
+			literal = v.To
+		}
+		line := cruiseLocation(run.Job.Snapshot.SnapshotDir, selected[v.From], literal)
 		observation(doc, resolver, cruiserExecution, digest, v.From, v.Rule.Name, line, start, end)
+	}
+	if doc.Coverage.Units["dependency_violation_unmapped"] > 0 {
+		doc.Limitations = append(doc.Limitations, "dependency_violations_not_represented")
 	}
 }
 

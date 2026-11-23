@@ -30,11 +30,26 @@
       "additionalProperties": false,
       "description": "The Go module download settings of the user's go env that differ from Go's defaults; the dependency fetch follows them. Absent when none differs.",
       "properties": {
-        "goproxy": {"type": "string", "minLength": 1},
-        "gosumdb": {"type": "string", "minLength": 1},
-        "goprivate": {"type": "string", "minLength": 1},
-        "gonoproxy": {"type": "string", "minLength": 1},
-        "gonosumdb": {"type": "string", "minLength": 1}
+        "goproxy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gosumdb": {
+          "type": "string",
+          "minLength": 1
+        },
+        "goprivate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gonoproxy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gonosumdb": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "npm_registry": {
@@ -519,6 +534,88 @@
           }
         }
       ]
+    },
+    "toolchain_path": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "programs"
+      ],
+      "description": "The programs the agent's toolchain path (agent.toolchain_path, default /usr/bin:/bin) offers to the tasks that find them there: C/C++ compile DB generation, CMake test suites, Cargo build scripts. Only presence is checked. Absent on Windows without a configured path.",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "programs": {
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "status",
+              "used_for"
+            ],
+            "properties": {
+              "name": {
+                "enum": [
+                  "cmake",
+                  "make",
+                  "ninja",
+                  "cc",
+                  "c++",
+                  "ar"
+                ]
+              },
+              "status": {
+                "enum": [
+                  "found",
+                  "not_found"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^(/|[A-Za-z]:[\\\\/])",
+                "minLength": 2
+              },
+              "used_for": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "enum": [
+                    "compile_db_generation",
+                    "cmake_tests",
+                    "rust_build_scripts"
+                  ]
+                }
+              }
+            },
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "found"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "path"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

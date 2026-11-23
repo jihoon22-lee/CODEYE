@@ -13,7 +13,7 @@
 
 ## 신뢰와 실행 권한
 
-- 정적 분석도 JS 설정, build script, compiler plugin, proc macro 등을 실행할 수 있다. "정적"이라는 이름만으로 무실행으로 분류하지 않는다.
+- 정적 분석도 JS 설정, build script, compiler plugin, proc macro 등을 실행할 수 있다. "정적"이라는 이름만으로 무실행으로 분류하지 않는다. 지금 허가를 받아야 하는 정적 분석 쪽 실행은 Rust cargo check·clippy·rustdoc과 C/C++ compile DB 생성(CMake configure, [compile DB 생성](ANALYZERS.md#compile-db-생성))이다. 이 작업들은 시스템 C 도구를 이름으로 찾으므로 자식 `PATH`에 `--toolchain-path`가 들어간다.
 - Native에서 실행되는 자식은 실행 계정의 권한을 가진다. 디렉터리 복사, venv, 환경변수 allowlist는 보안 샌드박스가 아니다. 신뢰 경계가 다른 프로젝트는 별도 계정·노드를 쓴다.
 - 같은 OS 사용자로 도는 분석 도구는 `<state-dir>/node.json`(노드 비밀값)을 읽을 수 있다. 파일 권한 0600은 같은 사용자를 막지 못한다. 실행 계정 분리는 운영 배치에서 한다.
 - 저장소 코드 실행에는 프로젝트의 `run_build_scripts`, 실행자에 대한 서비스의 허용 범위, 노드의 실행 허가를 모두 적용한다. 프로젝트 기본값은 로컬 폴더는 켬, Git 저장소는 끔이다. 관리자가 시작한 실행에는 다른 사용자용 서비스 스위치를 적용하지 않는다.

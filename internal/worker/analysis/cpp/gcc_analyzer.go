@@ -174,14 +174,16 @@ func (a *GCCAnalyzer) Run(ctx context.Context, job analysis.Job, spec analysis.T
 	}
 	doc := gccBase(job, tasks[0])
 	l, _ := layoutOf(job)
-	if len(l.DBs) == 0 {
+	src, broken := compileDBs(job, l)
+	if broken != "" {
+		return notRun(s, doc, domain.TaskFailed, broken, obsdoc.ExitNotRun)
+	}
+	if len(src.DBs) == 0 {
+		doc.Limitations = append(doc.Limitations, src.Limitations...)
 		return notRun(s, doc, domain.TaskUnsupported, ReasonCompileDBMissing, obsdoc.ExitNotRun)
 	}
-	data, cfgFiles, ok := readDBs(job, l)
-	if !ok {
-		return notRun(s, doc, domain.TaskFailed, ReasonSnapshotIntegrity, obsdoc.ExitNotRun)
-	}
-	m, err := MapDBs(l.DBs, data, l.Files, func(rel string) bool { return path.Ext(rel) == ".c" && pack.PathInScope(rel, job.Scope) })
+	l.DBs = src.DBs
+	m, err := MapDBs(src.DBs, src.Data, l.Files, func(rel string) bool { return path.Ext(rel) == ".c" && pack.PathInScope(rel, job.Scope) })
 	if err != nil {
 		return notRun(s, doc, domain.TaskFailed, ReasonCompileDBUnreadable, obsdoc.ExitNotRun)
 	}
@@ -194,7 +196,8 @@ func (a *GCCAnalyzer) Run(ctx context.Context, job analysis.Job, spec analysis.T
 		}
 	}
 	m.Units = slices.DeleteFunc(m.Units, func(u Unit) bool { return !gccCUnit(u) })
-	applyCompileDB(&doc, &m, l, cfgFiles)
+	applyCompileDB(&doc, &m, l, src.ConfigFiles)
+	src.apply(&doc)
 	if languageExcluded > 0 {
 		doc.Limitations = append(doc.Limitations, reasonGCCLanguage)
 		doc.Target.Properties["c_entries_in_other_languages"] = strconv.Itoa(languageExcluded)
