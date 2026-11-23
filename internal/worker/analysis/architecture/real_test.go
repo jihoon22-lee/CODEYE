@@ -58,6 +58,43 @@ func TestRealDependencyCruiser(t *testing.T) {
 	}
 }
 
+// A repository rule that forbids a core module or an unresolved package
+// reports violations whose target is a module entry that was not followed.
+// Each one is an observation at the importing file and line.
+func TestRealDependencyCruiserForbiddenTargets(t *testing.T) {
+	node, entry := os.Getenv("CODEYE_TEST_NODE"), os.Getenv("CODEYE_TEST_DEPENDENCY_CRUISER")
+	if node == "" || entry == "" {
+		t.Skip("configure Node and dependency-cruiser")
+	}
+	runner := &executor.Executor{}
+	a, err := New(DependencyCruiser, entry, &pack.Toolchain{Executable: node, Dir: filepath.Dir(node)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Probe(context.Background(), runner, t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	rules := `{"forbidden":[{"name":"no-core","severity":"error","from":{},"to":{"dependencyTypes":["core"]}},` +
+		`{"name":"no-unresolvable","severity":"error","from":{},"to":{"couldNotResolve":true}}]}`
+	fx := packtest.NewFixture(t, "", map[string]string{
+		"a.js": "import \"./b.js\";\nimport fs from \"fs\";\nimport pad from \"left-pad\";\nexport const a = [fs, pad];\n",
+		"b.js": "export const b = 2;\n", ".dependency-cruiser.json": rules}, domain.Scope{})
+	result := packtest.RunTask(t, a, fx.Job, a.desc.Name, runner)
+	doc, body := packtest.ReadEnvelope(t, fx.Job, result, "")
+	if result.Status != domain.TaskSucceeded || doc.Coverage.Units["dependency_violation_unmapped"] != 0 {
+		t.Fatalf("task %+v\n%s", result, body)
+	}
+	lines := map[string]int{}
+	for _, o := range doc.Observations {
+		if o.Location != nil && *o.Path == "a.js" {
+			lines[o.RuleID] = o.Location.StartLine
+		}
+	}
+	if lines["no-core"] != 2 || lines["no-unresolvable"] != 3 {
+		t.Fatalf("observations %+v\n%s", doc.Observations, body)
+	}
+}
+
 func TestRealImportLinter(t *testing.T) {
 	entry := os.Getenv("CODEYE_TEST_IMPORT_LINTER")
 	if entry == "" {

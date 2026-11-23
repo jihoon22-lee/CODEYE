@@ -1,6 +1,7 @@
 package architecture
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
@@ -35,6 +36,16 @@ func TestParseCruiserSkipsTargetsThatWereNotFollowed(t *testing.T) {
 	if outcome.Failed() || len(doc.Coverage.ProcessedPaths) != 2 || doc.Coverage.Units["dependency_targets_not_followed"] != 3 ||
 		doc.Coverage.Units["dependency_unresolved"] != 1 || doc.Parse.ShapeErrors != 0 {
 		t.Fatalf("outcome %+v coverage %+v parse %+v", outcome, doc.Coverage, doc.Parse)
+	}
+
+	// A reported violation that cannot be tied to a cruised source is not
+	// dropped silently: the envelope says reported violations are missing.
+	doc = obsdoc.New(doc.Analyzer, doc.Adapter, doc.Parser, doc.TaskKey, doc.ManifestDigest)
+	outcome = anypack.Outcome{}
+	parseCruiser(&anypack.Run{Job: fx.Job}, files, &doc, &outcome, []byte(`{"modules":[{"source":"a.js","dependencies":[]}],
+ "summary":{"violations":[{"type":"dependency","from":"elsewhere.js","to":"a.js","rule":{"name":"no-x","severity":"error"}}],"totalCruised":1}}`))
+	if doc.Coverage.Units["dependency_violation_unmapped"] != 1 || !slices.Contains(doc.Limitations, "dependency_violations_not_represented") {
+		t.Fatalf("unmapped violation: %+v %v", doc.Coverage.Units, doc.Limitations)
 	}
 
 	// A listed path that is neither a selected source nor a target that
