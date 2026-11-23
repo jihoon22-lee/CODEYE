@@ -25,7 +25,7 @@ export type Finding = {
   impact: string;
   claims: { assertion: string; kind: string; evidence: string[] }[];
   severityReason: string;
-  conditions: { statement: string; evidence: string[] }[];
+  conditions: { statement: string; status: string; evidence: string[] }[];
   recommendation: string;
   verification: string[];
   limitations: string[];
@@ -229,7 +229,7 @@ function finding(v: unknown, expandedDocuments: boolean): Finding {
     }),
     conditions: array(f.conditions, (v) => {
       const c = object(v);
-      return { statement: str(c.statement), evidence: array(c.evidence_ids ?? [], str) };
+      return { statement: str(c.statement), status: typeof c.status === 'string' ? c.status : '', evidence: array(c.evidence_ids ?? [], str) };
     }),
     recommendation: str(object(f.recommendation).summary),
     verification: array(f.verification, str),

@@ -536,25 +536,8 @@ func (v secView) ReadingOverview() []overviewReadingRow {
 		return &rows[len(rows)-1]
 	}
 
-	primary, secondary := 0, 0
-	var actionable []Finding
-	for _, finding := range v.R.Findings {
-		if hiddenDisposition[finding.Disposition] || finding.Validation != ValidationSupported && finding.Validation != ValidationReproduced {
-			continue
-		}
-		actionable = append(actionable, finding)
-	}
-	duplicates := duplicateReadingFindings(actionable, v.R.Observations)
-	for _, finding := range actionable {
-		if duplicates[finding.ID] {
-			continue
-		}
-		if findingSecondary(finding) {
-			secondary++
-		} else {
-			primary++
-		}
-	}
+	primaryFindings, secondaryFindings := v.actionableFindings()
+	primary, secondary := len(primaryFindings), len(secondaryFindings)
 	eligible, sent, accepted := 0, 0, 0
 	reviewedLines, totalLines := 0, 0
 	knownAccepted := true
@@ -781,6 +764,7 @@ func (v secView) CodeIndexCount() int {
 func mdReadingOverview(p func(...string), v secView) {
 	l := v.L
 	if rows := v.ReadingOverview(); len(rows) > 0 {
+		mdReadingAnchor(p, "coverage")
 		p("### ", mdText(l.Label("reading.outcome")))
 		p()
 		p("| ", mdText(l.Label("reading.area")), " | ", mdText(l.Label("reading.result")), " | ", mdText(l.Label("reading.details")), " |")

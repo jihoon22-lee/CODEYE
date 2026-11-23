@@ -206,6 +206,88 @@ test('saved report focuses one mobile finding while retaining its list, links an
   await expect(second).toBeVisible();
 });
 
+test('action cards keep status, line numbers and expanders inside phone and desktop widths', async ({page}) => {
+  const assets = new URL('../../internal/report/reportui/', import.meta.url);
+  const css = ['tabler.css', 'report.css', 'workbench.css', 'actions.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
+  const longPath = 'internal/gateway/' + 'very_long_directory_name/'.repeat(4) + 'forward.go';
+  const line = (n: number, text: string) => `<span class="source-line"><span class="source-line-number" aria-hidden="true">${n}</span><span class="source-line-code">${text}</span></span>`;
+  await page.setContent(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style>
+    <article class="report-document review-theme web-report"><div class="report-layout"><div class="report-main">
+    <p class="report-coverage-note"><strong>분석 범위의 한계</strong> 판정에 필요한 분석 작업 1개가 성공하지 않았습니다. <button type="button" class="report-plain-action">분석 범위와 상태 보기</button></p>
+    <section class="report-actions"><div class="report-group" data-tone="action">
+    <article class="card report-action-card" data-severity="high"><div class="card-body">
+      <header class="report-action-head"><h6>재시도 반복에서 앞선 시도의 오류를 덮어씀</h6>
+        <p class="report-action-badges"><span class="report-status-badge" data-tone="ready">근거 있음</span><span class="report-action-severity">심각도 높음</span></p></header>
+      <dl class="report-action-rows"><div><dt>확인된 발생 조건</dt><dd>send가 두 번 이상 실패하는 경우</dd></div><div><dt>영향</dt><dd>재시도가 모두 실패하면 첫 실패의 원인을 로그에서 찾을 수 없다.</dd></div></dl>
+      <div class="report-selected-source" data-wrap="true"><p class="report-excerpt-label"><code class="report-path-text">${longPath}</code></p>
+        <pre class="source-window" tabindex="0" data-mode="short"><code>${line(3, 'func Forward() error {')}${line(4, '\t' + 'err = sendWithAVeryLongName(' + 'argument, '.repeat(12) + ')')}</code></pre></div>
+      <button type="button" class="btn btn-sm btn-ghost-primary report-card-action">근거와 반대 근거 보기 (근거 1건 · 반대 근거 1건)</button>
+    </div></article></div>
+    <details class="report-more report-action-fold"><summary>추가 확인이 필요한 후보 1건</summary><div class="report-more-body"><ul class="report-action-list"><li>
+      <div class="report-action-list-head"><strong>취소 신호를 확인하지 않을 수 있다</strong><span class="report-status-badge" data-tone="attention">판단 보류</span></div><code class="report-path-text">${longPath}:3–16</code></li></ul></div></details>
+    <details class="report-more report-action-fold"><summary>도구 진단 2건 (규칙 2종, 도구 1종)</summary><div class="report-diag-groups"><details class="report-diag-group"><summary>
+      <span class="report-diag-name"><code>go.staticcheck</code> <code>SA4006</code></span><span class="report-diag-count">1건</span><span class="report-diag-description">이 값은 이전 시도의 오류를 기록하기 전에 덮어쓰인다.</span></summary><ul><li><code class="report-path-text">${longPath}:13</code></li></ul></details></div></details>
+    </section></div></div></article>`);
+
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({width, height: 844});
+    await page.locator('.report-action-fold > summary').first().click();
+    await page.locator('.report-diag-group').locator('xpath=ancestor::details[1]').evaluate(details => { (details as HTMLDetailsElement).open = true; });
+    await page.locator('.report-diag-group > summary').click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    for (const selector of ['.report-status-badge', '.report-action-severity', '.source-line-number', '.report-action-fold > summary', '.report-diag-group > summary', '.report-card-action']) {
+      for (const element of await page.locator(selector).all()) {
+        const box = (await element.boundingBox())!;
+        expect(box.x, selector).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width, selector).toBeLessThanOrEqual(width + 1);
+      }
+    }
+    // Long source wraps inside its own window, never the page.
+    const source = page.locator('.report-action-card .source-window');
+    expect(await source.evaluate(pre => pre.scrollWidth - pre.clientWidth)).toBeLessThanOrEqual(1);
+    await page.locator('.report-diag-group > summary').click();
+    await page.locator('.report-action-fold > summary').first().click();
+  }
+  // Keyboard: a fold opens and closes with Enter and Space.
+  const fold = page.locator('.report-action-fold > summary').first();
+  await fold.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.report-action-list')).toBeVisible();
+  await page.keyboard.press('Space');
+  await expect(page.locator('.report-action-list')).toBeHidden();
+});
+
+test('a link from an action card opens the collapsed blocks around its target in the saved HTML', async ({page}, info) => {
+  const assets = new URL('../../internal/report/reportui/', import.meta.url);
+  const css = ['tabler.css', 'report.css', 'export.css', 'workbench.css', 'actions.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
+  const script = readFileSync(new URL('export-navigation.js', assets), 'utf8');
+  const hash = createHash('sha256').update(script).digest('base64');
+  const file = info.outputPath('actions.html');
+  mkdirSync(dirname(file), {recursive: true});
+  writeFileSync(file, `<!doctype html><html lang="ko"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'">
+    <style>${css}</style>
+    <body class="review-theme report-export"><div class="report-layout export-page">
+    <nav class="report-rail"><div class="export-desktop-nav"><ul class="nav"><li><a href="#overview" class="nav-link">종합</a></li></ul></div></nav>
+    <main class="report-main"><section class="export-section" id="overview"><h2>종합</h2>
+      <p class="report-coverage-note"><strong>분석 범위의 한계</strong> 분석 공백 1건 <a id="to-coverage" href="#coverage">분석 범위와 상태 보기</a></p>
+      <article class="card report-action-card"><div class="card-body"><a id="to-evidence" href="#finding-row" class="btn btn-sm btn-ghost-primary report-card-action">근거와 반대 근거 보기</a></div></article>
+      <details class="card report-disclosure" id="candidates"><summary>추가 확인이 필요한 후보 1건</summary>
+        <details class="report-diag-group"><summary>규칙</summary><p id="finding-row">숨은 근거 행</p></details></details>
+      <section id="coverage" tabindex="-1"><h3>주요 분석 결과</h3></section>
+    </section></main></div><script>${script}</script></body></html>`);
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({width, height: 800});
+    await page.goto(pathToFileURL(file).href);
+    await expect(page.locator('#finding-row')).toBeHidden();
+    await page.locator('#to-evidence').click();
+    await expect(page.locator('#finding-row')).toBeVisible();
+    await expect(page.locator('#candidates')).toHaveJSProperty('open', true);
+    await page.locator('#to-coverage').click();
+    await expect(page.locator('#coverage')).toBeInViewport();
+  }
+});
+
 test('published report exposes the same counts, evidence and revision in the browser and exports', async ({page}) => {
   const login = process.env.CODEYE_TEST_REPORT_LOGIN;
   test.skip(!login, '실제 게시 보고서는 회귀 파일럿에서 생성한다');
@@ -261,7 +343,7 @@ test('published report exposes the same counts, evidence and revision in the bro
   await expect(judgment).toHaveCount(1);
   const context = report.locator('details.report-overview-context');
   await expect(context).not.toHaveAttribute('open', '');
-  await expect(report.getByRole('tabpanel', {name: '종합', exact: true}).locator('pre:visible')).toHaveCount(0);
+  await expect(report.getByRole('tabpanel', {name: '종합', exact: true}).locator('details.report-overview-context pre:visible')).toHaveCount(0);
   await context.locator(':scope > summary').press('Enter');
   await expect(judgment).toBeVisible();
   await expect(judgment.locator('table, .model-reading-list')).toHaveCount(0);

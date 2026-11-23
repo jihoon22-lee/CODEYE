@@ -733,6 +733,9 @@ func TestRenderingEscapesHostileText(t *testing.T) {
 			outside = strings.ReplaceAll(outside, "[보기](#"+section+")", "")
 		}
 		outside = regexp.MustCompile(`\[상세 보기\]\(#static-detail-obs_[0-9a-f]{20}\)`).ReplaceAllString(outside, "")
+		// The links of the opening to in-page anchors: their text is a fixed
+		// sentence, never tool text (that is escaped and cannot close a link).
+		outside = regexp.MustCompile(`\[[^\[\]\\]*\]\(#[A-Za-z0-9_.-]+\)`).ReplaceAllString(outside, "")
 		if strings.Contains(outside, "<script") || strings.Contains(outside, "<img") || strings.Contains(outside, "](") || strings.Contains(outside, "![") || strings.Contains(outside, "\n# heading") {
 			t.Fatalf("markdown structure broken:\n%s", md)
 		}

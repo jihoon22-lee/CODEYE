@@ -12,9 +12,62 @@ CODEYE 분석 보고서
 
 > 일부 검사를 마치지 못했습니다\. 분석 범위에서 해당 항목을 확인할 수 있습니다\.
 
+> **분석 범위의 한계** 판정에 필요한 분석 작업 1개가 성공하지 않았다\. 검토 대상 코드·테스트 파일 1개를 모델에 보내지 못했다\. 분석하지 못했거나 일부만 분석한 범위가 7건 있다\. [분석 범위와 상태 보기](#coverage)
+
 <a id="overview"></a>
 
 ## 종합
+
+<a id="actions"></a>
+
+### 조치 항목
+
+코드를 읽어 근거를 확인했거나 실행으로 재현한 항목 1건이다\. 심각도가 높은 순서로 나열한다\.
+
+<a id="action-review_interpret_1"></a>
+
+#### 재시도 반복에서 앞선 시도의 오류를 덮어씀
+
+**근거 있음** · 심각도 낮음
+
+- **발생 조건\(가정\)** send가 두 번 이상 실패하는 경우
+- **발생 조건\(가정\)** send가 두 번 이상 실패한다\.
+- **영향** 재시도가 모두 실패하면 첫 실패의 원인을 로그에서 찾을 수 없다\.
+
+`gateway.go:3-16`
+
+- **개선 방향** 시도마다 오류를 기록하거나 errors\.Join으로 묶어 반환한다\.
+- **확인 방법** send가 연속으로 실패하는 테스트로 반환 오류를 확인한다\.
+
+[근거와 반대 근거 보기 \(근거 1건 · 반대 근거 0건\)](#review_interpret_1)
+
+### 함께 확인할 것
+
+- [비밀정보로 보이는 값이 1곳에서 탐지됐다\.](#secrets)
+- [모듈이 선언한 도구 요구와 노드 관측이 1건 어긋난다\.](#environment)
+- [문서 안내끼리 충돌하는 곳이 1건 있다\(모델 해석\)\.](#documents)
+
+<a id="tool-diagnostics"></a>
+
+<details><summary>도구 진단 2건 &#40;규칙 2종, 도구 1종&#41;</summary>
+
+정적 분석 도구가 보고한 진단이며 결함으로 확인된 것이 아니다\. 분석기와 규칙별로 묶었고 규칙을 펼치면 위치가 나온다\.
+
+<details><summary>go.staticcheck SA4006 · 1건 · low — this value of err is overwritten before the previous attempt&#39;s error is logged &#40;synthetic example&#41;</summary>
+
+- `gateway.go:13-13`
+
+</details>
+
+<details><summary>go.staticcheck SA6005 · 1건 · low — should use strings.EqualFold instead &#40;synthetic example&#41;</summary>
+
+- `svc/a/normalize.go:8-8`
+
+</details>
+
+</details>
+
+<a id="coverage"></a>
 
 ### 주요 분석 결과
 
@@ -625,6 +678,8 @@ CCN은 함수의 제어 흐름에서 가능한 독립 경로를 나타내는 값
 
 ### 탐지 위치
 
+<a id="obs_5d7b53aeeecc5810853b"></a>
+
 | 규칙 | 위치 | 위치 확인 |
 |---|---|---|
 | `generic-api-key` | `svc/b/charge.go:6-6` | 스냅샷 위치 확인 |
@@ -636,6 +691,8 @@ CCN은 함수의 제어 흐름에서 가능한 독립 경로를 나타내는 값
 모델 조사 요청 1회 · 후보 검증 요청 1회
 
 ### 근거를 확인한 문제와 개선 기회
+
+<a id="review_interpret_1"></a>
 
 #### 재시도 반복에서 앞선 시도의 오류를 덮어씀
 
@@ -682,6 +739,8 @@ const MaxRetries = 3
 
 <details>
 <summary>기각된 후보</summary>
+
+<a id="review_investigate_1"></a>
 
 | 발견 | 제목 | 판정 | 심각도 | 위치 |
 |---|---|---|---|---|

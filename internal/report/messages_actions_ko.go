@@ -1,0 +1,42 @@
+package report
+
+// Labels of the action-first opening of the overview (render_actions.go).
+func init() {
+	for k, v := range map[string]string{
+		"opening.counterevidence":      "반대 근거(확인한 방어 코드·배제한 가능성)",
+		"actions.heading":              "조치 항목",
+		"actions.lead":                 "코드를 읽어 근거를 확인했거나 실행으로 재현한 항목 %d건이다. 심각도가 높은 순서로 나열한다.",
+		"actions.lead_code_free":       "코드 미포함으로 내보내 서술과 코드 발췌는 생략했다. 위치와 검증 상태만 표시한다.",
+		"actions.lead_partial":         "일부 AI 검토 결과만 확보했다. 아래는 확보한 결과에서 근거를 확인한 항목이다.",
+		"actions.severity":             "심각도 %s",
+		"actions.evidence_link":        "근거와 반대 근거 보기 (근거 %d건 · 반대 근거 %d건)",
+		"actions.not_assessed":         "이번 분석에서는 조치 항목을 판단하지 못했다. 목록이 비어 있는 것은 확인한 결과가 아니라 판단하지 않았다는 뜻이다.",
+		"actions.none_partial":         "일부 AI 검토 결과만 확보했으므로 확보하지 못한 범위에는 조치 항목이 있을 수 있다.",
+		"actions.none_not_a_proof":     "결함이 없다는 뜻이 아니다. 위 범위에서 근거로 지지하거나 재현한 항목을 찾지 못했다는 뜻이다.",
+		"actions.others_candidates":    "추가 확인이 필요한 후보 %d건이 아래에 있다.",
+		"actions.others_secondary":     "예제·시험 등 부차 경로의 항목 %d건이 아래에 있다.",
+		"actions.others_mismatch":      "문서와 구현이 어긋난 항목 %d건이 아래에 있다.",
+		"actions.mismatch_heading":     "문서와 구현이 다른 곳",
+		"actions.mismatch_lead":        "문서가 약속한 동작을 구현과 대조해 일치하지 않거나 일부만 일치한 항목 %d건이다. 불일치를 먼저 나열한다.",
+		"actions.mismatch_more":        "나머지 문서 대조 %d건",
+		"actions.observed":             "구현에서 관찰한 동작",
+		"actions.document_location":    "문서 위치",
+		"actions.code_location":        "코드 위치",
+		"actions.open_comparison":      "대조 근거 보기",
+		"actions.notices_heading":      "함께 확인할 것",
+		"actions.candidates":           "추가 확인이 필요한 후보 %d건",
+		"actions.candidates_note":      "검증이 끝나지 않았거나(판단 보류) 검증 전인 모델 후보다. 확인하기 전에는 조치 항목으로 세지 않는다.",
+		"actions.secondary":            "예제·시험 입력 등에서 발견한 항목 %d건",
+		"actions.secondary_note":       "제품 코드가 아닌 경로(예제·시험 입력 등)의 항목이다. 검증 상태는 항목마다 표시한다.",
+		"actions.open_finding":         "근거 보기",
+		"actions.diagnostics":          "도구 진단 %d건 (규칙 %d종, 도구 %d종)",
+		"actions.diagnostics_note":     "정적 분석 도구가 보고한 진단이며 결함으로 확인된 것이 아니다. 분석기와 규칙별로 묶었고 규칙을 펼치면 위치가 나온다.",
+		"actions.diagnostics_unplaced": "위치를 확인하지 못한 진단은 위치 대신 \"없음\"으로 적는다.",
+		"actions.diag_count":           "%d건",
+		"actions.diag_more":            "외 %d곳은 정적 분석 절과 JSON에 있다.",
+		"actions.coverage_lead":        "분석 범위의 한계",
+		"actions.coverage_link":        "분석 범위와 상태 보기",
+	} {
+		Korean.Labels[k] = v
+	}
+}

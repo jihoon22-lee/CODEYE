@@ -351,6 +351,9 @@ func mdTasks(p func(...string), r Report, l Locale, h string) {
 
 // mdFinding renders one finding under heading level h.
 func mdFinding(p func(...string), f Finding, h string, sectioned bool) {
+	if sectioned {
+		mdReadingAnchor(p, f.ID)
+	}
 	p(h, mdText(f.Title))
 	p()
 	p("- id: ", mdCode(f.ID))

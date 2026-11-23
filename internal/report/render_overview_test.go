@@ -142,8 +142,10 @@ func TestProjectDecisionShowsOneGroundedPriority(t *testing.T) {
 					t.Fatalf("opening lacks %q", want)
 				}
 			}
-			if strings.Count(opening, Korean.Label("insight.interpretation")) != 1 {
-				t.Fatal("opening should explain the source of the review once")
+			// The mismatch card and the project decision each say that the
+			// document reading is the model's; neither repeats it.
+			if strings.Count(opening, Korean.Label("insight.interpretation")) != 2 {
+				t.Fatal("opening should explain the source of the review once per presentation")
 			}
 			for _, s := range []string{c.Statement, c.Reason, "Package gateway forwards billing requests"} {
 				if present := strings.Contains(opening, s) || strings.Contains(opening, mdText(s)); present != include {

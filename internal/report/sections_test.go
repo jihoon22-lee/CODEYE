@@ -372,7 +372,11 @@ func TestExampleFormatsShowSameNumbers(t *testing.T) {
 		}
 		md := string(RenderMarkdown(r, Digest(b), Korean))
 		h := string(html)
-		if strings.Count(h, `data-observation="`) != len(r.Observations) || strings.Count(h, `data-finding="`) != len(r.Findings) || strings.Count(md, "\n#### ") != len(r.Findings) {
+		// The opening repeats a finding to act on and a document mismatch as a
+		// card with its own heading; the full record of each stays once.
+		opening := withInsights(newSecView(r, Digest(b), Korean)).Actions
+		cards := len(opening.Cards) + len(opening.Mismatches) + len(opening.MismatchMore)
+		if strings.Count(h, `data-observation="`) != len(r.Observations) || strings.Count(h, `data-finding="`) != len(r.Findings) || strings.Count(md, "\n#### ") != len(r.Findings)+cards {
 			t.Fatalf("include_code=%v: rendered lists differ from the report", include)
 		}
 		for _, s := range r.Overview.Sections {
