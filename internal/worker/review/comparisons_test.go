@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -592,7 +593,7 @@ func dryRunUpstream(t *testing.T, python, role string, q opencode.Request) openc
 		t.Fatal(err)
 	}
 	cmd := exec.CommandContext(t.Context(), python, "-I", "-B", "-c",
-		"import json, sys\nsys.path.insert(0, sys.argv[1])\nimport fake_model_upstream as f\nprint(json.dumps(f.result_for(sys.argv[2], json.load(sys.stdin))))",
+		"import json, sys\nsys.path.insert(0, sys.argv[1])\nimport fake_model_upstream as f\nprint(json.dumps(f.result_for(sys.argv[2], json.load(sys.stdin.buffer))))",
 		dir, role)
 	cmd.Stdin = bytes.NewReader(q.Input)
 	var stderr bytes.Buffer
@@ -611,6 +612,9 @@ func dryRunUpstream(t *testing.T, python, role string, q opencode.Request) openc
 // repaired with its position and field, then left out with
 // contract_comparison_omitted, and the report shows that contract unchecked.
 func TestDryRunUpstreamComparisons(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("dry runs with scripts/fake_model_upstream.py are a Linux procedure")
+	}
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("python3 is not installed")
