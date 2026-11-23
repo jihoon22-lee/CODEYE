@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -166,7 +167,13 @@ func TestGenerationHandlerPlanAndGrant(t *testing.T) {
 func TestGenerateWithoutBuildTools(t *testing.T) {
 	ctx := context.Background()
 	bin := t.TempDir()
-	fakeCMake := filepath.Join(bin, "cmake")
+	// Only found, never run: the lookup wants an executable regular file
+	// (cmake.exe on Windows, where executable bits do not exist).
+	name := "cmake"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	fakeCMake := filepath.Join(bin, name)
 	if err := os.WriteFile(fakeCMake, []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
