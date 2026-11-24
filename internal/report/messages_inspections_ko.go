@@ -68,6 +68,7 @@ func init() {
 		"inspection.related.tool_note":                  "도구 메모",
 		"inspection.related.condition_assumption":       "분석기가 가정한 조건",
 		"inspection.related.assumed_branch":             "분석기가 선택한 분기",
+		"inspection.related.tool_flow_step":             "도구가 보고한 데이터 흐름 단계",
 		"inspection.related_explanation":                "아래 위치와 메모는 정적 분석 도구가 보고했습니다.",
 		"inspection.related_source":                     "관련 소스 보기",
 		"graph.title":                                   "Go 패키지 의존 관계",

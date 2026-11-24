@@ -11,6 +11,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/javapack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jscpd"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/lizard"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/opengrep"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/python"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/rustpack"
@@ -77,6 +78,7 @@ func testedTable() map[string]testedInfo {
 		lizard.Tool:          {series: lizard.TestedSeries, tested: lizard.VersionTested},
 		jscpd.Tool:           {series: jscpd.TestedSeries, tested: jscpd.VersionTested},
 		gitleaks.Tool:        {series: gitleaks.TestedSeries, tested: gitleaks.VersionTested},
+		opengrep.Tool:        {series: opengrep.TestedSeries, tested: opengrep.VersionTested},
 		"node":               {},
 		"java":               {},
 		"dependency-cruiser": seriesOf("18.8"),

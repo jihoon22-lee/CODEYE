@@ -10,22 +10,23 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/gitleaks"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jscpd"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/lizard"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/opengrep"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
 // anyMissing are the any-ecosystem analyzers a node without their tool flags
 // reports, in catalog order (docs/ANALYZERS.md).
-var anyMissing = []string{"lizard:not_configured", "jscpd:not_configured", "gitleaks:not_configured"}
+var anyMissing = []string{"lizard:not_configured", "jscpd:not_configured", "gitleaks:not_configured", "opengrep:not_configured"}
 
 func anyTask(key string) bool {
-	return pack.Owns(lizard.Name, key) || pack.Owns(jscpd.Name, key) || pack.Owns(gitleaks.Name, key)
+	return pack.Owns(lizard.Name, key) || pack.Owns(jscpd.Name, key) || pack.Owns(gitleaks.Name, key) || pack.Owns(opengrep.Name, key)
 }
 
 func withoutAny(in []pack.ToolProbe) []pack.ToolProbe {
 	var out []pack.ToolProbe
 	for _, p := range in {
-		if p.Tool != lizard.Tool && p.Tool != jscpd.Tool && p.Tool != gitleaks.Tool {
+		if p.Tool != lizard.Tool && p.Tool != jscpd.Tool && p.Tool != gitleaks.Tool && p.Tool != opengrep.Tool {
 			out = append(out, p)
 		}
 	}
@@ -44,7 +45,7 @@ func TestAnyEcosystemCatalogEntries(t *testing.T) {
 			}
 		}
 	}
-	if !slices.Equal(ids[len(ids)-3:], []string{"any.lizard", "any.jscpd", "any.gitleaks"}) {
+	if !slices.Equal(ids[len(ids)-4:], []string{"any.lizard", "any.jscpd", "any.gitleaks", "any.opengrep"}) {
 		t.Fatalf("catalog order %v", ids)
 	}
 	if d := jscpd.Descriptor(); !slices.Equal(d.Toolchains, []string{"node"}) || d.Interpreter != "node" {
@@ -82,9 +83,9 @@ func TestAnyEcosystemBuildReasons(t *testing.T) {
 		tools map[string]string
 		want  []string
 	}{
-		{"jscpd without node", map[string]string{"jscpd": script}, []string{"lizard:not_configured", "jscpd:toolchain_not_configured", "gitleaks:not_configured"}},
-		{"relative paths", map[string]string{"lizard": "bin/lizard", "gitleaks": "gitleaks"}, []string{"lizard:invalid_config", "jscpd:not_configured", "gitleaks:invalid_config"}},
-		{"probe fails", map[string]string{"lizard": exe, "gitleaks": exe}, []string{"lizard:probe_failed", "jscpd:not_configured", "gitleaks:probe_failed"}},
+		{"jscpd without node", map[string]string{"jscpd": script}, []string{"lizard:not_configured", "jscpd:toolchain_not_configured", "gitleaks:not_configured", "opengrep:not_configured"}},
+		{"relative paths", map[string]string{"lizard": "bin/lizard", "gitleaks": "gitleaks", "opengrep": "opengrep"}, []string{"lizard:invalid_config", "jscpd:not_configured", "gitleaks:invalid_config", "opengrep:invalid_config"}},
+		{"probe fails", map[string]string{"lizard": exe, "gitleaks": exe, "opengrep": exe}, []string{"lizard:probe_failed", "jscpd:not_configured", "gitleaks:probe_failed", "opengrep:probe_failed"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			var got []string

@@ -186,7 +186,7 @@ type Options struct {
 }
 
 // order is the fixed order of Result.Tools.
-var order = append([]string{"go", "git", "gh", "node", "opencode", "staticcheck", "errcheck", "gitleaks", "ruff", "mypy", "pyright", "bandit", "lizard",
+var order = append([]string{"go", "git", "gh", "node", "opencode", "staticcheck", "errcheck", "gitleaks", "opengrep", "ruff", "mypy", "pyright", "bandit", "lizard",
 	"cppcheck", "clang-tidy", "gcc", "eslint", "tsc", "dependency-cruiser", "import-linter", "jscpd", "cargo", "clippy", "java", "pmd", "spotbugs"},
 	// The package managers of the dependency fetch.
 	append(append([]string{}, jsManagerNames...), pythonManagerNames...)...)
@@ -227,7 +227,7 @@ func Detect(ctx context.Context, opts Options) Result {
 
 	// Phase one: tools that need no other tool. Phase two: tools run by node
 	// or needing go (Staticcheck), validated against the phase-one results.
-	d.run([]string{"go", "git", "gh", "node", "opencode", "cargo", "java", "gitleaks", "ruff", "mypy", "bandit", "import-linter", "lizard", "cppcheck", "clang-tidy", "gcc"})
+	d.run([]string{"go", "git", "gh", "node", "opencode", "cargo", "java", "gitleaks", "opengrep", "ruff", "mypy", "bandit", "import-linter", "lizard", "cppcheck", "clang-tidy", "gcc"})
 	d.run([]string{"staticcheck", "errcheck", "pyright", "eslint", "tsc", "dependency-cruiser", "jscpd"})
 	d.run([]string{"clippy", "pmd", "spotbugs"})
 	// Package managers: the JS ones after node, python after uv (an

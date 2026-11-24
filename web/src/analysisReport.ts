@@ -291,7 +291,7 @@ export function parseAnalysisReport(
         const excerpt = parseExcerpt(note.excerpt);
         const loc = note.location == null ? null : object(note.location);
         const position = loc && { path: str(loc.path), start: count(loc.start_line), end: count(loc.end_line) };
-        if (!['reported_position', 'tool_note', 'condition_assumption', 'assumed_branch'].includes(kind) ||
+        if (!['reported_position', 'tool_note', 'condition_assumption', 'assumed_branch', 'tool_flow_step'].includes(kind) ||
           Boolean(position) !== (state === 'resolved') || loc && loc.snapshot_id !== object(r.inputs).snapshot_id ||
           position && (position.start < 1 || position.end < position.start) ||
           excerpt && (!position || !excerptFits(excerpt, position.start, position.end, false))) invalid();

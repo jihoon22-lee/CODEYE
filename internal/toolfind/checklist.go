@@ -20,6 +20,7 @@ var offlinePlaces = map[string]string{
 	"errcheck":           "copy the errcheck binary built for this host to ~/" + ToolPrefixRel + "/go/bin",
 	"staticcheck":        "copy the staticcheck binary (built with go install elsewhere) to ~/" + ToolPrefixRel + "/go/bin",
 	"gitleaks":           "copy the gitleaks release binary to ~/" + ToolPrefixRel + "/go/bin",
+	"opengrep":           "copy the opengrep release binary (renamed opengrep) to ~/" + ToolPrefixRel + "/bin; it needs no network and no rule download",
 	"ruff":               "copy the ruff binary to ~/" + ToolPrefixRel + "/bin, or `uv tool install ruff --index-url <internal index>`",
 	"mypy":               "`uv tool install mypy --index-url <internal index>` (a copied venv keeps its old interpreter path and is refused)",
 	"bandit":             "`uv tool install bandit --index-url <internal index>`",

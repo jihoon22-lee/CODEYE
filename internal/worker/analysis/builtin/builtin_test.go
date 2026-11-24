@@ -95,7 +95,7 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 	for _, d := range c.Descriptors() {
 		ids = append(ids, d.ID)
 	}
-	if !slices.Equal(ids, []string{"go.vet", "go.staticcheck", "go.gofmt", "go.errcheck", "cpp.cppcheck", "cpp.clang_tidy", "cpp.gcc_analyzer", "python.ruff", "python.mypy", "python.pyright", "python.bandit", "python.import_linter", "javascript.eslint", "javascript.tsc", "javascript.eslint_typed", "javascript.dependency_cruiser", "rust.cargocheck", "rust.clippy", "rust.rustdoc", "java.pmd", "java.spotbugs", "any.lizard", "any.jscpd", "any.gitleaks"}) {
+	if !slices.Equal(ids, []string{"go.vet", "go.staticcheck", "go.gofmt", "go.errcheck", "cpp.cppcheck", "cpp.clang_tidy", "cpp.gcc_analyzer", "python.ruff", "python.mypy", "python.pyright", "python.bandit", "python.import_linter", "javascript.eslint", "javascript.tsc", "javascript.eslint_typed", "javascript.dependency_cruiser", "rust.cargocheck", "rust.clippy", "rust.rustdoc", "java.pmd", "java.spotbugs", "any.lizard", "any.jscpd", "any.gitleaks", "any.opengrep"}) {
 		t.Fatalf("catalog order %v", ids)
 	}
 	// A configured staticcheck path that is not a file is invalid: the
@@ -123,7 +123,7 @@ func TestHandlersAdvertiseOnlyProbedToolchains(t *testing.T) {
 }
 
 func TestToolFlagsAndProbes(t *testing.T) {
-	if got := ToolFlags(); !slices.Equal(got, []string{"bandit", "cargo", "clang-tidy", "clippy", "cppcheck", "dependency-cruiser", "errcheck", "eslint", "gcc", "gitleaks", "import-linter", "jscpd", "lizard", "mypy", "pmd", "pyright", "ruff", "spotbugs", "staticcheck", "tsc"}) {
+	if got := ToolFlags(); !slices.Equal(got, []string{"bandit", "cargo", "clang-tidy", "clippy", "cppcheck", "dependency-cruiser", "errcheck", "eslint", "gcc", "gitleaks", "import-linter", "jscpd", "lizard", "mypy", "opengrep", "pmd", "pyright", "ruff", "spotbugs", "staticcheck", "tsc"}) {
 		t.Fatalf("flags %v", got)
 	}
 	tc := fakeRust(t, false)
@@ -132,7 +132,7 @@ func TestToolFlagsAndProbes(t *testing.T) {
 	for _, p := range all {
 		tools = append(tools, p.Tool)
 	}
-	if !slices.Equal(tools, []string{"bandit", "cargo", "clang-tidy", "clippy", "cppcheck", "dependency-cruiser", "errcheck", "eslint", "gcc", "gitleaks", "import-linter", "jscpd", "lizard", "mypy", "pmd", "pyright", "ruff", "spotbugs", "staticcheck", "tsc"}) {
+	if !slices.Equal(tools, []string{"bandit", "cargo", "clang-tidy", "clippy", "cppcheck", "dependency-cruiser", "errcheck", "eslint", "gcc", "gitleaks", "import-linter", "jscpd", "lizard", "mypy", "opengrep", "pmd", "pyright", "ruff", "spotbugs", "staticcheck", "tsc"}) {
 		t.Fatalf("probe tools %v", tools)
 	}
 	// The C/C++ probes are checked by TestCppAnalyzersAdvertiseOnlyWithTheBaseline,

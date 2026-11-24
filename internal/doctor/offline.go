@@ -229,7 +229,7 @@ var languageNeeds = []struct {
 	{"rust", []string{"cargo", "clippy"}, []string{"cargo"}, "crates_registry"},
 	{"cpp", []string{"cppcheck", "clang-tidy", "gcc"}, nil, ""},
 	{"java", []string{"pmd", "java", "spotbugs"}, nil, ""},
-	{"common", []string{"git", "gitleaks", "lizard", "jscpd"}, nil, ""},
+	{"common", []string{"git", "gitleaks", "lizard", "jscpd", "opengrep"}, nil, ""},
 	{"model", []string{"opencode"}, nil, "model_endpoint"},
 }
 

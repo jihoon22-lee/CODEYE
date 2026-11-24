@@ -24,6 +24,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/javapack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jscpd"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/lizard"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/opengrep"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/python"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/rustpack"
@@ -126,10 +127,12 @@ func catalog() []entry {
 		{desc: rustpack.DocDescriptor(), plan: rustpack.DocPlan, build: buildRustdoc},
 		{desc: javapack.Descriptor(javapack.PMD), plan: javapack.PlanPMD, build: buildPMD},
 		{desc: javapack.Descriptor(javapack.SpotBugs), plan: javapack.PlanSpotBugs, build: buildSpotBugs},
-		// Any ecosystem (extra depth: complexity, duplication, secrets).
+		// Any ecosystem (extra depth: complexity, duplication, secrets,
+		// intra-file taint rules).
 		{desc: lizard.Descriptor(), plan: lizard.Plan, build: buildLizard},
 		{desc: jscpd.Descriptor(), plan: jscpd.Plan, build: buildJscpd},
 		{desc: gitleaks.Descriptor(), plan: gitleaks.Plan, build: buildGitleaks},
+		{desc: opengrep.Descriptor(), plan: opengrep.Plan, build: buildOpengrep},
 	}
 }
 
