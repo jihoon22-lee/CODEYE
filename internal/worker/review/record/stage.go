@@ -222,8 +222,10 @@ type Record struct {
 	Candidates          []Candidate             `json:"candidates,omitempty"`
 	Limits              []InterpretationLimit   `json:"interpretation_limits,omitempty"`
 	Verifications       []Verification          `json:"verifications,omitempty"`
-	Limitations         []string                `json:"limitations"`
-	Calls               []Call                  `json:"calls"`
+	// TriageGroups are the diagnostic groups of a triage record (0.8).
+	TriageGroups []TriageGroup `json:"triage_groups,omitempty"`
+	Limitations  []string      `json:"limitations"`
+	Calls        []Call        `json:"calls"`
 }
 
 // Accepted reports whether the record carries an accepted stage result.
@@ -231,22 +233,27 @@ func (r Record) Accepted() bool { return r.Outcome == OutcomeAccepted }
 
 // bounds are the limits a record version enforces.
 type bounds struct {
-	evidence   int
-	lines      int // lines of one evidence entry (a cited range: MaxCitedLines)
-	text       int
-	mechanism  int // 0: no mechanism field
-	listText   int
-	candidates int // investigate candidates of one record
-	origins    map[string]bool
-	ids        *regexp.Regexp
+	evidence     int
+	observations int
+	lines        int // lines of one evidence entry (a cited range: MaxCitedLines)
+	text         int
+	mechanism    int // 0: no mechanism field
+	listText     int
+	candidates   int // investigate candidates of one record
+	origins      map[string]bool
+	ids          *regexp.Regexp
 }
 
 func boundsOf(schema string) bounds {
-	if schema == SchemaVersionCitedLines {
-		return bounds{evidence: maxCitedEvidence, lines: MaxSourceBytes, text: MaxProseText, mechanism: MaxMechanismText, listText: MaxProseText,
+	switch schema {
+	case SchemaVersionCitedLines:
+		return bounds{evidence: maxCitedEvidence, observations: maxObservations, lines: MaxSourceBytes, text: MaxProseText, mechanism: MaxMechanismText, listText: MaxProseText,
 			candidates: MaxCandidates, origins: citedOrigins, ids: candidateIDRuleWide}
+	case SchemaVersionTriage:
+		return bounds{evidence: maxCitedEvidence, observations: MaxTriageObservations, lines: MaxSourceBytes, text: MaxProseText, mechanism: MaxMechanismText, listText: MaxProseText,
+			candidates: MaxTriageGroups, origins: citedOrigins, ids: triageCandidID}
 	}
-	return bounds{evidence: maxEvidence, lines: 80, text: maxText, listText: maxListText, candidates: 4, origins: origins, ids: candidateIDRule}
+	return bounds{evidence: maxEvidence, observations: maxObservations, lines: 80, text: maxText, listText: maxListText, candidates: 4, origins: origins, ids: candidateIDRule}
 }
 
 // ProseText bounds one model prose field to limit JSON-encoded bytes (and
@@ -387,12 +394,20 @@ func Validate(r Record, want Expect) error {
 		if r.WorkflowReading != nil && (r.Stage != StageInvestigate || !r.Accepted()) {
 			return invalid("workflow reading requires an accepted global investigation")
 		}
+	case SchemaVersionTriage:
+		if err := checkTriageSlot(r, want); err != nil {
+			return err
+		}
+		if r.ContractProbe != nil || r.WorkflowReading != nil || r.WorkflowSelections != nil || r.ContractComparisons != nil {
+			return invalid("whole-run content on a triage record")
+		}
 	default:
 		return invalid("schema_version")
 	}
 	b := boundsOf(r.Schema)
 	switch {
-	case (r.Stage != StageContract && !slices.Contains(Stages, r.Stage)) || (want.Stage != "" && want.Stage != r.Stage):
+	case (r.Stage != StageContract && r.Stage != StageTriage && !slices.Contains(Stages, r.Stage)) || (want.Stage != "" && want.Stage != r.Stage) ||
+		(r.Stage == StageTriage && r.Schema != SchemaVersionTriage):
 		return invalid("stage")
 	case !packID.MatchString(r.Pack.ID) || !version.MatchString(r.Pack.Version):
 		return invalid("pack identity")
@@ -402,7 +417,7 @@ func Validate(r Record, want Expect) error {
 		return invalid("record belongs to another snapshot or attempt")
 	case r.Upstream == nil || r.Evidence == nil || r.Observations == nil || r.Limitations == nil || r.Calls == nil:
 		return invalid("missing list")
-	case len(r.Evidence) > b.evidence || len(r.Observations) > maxObservations:
+	case len(r.Evidence) > b.evidence || len(r.Observations) > b.observations:
 		return invalid("input size")
 	case !codes(r.Limitations):
 		return invalid("limitations")
@@ -447,6 +462,9 @@ func Validate(r Record, want Expect) error {
 		return err
 	}
 	if err := checkStageContent(r, catalog, observations, b); err != nil {
+		return err
+	}
+	if err := checkTriage(r, catalog, observations, b); err != nil {
 		return err
 	}
 	if err := checkInsights(r, catalog, b); err != nil {
@@ -528,6 +546,15 @@ func checkSlice(r Record, want Expect) error {
 func upstreamSources(r Record) []string {
 	if r.Slice == nil {
 		return stageSources[r.Stage]
+	}
+	if r.Schema == SchemaVersionTriage {
+		// A triage slot reads the analyzer tasks and the whole-run
+		// interpretation (whose hypotheses it leaves out); its verify reads
+		// the documents record and the slot's triage record.
+		if r.Stage == StageTriage {
+			return []string{analyzerSource, "review." + StageInterpret}
+		}
+		return []string{"review.documents", "review." + StageTriage + "." + r.Slice.Key}
 	}
 	if r.Stage == StageInvestigate {
 		return []string{"review.environment", "review.documents", TaskScope}
@@ -685,6 +712,10 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 		if !empty(notes, docs, len(r.Candidates), len(r.Limits), len(r.Verifications), len(r.Observations)) {
 			return invalid("contract content")
 		}
+	case StageTriage:
+		if !empty(notes, docs, len(r.Limits), len(r.Verifications)) || len(r.Candidates) > b.candidates || len(r.TriageGroups) == 0 {
+			return invalid("triage content")
+		}
 	}
 	for _, n := range r.EnvironmentNotes {
 		if !moduleRef.MatchString(n.Module) || n.RequirementIDs == nil || n.EvidenceIDs == nil || len(n.RequirementIDs) > 4 ||
@@ -743,14 +774,21 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 		if c.ID != fmt.Sprintf("%s_%d", c.Origin, counts[c.Origin]) || !b.ids.MatchString(c.ID) {
 			return invalid("candidate id")
 		}
-		if (r.Stage == StageInvestigate || r.Stage == StageInterpret) && c.Origin != r.Stage {
+		if (r.Stage == StageInvestigate || r.Stage == StageInterpret || r.Stage == StageTriage) && c.Origin != r.Stage {
+			return invalid("candidate origin")
+		}
+		if (r.Schema == SchemaVersionTriage) != (c.Origin == StageTriage) {
 			return invalid("candidate origin")
 		}
 		if !candidateTextWithin(c.CandidateText, b) || !refs(c.Evidence, catalog, 6, "code", "test", "document") || !hasKind(c.Evidence, catalog, "code") ||
 			(b.mechanism > 0 && (c.Origin == StageInvestigate || c.Origin == StageInterpret) && r.Stage == c.Origin && c.Mechanism == "") {
 			return invalid("candidate %s", c.ID)
 		}
-		if (c.Origin == StageInterpret) != (len(c.ObservationIDs) > 0) || len(c.ObservationIDs) > 4 {
+		maxObs := 4
+		if c.Origin == StageTriage {
+			maxObs = MaxGroupObservations
+		}
+		if (c.Origin == StageInterpret || c.Origin == StageTriage) != (len(c.ObservationIDs) > 0) || len(c.ObservationIDs) > maxObs {
 			return invalid("candidate observations")
 		}
 		for i, id := range c.ObservationIDs {
@@ -761,7 +799,7 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 	}
 	if r.Stage == StageVerify {
 		// A slice verify checks its own slice's investigate candidates only.
-		if counts[StageInterpret] > 2 || counts[StageInvestigate] > b.candidates || (r.Slice != nil && counts[StageInterpret] > 0) {
+		if counts[StageInterpret] > 2 || counts[StageInvestigate] > b.candidates || counts[StageTriage] > MaxTriageGroups || (r.Slice != nil && counts[StageInterpret] > 0) {
 			return invalid("verify candidates")
 		}
 		reviewed := 0
@@ -872,7 +910,7 @@ func checkCalls(r Record) error {
 		// carry accepted items; any other stage accepts one primary output,
 		// the last one unless the platform degraded an earlier output after
 		// the later calls failed (LimOutputDegraded).
-		if ok && !extra && r.Stage != StageVerify && (accepted || (!degraded && (len(c.OutputErrors) != 0 || !primaryLast))) {
+		if ok && !extra && r.Stage != StageVerify && r.Stage != StageTriage && (accepted || (!degraded && (len(c.OutputErrors) != 0 || !primaryLast))) {
 			return invalid("call sequence")
 		}
 		accepted = accepted || ok

@@ -303,11 +303,14 @@ type toolObservation struct {
 type toolSummary struct {
 	Tool, Module, TaskStatus, ExitClass string
 	// Ecosystem is the analyzer's ecosystem (go for a go vet document).
-	Ecosystem             string
-	ToolVersion           *string
-	PartialParse, ParseOK bool
-	Limitations           []string
-	Observations          []toolObservation
+	Ecosystem string
+	// RulePack, RulePackVersion and Purpose are the envelope's rule pack and
+	// analyzer purpose (go vet: the synthesized rule pack, diagnostics).
+	RulePack, RulePackVersion, Purpose string
+	ToolVersion                        *string
+	PartialParse, ParseOK              bool
+	Limitations                        []string
+	Observations                       []toolObservation
 }
 
 type toolDoc struct {
@@ -326,7 +329,8 @@ func (s *roleStage) readToolDoc(key string, files map[string]source.Entry) (tool
 			return toolSummary{}, nil, reasonRecordInvalid
 		}
 		sum := toolSummary{Tool: d.Analyzer.ID, ToolVersion: d.Tool.Version, Module: d.Module.Dir, TaskStatus: string(d.Outcome.TaskStatus), ExitClass: d.Outcome.ExitClass,
-			PartialParse: d.Outcome.PartialParse, ParseOK: d.Parse.OK, Limitations: d.Limitations, Ecosystem: d.Analyzer.Ecosystem}
+			PartialParse: d.Outcome.PartialParse, ParseOK: d.Parse.OK, Limitations: d.Limitations, Ecosystem: d.Analyzer.Ecosystem,
+			RulePack: d.RulePack.ID, RulePackVersion: d.RulePack.Version, Purpose: d.Analyzer.Purpose}
 		for _, o := range d.Observations {
 			// A diagnostic the tool reported as suppressed in source is the
 			// project's decision, not a candidate: it never reaches the model
@@ -369,7 +373,8 @@ func (s *roleStage) readToolDoc(key string, files map[string]source.Entry) (tool
 		return toolSummary{}, nil, reasonRecordInvalid
 	}
 	sum := toolSummary{Tool: d.AnalyzerID, ToolVersion: d.ToolVersion, Module: d.Module.Dir, TaskStatus: string(d.Outcome.TaskStatus), ExitClass: d.Outcome.ExitClass,
-		PartialParse: d.Outcome.PartialParse, ParseOK: d.Parse.OK, Limitations: d.Limitations, Ecosystem: "go"}
+		PartialParse: d.Outcome.PartialParse, ParseOK: d.Parse.OK, Limitations: d.Limitations, Ecosystem: "go",
+		RulePack: govet.Severity.RulePack, RulePackVersion: govet.Severity.RulePackVersions[0]}
 	for _, o := range d.Observations {
 		to := toolObservation{ID: o.ID, Tool: o.Tool, RuleID: o.RuleID, RawMessage: o.RawMessage, LocationState: o.LocationState}
 		if o.Location != nil {

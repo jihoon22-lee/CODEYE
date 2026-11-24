@@ -116,11 +116,16 @@ func (s *roleStage) verify() analysis.TaskResult {
 	var invRec, intRec record.Record
 	var uInv, uInt record.Upstream
 	var upstream []record.Upstream
-	if s.slice == nil {
+	switch {
+	case s.triage != "":
+		// A triage slot's verify checks its problems (origin triage).
+		invRec, uInv = s.prior(record.StageTriage + "." + s.triage)
+		upstream = []record.Upstream{uDoc, uInv}
+	case s.slice == nil:
 		invRec, uInv = s.prior(record.StageInvestigate)
 		intRec, uInt = s.prior(record.StageInterpret)
 		upstream = []record.Upstream{uDoc, uInv, uInt}
-	} else {
+	default:
 		invRec, uInv = s.prior(record.StageInvestigate + "." + s.slice.Key)
 		upstream = []record.Upstream{uDoc, uInv, s.scopeUp}
 	}
@@ -145,6 +150,19 @@ func (s *roleStage) verify() analysis.TaskResult {
 	if uInv.State == record.UpstreamAccepted {
 		candidates = append(candidates, invRec.Candidates...)
 		addEvidence(invRec.Evidence)
+		if s.triage != "" {
+			used := map[string]bool{}
+			for _, c := range invRec.Candidates {
+				for _, id := range c.ObservationIDs {
+					used[id] = true
+				}
+			}
+			for _, o := range invRec.Observations {
+				if used[o.ID] {
+					s.rec.Observations = append(s.rec.Observations, o)
+				}
+			}
+		}
 	}
 	if uInt.State == record.UpstreamAccepted {
 		candidates = append(candidates, intRec.Candidates...)
