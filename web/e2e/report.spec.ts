@@ -345,6 +345,14 @@ test('published report exposes the same counts, evidence and revision in the bro
   await expect(context).not.toHaveAttribute('open', '');
   await expect(report.getByRole('tabpanel', {name: '종합', exact: true}).locator('details.report-overview-context pre:visible')).toHaveCount(0);
   await context.locator(':scope > summary').press('Enter');
+  await expect(context).toHaveAttribute('open', '');
+  // A reading with nothing to act on keeps its judgment card one fold deeper, under "문서 동작 대조".
+  const assessment = context.locator('details.report-behavior-assessment');
+  if (await assessment.count()) {
+    await expect(judgment).toBeHidden();
+    await assessment.locator(':scope > summary').press('Enter');
+    await expect(assessment).toHaveAttribute('open', '');
+  }
   await expect(judgment).toBeVisible();
   await expect(judgment.locator('table, .model-reading-list')).toHaveCount(0);
   await expect(judgment.getByText('적용 범위', {exact:true})).toHaveCount(0);
