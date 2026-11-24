@@ -10,7 +10,7 @@
 |---|---|
 | `schema_version` | `0.1`. 새 필드는 모두 선택 필드로 추가했다. |
 | `demo` | 제품이 게시한 보고서는 항상 `false`다. [`examples/report.json`](../examples/report.json)은 현재 builder가 실제 worker 파이프라인과 대본 모델 응답으로 만든 합성 예시(`demo: true`)이고, [`examples/report-go-vet.json`](../examples/report-go-vet.json)은 builder 1 시절의 실제 코드 미포함 내보내기다(분석 종류별 절 없음). |
-| `builder.id` / `builder.version` | `codeye-report` / `19`. 생성 시점의 버전을 저장한다. 이전 보고서에 없는 필드는 비워 두고, 화면은 저장된 절과 근거만 표시한다. |
+| `builder.id` / `builder.version` | `codeye-report` / `22`. 생성 시점의 버전을 저장한다. 이전 보고서에 없는 필드는 비워 두고, 화면은 저장된 절과 근거만 표시한다. |
 | `builder.input_digest` | run·snapshot·attempt 사실, task 행, 결과 manifest, 산출물 행, 게시 시점 판정 집합과 builder ID·버전·스키마 버전을 SHA-256으로 계산한다. 프로젝트 정보가 있으면 프로젝트명·소스 경로·분석 시작 및 종료 시각을 포함한다. PR 실행에는 고정한 PR 정보도 포함한다. 보고서 ID·리비전·보고서 생성 시각은 제외한다. |
 | `export.include_code` | 저장본은 `true`다. 코드 미포함 내보내기는 같은 저장본의 projection이며 `false`다. |
 
@@ -66,7 +66,7 @@ builder 5부터 보고서는 위 필드에 더해 분석 종류마다 한 블록
 | 4 | 정적 분석 | `static_analysis` | 생태계(`languages[].ecosystem`)별, 그 안에서 분석기 task별 한 행: 목적, 작업 상태·사유, 결과 수락 여부, exit class, 규칙 팩, 범위·처리 파일 수, 규칙별 관찰 수, 관찰·발견 ID |
 | 5 | 구조·중복 지표 | `metrics` | 복잡도·중복 분석기 작업과 측정값(이름·단위·임계값·최댓값·관찰 ID), Go 내부 패키지 의존 관계 |
 | 6 | 비밀정보 | `secrets` | 비밀정보 분석기 task, 탐지마다 규칙·위치·근거 상태·관찰 ID·도구 발견 ID, 모델 입력에서 비밀값을 걸렀는지(`model_input`) |
-| 7 | 코드 분석(모델 검토) | `code_review` | 지침 팩, 역할별 결과, 호출 수·수락 수·요청 바이트, 모델에 노출한 파일 수, 해석 한계, 모델 후보 발견 ID, slice가 계획된 실행이면 [모듈별 검토 장부](#모듈별-검토-장부)(`ledger`) |
+| 7 | 코드 분석(모델 검토) | `code_review` | 지침 팩, 역할별 결과, 호출 수·수락 수·요청 바이트, 모델에 노출한 파일 수, 해석 한계, 모델 후보 발견 ID, slice가 계획된 실행이면 [모듈별 검토 장부](#모듈별-검토-장부)(`ledger`), 분류 slot이 계획된 실행이면 [도구 진단 분류](#도구-진단-분류)(`diagnostic_triage`, builder 22부터) |
 | 8 | 분석 공백 | `gaps` | 분석하지 못했거나 일부만 분석한 범위(`section`, `code`, 선택 `subject`·`detail`). 비어 있으면 생략한다. |
 
 "이전 실행과 비교"는 저장 문서의 절이 아니다. 비교는 요청마다 계산하므로([run 비교](#run-비교)) 웹 화면만 종합 아래에 그 결과를 따로 보여주고, 내보내기에는 넣지 않는다.
@@ -122,6 +122,25 @@ builder 6부터 보고서는 [모듈 단위 검토 분할](REVIEW.md#모듈-단�
 **비밀값 선별 상태.** builder 6부터 비밀정보 절의 `model_input`에 `screened`(완료된 탐지로 걸렀고 뺀 파일 없음)가 있다. builder 5는 이 경우를 `not_screened`로 읽었다. 비밀값 작업이 실행됐지만 결과를 쓸 수 없어(실패·부분 결과) 미선별로 검토한 실행도 `not_screened`다. 그 결과가 보고한 파일을 뺐어도(`secret_files_withheld`) `withheld`보다 `not_screened`가 앞선다. 나머지 입력은 거르지 않았기 때문이다. Markdown과 웹은 이때 쓸 수 없던 작업과 상태·사유를 적는다(예시 `internal/report/testdata/report-screen-unusable.json`). 이전 worker가 검토를 건너뛴 실행(`secret_screen_failed`)은 그대로 `screen_failed`로 읽는다.
 
 예시는 [`examples/report-slices.json`](../examples/report-slices.json)과 [`examples/report-slices.md`](../examples/report-slices.md)이다. `fixtures/modules/slices/input`을 호출 상한 15로 실행해(작업마다 대본 응답 1회, 모델 호출 없음) 계획한 slot 9개 중 `review.scope`가 6개를 채우고, 그중 3개가 승인되고 3개가 `budget_exhausted`로, 빈 slot 3개가 `no_review_scope`로 끝난 합성 예시이며, builder 7이 쓴 같은 예시는 `internal/report/testdata/report-slices-builder7.json`으로 남아 계속 읽히는지 시험한다. 이 예시와 [`examples/report.md`](../examples/report.md)의 Markdown은 요약 보기이며, 생성 시험은 [`report_slices_example_test.go`](../internal/worker/review/report_slices_example_test.go)다.
+
+### 도구 진단 분류
+
+builder 22부터 분류 slot(`review.triage.tNNN`·`review.verify.tNNN`, [검토](REVIEW.md#도구-진단-분류))이 계획된 보고서의 코드 분석 절은 `diagnostic_triage`를 싣는다. 이전 리비전에는 없고 화면은 이전처럼 분석기·규칙별 도구 진단만 보인다. [생성과 검증](../internal/report/review_triage.go)
+
+| 필드 | 내용 |
+|---|---|
+| `tasks` | 분류·검증 task마다 상태와 결과(`accepted`·`skipped`·`not_succeeded` 등). task 행과 같아야 한다 |
+| `diagnostics` | 보고서의 대상 진단 수: 정적 분석 절의 진단 분석기 행(지표·비밀정보 제외)의 관찰 중 억제되지 않은 것 |
+| `triaged` | 그중 수락되고 계보 검사를 통과한 분류 기록의 분류된 묶음에 든 진단 수 |
+| `interpreted` | 분류되지 않았고 해석 역할 후보의 발견이 다룬 진단 수 |
+| `groups[]` | 분류된 묶음: `task_key`, `group_id`, `classification`(`problem`·`harmless`·`unclear`), `bucket`, `observation_ids`, `cross_tool`, 모델의 `reason`(무해·판단 불가), 인용한 코드 위치 `locations`, 문제 묶음의 발견 `finding_id` |
+| `limitations` | 수락된 분류 기록의 공개 한계 코드(예: `diagnostics_outside_triage_slots`, `diagnostic_groups_not_triaged`) |
+
+- 수는 모두 보고서 자신의 관찰·발견과 수락된 기록의 구조화 필드에서 센다. 모델이 쓴 숫자는 쓰지 않는다. `diagnostics - triaged - interpreted`는 분류하지 않은 진단이며 깨끗하다는 뜻이 아니다. slot이 모두 생략·상한·실패·계보 거부여도 이 차이로 남는다.
+- `bucket`은 분류와 발견에서 정한다. `harmless`는 무해, 검증이 `refuted`로 판정한 문제는 `refuted`, 그 밖의 문제와 `unclear`는 `attention`이다. 검증은 이 규칙을 다시 계산해 대조한다.
+- 문제 묶음은 발견 `review_tNNN_triage_N`(코드 분석 절)이 되고 그 slot 검증의 판정을 싣는다. 도구 발견은 바뀌지 않으며 묶음의 관찰마다 도구 발견이 그대로 남는다. 두 도구가 함께 든 묶음(`cross_tool`)도 도구 발견은 도구마다 남는다(TC-102).
+- 코드 미포함 내보내기는 `reason`을 생략 문구로 바꾸고 위치·수·코드는 남긴다.
+- 종합의 코드 분석 수에 `diagnostics`(분류 대상 도구 진단)와 `diagnostics_triaged`(그중 모델이 분류한 진단)가 더해진다.
 
 ### 의존성 목록
 
@@ -311,7 +330,7 @@ builder 9부터 pull request run([pull request 분석](GITHUB.md#pull-request-�
 | `low` | 영향이 낮은 개선 |
 | `info` | 설명·관찰 |
 
-영향이 크다는 가정만으로 `critical`로 올리지 않는다.
+영향이 크다는 가정만으로 `critical`로 올리지 않는다. 도구 발견의 심각도는 분석기 팩의 [기본 심각도](ANALYZERS.md#기본-심각도) 표가 정한다(builder 22부터. 그 전은 모두 `low`). 도구 행의 `severity_table`이 쓰인 표를 가리킨다. 모델 검증은 `critical`을 정하지 않는다.
 
 ### 검증 상태
 
@@ -335,7 +354,7 @@ builder 9부터 pull request run([pull request 분석](GITHUB.md#pull-request-�
 - 위치와 근거 위치의 심볼 이름을 지운다.
 - `fingerprint`, `fingerprint_basis`, `disposition_version`을 싣지 않는다. 키 없는 digest는 짧은 코드 줄을 추측해 맞춰 볼 수 있는 확인 수단이 되기 때문이다. 식별과 현재 판정은 프로젝트 권한을 검사하는 비교·판정 API로만 읽는다. 프로젝트별 키로 감싼 식별자는 키 수명 관리가 필요해 만들지 않았다.
 - 도구 행 `rule_context`의 `config_paths`·`config_digest`를 지운다. 설정 바이트의 digest도 같은 이유로 추측 확인 수단이 된다.
-- 분석 종류별 절의 모델 문장(환경 메모, 문서 계약·충돌·질문·지침 메모, 진단 해석의 한계)을 생략 문구로 바꾸고, 모듈 요구의 제약 문자열은 버전 제약 형식이 아니면 지운다([분석 종류별 절](#분석-종류별-절)).
+- 분석 종류별 절의 모델 문장(환경 메모, 문서 계약·충돌·질문·지침 메모, 진단 해석의 한계, 도구 진단 분류의 이유)을 생략 문구로 바꾸고, 모듈 요구의 제약 문자열은 버전 제약 형식이 아니면 지운다([분석 종류별 절](#분석-종류별-절)).
 
 스키마의 code-free 규칙과 [`scripts/validate_bundle.py`](../scripts/validate_bundle.py)의 부정 사례가 식별·규칙 문맥 규칙을, `ValidateReport`가 절의 모델 문장 규칙을 강제한다. 경로·줄 번호·규칙 ID·산출물 hash는 남는다. 비밀값과 그 일부·hash는 처음부터 저장하지 않는다([분석기](ANALYZERS.md)). 코드 포함 내보내기는 같은 프로젝트를 읽을 수 있는 사용자에게 저장된 도구 메시지·검토 문구·심볼을 그대로 준다. 내보내기 다운로드도 요청마다 프로젝트 권한을 검사한다.
 
@@ -355,7 +374,7 @@ builder 9부터 pull request run([pull request 분석](GITHUB.md#pull-request-�
 | 1 | 판정. 표지의 실행 상태와 부분·실패·취소 안내는 그대로 맨 위에 있다. 바로 아래 한 줄이 분석하지 못한 범위(미성공 필수 작업, 분석 공백, 모델에 보내지 못한 파일, 모델 검토 미수행·일부)를 쓰고 상태 표로 연결한다. 해당하는 것이 없으면 이 줄은 없다. |
 | 2 | **조치 항목.** `supported`·`reproduced` 발견 중 숨김 판정이 아니고, 도구 발견과 중복되지 않으며 주요 경로에 있는 것을 카드로 보인다. 심각도 순이고 같은 심각도에서는 `reproduced`가 앞선다. 종합 표의 "주요 코드 조치" 수와 같은 발견이다. 카드는 제목, 검증 상태와 심각도, 확인된 발생 조건과 가정, 영향, 저장된 코드 발췌 또는 위치, 개선 방향, 확인 방법, 판단 범위(기록된 한계), 근거·반대 근거로 가는 링크를 담는다. 링크는 코드 분석 절의 같은 발견 행(발견 상세 전체)으로 간다. |
 | 3 | **문서와 구현이 다른 곳.** 문서 대조의 `mismatch`·`partial`을 불일치부터 보인다. 카드는 문서가 약속한 동작(제목), 구현에서 관찰한 동작, 적용 범위, 문서 위치와 코드 위치, 문서 분석 절의 대조 근거 링크이며 모델 해석이라는 표시를 단다. 5건을 넘으면 나머지는 접는다. |
-| 4 | **함께 확인할 것**(비밀정보 탐지, 환경 요구 불일치, 문서 안내 충돌: 종합이 저장한 먼저 볼 항목)과 접힌 목록 둘. 접힌 **추가 확인이 필요한 후보**는 주요 경로의 `inconclusive`·`unreviewed` 모델 후보로 제목, 상태, 위치, 기록된 확인 방법을 보인다. 접힌 **예제·시험 입력 등에서 발견한 항목**은 부차 경로의 같은 종류와 근거로 지지한 항목이다. 접힌 **도구 진단**은 분석기·규칙별 한 행(건수, 심각도, 규칙 설명)이고 펼치면 위치(최대 25곳, 나머지는 정적 분석 절과 JSON)가 나온다. |
+| 4 | **함께 확인할 것**(비밀정보 탐지, 환경 요구 불일치, 문서 안내 충돌: 종합이 저장한 먼저 볼 항목)과 접힌 목록 둘. 접힌 **추가 확인이 필요한 후보**는 주요 경로의 `inconclusive`·`unreviewed` 모델 후보로 제목, 상태, 위치, 기록된 확인 방법을 보인다. 접힌 **예제·시험 입력 등에서 발견한 항목**은 부차 경로의 같은 종류와 근거로 지지한 항목이다. 접힌 **도구 진단**은 분석기·규칙별 한 행(건수, 심각도, 규칙 설명)이고 펼치면 위치(최대 25곳, 나머지는 정적 분석 절과 JSON)가 나온다. `diagnostic_triage`가 있으면 제목이 "도구 진단 M건 중 N건 분류"이고 확인이 필요한 진단·검증에서 반증된 진단·무해하다고 판단한 진단·분류하지 않은 진단 순으로 나눈 뒤 그 안에서 분석기·규칙별로 묶는다. 행은 기본 심각도를 보이고 펼치면 묶음의 분류, 무해·판단 불가의 이유와 인용 위치, 문제 묶음의 발견으로 가는 링크가 위치 목록 앞에 나온다. 지지된 문제 묶음은 2의 조치 항목 카드로도 보인다. |
 | 5 | 분석 범위: 주요 분석 결과 표(영역별 상태), 문서 대조와 판단 근거, 검토 범위와 집계(접힘), 이어서 환경·문서·정적 분석 등의 절과 부록. 모두 이전과 같은 내용이며 위치만 아래로 옮겼다. |
 
 조치 항목이 없을 때의 문구는 검토 상태에 따라 다르다. 수락한 검토가 있고 찾지 못했으면 "검토한 주요 코드 경로에서 근거로 지지하거나 재현한 조치 항목을 찾지 못했습니다"와 모델에 보낸 주요 경로 파일 수, "결함이 없다는 뜻이 아니다"를 쓴다. 모델 검토를 수행하지 못했거나 실행이 실패·취소됐으면 "조치 항목을 판단하지 못했다"고 쓰며 빈 목록을 확인한 결과로 읽히지 않게 한다. 조치 항목이 없어도 후보·부차 경로 항목·문서 불일치가 있으면 그 수를 같은 자리에 적는다. 코드 미포함 내보내기는 서술과 발췌를 생략하고 위치·검증 상태·심각도만 보이며, 생략 안내는 카드마다 반복하지 않고 한 번 쓴다.

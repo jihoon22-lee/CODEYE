@@ -68,6 +68,7 @@
 | [문서 검토](../prompts/review/documents.md) | 경로별 문서·설정·선택 첨부와 제한된 코드 발췌 | 적용 경로, 문서상 계약, 상충하는 근거, 미확인 질문 |
 | [독립 코드 분석](../prompts/review/investigate.md) | 모듈 계약, 환경 한계, 코드·테스트 발췌 | 원인·발생 조건·영향·반증 가능성을 가진 후보 또는 빈 목록 |
 | [정적 진단 해석](../prompts/review/interpret-diagnostics.md) | 어댑터가 발급한 관찰 ID, 버전·범위·파싱 상태와 관련 발췌 | 원시 관찰에 연결한 영향 가설 또는 해석 한계 |
+| [도구 진단 분류](../prompts/review/triage.md) | 분석기·규칙·위치·원시 메시지·기본 심각도를 가진 진단 묶음과 그 선언 단위 | 묶음마다 실제 문제·무해·판단 불가와 그 근거 줄 |
 | [후보 검증](../prompts/review/verify.md) | 이전 후보 원문과 ID, 호출부·테스트·반대 근거 | 지지·기각·판단 보류의 이유, 유효·무효 조건, 추가 확인 사항 |
 | [문서 계약 후속 검토](../prompts/review/contract.md) | 문서 약속과 원래 판단, 새 구현과 관련 호출자·테스트 발췌 | 적용 범위와 문서 근거가 같은 대조 또는 미확인 |
 
@@ -211,7 +212,7 @@
 
 - 계획된 분석기 task의 관찰 산출물을 다시 검증해 읽는다. 소스에서 억제된 진단과 구조 지표는 넣지 않는다([분석기](ANALYZERS.md)).
 - 도구 상태는 최대 8개(`tools_outside_interpret_input`), 관찰은 경로·줄·ID 순으로 최대 8개다(`observations_outside_interpret_input`).
-- 관찰 메시지가 UTF-8이 아니거나, 민감값 패턴에 걸리거나, 600바이트를 넘으면 `(omitted by the platform)`으로 바꾸고 `observation_message_omitted`를 남긴다. 비밀값 선별이 보류한 기본 위치나 관련 위치의 메시지도 생략한다.
+- 관찰 메시지가 UTF-8이 아니거나, 민감값 패턴에 걸리거나, 600바이트를 넘으면 `(omitted by the platform)`으로 바꾸고 `observation_message_omitted`를 남긴다. 비밀값 선별이 보류한 기본 위치나 관련 위치의 메시지도 생략하고 `secret_files_withheld`를 남긴다. [도구 진단 분류](#도구-진단-분류)도 같은 함수(`shownMessage`)로 메시지를 정한다.
 - 진단 위치가 지원 언어의 소스 파일이면 위치 10줄 앞부터 21줄, 1,600바이트 이하의 줄 창을 만든다. 창은 최대 4개다(`observation_context_outside_input`). manifest·설정·문서처럼 소스가 아닌 파일에는 창이 없고 관찰만 간다.
 - Cppcheck·clang-tidy의 관찰에 실행 원문의 위치와 스냅샷 위치를 확인한 관련 기록이 있으면, 기본 진단 창과 연결한 관련 소스 근거를 요청당 최대 두 곳 더 고른다. 기존 네 창을 공유하고 남는 창이 없으면 뒤쪽 기본 창 하나를 관련 창으로 바꿀 수 있다. 기존 창 밖의 원문을 최대 네 번 다시 읽고, 관련 메모의 종류와 원래 줄, 실제 발췌 ID를 관찰에 연결한다. 메모 원문은 보내지 않으며 범위 밖·선별 보류·위치 미확인·작업 사본 변경 경로는 건너뛴다. 가정과 분기 표시는 분석기가 보고한 정적 단서다.
 
@@ -293,7 +294,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 
 ### 호출 상한과 승인
 
-- `codeye agent --review-max-calls N`과 서비스 설정 `agent.model.review_max_calls`는 attempt당 호출 수를 제한한다(기본 99, 15~2,013). 일반 검토에는 최대 207회가 적용된다. `scope.review_coverage: "extended"`를 선택하고 노드 상한이 207회를 넘을 때 96개 이후의 후속 조사도 실행할 수 있다. 전체 역할 다섯 개의 최대 호출은 15회이며 후속 조사보다 먼저 실행된다.
+- `codeye agent --review-max-calls N`과 서비스 설정 `agent.model.review_max_calls`는 attempt당 호출 수를 제한한다(기본 99, 15~2,013). 일반 검토에는 최대 207회가 적용된다. `scope.review_coverage: "extended"`를 선택하고 노드 상한이 207회를 넘을 때 96개 이후의 후속 조사도 실행할 수 있다. 전체 역할 다섯 개의 최대 호출은 15회이며 후속 조사보다 먼저 실행된다. [도구 진단 분류](#도구-진단-분류) slot은 전체 역할 뒤, 후속 조사 앞에서 같은 상한의 나머지를 쓴다.
 - slice는 조사와 확인을 위해 두 호출이 남아 있을 때 시작한다. 조사 재시도는 확인에 쓸 한 호출을 보존한다. 후보가 없는 slot은 검증 호출 없이 완료된다. 형식 복구도 같은 상한을 쓰며, 호출을 남김없이 써야 하는 검토는 기존 복구 횟수보다 일찍 종료할 수 있다. 승인되지 않은 slot은 `budget_exhausted`(`review_budget_exhausted`)로 기록한다. 선택적 `review.contract`도 같은 계수의 잔여 호출을 사용한다.
 - 계수 파일은 attempt의 scratch에 둔다. 순서대로 실행하는 모든 모델 요청은 호출 전에 계수를 확인하고 한 줄을 기록한다. 계수를 읽거나 쓰지 못하면 해당 호출은 `review_call_count_failed`로 끝난다.
 
@@ -304,6 +305,35 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - slice는 overview와 같은 역할 지침을 쓴다. 문서·환경 맥락 때문에 코드 줄이 빠질 경우 먼저 덜 중요한 환경 메모와 문서 전달 항목을 줄인다. 전체 요청 한도 때문에 계획한 범위를 담지 못하면 `review_input_trimmed`로 남긴다. [조사 예시](../examples/review/slices/investigate.s001.json) · [검증 예시](../examples/review/slices/verify.s001.json)
 - 코드 강점은 요청에서 실행문을 찾을 수 있는 구현 발췌를 인용해야 한다. 근거가 부족한 강점을 제외해도 같은 응답의 유효한 후보와 계약 대조는 유지한다.
 - 보고서는 기록된 조사 요청의 발췌와 응답이 수락된 발췌의 줄을 각각 합친다. 응답을 수락하지 못했어도 요청 기록은 보존한다. 파일마다 남은 줄과 이유를 확인할 수 있다. 후보 검증은 별도이고 후보가 없어 모델을 부르지 않은 확인 작업은 후보 검증 수에 들지 않는다. 줄마다 모델이 의미를 이해했는지나 결함을 탐지했는지는 측정하지 않는다. [보고서](REPORT.md#모듈별-검토-장부)
+
+## 도구 진단 분류
+
+해석 역할(`review.interpret`)이 다루는 관찰은 요청당 8개다. 나머지 도구 진단은 계획된 분류 slot이 묶음 단위로 모델에 보내 실제 문제인지 분류한다. [계획](../internal/worker/review/triage_plan.go) · [실행](../internal/worker/review/triage_run.go) · [지침](../prompts/review/triage.md)
+
+| task | 단계 | 판정 필수 | 모델 호출 | 내용 |
+|---|---|---|---|---|
+| `review.triage.tNNN` | `code_review` | 아니오 | 1~3 | slot에 배정된 진단 묶음을 분류한다. 배정된 묶음이 없으면 `no_review_scope`, 해석할 관찰이 없으면 `no_tool_observations`, 호출 상한이면 `budget_exhausted` |
+| `review.verify.tNNN` | `code_review` | 아니오 | 0~3 | 같은 slot에서 문제로 분류한 묶음의 후보를 검증한다. 후보가 없으면 모델을 부르지 않는다. slot이 승인되지 않았으면 같은 상태와 사유로 끝난다 |
+
+### 계획과 묶음
+
+- **slot 수.** manifest의 적격 소스 파일 12개마다 한 slot, 최소 2개, 최대 24개다(적격 파일이 없으면 0). 계획은 manifest·범위·상수로만 정한다(A37 2). slot 쌍은 전체 역할 다섯 개 뒤, `review.scope`와 모듈 slice 앞에 온다.
+- **대상.** 수락된 분석기 산출물의 진단 중 소스에서 억제된 진단, 구조 지표, 비밀값 탐지를 뺀 것이다. 다음은 분류하지 않고 각 slot 기록의 한계로 남긴다. 수락된 해석 후보가 이미 다룬 진단(`diagnostics_interpreted`), 위치 없는 진단(`diagnostics_without_location`), 비밀값 선별이 보류한 파일의 진단(`secret_files_withheld`), 읽을 수 있는 소스 단위가 없는 진단(`diagnostic_context_unavailable`).
+- **묶음.** 같은 분석기·같은 규칙·같은 [검토 단위](#검토-단위)(단위보다 작은 파일은 파일 전체)의 진단을 한 묶음으로 한다. 서로 다른 두 도구가 같은 단위의 같은 줄에서 병합 계열([기본 심각도](ANALYZERS.md#기본-심각도))이 같은 규칙을 보고하면 두 묶음을 합치고 `cross_tool`로 표시한다. 진단은 합치지 않는다. 64개를 넘는 묶음은 64개씩 나눈다.
+- **순서.** 기본 심각도가 높은 묶음, 진단이 많은 묶음, 경로, 줄, 도구, 규칙 순이다.
+- **요청에 담기.** 순서대로 첫 번째로 맞는 slot에 넣는다. 한 요청은 묶음 수(출력 토큰에서 1,024를 빼고 1,024로 나눈 값, 2~24), 소스 원문 합계(요청 예산의 원문 한도), 진단 1,024개, 묶음 설명 바이트(요청 바이트의 1/16, 최소 8,000)를 넘지 않는다. 한 요청 안에서 같은 단위는 한 번만 보내고 비용도 한 번만 센다. slot을 다 쓰고 남은 묶음은 `diagnostics_outside_triage_slots`로 남는다.
+
+### 요청과 출력
+
+- 묶음마다 도구·규칙 ID·기본 심각도·진단 수·`cross_tool`·경로·줄 목록, 메시지를 붙인 진단 예시 최대 8개, 문맥 발췌 ID(묶음의 단위, 단위가 파일 처음이 아니면 그 파일의 머리 한 번)를 보낸다. 메시지 규칙은 해석 창과 하나다([도구 관찰과 해석 창](#도구-관찰과-해석-창interpret)). 발췌 원문은 다른 역할과 같은 읽기 검사(비밀값 선별, 민감값 패턴, 크기)를 거친다. 요청이 예산을 넘으면 뒤쪽 묶음부터 빼고 `review_input_trimmed`를 남긴다.
+- slot은 분류와 검증에 쓸 호출 두 번이 남아 있을 때 시작한다. 분류 재시도는 검증에 쓸 호출 하나를 남긴다. 결정은 호출 계수 옆 파일에 쓰고 같은 slot의 검증이 따른다.
+- 출력은 묶음마다 `problem`(조건·영향·고칠 방향과 묶음 문맥 안의 줄 인용), `harmless`(무해하게 만드는 코드 근거와 그 줄 인용), `unclear`(무엇이 더 필요한지) 중 하나다. 의존성·타입·헤더를 찾지 못해 생긴 진단은 분석 공백으로 보고 `unclear`로 둔다. 모델은 도구 상태·진단 수·원시 등급·규칙·기본 심각도를 바꾸지 못하고 심각도를 정하지 않는다.
+- 출력 오류는 [출력 오류 분류](#출력-오류-분류)를 따른다. 형식 오류가 있으면 남은 묶음만 담은 복구를 한 번 보낸다. 복구 뒤에도 남은 형식 오류는 그 묶음만 분류하지 않고(`triage_item_omitted`), 무결성 오류는 그 답을 거부한다(`triage_item_rejected`). 답이 없는 묶음은 `triage_answer_missing`이다. 분류하지 않은 묶음이 있으면 `diagnostic_groups_not_triaged`를 남긴다. 분류한 묶음이 하나도 없으면 task가 실패한다.
+- 문제로 분류한 묶음은 후보 `triage_N`(origin `triage`, 묶음의 관찰 ID)이 되고 `review.verify.tNNN`이 검증한다. 검증은 문서 기록과 그 slot의 분류 기록을 상류로 읽는다. 도구 진단, 모델 후보, 검증 판정은 서로 다른 기록이며 관찰 ID로 연결된다. 무해 판단은 도구 finding을 숨기지 않는다.
+
+### 호출 비용
+
+분류 slot은 같은 attempt 호출 상한을 쓴다. 묶음이 배정된 slot은 보통 분류 한 번과(문제가 있으면) 검증 한 번을 부르고, 형식 복구와 재시도를 포함하면 각각 세 번까지다. 배정된 묶음이 없는 slot은 부르지 않는다. 분류 slot이 모듈 slice보다 먼저 실행되므로, 진단이 많은 프로젝트에서는 같은 상한 아래 모듈 slice가 받는 호출이 줄어든다. 범위 산출물의 `calls_before_slices`는 전체 역할의 호출만 세고, 보고서 장부는 분류 slot 기록의 호출을 slice처럼 더한다. 실제 비용과 품질 변화는 측정하지 않았다.
 
 ## 문서 계약 후속 검토
 
@@ -699,6 +729,13 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - 보고서 생성기 20부터 0.7 기록을 읽는다(`CitedReviewDecoder`). 서술 상한은 기록을 만든 생성기 버전으로 정한다. [보고서](REPORT.md)
 - 형식 오류를 정리해 받은 기록은 `review_output_degraded` 한계를 가진다. 정리한 호출은 `accepted`이면서 `output_errors`에 원래 코드를 남기고, 그 뒤에 실패한 호출이 이어질 수 있다. 호출 순서 검사는 이 한계가 있는 기록에서만 이를 받는다. 필드와 형식이 바뀌지 않았고 이전 기록에는 이 한계가 없어 같은 규칙으로 읽히므로 schema는 0.7을 유지한다.
 
+### schema 0.8(도구 진단 분류)
+
+- 분류 slot의 기록(stage `triage`)과 그 검증 기록(stage `verify`)이다. `slice`는 `{"key":"tNNN","modules":[]}`이다. 전체 역할의 선택 필드(문서 대조, probe, 강점, 경로 선택·읽기, 환경·문서 항목, 해석 한계)는 없다.
+- `triage_groups`는 보낸 묶음마다 `id`(`g1`~`g64`), `observation_ids`(최대 256), `context_evidence_ids`, 선택 `cross_tool`, 그리고 `classification`(`problem`은 `candidate_id`, `harmless`는 `reason`과 `evidence_ids`, `unclear`는 `reason`) 또는 `omitted`(`triage_item_rejected`·`triage_item_omitted`·`triage_answer_missing`)를 가진다. 관찰은 묶음 하나에만 들고 보낸 모든 관찰이 묶음에 든다.
+- 후보는 `triage_1`~`triage_64`이고 origin `triage`, 묶음과 같은 관찰 ID를 가진다. 관찰 참조는 최대 1,024개다. 분류 기록의 상류는 분석기 task와 `review.interpret`, 검증 기록의 상류는 `review.documents`와 `review.triage.tNNN`이다.
+- 보고서 생성기 22부터 읽는다(`TriageReviewDecoder`). [분류 예시](../examples/review/triage/triage.t001.json) · [검증 예시](../examples/review/triage/verify.t001.json)
+
 ## 보고서 연결
 
 보고서 규칙의 전체는 [보고서](REPORT.md)에 있다. 검토 기록과 직접 맞물리는 규칙은 다음과 같다.
@@ -707,6 +744,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - 형식 복구 뒤 뺀 항목은 분석 공백(`review_candidate_omitted`·`interpretation_items_omitted`는 코드 분석, `document_items_omitted`는 문서 분석, `environment_notes_omitted`는 환경 분석)으로 보인다. 후보나 가설을 뺀 보고서는 `no_actionable_findings` 대신 `inconclusive`다. 필수가 아닌 역할은 `coverage.ai_review.optional_tasks`에 결과와 사유를 적고 수행으로 세지 않는다. 검토 task가 없는 계획은 필수 역할이 없다.
 - `coverage.review_calls`는 호출마다 `pack_id`·`pack_version`과 호출이 든 task(`task_key`)를 싣는다. 최대 2,013개다. `llm_exposed_files`는 slice 기록이 보낸 경로도 센다.
 - 앞 단계·탐색·도구 산출물의 SHA-256, 관찰 ID, verify 후보와 앞 단계 후보가 맞지 않으면 그 단계를 `review_lineage_mismatch:<task>`로 제외한다. verify 근거 중 앞 단계와 ID가 같은 발췌는 앞 단계 항목 그대로여야 한다([인용](#인용)). 같은 발췌가 앞 단계마다 다른 출처 표시(`context`·`observation`)로 올 수 있으므로 어느 한 항목과 같으면 받는다.
+- 생성기 22부터 분류 slot의 문제 후보는 발견 `review_tNNN_triage_N`이 되고 그 slot의 검증 판정을 싣는다. 지지된 후보는 조치 항목에 든다. 코드 검토 절의 `diagnostic_triage`는 분류 결과와 수(대상 진단, 분류한 진단, 해석 후보가 다룬 진단)를 보고서 자신의 관찰과 발견에서 센다([보고서](REPORT.md#도구-진단-분류)).
 - 모델이 서술한 숫자를 run 상태나 통계로 쓰지 않는다. 도구 관찰과 모델 후보는 서로 다른 산출물이다.
 
 ## 시험

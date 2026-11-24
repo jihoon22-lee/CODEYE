@@ -110,7 +110,7 @@ def check_environment_example(doc: dict) -> None:
 
 
 ROLE_STAGES = ("environment", "documents", "investigate", "interpret", "verify")
-PACK_ROLES = (*ROLE_STAGES, "contract")
+PACK_ROLES = ("environment", "documents", "investigate", "interpret", "triage", "verify", "contract")
 
 
 def compact_json(text: str) -> bytes:
@@ -637,6 +637,105 @@ def check_slice_examples(raw: dict, validators: dict) -> int:
         case("scope severity without observations", lambda d: first_file(d).update(severity="high")),
         case("scope planned file in the excluded list", lambda d: d["scope"]["excluded"].append(dict(d["scope"]["slices"][-1]["files"].pop(), state="planned"))),
         case("scope 0.1 shape labelled 0.2", lambda d: [d["scope"].pop("priority"), d["scope"].pop("excluded"), d["scope"].update(schema_version="0.1")]),
+    ]
+    for name, d in negative:
+        expect_invalid(name, check, d)
+    return len(negative)
+
+
+# The triage examples (docs/REVIEW.md#도구-진단-분류): the first triage slot's
+# records of fixtures/modules/triage/input, written by
+# TestDiagnosticTriageReachesTheReport.
+TRIAGE_EXAMPLE_FILES = ("triage.t001", "verify.t001")
+
+
+def triage_examples() -> dict:
+    return {name: (ROOT / "examples/review/triage" / (name + ".json")).read_text(encoding="utf-8") for name in TRIAGE_EXAMPLE_FILES}
+
+
+def check_triage_examples(raw: dict, validators: dict) -> int:
+    """Validate and bind the triage examples; returns the negative cases run.
+    Beyond the schema: evidence bound to the fixture blobs, groups that do
+    not share a diagnostic and cite only sent excerpts, a problem group's
+    candidate carrying exactly its diagnostics, cross_tool exactly for
+    groups of two tools, and the slot's verify bound to its triage record."""
+
+    record_v = validators["review-record.schema.json"]
+    docs = {name: json.loads(text) for name, text in raw.items()}
+    pack, roles = pack_selection(("go",))
+    root = ROOT / "fixtures/modules/triage/input"
+
+    def check(docs: dict) -> None:
+        triage, verify = docs["triage.t001"], docs["verify.t001"]
+        for name, doc in docs.items():
+            record_v.validate(doc)
+            stage = name.split(".")[0]
+            ensure(doc["schema_version"] == "0.8" and doc["stage"] == stage and doc["slice"] == {"key": "t001", "modules": []}, "triage record identity: " + name)
+            ensure(all(doc[k] == triage[k] for k in ("snapshot_manifest_digest", "run_id", "attempt_id", "pack")), "triage record of another attempt: " + name)
+            ensure(doc["pack"] == {"id": pack["id"], "version": pack["version"]}, "triage record pack: " + name)
+            for e in doc["evidence"]:
+                body = (root / e["path"]).read_bytes()
+                sha = hashlib.sha256(body).hexdigest()
+                binding = "\0".join([doc["snapshot_manifest_digest"], e["path"], sha, f'{e["start_line"]}:{e["end_line"]}'])
+                ensure(sha == e["sha256"] and 1 <= e["start_line"] <= e["end_line"] <= len(body.split(b"\n"))
+                       and e["id"] == "ev_" + hashlib.sha256(binding.encode()).hexdigest()[:24], "triage evidence blob or ID: " + e["path"])
+            for call in doc["calls"]:
+                ensure(call["role"] == stage and call["pack_files"] == roles[stage]["files"] and call["pack_sha256"] == roles[stage]["digest"], "triage call pack digest: " + name)
+        evidence = {e["id"]: e for e in triage["evidence"]}
+        tools = {o["id"]: o["tool"] for o in triage["observations"]}
+        candidates = {c["id"]: c for c in triage["candidates"]}
+        seen, claimed = set(), set()
+        for g in triage["triage_groups"]:
+            ids = set(g["observation_ids"])
+            ensure(ids <= set(tools), "triage group names a diagnostic the record does not carry: " + g["id"])
+            ensure(not ids & seen, "triage groups share a diagnostic: " + g["id"])
+            seen |= ids
+            ensure(g.get("cross_tool", False) == (len({tools[i] for i in ids}) > 1), "triage group cross_tool differs from its tools: " + g["id"])
+            cited = g["context_evidence_ids"] + g.get("evidence_ids", [])
+            ensure(all(i in evidence and evidence[i]["kind"] in ("code", "test") for i in cited), "triage group cites an excerpt the request did not send: " + g["id"])
+            if g.get("classification") == "problem":
+                c = candidates.get(g["candidate_id"])
+                ensure(c is not None and c["origin"] == "triage" and g["candidate_id"] not in claimed
+                       and set(c["observation_ids"]) == ids, "triage problem group and its candidate differ: " + g["id"])
+                claimed.add(g["candidate_id"])
+        ensure(claimed == set(candidates), "triage candidate without a problem group")
+        up = {u["source"]: u for u in verify["upstream"]}.get("review.triage.t001", {})
+        ensure(up.get("sha256") == hashlib.sha256(compact_json(raw["triage.t001"])).hexdigest(), "triage verify upstream digest")
+        ensure(verify["candidates"] == triage["candidates"], "triage verify candidates differ from the triage candidates")
+        ensure(carries_upstream_evidence(verify, triage), "triage verify evidence changes a triage excerpt of the same ID")
+
+    check(docs)
+
+    def case(name: str, edit) -> tuple[str, dict]:
+        d = copy.deepcopy(docs)
+        edit(d)
+        return name, d
+
+    def group(d, classification):
+        return next(g for g in d["triage.t001"]["triage_groups"] if g.get("classification") == classification)
+
+    negative = [
+        case("triage record on schema 0.7", lambda d: d["triage.t001"].update(schema_version="0.7")),
+        case("triage record without its slot", lambda d: d["triage.t001"].pop("slice")),
+        case("triage slot key of a slice", lambda d: d["triage.t001"]["slice"].update(key="s001")),
+        case("accepted triage without groups", lambda d: d["triage.t001"].pop("triage_groups")),
+        case("triage group classified critical", lambda d: group(d, "unclear").update(classification="critical")),
+        case("harmless group without cited code", lambda d: group(d, "harmless").pop("evidence_ids")),
+        case("harmless group with a candidate", lambda d: group(d, "harmless").update(candidate_id="triage_1")),
+        case("problem group without its candidate", lambda d: group(d, "problem").pop("candidate_id")),
+        case("problem group with a reason", lambda d: group(d, "problem").update(reason="무해하다")),
+        case("omitted group with a classification", lambda d: group(d, "unclear").update(omitted="triage_item_rejected")),
+        case("triage groups share a diagnostic", lambda d: d["triage.t001"]["triage_groups"][1]["observation_ids"].append(d["triage.t001"]["triage_groups"][0]["observation_ids"][0])),
+        case("triage group of an unknown diagnostic", lambda d: group(d, "unclear")["observation_ids"].append("obs_ffffffffffffffffffff")),
+        case("triage group cites an unsent excerpt", lambda d: group(d, "harmless").update(evidence_ids=["ev_" + "0" * 24])),
+        case("single-tool group marked cross_tool", lambda d: group(d, "unclear").update(cross_tool=True)),
+        case("problem candidate drops a diagnostic", lambda d: d["triage.t001"]["candidates"][0]["observation_ids"].pop()),
+        case("triage candidate of an investigate origin", lambda d: d["triage.t001"]["candidates"][0].update(origin="investigate")),
+        case("triage upstream names a slice", lambda d: d["triage.t001"]["upstream"].append({"source": "review.investigate.s001", "sha256": "0" * 64})),
+        case("triage call of another role", lambda d: d["triage.t001"]["calls"][0].update(role="interpret")),
+        case("triage verify unbound to its triage record", lambda d: next(u for u in d["verify.t001"]["upstream"] if u["source"] == "review.triage.t001").update(sha256="0" * 64)),
+        case("triage verify of other candidates", lambda d: d["verify.t001"]["candidates"].pop()),
+        case("triage evidence of another blob", lambda d: d["triage.t001"]["evidence"][0].update(sha256="0" * 64)),
     ]
     for name, d in negative:
         expect_invalid(name, check, d)

@@ -1,6 +1,7 @@
 package review
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -56,23 +57,9 @@ func triageScript(t *testing.T, classOf func(g triageGroupInput) string) func(in
 	}
 }
 
-// triageTree is a module of six files with three functions each.
-func triageTree() map[string]string {
-	tree := map[string]string{
-		"go.mod":    "module example.test/triage\n\ngo 1.23\n",
-		"README.md": "# Triage\n\nThe service reads values and reports them.\n",
-	}
-	for _, name := range []string{"a", "b", "c", "d", "e", "f"} {
-		var b strings.Builder
-		b.WriteString("package triage\n")
-		for k := range 3 {
-			// Function k starts at line 3+6k; its body is lines 4+6k..7+6k.
-			fmt.Fprintf(&b, "\nfunc %s%d(p *int) int {\n\tx := *p\n\tx = 2\n\treturn x\n}\n", strings.ToUpper(name), k)
-		}
-		tree[name+".go"] = b.String()
-	}
-	return tree
-}
+// triageFixture is fixtures/modules/triage/input: a module of six files
+// with three functions each (function k at line 3+6k, its body 4+6k..7+6k).
+const triageFixture = "../../../fixtures/modules/triage/input"
 
 // triageDiagsOf: one SA4006 per function (line 5+6k) and, in a.go's first
 // function, an SA5011 and a go vet nilness on line 4 (one construct, two
@@ -155,6 +142,7 @@ func triageVet(t *testing.T, j analysis.Job, task pack.Task, files []string) ana
 }
 
 type triageRun struct {
+	j       analysis.Job
 	plan    []analysis.TaskSpec
 	results map[string]analysis.TaskResult
 	report  report.Report
@@ -165,7 +153,9 @@ type triageRun struct {
 // builds the report.
 func runTriageReport(t *testing.T, script map[string]func(int, opencode.Request) opencode.Reply, maxCalls int, budget Budget) triageRun {
 	t.Helper()
-	j := treeJob(t, triageTree())
+	j := dirJob(t, triageFixture)
+	j.RunID, j.AttemptID = "0195f3a0-0000-7000-8000-000000000a01", "0195f3a0-0000-7000-8000-000000000a02"
+	pinExampleSnapshot(t, &j)
 	caller := &scriptedCaller{script: script}
 	h, err := discovery.Wrap(Handler{Static: triageStatic(t), Caller: caller, MaxCalls: maxCalls, Budget: budget}, discovery.Config{Observer: exampleObserver{t: t}})
 	if err != nil {
@@ -194,7 +184,7 @@ func runTriageReport(t *testing.T, script map[string]func(int, opencode.Request)
 	if err := report.ValidateReport(report.Project(r, false)); err != nil {
 		t.Fatalf("code-free export: %v", err)
 	}
-	return triageRun{plan: plan, results: results, report: r, caller: caller}
+	return triageRun{j: j, plan: plan, results: results, report: r, caller: caller}
 }
 
 // triageReviewScript: the whole-run roles answer validly (interpretation
@@ -258,6 +248,29 @@ func triageReviewScript(t *testing.T) map[string]func(int, opencode.Request) ope
 func TestDiagnosticTriageReachesTheReport(t *testing.T) {
 	run := runTriageReport(t, triageReviewScript(t), 0, Budget{})
 	r := run.report
+	// The slot's records are the examples of a triage record and of its
+	// verification (examples/review/triage, scripts/validate_bundle.py).
+	for _, name := range []string{"triage.t001", "verify.t001"} {
+		b, err := os.ReadFile(recordPath(run.j, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var pretty bytes.Buffer
+		if err := json.Indent(&pretty, b, "", "  "); err != nil {
+			t.Fatal(err)
+		}
+		pretty.WriteByte('\n')
+		p := "../../../examples/review/triage/" + name + ".json"
+		if os.Getenv("CODEYE_UPDATE_EXAMPLES") == "1" {
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(p, pretty.Bytes(), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		compareStoredExample(t, p, pretty.Bytes())
+	}
 	for _, key := range []string{"review.triage.t001", "review.verify.t001"} {
 		if res := run.results[key]; res.Status != domain.TaskSucceeded {
 			t.Fatalf("%s: %+v", key, res)
