@@ -261,4 +261,3 @@ func pointer(p []string) string {
 	}
 	return b.String()
 }
-
