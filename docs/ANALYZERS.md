@@ -43,6 +43,7 @@
 | `any.lizard` | `lizard` | 아니오 | `--lizard` | 아니오 | `codeye-structure-lizard` v2 | `overridden` / `honored` |
 | `any.jscpd` | `jscpd` | 아니오 | `--jscpd` + `--node` | 아니오 | `codeye-duplication-jscpd` v2 | `overridden` / `honored` |
 | `any.gitleaks` | `gitleaks` | 아니오 | `--gitleaks` | 아니오 | `codeye-secrets-gitleaks` v1 | `honored` / `disabled` |
+| `any.opengrep` | `opengrep` | 아니오 | `--opengrep` | 아니오 | `codeye-taint` v1 | `overridden` / `reported` |
 
 go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder와 비교가 합성한다([규칙 문맥과 소스 안 억제](#규칙-문맥과-소스-안-억제)). 모듈 단위 분석기는 루트 모듈의 key에 이름만 쓰고 나머지 모듈은 경로 정렬 순서로 `.m01`부터 붙인다. 모듈이 64개를 넘으면 계획 오류다. 무엇이 모듈인지는 팩별 절이 정한다. C/C++과 `any` 분석기는 작업 하나다.
 
@@ -74,6 +75,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | `--lizard /abs/lizard` | 설치된 실행 파일 | lizard |
 | `--jscpd /abs/node_modules/jscpd/run-jscpd.js` | JS 진입 스크립트(`node_modules/.bin` shim 거부) | jscpd |
 | `--gitleaks /abs/gitleaks` | 실행 파일 | gitleaks |
+| `--opengrep /abs/opengrep` | Opengrep 릴리스의 단일 실행 파일([설치](#opengrep-설치)) | 패턴 taint 규칙 |
 | `--npm /abs/node_modules/npm/bin/npm-cli.js`, `--pnpm /abs/node_modules/pnpm/bin/pnpm.cjs`, `--yarn /abs/node_modules/yarn/bin/yarn.js` | JS 진입 스크립트. `--node`가 있어야 함. 분석기가 아니라 받는 도구다 | `deps.javascript` |
 | `--toolchain-path PATH` | 절대 디렉터리 목록, 기본 `/usr/bin:/bin`. 분석기는 보조 프로그램 조회에만 쓴다(Rust 링커 `cc`) | cargo check, clippy |
 | `--repo-code-source-root ID` (반복) | 저장소 코드 실행 허가. 같은 agent의 `--source-root ID=...`가 있어야 함 | 저장소 코드를 실행하는 작업 |
@@ -99,7 +101,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 
 로컬 워커가 사용할 Python, JDK, Go, Cargo, Node.js는 관리 화면에서 지정할 수 있다. 실행 파일이나 설치 디렉터리를 저장하면 다음 분석에서 그 도구를 사용한다. 분석기 자체의 실행 파일은 기존 설정 키로 지정한다. [언어 도구 경로](GUIDE.md#언어-도구-경로)
 
-**찾는 대상.** go, git, node, java, OpenCode와 이 빌드의 분석기 도구 전부다(staticcheck, gitleaks, ruff, mypy, pyright, bandit, lizard, cppcheck, clang-tidy, gcc, eslint, tsc, jscpd, cargo, clippy, pmd, spotbugs, import-linter, dependency-cruiser), 그리고 의존성을 받는 패키지 관리자 npm, pnpm, yarn, uv, python이다. 결과의 `name`은 에이전트 플래그 이름이며 `agent.tools.<name>`과 같다. go는 `agent.go`, git은 `agent.git`, OpenCode는 `agent.model.opencode`다.
+**찾는 대상.** go, git, node, java, OpenCode와 이 빌드의 분석기 도구 전부다(staticcheck, gitleaks, ruff, mypy, pyright, bandit, lizard, cppcheck, clang-tidy, gcc, eslint, tsc, jscpd, opengrep, cargo, clippy, pmd, spotbugs, import-linter, dependency-cruiser), 그리고 의존성을 받는 패키지 관리자 npm, pnpm, yarn, uv, python이다. 결과의 `name`은 에이전트 플래그 이름이며 `agent.tools.<name>`과 같다. go는 `agent.go`, git은 `agent.git`, OpenCode는 `agent.model.opencode`다.
 
 **찾는 위치.** 순서대로 사용자의 `PATH`, `~/.local/bin`, `~/go/bin`, `/usr/local/go/bin`과 시스템 디렉터리, `~/.opencode/bin`, CODEYE 도구 접두사 `~/.local/share/codeye-tools/{bin,cpp/bin,go/bin}`이다. 모양이 정해진 도구는 다음처럼 찾는다.
 
@@ -147,6 +149,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | tsc | 15분 | 32 MiB | 4 MiB |
 | cargo check, clippy | 30분 | 64 MiB | 4 MiB |
 | lizard, jscpd, gitleaks | 15분 | 32 MiB | 4 MiB |
+| Opengrep | scan당 15분(규칙 하나·파일 하나당 30초) | 32 MiB | 4 MiB |
 | 시작 probe·탐색 probe·toolchain probe | 30초 | 64 KiB | |
 
 ### 확인한 도구 버전
@@ -176,6 +179,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | lizard | 1.26.1 | `1.26` |
 | jscpd | 5.4.3 | `5.4` |
 | gitleaks | 8.30.1 | `8.30` |
+| Opengrep | 2.0.0 | `2.0` |
 
 형식이 맞지만 범위 밖인 버전은 실행하고 `tool_version_untested`(rustc는 `rustc_version_untested`)와 `version_tested=false`를 남긴다. 버전 출력을 알아보지 못하면 도구를 코드에 실행하지 않는다(`tool_version_unrecognized`).
 
@@ -194,6 +198,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | JS/TS | `CODEYE_TEST_NODE`, `CODEYE_TEST_ESLINT`, `CODEYE_TEST_TSC` | `CODEYE_JSTS_CAPTURE`, `CODEYE_JSTS_DUMP` | `-run 'TestRealESLint\|TestRealEngine' ./internal/worker/analysis/eslint/`, `-run TestRealTsc ./internal/worker/analysis/tsc/` |
 | Rust | `CODEYE_TEST_CARGO`, `CODEYE_TEST_CLIPPY`, 링커 시험은 `CODEYE_TEST_TOOLPATH`(`cc` 포함) | `CODEYE_RUST_CAPTURE`, `CODEYE_RUST_DUMP` | `./internal/worker/analysis/rustpack/` |
 | lizard, jscpd, gitleaks | `CODEYE_TEST_LIZARD`, `CODEYE_TEST_JSCPD` + `CODEYE_TEST_NODE`, `CODEYE_TEST_GITLEAKS` | `CODEYE_STRUCTURE_CAPTURE`, `CODEYE_STRUCTURE_DUMP` | `-run TestReal ./internal/worker/analysis/{lizard,jscpd,gitleaks}/` |
+| Opengrep | `CODEYE_TEST_OPENGREP`, 네트워크 추적은 `CODEYE_TEST_STRACE` | `CODEYE_OPENGREP_CAPTURE`(`testdata/fixtures.*`), `CODEYE_OPENGREP_EXAMPLE`(관찰 예시 기록) | `-run TestRealOpengrep ./internal/worker/analysis/opengrep/`, 기대값은 `fixtures/taint/`의 `expect:` 표지 |
 
 시험 대상 소스는 저장소의 gofmt·vet·분석기가 보지 않도록 시험 코드 문자열이나 `fixtures/` 아래에 둔다. 비밀값 fixture는 시험 시점에 생성하고 저장소에는 실제와 비슷한 토큰을 두지 않는다. 시험 전체 구성은 [시험](TESTING.md)을 따른다.
 
@@ -249,12 +254,20 @@ envelope의 `outcome.exit_class`는 다음 중 하나다.
 
 `coverage`는 `unit`(`crate`·`file`·`module`·`package`·`project`·`translation_unit`), `files_in_scope`(null=셀 수 없음), `processed_paths`(null=모름, []=0), `files_skipped`, `files_unlisted`, 단위 상태별 수를 담는다. 도구가 주지 않는 상세 범위는 모름으로 남긴다.
 
+### SARIF 입력 어댑터
+
+`internal/worker/analysis/sarif`는 팩이 실행한 도구의 SARIF 2.1.0 출력을 공통 관찰 모델로 옮기는 입력 어댑터다. 팩 안에서 도구 출력을 읽는 데만 쓰며, 다른 곳에서 만든 SARIF를 올려 결과로 받는 경로는 없다. 지금 쓰는 팩은 [Opengrep 패턴 taint 팩](#opengrep-패턴taint-팩)이다.
+
+- **원시 stream이 근거다.** SARIF는 도구의 stdout으로 받아 그대로 기록한다. 결과마다 `/runs/i/results/j` JSON pointer와 그 결과의 byte 범위를, 위치·관련 위치·흐름 단계마다 자기 byte 범위를 기록하므로 관찰의 `raw_ref`와 관련 위치의 `raw_span`이 원시 파일의 바이트를 가리킨다.
+- **옮기는 것.** `results`(규칙 ID, level, 메시지, 주 위치), `locations`, `relatedLocations`, `codeFlows/threadFlows/locations`(흐름·스레드·순서·`kinds`·`nestingLevel`을 보존하고 도구가 만든 흐름 단계로 표시), `partialFingerprints`·`fingerprints`, `suppressions`(종류), driver의 규칙 메타데이터(ID, 짧은·긴 설명, 기본 level, `CWE-<n>` 태그), 실행 알림(`toolExecutionNotifications`)과 `executionSuccessful`이다.
+- **엄격한 검증.** 모델링한 부분집합 밖의 필드, 중복 키, 64단계를 넘는 중첩, 뒤에 붙은 데이터, 크기 상한(32 MiB)·결과 수 상한(100000)·결과당 흐름 단계 상한(4096) 초과, `kind`가 `fail`이 아닌 결과는 모두 형태 오류(`sarif.ErrShape`)다. 형태 오류는 결과 0건이 아니라 `output_unparsed`다.
+- **경로.** `artifactLocation.uri`는 작업 사본 상대 경로로만 받는다. 절대 경로, 스킴(`file:` 포함), `..`, 역슬래시, 드라이브 문자, 모르는 `uriBaseId`는 작업 사본을 벗어난 위치로 표시되고, 팩은 그 결과를 버리고 작업을 실패시킨다(`result_outside_snapshot`). URI 형식(퍼센트 인코딩 여부)과 허용 `uriBaseId`는 팩이 도구의 실측 출력대로 고른다.
+- 관련 위치의 종류 `tool_flow_step`은 도구가 보고한 데이터 흐름 단계다. 순서는 원시 stream 순서이며 보고서까지 그대로 간다([보고서](REPORT.md)).
+
 ### 설계 계약(미구현)
 
 다음은 설계만 있고 구현하지 않았다.
 
-- SARIF 입력 어댑터(locations·relatedLocations·codeFlows·fingerprints를 공통 모델로 옮기고 원시 파일 보존). SARIF는 외부 도구 어댑터 형식이며 보고서 모델을 대신하지 않는다.
-- Semgrep CE 등 승인된 로컬 패턴 규칙. 구현하더라도 지원 범위만 명세하고 파일 간 완전한 데이터 흐름 분석을 했다고 표시하지 않는다.
 - 승인된 digest·버전을 가진 외부 플러그인 카탈로그. 임의 다운로드 플러그인은 지원하지 않는다.
 - 사용자가 규칙을 끈 이유·범위·기간 기록과 프로젝트별 규칙 정책 revision.
 - 여러 검사기의 진단을 rule family·symbol·문맥으로 묶는 자동 병합. 현재는 도구 사이 자동 병합을 하지 않는다([엔진 중복](#엔진-중복)).
@@ -377,6 +390,7 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 | `tool` | `name`, 관측한 `version`(없으면 null), `version_tested` |
 | `target` | `platform`과 생태계별 `properties` |
 | `rule_pack` | `id`·`version`·`selection`, `repository_config`(`overridden`/`honored`/`none`), `config_files`(경로·manifest SHA-256), `source_suppressions`(`honored`/`reported`/`disabled`/`none`), `unreported_suppression_rules` |
+| `rules` | 선택. 도구가 읽었다고 보고한 규칙의 `id`, `short_description`, `cwe`(`CWE-<n>` 목록). ID 순으로 정렬·중복 없음이고 관찰의 모든 `rule_id`가 여기에 있어야 한다(Opengrep) |
 | `outcome` | `task_status`, `reason`, `exit_class`, `partial_parse` |
 | `executions` | 실행마다 이름, 상태, exit code, 정리 결과, 상대화한 argv·cwd·환경변수 이름, stdout/stderr의 SHA-256·크기·잘림 |
 | `coverage` | [범위 정보](#범위-정보) |
@@ -1416,3 +1430,92 @@ gitleaks 탐지는 미검토 낮음 보안 finding이다. 비밀값 엔진은 gi
 - 저장소 `.gitleaksignore`가 숨긴 탐지도 같다. 저장소가 받아들인 값으로 보고 따르며 그 파일은 digest와 함께 규칙 문맥에 남는다.
 - 비밀값 규칙이 모르는 형식(임의 문자열 암호)과 git 이력 안의 지운 비밀값은 선별되지 않는다.
 - pyright 메시지의 문자열 literal 값처럼 다른 분석기의 진단 문구는 이 팩이 가리지 않는다. 탐지된 파일에 위치한 관찰의 문구만 모델 입력에서 뺀다.
+
+## Opengrep 패턴·taint 팩
+
+`any.opengrep`은 CODEYE가 처음부터 쓴 규칙 팩 `codeye-taint`를 Opengrep으로 실행해 **한 파일 안에서** 요청 입력이 위험한 호출에 닿는 흐름을 찾는 추가 깊이 분석기다. 구현은 `internal/worker/analysis/opengrep`, 출력 해석은 [SARIF 입력 어댑터](#sarif-입력-어댑터), 빌트인 연결은 `builtin/any_ecosystem.go`다. [서술](../examples/analyzer-opengrep.yaml) · [실측 관찰 예시](../examples/observations-opengrep.json)
+
+### 지원 범위
+
+- **파일 안 흐름만.** 출발점과 위험한 호출이 같은 파일에 있어야 한다. 그 파일의 함수 사이 호출(인자 → 매개변수 → 반환값)은 따라간다. 파일 사이 흐름, 프레임워크가 주입하는 값, 전역 상태·DB·파일을 거친 흐름은 찾지 않는다(`intra_file_flows_only`). Opengrep 2.0.0에는 파일 사이 분석 스위치(`--enable-interfile`)가 있으나 켜지 않는다. 파일 사이 데이터 흐름을 분석했다고 표시하지 않는다.
+- **출발점은 요청 입력뿐이다**(`request_input_sources_only`). 언어별 출발점은 아래 표와 같다. 명령행 인자, 그 밖의 환경변수, 표준 입력, 파일·DB에서 읽은 값은 출발점이 아니다.
+- **규칙이 아는 API만.** 표에 적은 위험 호출과 값 정리 함수만 안다. 처음 보는 래퍼 함수, 사용자 정의 escape, 다른 라이브러리의 같은 동작은 놓치거나(미탐) 정리되지 않은 것으로 본다(오탐).
+- **포함 검사 정리.** 경로 규칙은 `startsWith`·`HasPrefix`·`starts_with`·`strncmp` 같은 포함 검사를 받은 값을 그 뒤로 안전하다고 본다. 검사 전에 경로를 정규화했는지(`realpath`, `canonicalize`, `normalize`)는 확인하지 않는다.
+- 언어 판정은 확장자다. Python `.py`, JS/TS `.js .jsx .mjs .cjs .ts .tsx .mts .cts`, Go `.go`, Java `.java`, C/C++ `.c .h .cc .cpp .cxx .c++ .hh .hpp .hxx .h++`, Rust `.rs`. 숨김·`testdata`·`vendor`·`node_modules`와 `third-party` 계열 디렉터리는 넘기지 않는다(구조 팩과 같은 선택).
+
+| 언어 | 출발점 | 규칙(CWE) |
+|---|---|---|
+| Python | Flask `request.*`(args, form, values, json, data, cookies, headers, files, view_args, path, url, query_string, stream, get_data·get_json), Django·DRF·aiohttp형 `request.GET/POST/body/COOKIES/FILES/META/query_params/path_params/match_info`, `BaseHTTPRequestHandler`의 `self.path/headers/rfile.read` | command-injection(78), path-traversal(22), sql-injection(89), ssrf(918), unsafe-deserialization(502), code-evaluation(95), html-injection(79) |
+| JavaScript·TypeScript | Express형 `req`·`request`의 query, body, params, headers, cookies, originalUrl, url, path. HTML 출력 규칙만 브라우저의 `location.*`, `document.URL`, `document.documentURI`도 | command-injection(78), path-traversal(22), sql-injection(89), ssrf(918), unsafe-deserialization(502, node-serialize), code-evaluation(95), html-injection(79) |
+| Go | 파일에서 형이 선언된 `*http.Request`(FormValue, PostFormValue, PathValue, URL.Query, URL.RawQuery, URL.Path, Form, PostForm, Header, Body, Cookie), `*gin.Context`, `echo.Context`의 요청 값 | command-injection(78), path-traversal(22), sql-injection(89), ssrf(918), html-injection(79) |
+| Java | 파일에서 형이 선언된 `HttpServletRequest`의 getParameter 계열·getHeader·getQueryString·getPathInfo·getRequestURI·getCookies·getInputStream·getReader, Spring MVC `@RequestParam`·`@PathVariable`·`@RequestHeader`·`@RequestBody`·`@CookieValue` 매개변수 | command-injection(78), path-traversal(22), sql-injection(89), ssrf(918), unsafe-deserialization(502), code-evaluation(95), html-injection(79) |
+| C·C++ | `recv`·`recvfrom`으로 받은 버퍼, CGI 요청 변수(`QUERY_STRING`, `PATH_INFO`, `PATH_TRANSLATED`, `REQUEST_URI`, `SCRIPT_NAME`, `CONTENT_TYPE`, `HTTP_*`)의 `getenv`. `strcpy`·`strcat`·`snprintf`·`memcpy`·`realpath` 등의 복사를 따라간다 | command-injection(78), path-traversal(22), sql-injection(89), ssrf(918, libcurl) |
+| Rust | axum·actix-web의 `Query`·`Path`·`Json`·`Form` 추출 매개변수(`web::` 접두 포함), actix `HttpRequest`의 query_string·uri·path·headers·match_info | command-injection(78), path-traversal(22), sql-injection(89), ssrf(918, reqwest), html-injection(79) |
+
+규칙 ID는 `codeye.<언어>.<규칙>`이다(C·C++은 `codeye.c.*`). Go·C/C++·Rust에는 역직렬화·코드 평가 규칙이 없다. 표준 디코더(encoding/json, serde)는 코드를 실행하지 않고 언어에 eval이 없다. C/C++에는 HTML 출력 규칙이 없다. 규칙마다 한국어 설명(위험한 이유와 고치는 방법, CWE)이 보고서 규칙 설명 표(`internal/report/reportui/rule_descriptions_ko.json`, key `any.opengrep:<규칙 ID>`)에 있고, 보고서 제목은 그 첫 문장을 쓴다.
+
+### 규칙 팩
+
+- **출처.** 모든 규칙은 CODEYE가 각 언어·프레임워크의 공개 API를 보고 새로 썼다. Semgrep 레지스트리 규칙(Semgrep Rules License v1.0, [원문](https://github.com/semgrep/semgrep-rules/blob/develop/LICENSE))이나 라이선스를 확인하지 않은 규칙 집합을 복사하거나 고쳐 쓰지 않았다. 규칙 파일은 저장소의 다른 소스와 같은 조건이다.
+- **내장과 식별.** 규칙 파일 `rules/<언어>.yaml`은 바이너리에 내장(`go:embed`)되고 실행마다 task scratch의 `rules/`에 써서 `--config`로 넘긴다. `rule_pack.selection`은 엔진 스위치와 규칙 파일마다 SHA-256 앞 12자(`rules/python.yaml@…`)다. 규칙을 바꾸면 선택이 바뀌어 규칙 문맥이 달라진다. 팩 버전은 `codeye-taint` v1이다.
+- **정밀도 우선.** 규칙마다 양성 fixture(`fixtures/taint/<언어>/<규칙>.*`, 위험 줄에 `expect: <규칙 ID>`)와 음성 fixture(`*_safe.*`: 인자 목록 실행, 매개변수 바인딩, 상수 호스트 접두사, escape, 숫자 변환, 포함 검사)가 있다. 실제 Opengrep 실행에서 양성 86줄을 모두 찾고 음성에서 결과가 없어야 시험을 통과한다. 음성에서 정확하게 만들 수 없는 위험 호출은 규칙에 넣지 않았다(예: Go의 `$X.Get(a, b)` 형태 SQL 호출은 캐시 클라이언트와 구별할 수 없어 뺐다).
+- **YAML.** Opengrep은 YAML anchor를 받지 않으므로 규칙 파일은 출발점·정리 블록을 규칙마다 펼쳐 쓴다.
+
+### 실행
+
+- 버전 probe(`opengrep --version`, 한 줄 `X.Y.Z`) 뒤 scan 한 번(파일 목록이 argv 한도 96 KiB를 넘으면 나눠 최대 64번)이다. 64번을 넘으면 실행하지 않고 `unsupported`/`too_many_files`다.
+- argv: `scan --config <scratch>/…/rules/<언어>.yaml … --no-rewrite-rule-ids --sarif --dataflow-traces --taint-intrafile --json-output <scratch>/…/opengrep.scan.json --project-root . --quiet --jobs 4 --timeout 30 --timeout-threshold 3 --max-target-bytes 1000000 -- ./<파일>…`. cwd는 작업 사본, 환경은 공통값(`PATH`, `LANG`, `SystemRoot`)과 executor의 실행별 `HOME`·임시 디렉터리뿐이다. 범위에 있는 언어의 규칙 파일만 넘긴다.
+- **한 번의 실행, 두 출력.** stdout의 SARIF가 원시 stream이고 관찰의 근거다. `--json-output`이 scratch에 쓰는 JSON 사본은 SARIF에 없는 두 가지, 검사한 파일 목록(`paths.scanned`)과 파일별 구조화 오류를 준다. 두 출력은 대조한다. 오류 수와 SARIF 알림 수가 같아야 하고, 억제되지 않은 결과의 (규칙, 경로, 줄) 다중집합이 같아야 한다(JSON 사본은 억제된 결과를 빼고 쓴다). 다르면 `output_unparsed`다.
+- **네트워크를 쓰지 않는다.** 규칙은 로컬 파일로만 넘기고 레지스트리(`p/…`, `r/…`, `auto`), URL, `git+` 설정, `SEMGREP_RULES` 환경변수를 쓰지 않는다. Opengrep 2.0.0에는 지표 전송 옵션이 없다. 버전 확인도 하지 않는다. 시험 `TestRealOpengrepNoNetwork`(TC-291)가 팩이 만든 argv·환경 그대로 strace(`trace=network,process`)로 실행해 `socket`·`connect`·`sendto`·`bind`가 없고 `execve`가 하나뿐임을 확인했다. 재생 시험은 기록된 argv와 환경에 레지스트리·URL·파일 사이 스위치가 없음을 CI에서 검사한다.
+- 1 MB를 넘는 파일(`files_over_size_limit_skipped`)과 UTF-8이 아닌 파일(`non_text_files_skipped`)은 CODEYE가 넘기지 않는다. 처리 파일이 아니며 단위 상태로 센다.
+
+### 종료 코드와 결과
+
+| 상황 | 판정 |
+|---|---|
+| exit 0, 두 출력 일치 | 결과가 있으면 `success_with_findings`, 없으면 `success_without_findings`. 결과가 있어도 exit 0이다(측정) |
+| exit 4(규칙 패턴), 5(YAML), 7(설정 없음), 8(언어), 규칙 오류 알림, driver 규칙 목록이 내장 규칙과 다름 | `failed`/`rule_pack_load_failed`. 규칙을 읽지 못한 실행은 0건이 아니다 |
+| 그 밖의 0이 아닌 종료(2 등) | `failed`/`opengrep_failed` |
+| driver가 `Opengrep`가 아니거나 버전이 probe와 다름, 형태 오류, JSON 사본 없음·불일치 | `failed`/`output_unparsed` |
+| 넘기지 않은 파일의 결과나 오류 | 그 결과는 버리고 `failed`/`result_outside_snapshot` |
+| 파일 일부만 해석(경고 수준 오류)·규칙 제한시간 초과 | 그 파일은 처리 파일에서 빼고 `files_not_fully_analyzed`(파일 목록은 `target.properties.incomplete_files`). 나머지 파일의 결과는 유지 |
+| 검사했다고 보고하지 않은 파일 | 처리 파일에서 빼고 `planned_files_not_scanned` |
+
+### 관찰
+
+- 범주는 `security`, 원문 등급은 SARIF level(`error`·`warning`), 문구는 규칙 메시지(고정 영어 문장)다. 위치는 SARIF의 주 위치(위험 호출의 인자)다.
+- `--dataflow-traces`의 흐름 단계는 `related`의 `tool_flow_step`이다. 문구는 CODEYE가 만든 고정 문장(`taint flow step N of M: source|propagation|call|callee parameter|callee return|sink`)이고 코드를 인용하지 않는다. 각 단계는 원시 stream의 자기 byte 범위를 가리킨다. 64단계를 넘으면 앞 63단계와 마지막 단계만 남긴다(`flow_steps_truncated`).
+- envelope의 `rules`에 이번 실행이 읽은 규칙의 ID, 짧은 설명, CWE가 있다. `target.properties`는 `analysis=intra_file_taint`, `sources=request_input`, `rule_languages`(넘긴 규칙 파일)다.
+- **원시 stream에는 소스 코드가 있다.** SARIF는 일치한 코드 조각과 흐름 단계의 원문을 담는다(`tool_output_holds_source_text`). 관찰과 보고서 문구에는 넣지 않는다. 코드 제외 내보내기는 원시 stream을 내보내지 않는다.
+
+### 규칙 문맥과 억제
+
+- `repository_config=overridden`, `config_files=[]`. 파일을 명시해 넘기므로 저장소의 `.semgrepignore`·`.gitignore`는 적용되지 않는다(측정). 저장소 안의 규칙 파일·설정은 읽지 않는다.
+- `source_suppressions=reported`. `nosemgrep`·`nosem` 주석(규칙 ID를 적으면 그 규칙만)은 도구가 적용하고 SARIF `suppressions`(`inSource`)로 알린다. 그 결과는 `suppressed=true` 관찰로 남고 발견이 되지 않는다. fixture에서 규칙 없는 주석과 같은 규칙 ID 주석은 억제되고 다른 규칙 ID 주석은 억제되지 않았다(TC-290).
+
+### 엔진 중복
+
+[엔진 중복](#엔진-중복) 절차대로 같은 fixture에 기존 분석기를 CODEYE 선택으로 실행해 같은 줄 보고를 쟀다. 모든 규칙에 다른 도구가 보고하지 않는 변형이 있어 규칙을 모두 남긴다. 같은 줄의 두 보고는 각 작업의 관찰로 남고 보고서는 합치지 않는다.
+
+| 기존 분석기(선택) | 같은 줄에서 함께 보고 | Opengrep만 보고한 변형 | 기존 분석기만 보고(음성 fixture) |
+|---|---|---|---|
+| bandit 1.9.4 (B602·B605 셸 실행, B608 SQL 문자열, B310 urlopen, B301·B506 pickle·yaml, B307·B102 eval·exec, B703·B704 Markup) | Python 양성 23줄 중 11줄 | 경로 4줄 전부, 함수 사이 명령 흐름, requests SSRF, 템플릿 HTML, `yaml.unsafe_load`, `compile` | 셸 상수 명령·숫자 인자·quote 처리 등 음성 8줄(B605·B602·B608·B307·B301). bandit은 입력 출처를 보지 않는다 |
+| ESLint 10.15 기준선(`@eslint/js` recommended) | 없음 | 전부 | 없음 |
+| ESLint type-aware(`@typescript-eslint/no-implied-eval`) | TS의 `new Function(입력)` | `eval(입력)`, vm 실행, JS 파일 | `setTimeout(문자열)` |
+| go vet, Staticcheck(SA·U1000), errcheck | 없음(errcheck는 무시한 오류 반환만) | 전부 | 없음 |
+| SpotBugs 4.10.5(전체 검출기, `-low`) | 서블릿 XSS 2줄(`XSS_REQUEST_PARAMETER_TO_SERVLET_WRITER`), 경로 1줄(`PT_RELATIVE_PATH_TRAVERSAL`), SQL 1줄(`SQL_NONCONSTANT_STRING_PASSED_TO_EXECUTE`) | 메서드 사이 XSS, `Files.*`·`File.delete` 경로, JdbcTemplate SQL, Spring 매개변수 출발점, 명령·SSRF·역직렬화·SpEL | 포함 검사를 거친 경로 1줄(`PT_ABSOLUTE_PATH_TRAVERSAL`) |
+| clang-tidy(`bugprone-command-processor`, cert-env33-c와 같은 검사) | `system`·`popen` 2줄 | `execl("/bin/sh", …, "-c", 입력)` | 상수·숫자 명령의 `system` 2줄 |
+| cppcheck | 없음 | 전부 | 없음 |
+
+- Java 측정은 fixture가 참조하는 서블릿·Spring API의 최소 stub으로 컴파일해 SpotBugs를 실행했다(저장소에 두지 않음). Rust clippy 선택(6개 lint)에는 이 구성을 보는 lint가 없어 실행하지 않았다.
+- 측정은 이 fixture의 구성에 한정된다. 규칙을 바꾸면 다시 잰다.
+
+### Opengrep 설치
+
+Opengrep은 [opengrep/opengrep](https://github.com/opengrep/opengrep)의 LGPL-2.1 프로그램이다([LICENSE](https://github.com/opengrep/opengrep/blob/main/LICENSE)). CODEYE는 바이너리를 저장소에 넣거나 내려받지 않는다. 운영자가 설치한다.
+
+1. [릴리스 v2.0.0](https://github.com/opengrep/opengrep/releases/tag/v2.0.0)에서 플랫폼 파일을 받는다. Linux x86-64는 `opengrep_linux_x86`이다(시험한 파일 SHA-256 `37e93f4da5fd04a18c5c1febbdd12f7e98dfccd4d0c9cf2593bcb25eeb462da0`). 같은 릴리스의 `.sig`·`.cert`로 서명을 확인할 수 있다(CODEYE 시험에서는 확인하지 않았다).
+2. 이름을 `opengrep`으로 바꿔 `~/.local/share/codeye-tools/bin/`에 두고 실행 권한을 준다. 다른 위치면 `agent.tools.opengrep`(에이전트 플래그 `--opengrep`)에 절대 경로를 적는다.
+3. `codeye tools`에서 `opengrep`이 `found`, 버전 2.0.0, `version_tested=true`인지 확인한다. `codeye doctor`도 같은 검사를 한다.
+
+설치하지 않으면 지원 언어 소스가 있는 분석에서 작업이 계획되고 `unsupported`/`tool_not_configured`로 끝난다(0건 통과 아님). 실제 실행은 Linux x86-64에서만 확인했다. macOS·Windows 릴리스 파일은 시험하지 않았다.

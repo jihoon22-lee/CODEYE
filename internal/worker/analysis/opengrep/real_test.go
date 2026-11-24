@@ -37,7 +37,7 @@ func testOpengrep(t *testing.T) string {
 	return p
 }
 
-// TC-139: every positive fixture line of the rule pack is found with its
+// TC-290: every positive fixture line of the rule pack is found with its
 // tool flow, no negative fixture yields a finding, nosem comments are
 // reported as suppressed, and the source and snapshot are not changed.
 func TestRealOpengrepFixtures(t *testing.T) {
@@ -46,6 +46,11 @@ func TestRealOpengrepFixtures(t *testing.T) {
 		t.Fatal(err)
 	}
 	files := fixtureFiles(t)
+	// Repository ignore files that would hide two fixture directories: the
+	// explicit file targets make Opengrep skip neither (repository_config
+	// overridden), so every expected finding is still there.
+	files[".semgrepignore"] = []byte("python/\n")
+	files[".gitignore"] = []byte("javascript/\n")
 	fx := anypacktest.New(t, filepath.Join(t.TempDir(), "공백 & (dir)"), files, domain.Scope{})
 	before, snapBefore := packtest.TreeHash(t, fx.SourceRoot), packtest.TreeHash(t, fx.Job.Snapshot.SnapshotDir)
 	res := packtest.RunTask(t, a, fx.Job, Name, &executor.Executor{})
@@ -148,7 +153,7 @@ func capture(t *testing.T, scratch string, r executor.Result) {
 	}
 }
 
-// TC-140: a traced run of the version probe and of the scan argv the pack
+// TC-291: a traced run of the version probe and of the scan argv the pack
 // builds, with the pack's environment, makes no network system call and
 // starts no other program.
 func TestRealOpengrepNoNetwork(t *testing.T) {

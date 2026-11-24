@@ -85,7 +85,7 @@ func replay(t *testing.T, c replayCase) replayed {
 	return replayed{res: res, doc: doc, r: r}
 }
 
-// TC-139 (replay): the captured scan of the rule pack fixtures gives every
+// TC-290 (replay): the captured scan of the rule pack fixtures gives every
 // expected finding with its tool flow and the suppressed ones marked.
 func TestReplayOpengrepFixtures(t *testing.T) {
 	got := replay(t, replayCase{})

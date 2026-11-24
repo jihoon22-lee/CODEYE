@@ -20,7 +20,7 @@ func readTestdata(t *testing.T, name string) []byte {
 
 var rawOpt = Options{URIForm: URIRawPath, BaseIDs: []string{"%SRCROOT%"}}
 
-// The captured Opengrep 2.0.0 log: a taint result with its code flow, a
+// TC-289: the captured Opengrep 2.0.0 log: a taint result with its code flow, a
 // suppressed result, rule metadata with CWE tags and raw (not
 // percent-encoded) URIs.
 func TestDecodeOpengrepLog(t *testing.T) {
@@ -140,7 +140,7 @@ func TestMapURI(t *testing.T) {
 	}
 }
 
-// Malformed, unknown, oversized and out-of-range logs are shape errors,
+// TC-289: malformed, unknown, oversized and out-of-range logs are shape errors,
 // never an empty result list.
 func TestDecodeRejects(t *testing.T) {
 	good := string(readTestdata(t, "spec-features.sarif"))
