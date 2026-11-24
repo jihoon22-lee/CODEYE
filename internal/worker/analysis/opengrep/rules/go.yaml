@@ -1,0 +1,355 @@
+# CODEYE rule pack codeye-taint (Go). Written for CODEYE from the Go
+# standard library (net/http, os, os/exec, database/sql, html/template) and
+# the gin and echo request APIs; not derived from any third-party rule set.
+# Every rule is an intra-file taint rule: the source and the sink must be in
+# the same file (calls between functions of that file are followed).
+# Sources are HTTP request input read from a *http.Request, *gin.Context or
+# echo.Context whose type is declared in the file. Go has no rule for
+# unsafe deserialization or code evaluation: the standard decoders do not
+# run code and the language has no eval.
+rules:
+  - id: codeye.go.command-injection
+    mode: taint
+    languages: [go]
+    severity: ERROR
+    message: HTTP request input selects the program or the shell command that is run
+    metadata: {cwe: ["CWE-78"], codeye_family: command-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $R.FormValue(...)
+              - pattern: $R.PostFormValue(...)
+              - pattern: $R.PathValue(...)
+              - pattern: $R.URL.Query()
+              - pattern: $R.URL.RawQuery
+              - pattern: $R.URL.Path
+              - pattern: $R.Form
+              - pattern: $R.PostForm
+              - pattern: $R.Header
+              - pattern: $R.Body
+              - pattern: $R.Cookie(...)
+              - pattern: $R.Cookies()
+          - metavariable-type:
+              metavariable: $R
+              type: "*http.Request"
+      - patterns:
+          - pattern-either:
+              - pattern: $C.Query(...)
+              - pattern: $C.DefaultQuery(...)
+              - pattern: $C.Param(...)
+              - pattern: $C.PostForm(...)
+              - pattern: $C.DefaultPostForm(...)
+              - pattern: $C.GetHeader(...)
+              - pattern: $C.Cookie(...)
+          - metavariable-type:
+              metavariable: $C
+              type: "*gin.Context"
+      - patterns:
+          - pattern-either:
+              - pattern: $C.QueryParam(...)
+              - pattern: $C.Param(...)
+              - pattern: $C.FormValue(...)
+          - metavariable-type:
+              metavariable: $C
+              type: echo.Context
+    pattern-sanitizers:
+      - pattern: strconv.Atoi(...)
+      - pattern: strconv.ParseInt(...)
+      - pattern: strconv.ParseUint(...)
+      - pattern: strconv.ParseFloat(...)
+      - pattern: strconv.ParseBool(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: exec.Command($PROG, ...)
+              - pattern: exec.CommandContext($CTX, $PROG, ...)
+          - focus-metavariable: $PROG
+      - patterns:
+          - pattern-either:
+              - pattern: exec.Command("$SH", "-c", $CMD, ...)
+              - pattern: exec.CommandContext($CTX, "$SH", "-c", $CMD, ...)
+          - metavariable-regex:
+              metavariable: $SH
+              regex: ^(/bin/|/usr/bin/)?(sh|bash|zsh|dash)$
+          - focus-metavariable: $CMD
+
+  - id: codeye.go.path-traversal
+    mode: taint
+    languages: [go]
+    severity: WARNING
+    message: HTTP request input selects the file path of a file system operation
+    metadata: {cwe: ["CWE-22"], codeye_family: path-traversal}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $R.FormValue(...)
+              - pattern: $R.PostFormValue(...)
+              - pattern: $R.PathValue(...)
+              - pattern: $R.URL.Query()
+              - pattern: $R.URL.RawQuery
+              - pattern: $R.URL.Path
+              - pattern: $R.Form
+              - pattern: $R.PostForm
+              - pattern: $R.Header
+              - pattern: $R.Body
+              - pattern: $R.Cookie(...)
+              - pattern: $R.Cookies()
+          - metavariable-type:
+              metavariable: $R
+              type: "*http.Request"
+      - patterns:
+          - pattern-either:
+              - pattern: $C.Query(...)
+              - pattern: $C.DefaultQuery(...)
+              - pattern: $C.Param(...)
+              - pattern: $C.PostForm(...)
+              - pattern: $C.DefaultPostForm(...)
+              - pattern: $C.GetHeader(...)
+              - pattern: $C.Cookie(...)
+          - metavariable-type:
+              metavariable: $C
+              type: "*gin.Context"
+      - patterns:
+          - pattern-either:
+              - pattern: $C.QueryParam(...)
+              - pattern: $C.Param(...)
+              - pattern: $C.FormValue(...)
+          - metavariable-type:
+              metavariable: $C
+              type: echo.Context
+    pattern-sanitizers:
+      - pattern: strconv.Atoi(...)
+      - pattern: strconv.ParseInt(...)
+      - pattern: filepath.Base(...)
+      - pattern: path.Base(...)
+      # A containment check (if !strings.HasPrefix(p, root) { return })
+      # makes the checked value trusted afterwards.
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern: strings.HasPrefix($P, ...)
+              - pattern: filepath.IsLocal($P)
+          - focus-metavariable: $P
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: os.$FN($PATH, ...)
+              - pattern: ioutil.$FN($PATH, ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(Open|OpenFile|Create|ReadFile|WriteFile|Remove|RemoveAll|ReadDir|Mkdir|MkdirAll|Truncate)$
+          - focus-metavariable: $PATH
+
+  - id: codeye.go.sql-injection
+    mode: taint
+    languages: [go]
+    severity: ERROR
+    message: HTTP request input is built into the text of an SQL statement
+    metadata: {cwe: ["CWE-89"], codeye_family: sql-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $R.FormValue(...)
+              - pattern: $R.PostFormValue(...)
+              - pattern: $R.PathValue(...)
+              - pattern: $R.URL.Query()
+              - pattern: $R.URL.RawQuery
+              - pattern: $R.URL.Path
+              - pattern: $R.Form
+              - pattern: $R.PostForm
+              - pattern: $R.Header
+              - pattern: $R.Body
+              - pattern: $R.Cookie(...)
+              - pattern: $R.Cookies()
+          - metavariable-type:
+              metavariable: $R
+              type: "*http.Request"
+      - patterns:
+          - pattern-either:
+              - pattern: $C.Query(...)
+              - pattern: $C.DefaultQuery(...)
+              - pattern: $C.Param(...)
+              - pattern: $C.PostForm(...)
+              - pattern: $C.DefaultPostForm(...)
+              - pattern: $C.GetHeader(...)
+              - pattern: $C.Cookie(...)
+          - metavariable-type:
+              metavariable: $C
+              type: "*gin.Context"
+      - patterns:
+          - pattern-either:
+              - pattern: $C.QueryParam(...)
+              - pattern: $C.Param(...)
+              - pattern: $C.FormValue(...)
+          - metavariable-type:
+              metavariable: $C
+              type: echo.Context
+    pattern-sanitizers:
+      - pattern: strconv.Atoi(...)
+      - pattern: strconv.ParseInt(...)
+      - pattern: strconv.ParseUint(...)
+      - pattern: strconv.ParseFloat(...)
+      - pattern: strconv.ParseBool(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $DB.$FN($SQL, ...)
+          # A string literal is never built from input; this also keeps the
+          # request reader c.Query("name") of gin from being a sink.
+          - pattern-not: $DB.$FN("...", ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(Query|QueryRow|Exec|Prepare|Queryx|QueryRowx|MustExec|Raw)$
+          - focus-metavariable: $SQL
+      - patterns:
+          - pattern: $DB.$FN($CTX, $SQL, ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(QueryContext|QueryRowContext|ExecContext|PrepareContext|QueryxContext|QueryRowxContext|MustExecContext)$
+          - focus-metavariable: $SQL
+
+  - id: codeye.go.ssrf
+    mode: taint
+    languages: [go]
+    severity: WARNING
+    message: HTTP request input decides the address of an outgoing HTTP request
+    metadata: {cwe: ["CWE-918"], codeye_family: ssrf}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $R.FormValue(...)
+              - pattern: $R.PostFormValue(...)
+              - pattern: $R.PathValue(...)
+              - pattern: $R.URL.Query()
+              - pattern: $R.URL.RawQuery
+              - pattern: $R.URL.Path
+              - pattern: $R.Form
+              - pattern: $R.PostForm
+              - pattern: $R.Header
+              - pattern: $R.Body
+              - pattern: $R.Cookie(...)
+              - pattern: $R.Cookies()
+          - metavariable-type:
+              metavariable: $R
+              type: "*http.Request"
+      - patterns:
+          - pattern-either:
+              - pattern: $C.Query(...)
+              - pattern: $C.DefaultQuery(...)
+              - pattern: $C.Param(...)
+              - pattern: $C.PostForm(...)
+              - pattern: $C.DefaultPostForm(...)
+              - pattern: $C.GetHeader(...)
+              - pattern: $C.Cookie(...)
+          - metavariable-type:
+              metavariable: $C
+              type: "*gin.Context"
+      - patterns:
+          - pattern-either:
+              - pattern: $C.QueryParam(...)
+              - pattern: $C.Param(...)
+              - pattern: $C.FormValue(...)
+          - metavariable-type:
+              metavariable: $C
+              type: echo.Context
+    pattern-sanitizers:
+      - pattern: strconv.Atoi(...)
+      - pattern: url.PathEscape(...)
+      - pattern: url.QueryEscape(...)
+      # A constant scheme, host and path prefix leaves only the path or query
+      # to the input.
+      - patterns:
+          - pattern-either:
+              - pattern: '"$PREFIX" + $X'
+              - pattern: fmt.Sprintf("$PREFIX", ...)
+          - metavariable-regex:
+              metavariable: $PREFIX
+              regex: ^https?://[^/%]+/
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: http.Get($URL)
+              - pattern: http.Head($URL)
+              - pattern: http.Post($URL, ...)
+              - pattern: http.PostForm($URL, ...)
+              - pattern: http.NewRequest($M, $URL, ...)
+              - pattern: http.NewRequestWithContext($CTX, $M, $URL, ...)
+          - focus-metavariable: $URL
+      - patterns:
+          - pattern-either:
+              - pattern: $CLIENT.Get($URL)
+              - pattern: $CLIENT.Head($URL)
+              - pattern: $CLIENT.Post($URL, ...)
+          - metavariable-type:
+              metavariable: $CLIENT
+              type: "*http.Client"
+          - focus-metavariable: $URL
+
+  - id: codeye.go.html-injection
+    mode: taint
+    languages: [go]
+    severity: WARNING
+    message: HTTP request input reaches HTML output without escaping
+    metadata: {cwe: ["CWE-79"], codeye_family: html-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $R.FormValue(...)
+              - pattern: $R.PostFormValue(...)
+              - pattern: $R.PathValue(...)
+              - pattern: $R.URL.Query()
+              - pattern: $R.URL.RawQuery
+              - pattern: $R.URL.Path
+              - pattern: $R.Form
+              - pattern: $R.PostForm
+              - pattern: $R.Header
+              - pattern: $R.Body
+              - pattern: $R.Cookie(...)
+              - pattern: $R.Cookies()
+          - metavariable-type:
+              metavariable: $R
+              type: "*http.Request"
+      - patterns:
+          - pattern-either:
+              - pattern: $C.Query(...)
+              - pattern: $C.DefaultQuery(...)
+              - pattern: $C.Param(...)
+              - pattern: $C.PostForm(...)
+              - pattern: $C.DefaultPostForm(...)
+              - pattern: $C.GetHeader(...)
+              - pattern: $C.Cookie(...)
+          - metavariable-type:
+              metavariable: $C
+              type: "*gin.Context"
+      - patterns:
+          - pattern-either:
+              - pattern: $C.QueryParam(...)
+              - pattern: $C.Param(...)
+              - pattern: $C.FormValue(...)
+          - metavariable-type:
+              metavariable: $C
+              type: echo.Context
+    pattern-sanitizers:
+      - pattern: strconv.Atoi(...)
+      - pattern: html.EscapeString(...)
+      - pattern: template.HTMLEscapeString(...)
+      - pattern: url.QueryEscape(...)
+    pattern-sinks:
+      # A format with HTML markup written to the response.
+      - patterns:
+          - pattern: fmt.Fprintf($W, "$FMT", ..., $ARG, ...)
+          - metavariable-regex:
+              metavariable: $FMT
+              regex: <[a-zA-Z/!]
+          - metavariable-type:
+              metavariable: $W
+              type: http.ResponseWriter
+          - focus-metavariable: $ARG
+      # Marking a value as trusted HTML for html/template.
+      - patterns:
+          - pattern: template.HTML($X)
+          - focus-metavariable: $X
