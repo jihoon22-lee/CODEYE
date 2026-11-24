@@ -9,7 +9,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/staticcheck"
 )
 
-// TC-289: every diagnostic analyzer of the catalog has a well-formed
+// TC-292: every diagnostic analyzer of the catalog has a well-formed
 // default-severity table next to its pack, written for the rule pack it runs
 // now; metric and secret analyzers have none.
 func TestSeverityTablesCoverTheCatalog(t *testing.T) {

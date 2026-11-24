@@ -239,7 +239,7 @@ func triageReviewScript(t *testing.T) map[string]func(int, opencode.Request) ope
 	return s
 }
 
-// TC-290: many diagnostics over several files are grouped per rule and
+// TC-293: many diagnostics over several files are grouped per rule and
 // declaration, packed into the planned slots and classified; the counts
 // come from the report's observations and add up; a harmless group keeps
 // its tool findings with its reason and cited code; a problem the slot's
@@ -366,7 +366,7 @@ func TestDiagnosticTriageReachesTheReport(t *testing.T) {
 	}
 }
 
-// TC-291: under the smallest ceiling the whole-run roles use most calls
+// TC-294: under the smallest ceiling the whole-run roles use most calls
 // (each answers on its third call): the first triage slot and its
 // verification still fit, the second slot is budget_exhausted. Its
 // diagnostics are reported not triaged, never clean, and the attempt stays
@@ -403,7 +403,7 @@ func TestDiagnosticsLeftUntriagedByTheCeiling(t *testing.T) {
 	}
 }
 
-// TC-292: at the smallest output budget a request holds two groups, so the
+// TC-295: at the smallest output budget a request holds two groups, so the
 // two planned slots carry four groups and the rest are recorded as outside
 // the slots (diagnostics_outside_triage_slots), not classified.
 func TestDiagnosticsOutsideTheSlotsAreNotTriaged(t *testing.T) {
@@ -414,7 +414,7 @@ func TestDiagnosticsOutsideTheSlotsAreNotTriaged(t *testing.T) {
 	}
 }
 
-// TC-293: a triage answer with faults of form (an unknown classification,
+// TC-296: a triage answer with faults of form (an unknown classification,
 // a missing group) gets one repair listing only the pending groups; an
 // answer naming a group the request did not hold is an integrity fault.
 // When the repair answers the same way, the groups classified on the first
@@ -469,7 +469,7 @@ func TestTriageRepairsFormAndKeepsIntegrityFaults(t *testing.T) {
 	}
 }
 
-// The dry-run upstream (scripts/fake_model_upstream.py) answers the triage
+// TC-297: the dry-run upstream (scripts/fake_model_upstream.py) answers the triage
 // and verify roles of the triage fixture. Its plain answers classify the
 // groups in turn as problem, harmless and unclear and every group is
 // triaged; with --shape-errors 1 every answer repeats a citation (resolved
