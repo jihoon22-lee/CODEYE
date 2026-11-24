@@ -55,6 +55,10 @@
 .review-theme .report-diag-description { flex-basis: 100%; color: var(--report-muted); font-size: .86rem; font-weight: 500; }
 .review-theme .report-diag-group ul { margin: .2rem 0 .5rem; padding-inline-start: 1.1rem; }
 .review-theme .report-diag-group li { min-width: 0; overflow-wrap: anywhere; }
+.review-theme .report-diag-bucket { margin-block: .8rem; }
+.review-theme .report-diag-bucket > h4, .review-theme .report-diag-bucket > h6 { margin: 0 0 .2rem; font-size: .95rem; font-weight: 700; }
+.review-theme .report-diag-bucket > p { margin: 0 0 .3rem; color: var(--report-muted); font-size: .86rem; }
+.review-theme .report-diag-group ul.report-diag-notes { list-style: none; padding-inline-start: .6rem; border-inline-start: 3px solid var(--report-line); }
 
 @container codeye-report (max-width: 36rem) {
   .review-theme .report-action-rows > div { grid-template-columns: minmax(0, 1fr); gap: .05rem; }
