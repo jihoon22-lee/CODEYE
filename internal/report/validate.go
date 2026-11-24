@@ -11,6 +11,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/severity"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
 
@@ -555,6 +556,13 @@ var safeTemplates = map[string]bool{
 	textToolSeverityReason: true, textToolCondition: true, textToolVerification: true, textToolEvidence: true,
 	textRejectImpact: true, textRejectAction: true, textRejectVerification: true,
 	textFormatImpact: true, textFormatAction: true, textFormatVerification: true, textFormatScope: true,
+}
+
+func init() {
+	// The default-severity reasons are fixed sentences of the tables.
+	for _, s := range severity.Reasons() {
+		safeTemplates[s] = true
+	}
 }
 
 func safeText(s string) string {

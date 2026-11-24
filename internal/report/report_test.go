@@ -244,7 +244,7 @@ func TestBuildFromRealGoVetDocument(t *testing.T) {
 		}
 	}
 	for _, x := range r.Findings {
-		if x.Validation != "unreviewed" || x.Severity != "low" || len(x.ObservationIDs) == 0 {
+		if x.Validation != "unreviewed" || !defaultSeverityOK(x) || len(x.ObservationIDs) == 0 {
 			t.Fatalf("tool finding %+v", x)
 		}
 	}

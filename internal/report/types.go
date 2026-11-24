@@ -22,7 +22,7 @@ const (
 	BuilderID     = "codeye-report"
 	// Stored revisions keep their original builder and schema. Bump this
 	// version when the same accepted inputs would produce a different report.
-	BuilderVersion             = "21"
+	BuilderVersion             = "22"
 	TestCaseResultsSince       = 19
 	AnalysisEvidenceSince      = 17
 	GoTestFailureEvidenceSince = 18
@@ -236,6 +236,11 @@ type ToolCoverage struct {
 	// when it is known and equal on both sides. Omitted in revisions before
 	// builder 4; RuleContextOf synthesizes go vet's.
 	RuleContext *RuleContext `json:"rule_context,omitempty"`
+	// SeverityTable is the default-severity table that decided the
+	// severity of the row's tool findings (<rule pack>/<table version>,
+	// builder 22, docs/ANALYZERS.md#기본-심각도). Omitted when the analyzer has
+	// no table for the rule pack it ran with: its findings keep low.
+	SeverityTable string `json:"severity_table,omitempty"`
 }
 
 // Task is one DB task row as accepted by the controller (the authority).
