@@ -19,3 +19,8 @@ def config():
     document = request.get_data()
     settings = yaml.load(document, Loader=yaml.Loader)  # expect: codeye.python.unsafe-deserialization
     return str(settings)
+
+
+@app.route("/import", methods=["POST"])
+def import_settings():
+    return str(yaml.unsafe_load(request.data))  # expect: codeye.python.unsafe-deserialization
