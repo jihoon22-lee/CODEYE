@@ -57,7 +57,9 @@ CORPUS_DIR = ROOT / "fixtures/quality-holdout"
 GATEWAY = SCRIPTS / "model_budget_relay.py"
 PACK = "review"
 BASE_REVIEW_ROLES = ("environment", "documents", "investigate", "interpret", "verify")
-PACK_ROLES = (*BASE_REVIEW_ROLES, "contract")
+# Diagnostic triage slots (docs/REVIEW.md#도구-진단-분류) record their calls as
+# triage and verify; they are not an original role of the slice check below.
+PACK_ROLES = (*BASE_REVIEW_ROLES, "triage", "contract")
 MANIFEST_SCHEMA = "codeye-quality-eval-manifest"
 REGISTRY = "holdout-registry.jsonl"
 HOLDOUT_LABEL = "holdout_seen_by_prior_revision"
@@ -446,6 +448,11 @@ def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAU
             count = max(1, seen.get(r, 0)) if seen is not None else 1
             upper_calls += count * (1 + repair_rate)
             upper_cost += count * (1 + repair_rate) * per_call[r] * margin
+        # A triage slot classifies and verifies its problem groups: each
+        # triage call may be followed by one verify call.
+        count = max(1, seen.get("triage", 0)) if seen is not None else 1
+        upper_calls += 2 * count * (1 + repair_rate)
+        upper_cost += count * (1 + repair_rate) * (per_call["triage"] + per_call["verify"]) * margin
         upper_calls += 2
         upper_cost += 2 * per_call["contract"] * margin
     return {"variants": n, "basis": basis, "margin": margin, "repair_rate": repair_rate, "max_calls": max_calls,

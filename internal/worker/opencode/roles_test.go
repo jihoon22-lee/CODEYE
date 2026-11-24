@@ -1,0 +1,24 @@
+package opencode
+
+import (
+	"testing"
+
+	reviewpack "github.com/jihoon22-lee/CODEYE/prompts/review"
+)
+
+// Every model role of the review instruction pack is a role a request may
+// name; a role the pack does not have is refused before OpenCode starts. A
+// role added to the pack and not here fails in the real worker only
+// (invalid_review_role), which the scripted review tests do not reach.
+func TestEveryPackRoleIsAReviewRole(t *testing.T) {
+	for _, role := range append(reviewpack.Roles, "probe") {
+		if !ReviewRole(role) {
+			t.Errorf("pack role %q is refused", role)
+		}
+	}
+	for _, role := range []string{"", "scope", "Triage", "review.triage"} {
+		if ReviewRole(role) {
+			t.Errorf("role %q is accepted", role)
+		}
+	}
+}

@@ -248,6 +248,16 @@ func outcome(r executor.Result) string {
 	return ""
 }
 
+// ReviewRole reports a role a request may name: the model roles of the review
+// instruction pack (prompts/review.Roles) and the live probe.
+func ReviewRole(role string) bool {
+	switch role {
+	case "environment", "documents", "investigate", "interpret", "triage", "verify", "contract", "probe":
+		return true
+	}
+	return false
+}
+
 // Review bounds a request including process cleanup. The raw event stream and
 // private reasoning stay out of Reply, journals, logs and report artifacts.
 func (cfg Config) Review(ctx context.Context, runner executor.Runner, q Request) (reply Reply) {
@@ -263,10 +273,7 @@ func (cfg Config) Review(ctx context.Context, runner executor.Runner, q Request)
 		reply.Reason = "invalid_review_input"
 		return
 	}
-	switch q.Role {
-	// The review roles and the live probe.
-	case "environment", "documents", "investigate", "interpret", "verify", "contract", "probe":
-	default:
+	if !ReviewRole(q.Role) {
 		reply.Reason = "invalid_review_role"
 		return
 	}
