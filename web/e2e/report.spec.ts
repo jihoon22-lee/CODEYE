@@ -257,6 +257,62 @@ test('action cards keep status, line numbers and expanders inside phone and desk
   await expect(page.locator('.report-action-list')).toBeHidden();
 });
 
+// The web panel also loads the application sheet, whose generic dl rule gives every definition list a
+// max-content first column; the saved HTML does not. Both must keep long unbreakable values inside the card.
+for (const surface of ['web panel', 'saved HTML']) {
+  test(`${surface} keeps long unbreakable values of action cards and findings inside the report`, async ({page}) => {
+    const assets = new URL('../../internal/report/reportui/', import.meta.url);
+    const names = surface === 'web panel' ? ['tabler.css', 'report.css', '../../../web/src/report.css', 'workbench.css', 'actions.css', '../../../web/src/style.css']
+      : ['tabler.css', 'report.css', 'export.css', 'workbench.css', 'actions.css'];
+    const css = names.map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');
+    const [open, close] = surface === 'web panel'
+      ? ['<main><div class="project-detail"><article class="report-document review-theme web-report sectioned-report"><div class="report-layout"><div class="report-main">', '</div></div></article></div></main>']
+      : ['<article class="report-document review-theme report-export"><div class="report-layout export-page"><main class="report-main">', '</main></div></article>'];
+    const long = (name: string) => `<span data-long="${name}">${name}-${'x'.repeat(300)}</span>`;
+    const row = (label: string, name: string) => `<div><dt>${label}</dt><dd>${long(name)} 뒤에 이어지는 설명</dd></div>`;
+    const source = `<div class="report-selected-source" data-wrap="false"><p class="report-excerpt-label"><code class="report-path-text">${long('path')}</code></p>
+      <pre class="source-window" tabindex="0"><code><span class="source-line"><span class="source-line-number" aria-hidden="true">4</span><span class="source-line-code">func Sum(samples []int) int {</span></span></code></pre></div>`;
+    await page.setContent(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style>
+      ${open}
+      <section class="report-actions"><div class="report-group" data-tone="action">
+      <article class="card report-action-card" data-severity="medium"><div class="card-body">
+        <header class="report-action-head"><h6>${long('title')}</h6><p class="report-action-badges"><span class="report-status-badge" data-tone="ready">근거 있음</span><span class="report-action-severity">심각도 보통</span></p></header>
+        <dl class="report-action-rows">${row('발생 조건(가정)', 'condition')}${row('영향', 'impact')}</dl>${source}
+        <dl class="report-action-rows">${row('개선 방향', 'recommendation')}${row('확인 방법', 'check')}${row('판단 범위', 'limit')}</dl>
+        <button type="button" class="btn btn-sm btn-ghost-primary report-card-action">근거와 반대 근거 보기 (근거 3건 · 반대 근거 0건)</button>
+      </div></article>
+      <article class="card report-action-card report-mismatch-card"><div class="card-body">
+        <header class="report-action-head"><h6>${long('statement')}</h6></header>
+        <dl class="report-action-rows">${row('구현에서 관찰한 동작', 'observed')}${row('적용 범위', 'scope')}${row('문서 위치', 'document')}${row('코드 위치', 'code')}</dl>
+      </div></article>
+      <details class="report-more report-action-fold" open><summary>추가 확인이 필요한 후보 1건</summary><div class="report-more-body"><ul class="report-action-list"><li>
+        <div class="report-action-list-head"><strong>${long('candidate')}</strong></div><code class="report-path-text">${long('candidate-path')}</code><p><strong>확인 방법</strong> ${long('candidate-check')}</p></li></ul></div></details>
+      </div></section>
+      <section class="card report-card report-tab-content"><div class="card-body"><div class="report-finding-workbench" data-selected="true"><section class="report-workbench-detail"><h6 class="report-finding-heading">${long('finding-title')}</h6>
+        <div class="finding-body">${source}
+        <dl class="key"><dt>영향</dt><dd>${long('finding-impact')}</dd><dt>개선 방향</dt><dd>${long('finding-recommendation')}</dd></dl>
+        <dl><dt>발생 조건</dt><dd><ul><li>${long('finding-condition')}</li></ul></dd><dt>심각도 근거</dt><dd>${long('finding-severity')}</dd><dt>확인 방법</dt><dd><ul><li>${long('finding-check')}</li></ul></dd></dl>
+        <h6>판단 한계</h6><ul><li>${long('finding-limit')}</li></ul>
+        <details class="finding-evidence" open><summary>근거 1개와 판단 과정</summary><p><strong>추론 · </strong>${long('finding-claim')}</p>
+          <ul><li>${long('finding-evidence')}<div class="report-evidence"><span class="report-file"><code class="report-file-name report-path-text">${long('finding-evidence-path')}</code></span></div></li></ul></details>
+        </div></section></div></div></section>
+      ${close}`);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({width, height: 900});
+      const article = page.locator('article.report-document');
+      await expect.poll(() => article.evaluate(element => element.scrollWidth - element.clientWidth), `${surface} ${width}px`).toBeLessThanOrEqual(1);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `${surface} ${width}px page`).toBeLessThanOrEqual(0);
+      // Every long value breaks inside its own box instead of extending past the report edge.
+      const edge = await article.evaluate(element => element.getBoundingClientRect().right);
+      for (const value of await page.locator('[data-long]').all()) {
+        const name = await value.getAttribute('data-long');
+        const box = (await value.boundingBox())!;
+        expect(box.x + box.width, `${surface} ${width}px ${name}`).toBeLessThanOrEqual(edge + 1);
+      }
+    }
+  });
+}
+
 test('a link from an action card opens the collapsed blocks around its target in the saved HTML', async ({page}, info) => {
   const assets = new URL('../../internal/report/reportui/', import.meta.url);
   const css = ['tabler.css', 'report.css', 'export.css', 'workbench.css', 'actions.css'].map(name => readFileSync(new URL(name, assets), 'utf8')).join('\n');

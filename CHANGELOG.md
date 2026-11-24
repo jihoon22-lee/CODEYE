@@ -12,6 +12,7 @@
 | 범위와 상태 | 상태 표, 집계, 분석 공백, 부록은 그대로 두고 조치 항목 아래로 옮겼다. 접힌 블록으로 가는 링크는 블록을 열고 이동한다. |
 | 평가 집합 | 공개 저장소의 실제 결함 수정과 심은 결함으로 만든 프로젝트 규모 평가 집합(`fixtures/project-defects/`)을 추가했다. 사례마다 커밋과 분석 범위를 고정하고 dev·holdout으로 나누며 holdout을 봉인했다. 입력은 캐시로 받은 트리에서 `.git`과 라벨 없이 만든다. [평가](docs/EVALUATION.md#프로젝트-규모-결함-집합) |
 | 평가 runner | corpus·분할·범위 경로를 고르고, 다른 checkout에서 만든 제품을 잴 수 있다(`--build-root`). 채점은 라벨 줄 범위의 위치 지표를 모델 finding과 도구 진단, 수정 전후로 나눠 내고, 변형과 라벨을 숨긴 블라인드 판정 묶음을 만든다. 저장소 코드 실행 허가를 준 평가에서는 평가 계정을 관리자로 만들어 Rust 분석기가 `repository_code_not_offered`로 건너뛰지 않는다. 실모델 기준 측정은 아직 없다. |
+| 조치 카드 너비 | 웹 화면에서 조치 카드의 발생 조건·영향·개선 방향 행이 응용 화면의 공통 `dl` 규칙(첫 열 max-content)을 받아, 한 줄이 긴 실제 보고서는 데스크톱 너비에서 가로로 넘쳤다. 행 목록의 열을 `minmax(0, 1fr)`로 고정하고, 긴 값이 웹 화면과 저장 HTML 모두에서 카드 안에서 줄바꿈되는지 브라우저 시험을 더했다. |
 | 로드맵 | 소유자가 승인한 분석 품질 개선 순서를 적었다. [로드맵](docs/ROADMAP.md#분석-품질-개선) |
 | C/C++ build 문맥 | `compile_commands.json`이 없는 CMake 프로젝트는 build 스크립트 실행을 허용했을 때 분석 전에 작업 사본에서 CMake configure만 실행해 compile DB를 만든다(`compile-db` 작업). cppcheck·clang-tidy·GCC가 그 DB와 configure가 만든 헤더로 분석하고 보고서에 생성한 DB임을 남긴다. 허가·cmake가 없거나 configure가 실패하면 이유를 제약으로 남기고 이전처럼 축소 모드다. 보고서는 생성 작업의 제약을 한계로 보이고, 실패하면 분석 공백으로 보인다. 새 사유·제약은 웹과 Markdown·HTML에서 문장으로 읽힌다. [compile DB 생성](docs/ANALYZERS.md#compile-db-생성) |
 | Rust build script | C 코드를 빌드하는 build script가 `cc`·`ar`를 찾지 못해 cargo check·clippy가 모두 `build_script_failed`이던 문제를 고쳤다. 허가받은 Rust 작업은 `agent.toolchain_path`의 시스템 도구를 쓴다. rustdoc의 같은 이름 crate 문서 충돌은 `doc_output_collision`으로 따로 보인다. [Rust 환경](docs/ANALYZERS.md#rust-환경) |

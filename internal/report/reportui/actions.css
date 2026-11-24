@@ -30,7 +30,7 @@
 .review-theme .report-action-severity { color: var(--report-ink); font-size: .84rem; font-weight: 700; }
 .review-theme .report-action-badges .report-group-note { margin: 0; }
 
-.review-theme .report-action-rows { display: grid; gap: .5rem; margin: .5rem 0; }
+.review-theme .report-action-rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: .5rem; margin: .5rem 0; }
 .review-theme .report-action-rows > div { display: grid; grid-template-columns: minmax(6.5rem, 9.5rem) minmax(0, 1fr); gap: .15rem .8rem; min-width: 0; }
 .review-theme .report-action-rows dt { margin: 0; color: var(--report-muted); font-size: .8rem; font-weight: 700; }
 .review-theme .report-action-rows dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
