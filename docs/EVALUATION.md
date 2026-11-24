@@ -24,7 +24,7 @@
 | 범위 | 상태 |
 |---|---|
 | 회귀 집합과 실행(`regression_pilot.py`), 보류 집합과 봉인 검사, 평가 runner(`tools`·`review` 조건, 정답 차단, holdout 등록부, 표본·예산 계획과 거절, 판정 양식, 판정 지표와 Wilson 구간, 반복 분산, 보고서 읽기 과제와 채점기), 예산 relay | 구현 |
-| 프로젝트 규모 결함 집합(`fixtures/project-defects/`, 공개 저장소의 실제 수정과 심은 결함, dev·holdout 분할과 봉인), runner의 corpus·분할·범위 선택, `--build-root`, 줄 범위 위치 지표, 블라인드 판정 묶음 | 구현. 실모델 baseline은 아직 없다 |
+| 프로젝트 규모 결함 집합(`fixtures/project-defects/`, 공개 저장소의 실제 수정과 심은 결함, dev·holdout 분할과 봉인), runner의 corpus·분할·범위 선택, `--build-root`, 줄 범위 위치 지표, 블라인드 판정 묶음 | 구현. dev 분할의 일곱 사례로 실모델 기준 측정이 있고, 그중 다섯 사례는 모듈 단위 검토 입력 변경의 전후 비교 한 번이 있다([평가 결과](EVALUATION-RESULTS.md)). 비교는 다섯 사례라 개선을 입증하지 못한다. holdout 봉인은 아직 쓰지 않았다 |
 | 아래 데이터셋 표 중 저장소에 corpus가 없는 집합(사용 허가된 개인 프로젝트의 수정, 레거시 프로젝트, 별도 공격/장애 corpus) | 평가 기준(설계). 공격/장애 경계는 단위 시험이 덮는다 |
 | 도구만·모델 맥락만·도구+모델·도구+모델+반증의 네 갈래 비교 | 평가 기준(설계). runner 조건은 `tools`와 `review` 둘이다 |
 | reversal quality 지표, CPU/RAM·캐시 기록 | 평가 기준(설계). 채점기가 내지 않는다. 철회 경로는 회귀 집합의 반례 입력에서 사람이 판정한다 |
@@ -80,6 +80,7 @@
 
 [`fixtures/project-defects/`](../fixtures/project-defects/README.md)는 허용 라이선스 공개 저장소의 실제 코드에서 결함을 찾는지 잰다. 합성 집합은 짧은 함수라서 파일 뒷부분에 있거나 두 번째 파일이 있어야 알아볼 수 있는 결함을 재지 못한다. 이 집합은 그런 결함만 고르므로 모델 입력의 범위·크기를 바꾸기 전후를 비교할 수 있다. 지침 작성자가 읽지 않는 자료이므로 이 문서는 사례 내용을 담지 않는다.
 
+- 측정 상태: 변경 전 제품으로 dev 분할 사례 일곱을 실행했고(장부 상한에서 멈췄다), 변경 뒤 제품으로 그중 다섯을 실행해 같은 다섯 사례를 블라인드 판정으로 비교했다. dev의 나머지 사례(건너뛴 큰 사례 둘 포함)와 holdout 분할은 실행하지 않았다. holdout 봉인은 한 번도 쓰지 않았다. 수치와 한계는 [평가 결과](EVALUATION-RESULTS.md)에 있고, dev 분할 결과는 독립 평가가 아니다([보류 독립성](#보류-독립성)).
 - 사례 하나는 저장소 URL·커밋 SHA·라이선스와 분석 범위(하위 디렉터리)를 고정한다. 범위 안 주 소스는 1,500~6,000줄이다. 실행은 사례마다 범위 경로를 run scope(`paths`)로 준다. 트리 전체(`.git` 제외)를 스냅샷으로 만들므로 범위 밖 파일도 문맥으로 읽을 수 있다.
 - 종류는 둘이고 대략 절반씩이다. `real_fix`는 실제 결함 수정 커밋의 부모가 before, 수정 커밋이 after이고 라벨은 수정 diff에서 나온다. `seeded`는 고정 커밋에 한 동작만 바꾼 작은 패치를 적용한 트리가 before이고 고정 커밋이 after다. 공개된 수정은 모델이 학습했을 수 있으므로 심은 사례를 대조군으로 둔다.
 - 선정 조건: 양성 위치는 모두 파일의 첫 50줄 밖이다. 대부분은 두 번째 파일(호출자·피호출자·설정·타입 정의)을 읽어야 알아볼 수 있고 `needs_cross_file`로 표시한다. 코드를 읽어 알아볼 수 있는 결함만 쓴다. 범주는 오류 처리·자원 수명·동시성·경계와 정확성·API 계약·데이터 무결성·입력에서 위험한 사용처까지의 보안이고, 언어는 Go·Python·JS/TS·Java·C/C++·Rust다.
@@ -257,7 +258,7 @@
 |---|---|---|
 | 정답 목록 | `fixtures/quality-holdout/corpus.py forbidden`, `fixtures/project-defects/corpus.py forbidden --split S --cache DIR` | 라벨 문구 n-gram과 고유 토큰 중 어떤 입력에도 나오지 않는 것을 JSON으로 내보낸다. 두 corpus가 같은 형식과 대조 규칙을 쓴다 |
 | relay 차단 | `scripts/model_budget_relay.py --forbidden-phrases FILE [--allow-model-echo]` | 목록 항목이 든 요청을 예약·전달 없이 막는다 |
-| 시험용 upstream | `--test-upstream http://127.0.0.1:PORT`, [`scripts/fake_model_upstream.py`](../scripts/fake_model_upstream.py) | dry run 전용 loopback 가짜. 키를 읽지 않는다. `--echo-text`는 운영자가 정한 문장을 investigate 후보 제목에 붙이고, `--dump DIR`은 요청을 저장한다 |
+| 시험용 upstream | `--test-upstream http://127.0.0.1:PORT`, [`scripts/fake_model_upstream.py`](../scripts/fake_model_upstream.py) | dry run 전용 loopback 가짜. 키를 읽지 않는다. 응답은 요청 구조에서 만든 고정 문구이고 품질 정보가 없다. documents 역할은 처음 세 입력 문서마다 계약 하나를 말하고, 전체 실행 investigate는 입력 계약마다 대조(`contract_comparisons`)를 답한다(소스 안 API 문서는 문서화된 선언 본문의 한 줄을 범위로 인용한다). `--mode`는 `normal`·`expensive`·`fail`·`unauthorized`다. `--echo-text`는 운영자가 정한 문장을 investigate 후보 제목에 붙이고, `--dump DIR`은 요청을 저장하고, `--delay-seconds N`은 모든 응답을 N초 늦춘다(0~3600). `--shape-errors RATE`(0~1)는 항목의 일부가 복구 호출에서도 형식 오류(범위 없는 긴 인용, 반복 ID)를 내게 해 형식 복구 뒤 항목별 처리 경로를 실행한다. `--integrity-errors RATE`(0~1)는 verify 판정의 일부가 요청에 없던 근거 ID를 인용하게 해 제품이 계속 거부하는 무결성 오류 경로를 실행한다. 항목의 선택은 역할·스냅샷 digest·항목에서 정해져 복구 요청에도 같은 오류가 반복된다. TLS 옵션(`--tls-cert`, `--tls-key`)도 있다 |
 | 공용 실행 틀 | `scripts/eval_harness.py`, `scripts/test_postgres.py`의 `temporary_postgres` | 임시 PostgreSQL, 제품 빌드, controller·agent, 보고서 조회. 회귀 실행(`regression_pilot.py`)도 같은 코드를 쓴다 |
 
 ### 조건
@@ -466,6 +467,10 @@ python3 scripts/quality_eval.py reader "$R/paid" --sample 6 --seed S --output "$
 
 - 2단계 capture는 유료 batch와 같은 `SEL`로 돌린다. 시험 장부의 요청 상한(기본 200건) 안에 들어가야 한다. 넘으면 언어마다 새 시험 relay를 쓴다.
 - 지침 개정 전후를 비교할 때: 개정 전 checkout(baseline)과 개정 뒤 checkout(candidate)에서 같은 표본으로 2단계 capture와 5~6단계를 각각 하고(`--batch capture-baseline`, `--batch paid-baseline`처럼 이름으로 구분한다), 7단계 `score`에 두 batch를 나란히 준다. 상한 호출이 큰 쪽을 먼저 실행하고, 끝난 뒤의 장부로 다른 쪽을 다시 계획한다. 거절이면 다른 쪽을 실행하지 않는다. 시작 전 남은 요청이 적으면 `남은 요청 − 먼저 실행한 쪽 기대 호출 − 5 ≥ 다른 쪽 상한 호출`이 되는 표본을 고른다.
+- 유료 batch 전에 가짜 upstream 확인을 두 번 한다. 일반 capture와, `--shape-errors`(예: 0.5)로 형식 오류를 섞은 capture다. 둘 다 모든 사례의 AI 검토가 `performed`이고 필수 검토 task를 잃지 않아야 한다. 일반 가짜 응답은 형식이 항상 맞아 형식 오류 경로를 지나지 않는다.
+- 이어서 유료 canary를 한두 사례로 먼저 돌려 통과 조건을 확인한 뒤 batch를 시작한다. 통과 조건은 실행 전에 적는다(예: AI 검토 `performed`, 필수 검토 task 실패 0, 장부의 거절 0, 사례당 비용이 계획 안). 실모델 출력에서만 나타나는 거부는 가짜로 만들 수 없고, 이를 batch 중간에서 발견하면 앞 사례의 비용이 무효가 된다. canary에서 결함이 나와 제품을 고쳤으면 고치기 전 제품의 결과는 비교에서 빼고 무효 실행으로 기록한다.
+- 예산이 중간에 끊길 수 있으면 가장 큰 사례를 마지막에 둔다. 정지로 잃는 쪽이 가장 큰 사례가 되어 비교할 사례 수를 가장 많이 남긴다. 기준과 후보는 둘 다 실행한 같은 사례로만 비교한다.
+- 기준 빌드와 후보 빌드 사이에 분석기가 바뀌었으면(버전, 새 분석 작업, 입력 해석) 블라인드 묶음에서 도구 진단을 뺀다. 도구 진단의 차이를 모델 입력 변경의 효과로 읽지 않는다. 위치 겹침 같은 구조 지표는 따로 보고하되 그 한계를 적는다.
 - 결과 수치와 판단은 [평가 결과](EVALUATION-RESULTS.md)에 쓰고 batch 디렉터리는 저장소 밖에 둔다.
 - 프로젝트 규모 집합: 모든 `plan`·`run`·`score`·`capture-list`·`blind`에 `--corpus project-defects --split dev --cache "$CACHE"`(holdout이면 `--split holdout`)를 더하고, 3단계 정답 목록은 `python3 -I fixtures/project-defects/corpus.py forbidden --split dev --cache "$CACHE" --allow-text prompts/review --allow-text "$R/allow.txt" --output "$R/forbidden.json"`로 만든다. `$CACHE`는 영구 비공개 경로에 둔다. 첫 `verify --cache "$CACHE"`가 캐시를 채운다. 기준 커밋의 제품을 잴 때는 그 커밋의 checkout을 따로 만들어 2단계 capture와 6단계 `run`에 `--build-root BASE`를 주고, runner·corpus는 지금 checkout을 쓴다. 7단계 판정은 `blind`로 만든 묶음을 판정한 뒤 `blind-merge`로 판정 파일을 만든다.
 
@@ -488,21 +493,22 @@ python3 scripts/quality_eval.py reader "$R/paid" --sample 6 --seed S --output "$
 python3 scripts/model_budget_relay.py \
   --ready-file "$DIR/ready-$(date +%s).json" \
   --ledger "$LEDGER" \
-  --model gpt-6.2-sol            # --budget-usd 기본 9.99, 소유자 승인 범위에서 최대 20
+  --model gpt-6.2-sol            # --budget-usd 기본 9.99, 소유자 승인 범위에서 최대 25
 ```
 
 | 옵션 | 기본 | 제한 |
 |---|---|---|
 | `--model` | — | `gpt-6.2-sol`, `gpt-6.1-sol`, `gpt-6.1-terra`, `gpt-6-luna` |
-| `--budget-usd` | 9.99 | 0 초과 20 이하, 소수 6자리까지. 기존 장부의 상한을 낮출 수만 있다 |
+| `--budget-usd` | 9.99 | 0 초과 25 이하, 소수 6자리까지. 기존 장부의 상한을 낮출 수만 있다 |
 | `--max-requests` | 200 | 1~1000. 장부 전체 요청 수 상한이며 낮출 수만 있다 |
-| `--max-input-bytes` | 49152 | 1~65536. 요청당 메시지 텍스트 UTF-8 바이트 합 |
+| `--max-input-bytes` | 278528 | 1~1,064,960. 요청당 메시지 텍스트 UTF-8 바이트 합. 기본은 제품의 기본 요청 예산(256 KiB)에 OpenCode가 덧붙이는 메시지 몫 16 KiB를 더한 값이고, 상한은 제품 요청 예산의 최대(1 MiB)에 같은 몫을 더한 값이다 |
+| `--max-output-tokens` | 16384 | 1~65536. 요청당 출력 토큰 상한이며 예약에 전부 들어간다. 클라이언트가 더 작은 값을 보내면 그 값을 쓴다 |
 | `--port` | 0(임시) | 항상 127.0.0.1에만 bind |
 | `--forbidden-phrases` | 없음 | 정답 목록. 주면 일치 요청을 막는다. 파일이 없거나 형식이 틀리면 종료 코드 2. 감시용 목록은 `--test-upstream`에서만 받는다 |
 | `--allow-model-echo` | 꺼짐 | 위 정답 차단의 예외 방식. 목록 없이 주면 종료 코드 2 |
 | `--test-upstream` | 없음 | dry run 전용. `http://127.0.0.1:PORT`만 받는다. 키를 읽지 않고 환경에서 지운다. 장부 header에 `upstream: test-loopback`을 남기고 실제 장부와 섞지 않는다 |
 
-- 상한은 장부 하나에 걸린다(`HARD_CAP_MICROUSD = 20_000_000`, 모든 relay 프로세스 합계 최대 USD 20). 더 큰 금액을 지정해 재시작해도 기존 장부의 상한과 잔액은 그대로 적용한다. 장부를 잃거나 새 경로를 쓰면 별도 예산이 생기므로, 예산 보장은 같은 장부 파일을 유지하는 운영 절차에 의존한다. 예산 기간마다 영구 경로의 장부 하나를 쓰고(`/tmp` 같은 휘발 경로 금지), 소유자 승인 없이 새 장부를 만들지 않는다.
+- 상한은 장부 하나에 걸린다(`HARD_CAP_MICROUSD = 25_000_000`, 모든 relay 프로세스 합계 최대 USD 25). 더 큰 금액을 지정해 재시작해도 기존 장부의 상한과 잔액은 그대로 적용한다. 장부를 잃거나 새 경로를 쓰면 별도 예산이 생기므로, 예산 보장은 같은 장부 파일을 유지하는 운영 절차에 의존한다. 예산 기간마다 영구 경로의 장부 하나를 쓰고(`/tmp` 같은 휘발 경로 금지), 소유자 승인 없이 새 장부를 만들지 않는다.
 - ready file은 반드시 새 경로여야 한다(이미 있으면 종료 코드 2). 0600으로 원자적으로 만들고 내용은 `{"base_url":"http://127.0.0.1:PORT/v1","token":"...","model":"gpt-6.2-sol","pid":N}`이다. SIGTERM/SIGINT 정상 종료 시 삭제한다. SIGKILL 뒤 남은 파일은 무효 token을 담으므로 지운 뒤 새 경로로 다시 시작한다.
 - OpenCode는 OpenAI 호환 provider의 `baseURL`·`apiKey`에 ready file의 `base_url`·`token`을, 모델 ID에 `model`을 쓴다. CODEYE에서는 `--model codeye-gateway/<model> --model-relay-file READY`로 고른다.
 - 보고: `python3 scripts/model_budget_relay.py --ledger PATH --report`(키 불필요).
@@ -513,7 +519,7 @@ python3 scripts/model_budget_relay.py \
 
 - `POST /v1/chat/completions`, `GET /v1/models`(로컬 응답, 상위 호출 없음)만 제공한다. 나머지는 404.
 - 매 실행 임의 bearer token, peer 127.0.0.1, `Host`가 `127.0.0.1:PORT` 또는 `localhost:PORT`여야 한다. `Origin`·CORS preflight 헤더가 있으면 403이고 CORS 헤더를 보내지 않는다.
-- 본문은 `Content-Length` 필수(chunked 거부), 1 MiB 이하, 헤더 합 16 KiB 이하, 읽기 30초. 한 프로세스에서 상위 호출은 동시에 1개이고 나머지는 최대 300초 대기 후 거부한다.
+- 본문은 `Content-Length` 필수(chunked 거부), 4 MiB 이하, 헤더 합 16 KiB 이하, 읽기 30초. 한 프로세스에서 상위 호출은 동시에 1개이고 나머지는 최대 660초 대기 후 거부한다(`relay_busy`).
 - 클라이언트 오류는 재시도되지 않는 상태 코드(400/401/402/403/404/411/413/415/424)만 쓴다. 408/409/429/5xx를 내지 않아 SDK 자동 재시도가 유료 호출을 늘리지 못하게 한다. 예산·요청 수·정지는 402, 상위 실패는 424.
 - 오류 본문에는 relay 코드, 상위 HTTP 상태, 형식이 안전한 상위 `error.code`/`error.type`만 담는다.
 
@@ -521,13 +527,13 @@ python3 scripts/model_budget_relay.py \
 
 - OpenCode 쪽은 `/v1/chat/completions`이고, relay→OpenAI 구간만 Responses API를 쓴다.
 - 고정 대상은 `https://api.openai.com/v1/responses`이고 `http.client`로 직접 연결한다. 프록시 환경변수·redirect·재시도를 쓰지 않는다. 대상을 바꾸는 환경변수는 없다. 유일한 예외는 dry run용 `--test-upstream`이고 loopback 주소만 받으며 실제 대상으로 돌아가는 fallback이 없다.
-- payload는 매번 새로 만든다: `model`, `input`(메시지를 순서대로 `{role, content: 문자열}`로 재구성, role `system|developer|user|assistant`), `max_output_tokens`(1536 이하, 추론 토큰 포함, 클라이언트 `max_tokens`/`max_completion_tokens`와 최소값), `reasoning: {effort: "low"}`, `service_tier: "default"`, `store: false`. 응답은 하나이며 스트리밍하지 않는다.
+- payload는 매번 새로 만든다: `model`, `input`(메시지를 순서대로 `{role, content: 문자열}`로 재구성, role `system|developer|user|assistant`), `max_output_tokens`(`--max-output-tokens` 이하, 추론 토큰 포함, 클라이언트 `max_tokens`/`max_completion_tokens`와 최소값), `reasoning: {effort: "low"}`, `service_tier: "default"`, `store: false`. 응답은 하나이며 스트리밍하지 않는다.
 - 응답에서는 assistant `message` 항목의 `output_text`(없으면 `refusal`)만 읽는다. reasoning 등 다른 출력 항목은 클라이언트에 보내지 않는다. `completed`는 `finish_reason: stop`, `incomplete`는 `max_output_tokens`→`length`, `content_filter`→`content_filter`다. 추론이 상한을 모두 쓰면 빈 content와 `length`로 200을 돌려준다. `failed`·`cancelled` 등은 424이고 예약 전액을 차감한다.
 - content가 text part 배열이면 줄바꿈으로 합친다. 이미지·오디오·파일 part, `tool` role, `tool_calls`/`function_call`/`tool_call_id`가 있는 메시지는 400으로 거부한다. 메시지는 64개 이하.
 - `tools`, `tool_choice`, `temperature`, cache·retention·tier 지정 등 그 밖의 최상위 키는 버리고 이름만 장부 `dropped_keys`에 남긴다. OpenCode가 도구 정의를 보내도 모델은 도구 없이 텍스트로만 답한다.
 - `stream: true` 요청은 한 번의 비스트리밍 결과로 `chat.completion.chunk` SSE(role → content → finish → `stream_options.include_usage`일 때 usage → `[DONE]`)를 만든다.
-- 상위 전체 제한시간 240초(연결·전송·헤더 대기·본문 읽기 합계), 응답 1 MiB.
-- 클라이언트가 요청을 취소하거나 연결을 끊어도 이미 보낸 상위 호출과 그 차감은 멈추지 않는다. 대기열의 요청도 최대 300초 뒤 전송될 수 있다. SIGTERM 시 진행 중 호출의 정산을 최대 250초 기다린 뒤 종료한다.
+- 상위 전체 제한시간 600초(연결·전송·헤더 대기·본문 읽기 합계, 제품의 기본 호출 제한시간과 같다), 응답 4 MiB.
+- 클라이언트가 요청을 취소하거나 연결을 끊어도 이미 보낸 상위 호출과 그 차감은 멈추지 않는다. 대기열에서 기다리는 동안 연결을 끊은 요청은 예약도 전달도 하지 않는다. SIGTERM 시 진행 중 호출의 정산을 최대 610초 기다린 뒤 종료한다.
 
 ### 장부와 차감
 
