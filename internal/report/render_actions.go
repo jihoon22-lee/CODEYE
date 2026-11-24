@@ -738,7 +738,7 @@ func mdDiagnosticFold(p func(...string), fold diagFold) {
 	mdDiagGroups(p, fold.Groups)
 	for _, s := range fold.Sections {
 		mdReadingAnchor(p, s.ID)
-		p("#### ", mdText(s.Label))
+		p("**", mdText(s.Label), "**")
 		p()
 		p(mdText(s.Note))
 		p()

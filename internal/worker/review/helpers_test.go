@@ -205,6 +205,8 @@ func excerptID(list []record.Excerpt, p string) string {
 // fixture.
 func validScript(t *testing.T) map[string]func(int, opencode.Request) opencode.Reply {
 	return map[string]func(int, opencode.Request) opencode.Reply{
+		// Every diagnostic group is left undecided: no verification follows.
+		"triage": triageScript(t, func(triageGroupInput) string { return record.TriageUnclear }),
 		"environment": func(_ int, q opencode.Request) opencode.Reply {
 			in := decodeAs[envInput](t, q)
 			var req envReqInput

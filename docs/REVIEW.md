@@ -493,6 +493,11 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 | `questions_evidence_ids_invalid` | 형식 | `contracts_evidence_ids_invalid`와 같다 |
 | `instruction_notes_evidence_ids_invalid` | 형식 | `contracts_evidence_ids_invalid`와 같다 |
 | `document_quality_evidence_ids_invalid` | 형식 | `contracts_evidence_ids_invalid`와 같다 |
+| `triage_group_unknown` | 무결성 | 요청에 없던 묶음의 답을 버린다. 그 답으로는 어떤 묶음도 분류하지 않는다 |
+| `triage_group_duplicate` | 형식 | 같은 묶음의 두 번째 답을 버린다 |
+| `triage_classification_invalid` | 형식 | 복구 요청에 그 묶음을 다시 싣는다. 복구 뒤에도 남으면 그 묶음만 분류하지 않음(`triage_item_omitted`, `diagnostic_groups_not_triaged`) |
+| `triage_evidence_not_at_group` | 형식 | 복구 요청에 그 묶음을 다시 싣는다. 복구 뒤에는 묶음 안의 인용만 남겨 통과하면 받고, 아니면 그 묶음만 분류하지 않음 |
+| `triage_answer_missing` | 형식 | 복구 요청에 답하지 않은 묶음만 싣는다. 끝내 없으면 그 묶음만 분류하지 않음(`triage_answer_missing`) |
 | `unknown_candidate_id` | 무결성 | 그 항목을 버린다. 답하지 않은 후보는 복구 뒤 격리 |
 | `duplicate_candidate_verification` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
 | `verification_missing` | 무결성 | 복구 요청에 그 후보를 다시 싣는다. 끝내 없으면 격리(앞서 받아 둔 형식 오류 판정이 있으면 정리해 받는다) |

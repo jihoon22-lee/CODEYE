@@ -6,9 +6,20 @@ import (
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
+
+// triagePlanKeys are the triage slot tasks a plan of j holds, in order:
+// each slot's triage before its verification.
+func triagePlanKeys(j analysis.Job) []string {
+	var out []string
+	for i := range (Handler{}).triageSlots(j) {
+		out = append(out, "review.triage."+triageKey(i), "review.verify."+triageKey(i))
+	}
+	return out
+}
 
 // triageSecretTree has three Go files: app/a.go and app/b.go are ordinary source,
 // app/keys.go is the file the secrets screen withholds in these tests.
