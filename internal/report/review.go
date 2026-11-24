@@ -220,7 +220,11 @@ func reviewLineage(rec *record.Record, states map[string]*taskState, obs map[str
 	var priors []record.Record
 	// A slice verify checks its own slice's investigate candidates.
 	sources := []string{"review." + record.StageInvestigate, "review." + record.StageInterpret}
-	if rec.Slice != nil {
+	switch {
+	case triageSlot(rec) != "":
+		// A triage slot's verify checks its own slot's problem groups.
+		sources = []string{"review." + record.StageTriage + "." + rec.Slice.Key}
+	case rec.Slice != nil:
 		sources = []string{"review." + record.StageInvestigate + "." + rec.Slice.Key}
 	}
 	for _, source := range sources {
@@ -376,6 +380,7 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 		}
 		addFindings(r, key+"_", from.Candidates, verdicts, evidence, obs)
 	}
+	composeTriage(r, states, obs)
 }
 
 // addFindings turns accepted candidates into findings; prefix is the slice

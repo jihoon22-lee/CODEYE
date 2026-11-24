@@ -75,6 +75,9 @@ func (w *worker) saveSourceExcerpts(a *attempt, tasks []*taskRun) {
 					continue
 				}
 				_, slice, _ := record.SliceTask(task.spec.Key)
+				if _, slot, triage := record.TriageTask(task.spec.Key); triage {
+					slice = slot
+				}
 				body := readExcerptInput(art.Path, record.MaxBytes)
 				rec, err := record.Decode(body, record.Expect{RunID: a.job.Attempt.RunID, AttemptID: a.job.Attempt.ID,
 					Snapshot: a.snapshot.Digest, Slice: slice, Lookup: lookup})

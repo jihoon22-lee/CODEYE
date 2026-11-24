@@ -477,6 +477,10 @@ type CodeReviewSection struct {
 	// plan held review slices (review.scope). Roles then list the whole-run
 	// roles only; the slice tasks are in the ledger rows.
 	Ledger *ReviewLedger `json:"ledger,omitempty"`
+	// DiagnosticTriage is what the triage slots did with the tool
+	// diagnostics (builder 22, review_triage.go); present when the plan held
+	// them.
+	DiagnosticTriage *DiagnosticTriage `json:"diagnostic_triage,omitempty"`
 }
 
 // ReviewLedger tells, per module, how much of the eligible code and test
