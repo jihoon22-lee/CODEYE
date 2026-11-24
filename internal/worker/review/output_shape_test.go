@@ -73,9 +73,10 @@ func TestOutputCodesMatchTheReviewTable(t *testing.T) {
 	if start < 0 {
 		t.Fatal("docs/REVIEW.md has no output error table")
 	}
+	// The table section ends at the next heading of any level.
 	section := text[start+1:]
-	if end := strings.Index(section, "\n### "); end >= 0 {
-		section = section[:end]
+	if end := regexp.MustCompile(`\n#{1,6} `).FindStringIndex(section); end != nil {
+		section = section[:end[0]]
 	}
 	row := regexp.MustCompile("(?m)^\\| `([a-z0-9_]+)` \\| (무결성|형식) \\|")
 	classes := map[string]codeClass{"무결성": classIntegrity, "형식": classForm}
@@ -240,12 +241,13 @@ func TestVerifyFormFaultsRepairedThenResolved(t *testing.T) {
 		cite  func(t *testing.T, in verifyInput, c record.Candidate) opencode.Reply
 		code  string
 		field string
+		cited bool
 		lim   string
 		check func(t *testing.T, run shapeRun, v record.Verification)
 	}{
 		{"long excerpt without a range, the candidate's range inside", func(t *testing.T, in verifyInput, c record.Candidate) opencode.Reply {
 			return citing(c, verifyUnit(t, in, scalePath).ID)
-		}, errCitationMissing, "supporting_evidence_ids", limCitationFromCandidate, func(t *testing.T, run shapeRun, v record.Verification) {
+		}, errCitationMissing, "supporting_evidence_ids", true, limCitationFromCandidate, func(t *testing.T, run shapeRun, v record.Verification) {
 			if !slices.Equal(v.SupportingEvidence, run.verify.Candidates[1].Evidence) {
 				t.Fatalf("supporting %v, want the candidate's range %v", v.SupportingEvidence, run.verify.Candidates[1].Evidence)
 			}
@@ -253,14 +255,14 @@ func TestVerifyFormFaultsRepairedThenResolved(t *testing.T) {
 		{"range longer than 80 lines of another unit", func(t *testing.T, in verifyInput, c record.Candidate) opencode.Reply {
 			u := verifyUnit(t, in, limitPath)
 			return citing(c, fmt.Sprintf("%s:%d-%d", u.ID, u.Start, u.End))
-		}, errCitationInvalid, "supporting_evidence_ids", limCitationUnspecified, func(t *testing.T, run shapeRun, v record.Verification) {
+		}, errCitationInvalid, "supporting_evidence_ids", true, limCitationUnspecified, func(t *testing.T, run shapeRun, v record.Verification) {
 			if e := catalogOf(run.verify.Evidence)[v.SupportingEvidence[0]]; len(v.SupportingEvidence) != 1 || e.Path != limitPath || e.Start != 1 {
 				t.Fatalf("supporting %v (%+v), want the whole limit.go unit", v.SupportingEvidence, e)
 			}
 		}},
 		{"repeated evidence", func(t *testing.T, in verifyInput, c record.Candidate) opencode.Reply {
 			return citing(c, c.Evidence[0], c.Evidence[0])
-		}, "evidence_id_duplicate", "", limCitationListTrimmed, func(t *testing.T, run shapeRun, v record.Verification) {
+		}, "evidence_id_duplicate", "supporting_evidence_ids", false, limCitationListTrimmed, func(t *testing.T, run shapeRun, v record.Verification) {
 			if len(v.SupportingEvidence) != 1 {
 				t.Fatalf("supporting %v", v.SupportingEvidence)
 			}
@@ -270,7 +272,7 @@ func TestVerifyFormFaultsRepairedThenResolved(t *testing.T) {
 			m["unresolved_assumptions"] = []string{"가정 하나", "가정 둘", "가정 셋", "가정 넷", "가정 다섯", "가정 여섯"}
 			m["next_verification"] = []string{"호출자를 읽는다.", "테스트를 읽는다.", "문서를 읽는다.", "설정을 읽는다.", "주석을 읽는다."}
 			return asJSON(m)
-		}, "list_too_long", "", limVerificationTrimmed, func(t *testing.T, run shapeRun, v record.Verification) {
+		}, "list_too_long", "unresolved_assumptions", false, limVerificationTrimmed, func(t *testing.T, run shapeRun, v record.Verification) {
 			if len(v.UnresolvedAssumptions) != 4 || len(v.NextVerification) != 3 {
 				t.Fatalf("verdict %+v", v)
 			}
@@ -294,10 +296,10 @@ func TestVerifyFormFaultsRepairedThenResolved(t *testing.T) {
 			if repair == nil || len(repair.Candidates) != 1 || repair.Candidates[0].ID != "investigate_2" || !slices.Contains(repair.Candidates[0].Errors, x.code) {
 				t.Fatalf("repair %+v", repair)
 			}
-			if x.field != "" && !slices.ContainsFunc(repair.Candidates[0].Evidence, func(e evidenceIssue) bool {
-				return e.Field == x.field && e.Error == x.code && e.ID != ""
+			if !slices.ContainsFunc(repair.Candidates[0].Issues, func(e verifyIssue) bool {
+				return e.Field == x.field && e.Error == x.code && (e.ID != "") == x.cited
 			}) {
-				t.Fatalf("repair evidence %+v", repair.Candidates[0].Evidence)
+				t.Fatalf("repair issues %+v", repair.Candidates[0].Issues)
 			}
 			for _, r := range repair.RangeRequired {
 				if slices.Contains(repair.AcceptedIDs, r.ID) || r.End-r.Start+1 <= record.WholeCitationLines {
@@ -366,11 +368,86 @@ func TestReportPublishesVerdictsOfAnIncompleteVerify(t *testing.T) {
 	}) {
 		t.Fatalf("gaps %+v", r.Gaps)
 	}
+	raw, err := report.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	md := string(report.RenderMarkdownAt(r, report.Digest(raw), report.Korean, report.DetailFull))
+	if p := os.Getenv("CODEYE_SHAPE_MD"); p != "" {
+		_ = os.WriteFile(p, []byte(md), 0o600)
+	}
+	if !strings.Contains(md, "검증 역할이 일부 후보만 판정했다") || !strings.Contains(md, "검증 작업이 일부 후보를 판정하지 못하고 끝났다") {
+		t.Fatal("the rendered report does not say the verification is incomplete")
+	}
 	// An older builder could not have published it.
 	old := r
 	old.Builder.Version = fmt.Sprint(report.VerifyIncompleteSince - 1)
 	if err := report.ValidateReport(old); err == nil || !strings.Contains(err.Error(), report.ResultAcceptedIncomplete) {
 		t.Fatalf("an older builder's accepted_incomplete: %v", err)
+	}
+}
+
+// The same for a slice verify: one of its two candidates keeps an integrity
+// fault. The slice findings carry the other verdict, the slice task is
+// accepted_incomplete, the ledger counts its calls and the report renders.
+func TestReportPublishesVerdictsOfAnIncompleteSliceVerify(t *testing.T) {
+	j := coverageJob(t)
+	script := coverageScript(t)
+	candidate := func(in investigateInput, title string) map[string]any {
+		return map[string]any{"title": title, "condition": "주소가 비어 있는 경우", "mechanism": "빈 주소가 검사 없이 연결에 쓰인다.", "impact": "서비스가 잘못된 주소로 시작한다.",
+			"improvement": "주소를 검사한다.", "counterpoint": "기본값이 항상 채워질 수 있다.", "evidence_ids": []string{in.Scope.Excerpts[0].ID}}
+	}
+	script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[investigateInput](t, q)
+		list := []map[string]any{candidate(in, "설정 주소 검증 누락")}
+		if !in.Scope.WholeRun {
+			list = append(list, candidate(in, "설정 주소의 형식 검사 누락"))
+		}
+		return asJSON(map[string]any{"candidates": list})
+	}
+	script["verify"] = func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[verifyInput](t, q)
+		var out []any
+		for _, c := range in.Candidates {
+			ids := []string{c.Evidence[0]}
+			if c.ID == "investigate_2" {
+				ids = []string{"ev_" + strings.Repeat("0", 24)}
+			}
+			out = append(out, inconclusiveFor(c, ids...))
+		}
+		return asJSON(map[string]any{"verifications": out})
+	}
+	r, results := reportAt(t, &j, sliceExampleStatic(t), &scriptedCaller{script: script}, smallBudget, &exampleIDs{n: 0xbc0})
+	var slice string
+	for key, res := range results {
+		if s, ok := strings.CutPrefix(key, "review.verify."); ok && res.Status == domain.TaskFailed && res.Reason == record.ReasonOutputIncomplete {
+			slice = s
+		}
+	}
+	if slice == "" {
+		t.Fatalf("no slice verify ended incomplete: %+v", results)
+	}
+	if f := findingOf(t, r, slice+"_investigate_1"); f.Validation != record.VerdictInconclusive {
+		t.Fatalf("slice verdict not published: %+v", f)
+	}
+	if f := findingOf(t, r, slice+"_investigate_2"); f.Validation != record.VerdictUnreviewed || !slices.Contains(f.Limitations, record.LimQuarantined) {
+		t.Fatalf("quarantined slice candidate %+v", f)
+	}
+	if !slices.ContainsFunc(r.Coverage.AIReview.OptionalTasks, func(x report.AIReviewTask) bool {
+		return x.Key == "review.verify."+slice && x.Result == report.ResultAcceptedIncomplete
+	}) || !slices.Contains(r.Limitations, report.LimReviewVerificationIncomplete) {
+		t.Fatalf("ai_review %+v limitations %v", r.Coverage.AIReview, r.Limitations)
+	}
+	if l := r.CodeReview.Ledger; l == nil || l.CallsUsed == nil || l.RequestBytesSent == nil {
+		t.Fatalf("ledger %+v", l)
+	}
+	raw, err := report.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if md := string(report.RenderMarkdownAt(r, report.Digest(raw), report.Korean, report.DetailFull)); !strings.Contains(md, "review_s"+strings.TrimPrefix(slice, "s")) &&
+		!strings.Contains(md, slice) {
+		t.Fatal("the rendered report omits the slice")
 	}
 }
 
@@ -459,6 +536,56 @@ func TestDryRunUpstreamFaultInjection(t *testing.T) {
 	}
 }
 
+// A role whose first answer has faults of form only, and whose repair times
+// out or is refused by the call ceiling, keeps that answer resolved: the
+// record holds an accepted call before the failed one (or none after it),
+// and the report builder accepts that record.
+func TestRoleFormFaultResolvedWhenTheRepairCannotArrive(t *testing.T) {
+	answer := func(n int, q opencode.Request) opencode.Reply {
+		in := decodeAs[investigateInput](t, q)
+		if !in.Scope.WholeRun {
+			return asJSON(map[string]any{"candidates": []any{}})
+		}
+		if n > 1 && in.Repair != nil {
+			return opencode.Reply{Reason: "model_timeout"}
+		}
+		u := unitOf(t, in, limitPath).ID + ":105-107"
+		return asJSON(map[string]any{"candidates": []record.CandidateText{billingCandidate("음수 처리", u, u)}})
+	}
+	run := func(maxCalls int) (analysis.Job, *scriptedCaller, report.Report, map[string]analysis.TaskResult) {
+		j := treeJob(t, limitTree())
+		script := coverageScript(t)
+		script["investigate"] = answer
+		script["verify"] = func(_ int, q opencode.Request) opencode.Reply {
+			return answerAll(decodeAs[verifyInput](t, q), func(c record.Candidate) []string { return []string{c.Evidence[0]} })
+		}
+		caller := &scriptedCaller{script: script}
+		r, results := reportWithCalls(t, &j, caller, maxCalls)
+		return j, caller, r, results
+	}
+	j, caller, r, results := run(0)
+	inv := readRecord(t, j, record.StageInvestigate)
+	if s := results["review.investigate"]; s.Status != domain.TaskSucceeded || len(inv.Calls) != 2 || inv.Calls[0].Outcome != record.OutcomeAccepted ||
+		inv.Calls[1].Outcome != "model_timeout" || !slices.Contains(inv.Calls[0].OutputErrors, "evidence_id_duplicate") ||
+		!slices.Contains(inv.Limitations, record.LimOutputDegraded) || len(inv.Candidates) != 1 || len(inv.Candidates[0].Evidence) != 1 {
+		t.Fatalf("investigate %+v, record %+v %v", s, inv.Calls, inv.Limitations)
+	}
+	requireReviewCounted(t, r)
+	// The ceiling leaves the overview investigation its first call only.
+	before := slices.IndexFunc(caller.requests, func(q opencode.Request) bool {
+		return q.Role == record.StageInvestigate && decodeAs[investigateInput](t, q).Scope.WholeRun
+	})
+	j, _, r, results = run(before + 1)
+	inv = readRecord(t, j, record.StageInvestigate)
+	if s := results["review.investigate"]; s.Status != domain.TaskSucceeded || len(inv.Calls) != 1 || inv.Calls[0].Outcome != record.OutcomeAccepted ||
+		!slices.Contains(inv.Limitations, limRepairNotSent) || !slices.Contains(inv.Limitations, record.LimOutputDegraded) {
+		t.Fatalf("investigate %+v, record %+v %v", s, inv.Calls, inv.Limitations)
+	}
+	if slices.ContainsFunc(r.Limitations, func(l string) bool { return strings.HasPrefix(l, report.LimReviewLineage) }) {
+		t.Fatalf("report set the record aside: %v", r.Limitations)
+	}
+}
+
 // requireResolvedCalls checks a role answered twice with the same faults:
 // the first call rejected with codes, the second accepted with the same
 // codes kept on the call, and the record marked review_output_degraded with
@@ -542,7 +669,10 @@ func TestCandidateFormFaultsResolvedAfterTheRepair(t *testing.T) {
 		gw := excerptID(in.Scope.Excerpts, "gateway.go")
 		kept := billingCandidate("Forward가 결제 호출을 반복할 수 있음", gw, gw)
 		empty := billingCandidate("", gw)
-		return asJSON(map[string]any{"candidates": []record.CandidateText{kept, empty}})
+		// A strength (optional, never repaired) with a malformed range
+		// stands for the whole excerpt at once.
+		strength := record.Strength{Title: "재시도 횟수에 상한을 둔다", Benefit: "실패한 호출이 끝없이 반복되지 않는다.", Scope: ".", EvidenceIDs: []string{gw + ":x"}}
+		return asJSON(map[string]any{"candidates": []record.CandidateText{kept, empty}, "strengths": []record.Strength{strength}})
 	}
 	script["interpret"] = func(_ int, q opencode.Request) opencode.Reply {
 		in := decodeAs[interpretInput](t, q)
@@ -576,6 +706,10 @@ func TestCandidateFormFaultsResolvedAfterTheRepair(t *testing.T) {
 	}
 	if len(inv.Candidates) != 1 || len(inv.Candidates[0].Evidence) != 1 || inv.Candidates[0].ID != "investigate_1" {
 		t.Fatalf("investigate candidates %+v", inv.Candidates)
+	}
+	if len(inv.Strengths) != 1 || inv.Strengths[0].EvidenceIDs[0] != inv.Candidates[0].Evidence[0] || !slices.Contains(inv.Limitations, limCitationUnspecified) ||
+		slices.Contains(inv.Limitations, "review_strength_omitted") {
+		t.Fatalf("strengths %+v limitations %v", inv.Strengths, inv.Limitations)
 	}
 	if len(interp.Candidates) != 1 || len(interp.Limits) != 1 || len(interp.Limits[0].ObservationIDs) != 1 {
 		t.Fatalf("interpret candidates %+v limits %+v", interp.Candidates, interp.Limits)

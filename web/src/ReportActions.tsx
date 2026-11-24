@@ -188,7 +188,8 @@ export function ReportActions({ report, sections, isDisposed, openFinding, openC
       .find(labels => Object.hasOwn(labels, code))?.[code]).find(Boolean);
     if (reason && report.aiReview !== 'not_requested') paragraphs.push(reason);
   } else if (sections.codeReview.findings.length > 0 || sections.codeReview.strengths.length > 0 || sections.codeReview.roles.some(role =>
-    role.result === 'accepted' && (role.key === 'review.investigate' || role.key === 'review.verify')) ||
+    (role.result === 'accepted' && role.key === 'review.investigate') ||
+    ((role.result === 'accepted' || role.result === 'accepted_incomplete') && role.key === 'review.verify')) ||
     sections.codeReview.ledger?.modules.some(module => module.completed > 0)) {
     lead = t.codeReading.none;
     if (facts.scope) paragraphs.push(t.sections.summary.reviewScope(facts.scope.primary, facts.scope.primarySent));

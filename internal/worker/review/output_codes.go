@@ -27,10 +27,10 @@ const (
 
 // Limitations of items the platform left out after the repair.
 const (
-	limCandidateOmitted      = "review_candidate_omitted"
-	limDocumentItemsOmitted  = "document_items_omitted"
-	limInterpretItemsOmitted = "interpretation_items_omitted"
-	limEnvironmentNotesOmit  = "environment_notes_omitted"
+	limCandidateOmitted      = record.LimCandidateOmitted
+	limDocumentItemsOmitted  = record.LimDocumentItemsOmitted
+	limInterpretItemsOmitted = record.LimInterpretItemsOmitted
+	limEnvironmentNotesOmit  = record.LimEnvironmentNotesOmitted
 	limVerificationTrimmed   = "verification_list_trimmed"
 )
 
@@ -98,6 +98,12 @@ var outputCodes = map[string]codeClass{
 	"verification_invalid":             classIntegrity,
 	"list_too_long":                    classForm,
 	"next_verification_invalid":        classForm,
+	// An accepted verdict whose observation IDs among its evidence were
+	// left out (the platform resolved it).
+	"evidence_id_dropped": classForm,
+	// The optional route selection call of the documents role: a selection
+	// it cannot bind is left out (workflow_selection_invalid), never repaired.
+	record.LimWorkflowSelectionInvalid: classIntegrity,
 	// Contract comparisons of the overview investigation: optional items,
 	// left out after the repair whatever the class.
 	record.CompareIndexInvalid:     classIntegrity,

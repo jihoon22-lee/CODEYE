@@ -44,6 +44,16 @@ const (
 	// codes in output_errors, and it may be followed by the calls that
 	// failed to bring a better output.
 	LimOutputDegraded = "review_output_degraded"
+
+	// Items of a role's output left out after the format repair because a
+	// fault of form could not be resolved in them (a candidate or hypothesis
+	// without a usable cited range, an item whose prose fails its rule).
+	// The report shows each as a gap of its section; a left-out candidate or
+	// hypothesis keeps the quality verdict from no_actionable_findings.
+	LimCandidateOmitted        = "review_candidate_omitted"
+	LimInterpretItemsOmitted   = "interpretation_items_omitted"
+	LimDocumentItemsOmitted    = "document_items_omitted"
+	LimEnvironmentNotesOmitted = "environment_notes_omitted"
 )
 
 // Task reasons of a verify task whose accepted record leaves candidates

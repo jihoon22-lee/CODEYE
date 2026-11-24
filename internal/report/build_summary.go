@@ -1,7 +1,10 @@
 package report
 
 import (
+	"slices"
 	"sort"
+
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
 // decideStatus maps structured facts to the report status. final is the run's
@@ -48,6 +51,13 @@ func reportVerdict(r Report) string {
 		return VerdictAttention
 	}
 	verdict := DecideVerdict(r.Status, r.Summary, r.Coverage.AIReview.Status)
+	// A model candidate or hypothesis left out after the format repair
+	// (its location could not be fixed) is not an absence of findings.
+	if verdict == VerdictNoActionable && slices.ContainsFunc(r.Limitations, func(l string) bool {
+		return l == record.LimCandidateOmitted || l == record.LimInterpretItemsOmitted
+	}) {
+		return VerdictInconclusive
+	}
 	if verdict == VerdictNoActionable && r.Documents != nil {
 		for _, c := range r.Documents.Comparisons {
 			if c.Status == "unknown" {

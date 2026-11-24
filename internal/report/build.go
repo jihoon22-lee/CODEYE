@@ -2,6 +2,7 @@ package report
 
 import (
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -357,6 +358,11 @@ func Build(in Input, reg *Registry) (Report, error) {
 	}
 
 	r.Coverage.AIReview = decideAIReview(states)
+	if slices.ContainsFunc(append(slices.Clone(r.Coverage.AIReview.RequiredTasks), r.Coverage.AIReview.OptionalTasks...), func(t AIReviewTask) bool {
+		return t.Result == ResultAcceptedIncomplete
+	}) {
+		lim.add(LimReviewVerificationIncomplete)
+	}
 	reviewPlanned := false
 	for _, k := range keys {
 		if strings.HasPrefix(k, "review.") {

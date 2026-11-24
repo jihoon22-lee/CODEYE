@@ -4,7 +4,7 @@
 
 - 구현 위치: [`internal/worker/review`](../internal/worker/review), [`internal/worker/review/record`](../internal/worker/review/record), [`internal/worker/opencode`](../internal/worker/opencode), [`prompts/review`](../prompts/review)
 - 요구사항: REQ-004/005/009/010/011/012/013/026/027/030, NFR-007/008/010([요구사항](REQUIREMENTS.md))
-- 수용 시험: TC-05, TC-10~12, TC-16, TC-18, TC-33, TC-34, TC-76~79, TC-85~89, TC-97, TC-100, TC-123, TC-128, TC-129, TC-287([시험](TESTING.md))
+- 수용 시험: TC-05, TC-10~12, TC-16, TC-18, TC-33, TC-34, TC-76~79, TC-85~89, TC-97, TC-100, TC-123, TC-128, TC-129, TC-287, TC-288([시험](TESTING.md))
 - 품질 평가와 지침 개정 절차: [평가](EVALUATION.md)
 
 ## 공통 경계
@@ -24,7 +24,7 @@
 
 | `pack.yaml` id·version | 기록 schema | 역할 |
 |---|---|---|
-| `review` 2.7.1 | `0.7`(줄 번호 인용, 모든 역할과 slice). 이전 워커의 `0.2`, slice `0.3`, 계약 후속 검토 `0.4`, HTTP 경로를 고른 문서 `0.5`, 함께 읽은 HTTP 근거 `0.6`도 읽는다 | environment, documents, investigate, interpret, verify, contract |
+| `review` 2.8.0 | `0.7`(줄 번호 인용, 모든 역할과 slice). 이전 워커의 `0.2`, slice `0.3`, 계약 후속 검토 `0.4`, HTTP 경로를 고른 문서 `0.5`, 함께 읽은 HTTP 근거 `0.6`도 읽는다 | environment, documents, investigate, interpret, verify, contract |
 
 - 지침 개정은 이 지침 하나에 한다. 개정의 검증 절차는 [평가](EVALUATION.md)에 있다.
 - 보고서는 Go가 만들므로 종합·보고 역할에 모델을 호출하지 않는다.
@@ -379,7 +379,9 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 
 - 모델은 코드·테스트 발췌를 `<근거 ID>:<시작>-<끝>`(한 줄이면 `<근거 ID>:<줄>`)으로 인용한다. 범위는 그 발췌 안이고 80줄 이하다. 80줄보다 긴 발췌(대개 파일 전체 단위)는 범위 없이 인용할 수 없다(`citation_range_missing`). 문서·manifest 근거와 80줄 이하 발췌는 ID만으로 인용할 수 있다.
 - 워커는 범위가 보낸 발췌 안에 있는지 확인하고 인용을 그 범위의 근거 ID로 바꾼다. 같은 경로·blob·종류에 (snapshot digest, 경로, blob SHA-256, 행 범위)로 계산한 ID이고 출처 표시는 `cited`다. 후보, 판정, 해석 가설, 강점의 근거와 보고서 발췌는 이 좁힌 범위를 가리킨다. 좁힌 범위도 다른 근거처럼 decoder가 ID와 blob을 다시 계산해 확인한다.
-- 범위 형식이 틀리거나, 발췌 밖이거나, 80줄을 넘거나, 문서 근거에 범위를 붙이면 `citation_range_invalid`다. 보내지 않은 ID는 기존처럼 `evidence_id_unknown`이다. 두 오류 모두 형식 복구 요청에 오류 코드로 간다.
+- 범위 형식이 틀리거나, 80줄을 넘거나, 문서 근거에 범위를 붙이면 `citation_range_invalid`다. 범위가 보낸 발췌에 없는 줄을 가리키면 `citation_range_outside`다. 보내지 않은 ID는 기존처럼 `evidence_id_unknown`이다. 모두 형식 복구 요청에 오류 코드로 가고, 그 항목(목록과 번호, verify는 후보 ID)·필드·인용한 발췌 ID도 함께 간다. 보내지 않은 ID는 되돌려 보내지 않는다.
+- `citation_range_missing`·`citation_range_invalid`는 실제로 보낸 발췌를 가리키므로 형식 오류다. 복구 뒤에도 남으면 플랫폼이 그 인용을 정리하거나 그 항목을 뺀다. `citation_range_outside`·`evidence_id_unknown`은 무결성 오류다([출력 오류 분류](#출력-오류-분류)).
+- 역할 계약 문자열과 복구 규칙은 긴 발췌의 유효한 인용(ID와 범위, 80줄 이하, 요청의 ID 형식을 따른 예시)을 함께 적는다. 이 문구는 지침 팩 밖의 Go 고정 문자열(`citationRule`, `repairRules`)이다.
 - 전체 조사의 문서 계약 대조도 후보처럼 인용한 범위를 저장한다([문서 계약 대조](#문서-계약-대조)). 계약 후속 검토의 코드 근거만 범위를 확인한 뒤 발췌의 원래 ID를 저장한다. 후속 검토는 새로 읽은 창 단위로 새 구현 여부를 정하기 때문이다.
 - verify는 앞 역할이 좁힌 범위를 인용 발췌로 받고, 그 범위를 다시 좁혀 인용할 수 있다.
 - 근거 ID는 위치(경로·blob·행 범위)에 묶이므로 verify가 만든 범위가 앞 역할의 발췌와 정확히 같을 수 있다. 감싸는 선언이 앞 역할이 보낸 단위 전체이거나, 확장 창이 앞 역할의 창이거나, 검증자가 다시 보내지 않은 앞 역할의 창과 같은 줄을 좁혀 인용하는 경우다. 그때 verify는 그 발췌를 앞 역할의 항목 그대로(출처 표시·심볼 포함) 보내고 기록한다. 워커는 기록을 쓰기 전에 이를 확인하고, 어긋나면 그 task를 `failed`(`review_lineage_mismatch`)로 끝낸다. 보고서도 같은 규칙으로 다시 확인한다([`record/lineage.go`](../internal/worker/review/record/lineage.go)).
@@ -389,10 +391,10 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 
 전체 조사(`whole_run`)는 수락된 문서 계약을 최대 6건 구현과 대조한다(`contract_comparisons`, [`comparisons.go`](../internal/worker/review/comparisons.go)). 대조는 선택 항목이다. 후보와 강점이 유효하면 대조 하나가 틀렸다고 필수 검토를 잃지 않는다.
 
-- 코드 근거(`code_evidence_ids`)는 후보와 같은 규칙으로 인용하고 좁힌 범위를 저장한다. 80줄보다 긴 발췌는 범위를 붙여야 한다. 범위 없는 긴 단위는 어느 줄이 계약을 구현하는지 말하지 않으므로 거부한다. 같은 단위의 두 범위는 서로 다른 근거다.
+- 코드 근거(`code_evidence_ids`)는 후보와 같은 규칙으로 인용하고 좁힌 범위를 저장한다. 80줄보다 긴 발췌는 범위를 붙여야 한다. 범위 없는 긴 단위는 어느 줄이 계약을 구현하는지 말하지 않으므로 형식 복구를 요청한다. 복구 뒤에도 범위가 없거나 틀리면 보낸 발췌 전체를 근거로 다시 검사하고(`citation_range_unspecified`), 통과하지 못하면 그 대조만 뺀다. 같은 단위의 두 범위는 서로 다른 근거다.
 - 구현이 인용한 문서 자체이면 안 된다는 규칙과, 문서화된 API의 본문 안이어야 한다는 규칙은 좁힌 범위로 판단한다. 같은 소스 파일에 문서가 있는 API(Java Javadoc, 안내 문서가 가리키는 Python docstring·rustdoc)는 파일 전체 단위가 문서 줄도 담는다. 그래서 단위 전체를 근거로 쓰면 이 규칙을 만족할 수 없고, 본문 줄을 범위로 인용해야 한다.
 - 문서 근거(`document_evidence_ids`)는 계약의 `evidence_ids`를 범위 없이 그대로 쓴다.
-- 대조 한 건의 거부는 조건마다 고정 코드다. 형식 복구 요청의 `output_errors`에 코드가 가고, `repair.contract_comparisons`에는 1부터 세는 대조 번호, 필드 이름과 코드가 간다. 요청 크기를 넘으면 들어가는 만큼만 싣는다. 모델 서술은 어느 쪽에도 넣지 않는다.
+- 대조 한 건의 거부는 조건마다 고정 코드다. 형식 복구 요청의 `output_errors`에 코드가 가고, `repair.items`에는 목록 `contract_comparisons`와 1부터 세는 대조 번호, 필드 이름, 인용 오류이면 그 발췌 ID, 코드가 간다. 요청 크기를 넘으면 들어가는 만큼만 싣는다. 모델 서술은 어느 쪽에도 넣지 않는다.
 
 | 코드 | 필드 | 조건 |
 |---|---|---|
@@ -417,7 +419,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 | `contract_comparison_in_slice` | `contract_comparisons` | slice 출력이 대조를 냈다 |
 | `contract_comparisons_too_many` | `contract_comparisons` | 7번째 이후 대조다 |
 
-- 형식 복구 기회가 남아 있으면 틀린 대조는 응답 전체를 거부하고 복구를 요청한다. 복구를 이미 썼거나 호출이 남지 않았으면, 다른 오류가 없을 때 틀린 대조만 빼고 응답을 받는다. 기록에는 `contract_comparison_omitted` 한계가 남는다. JSON이 아닌 응답 뒤의 재시도는 복구 기회를 쓰지 않으므로 빼지 않는다. 후보 오류는 이전처럼 응답을 거부한다.
+- 형식 복구 기회가 남아 있으면 틀린 대조는 응답 전체를 거부하고 복구를 요청한다. 복구를 이미 썼거나 보낼 수 없으면, 인용의 형식 오류(반복, 4개 초과, 범위 없음·틀림)를 정리해 다시 검사하고 그래도 틀린 대조만 빼고 응답을 받는다. 기록에는 `contract_comparison_omitted` 한계가 남는다. JSON이 아닌 응답 뒤의 재시도는 복구 기회를 쓰지 않으므로 빼지 않는다. 후보와 다른 항목의 오류는 [출력 오류 분류](#출력-오류-분류)를 따른다.
 - 보고서는 뺀 대조의 계약을 미확인(`unknown`, 대조 결과 없음)으로 보이고, 문서 절의 분석 공백에 `contract_comparison_omitted`를 남긴다.
 
 ## 출력 검사
@@ -429,6 +431,106 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - 서술 필드는 출력 토큰이 정한 JSON 인코딩 바이트 이하다([요청 크기](#요청-크기), 기본 1,200바이트, 최소 출력 예산 400바이트). 요청은 그 3/10 글자 이하의 간결한 한국어를 요구한다(기본 360자, 짧은 문단 하나). 후보는 무엇이 잘못되는지(`title`), 발생 조건(`condition`), 인용한 줄이 실패를 만드는 과정(`mechanism`, 서술 필드의 두 배까지), 영향, 수정이 지켜야 할 속성(`improvement`), 반박 근거나 남은 불확실성(`counterpoint`)을 쓴다. `mechanism`은 선택이다. 기록에 남는 모델 서술은 schema 0.7에서 1,200바이트(`mechanism` 2,400바이트), 이전 schema에서 400바이트 이하이고 민감값 패턴에 걸리지 않아야 한다.
 - 환경 메모는 플랫폼 판정을 다시 쓰거나 올리지 못한다. 판정 필드를 붙인 출력은 거부한다.
 
+### 출력 오류 분류
+
+출력 오류 코드는 모두 두 분류 중 하나다([`output_codes.go`](../internal/worker/review/output_codes.go)). 등록하지 않은 코드는 무결성으로 다룬다. 아래 표와 등록이 같은지 `TestOutputCodesMatchTheReviewTable`이 확인하고, 시험이 읽는 모든 기록의 `output_errors`가 등록된 코드인지도 확인한다.
+
+- **무결성.** 플랫폼이 받을 수 없는 내용이다. 요청에 없던 근거·관찰 ID, 보내지 않은 줄, 실행 주장, 넓힌 적용 범위, 플랫폼만 정하는 심각도, 규칙이 요구하는 근거가 없는 판정, 읽을 수 없는 결과가 여기에 든다. 처리는 이전과 같다. 응답을 거부하고 형식 복구 뒤에도 남으면 역할이 실패한다. verify는 그 후보를 격리하고, 선택 항목(강점, 문서 계약 대조)은 그 항목만 뺀다.
+- **형식.** 인용한 발췌는 실제로 보낸 것이거나, 항목 하나가 자기 규칙을 어겼다. 형식 복구를 한 번 요청한다. 복구 뒤에도 남거나 복구를 보낼 수 없으면 플랫폼이 그 항목 안에서 정리하거나 그 항목만 빼고, 한계를 남기고 단계를 유지한다. 항목의 형식 오류로 단계를 잃지 않는다.
+
+정리 규칙은 다음과 같다.
+
+- **범위가 없거나 틀린 긴 발췌 인용**(`citation_range_missing`, `citation_range_invalid`). 80줄을 넘는 범위는 자르지 않고 범위를 정하지 않은 인용으로 본다. 자르면 모델이 가리킨 줄이 잘릴 수 있지만 보낸 발췌 전체는 그 줄을 모두 담기 때문이다.
+  - verify의 근거·반대 근거: 같은 후보가 인용한 범위가 그 발췌 안에 있으면 그 범위(`citation_range_from_candidate`), 없으면 보낸 발췌 전체(`citation_range_unspecified`)다.
+  - 강점, 문서 계약 대조, 계약 후속 검토: 보낸 발췌 전체(`citation_range_unspecified`)다. 정리한 대조는 대조 규칙으로 다시 검사한다.
+  - 조사 후보, 해석 가설: 그 항목을 뺀다(`review_candidate_omitted`, `interpretation_items_omitted`). 후보의 근거는 결함이 있는 줄을 가리켜야 하는데 파일 전체는 그 위치를 말하지 않기 때문이다.
+- **반복·초과 인용과 목록**(`evidence_id_duplicate`, `evidence_list_too_long`, `observation_id_duplicate`, `requirement_id_duplicate`, 문서 항목의 `*_evidence_ids_invalid`, `list_too_long`). 반복을 빼고 앞에서부터 한도까지 남긴다(`citation_list_trimmed`, verify 목록은 `verification_list_trimmed`).
+- **항목 규칙**(서술, 실패 과정, 근거 누락, 요구 누락, 같은 문서 충돌). 그 항목을 뺀다. 한계는 조사 후보 `review_candidate_omitted`, 해석 `interpretation_items_omitted`, 문서 `document_items_omitted`, 환경 `environment_notes_omitted`다. verify의 조건·가정·다음 확인 항목은 그 항목만 뺀다(`verification_list_trimmed`).
+- 정리한 응답의 호출은 `accepted`이고 `output_errors`에 원래 코드를 유지한다. 기록에는 `review_output_degraded`와 정리 한계가 남고, verify는 판정마다 정리 한계를 남긴다. 복구를 보낼 수 없었으면(호출 상한, 요청 크기, 입력) `output_repair_not_sent`도 남는다. 항목을 빼서 역할 규칙(environment·interpret는 항목 하나 이상)을 어기면 응답은 거부된다.
+- 형식 오류만 있던 응답은 그 뒤 호출이 실패해도(timeout, 거절, 모델 오류, 두 번째 형식 거부, JSON이 아닌 응답) 정리해 받는다. 취소된 단계는 정리하지 않는다.
+- 보고서는 뺀 항목을 그 절의 분석 공백으로 보인다. 후보나 가설을 뺀 보고서는 `no_actionable_findings`를 게시하지 않고 판단 보류로 둔다([보고서 연결](#보고서-연결)).
+
+| 코드 | 분류 | 복구 뒤 처리 |
+|---|---|---|
+| `output_not_json` | 무결성 | 재시도 한 번(복구 기회를 쓰지 않음). 두 번째도 JSON이 아니면 앞서 받아 둔 형식 오류 응답을 정리하거나 역할 실패 |
+| `output_schema_invalid` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `item_schema_invalid` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패(verify는 그 후보 격리) |
+| `no_items` | 무결성 | 응답 거부(environment·interpret는 항목이 하나 이상이어야 한다). 복구 뒤 모든 항목을 빼서 비어도 같다 |
+| `too_many_items` | 형식 | 한도를 넘는 항목을 빼고 한계(각 역할의 `*_omitted`) |
+| `citation_range_outside` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패(verify는 후보 격리, 대조는 그 대조만 뺌) |
+| `citation_range_missing` | 형식 | 후보·가설은 그 항목을 뺀다(`review_candidate_omitted`·`interpretation_items_omitted`). verify 근거는 같은 후보가 인용한 범위가 그 발췌 안에 있으면 그 범위(`citation_range_from_candidate`), 없으면 보낸 발췌 전체(`citation_range_unspecified`) |
+| `citation_range_invalid` | 형식 | `citation_range_missing`과 같다. 강점은 복구 없이 바로 발췌 전체로, 계약 후속 검토는 보낸 창으로 받는다 |
+| `evidence_id_unknown` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패(verify는 후보 격리. 요청의 관찰 ID만이면 빼고 받는다) |
+| `evidence_kind_invalid` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `evidence_id_duplicate` | 형식 | 반복 ID를 빼고 받는다(`citation_list_trimmed`) |
+| `evidence_list_too_long` | 형식 | 앞에서부터 한도까지 남기고 받는다(`citation_list_trimmed`) |
+| `evidence_missing` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`) |
+| `code_evidence_missing` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`) |
+| `execution_claim` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패(verify는 후보 격리, 대조는 그 대조만 뺌). `execution_claim_rejected` |
+| `text_invalid` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`). verify의 조건·가정·다음 확인 항목은 그 항목만 뺀다(`verification_list_trimmed`) |
+| `mechanism_missing` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`) |
+| `insight_prose_requires_korean` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`). 대조는 그 대조만 뺀다 |
+| `evidence_not_at_observation` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `observation_id_unknown` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `observation_id_duplicate` | 형식 | 반복 ID를 빼고 받는다(`citation_list_trimmed`) |
+| `observation_ids_invalid` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`) |
+| `module_out_of_scope` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `requirement_id_unknown` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `requirement_of_other_module` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `evidence_of_other_requirement` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `module_duplicate` | 형식 | 뒤의 메모를 뺀다(`environment_notes_omitted`) |
+| `requirement_id_duplicate` | 형식 | 반복 ID를 빼고 받는다(`citation_list_trimmed`) |
+| `requirement_missing` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`) |
+| `scope_invalid` | 무결성 | 응답 거부. 범위 복구 뒤에는 다른 항목이 남으면 그 항목만 빼고 `document_scope_items_omitted` |
+| `scope_unknown_path` | 무결성 | `scope_invalid`와 같다 |
+| `scope_generalized` | 무결성 | `scope_invalid`와 같다(패키지 범위로 좁힐 수 있으면 좁힌다) |
+| `conflict_same_document` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`) |
+| `document_quality_invalid` | 형식 | 근거 목록을 정리해 통과하면 받고(`citation_list_trimmed`), 아니면 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`) |
+| `contracts_evidence_ids_invalid` | 형식 | 목록을 한도까지 줄여 통과하면 받고(`citation_list_trimmed`), 아니면 그 항목을 뺀다(`document_items_omitted`) |
+| `conflicts_first_evidence_ids_invalid` | 형식 | `contracts_evidence_ids_invalid`와 같다 |
+| `conflicts_second_evidence_ids_invalid` | 형식 | `contracts_evidence_ids_invalid`와 같다 |
+| `questions_evidence_ids_invalid` | 형식 | `contracts_evidence_ids_invalid`와 같다 |
+| `instruction_notes_evidence_ids_invalid` | 형식 | `contracts_evidence_ids_invalid`와 같다 |
+| `document_quality_evidence_ids_invalid` | 형식 | `contracts_evidence_ids_invalid`와 같다 |
+| `unknown_candidate_id` | 무결성 | 그 항목을 버린다. 답하지 않은 후보는 복구 뒤 격리 |
+| `duplicate_candidate_verification` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `verification_missing` | 무결성 | 복구 요청에 그 후보를 다시 싣는다. 끝내 없으면 격리(앞서 받아 둔 형식 오류 판정이 있으면 정리해 받는다) |
+| `verdict_invalid` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `category_invalid` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `severity_invalid` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `severity_not_assignable` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `supported_without_code_evidence` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `refuted_without_counterevidence` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `valid_conditions_missing` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `invalid_conditions_missing` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `unresolved_assumptions_missing` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `verification_invalid` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `list_too_long` | 형식 | 앞의 4개(다음 확인은 3개)만 남기고 받는다(`verification_list_trimmed`) |
+| `next_verification_invalid` | 형식 | 3개를 넘으면 앞의 3개만 남긴다(`verification_list_trimmed`). 비었으면 후보 격리 |
+| `evidence_id_dropped` | 형식 | 이미 정리된 표시다. 요청의 관찰 ID를 근거에서 빼고 받았다 |
+| `workflow_selection_invalid` | 무결성 | 선택 호출이라 복구하지 않는다. 묶을 수 없는 선택만 빼고 한계 |
+| `contract_comparison_index_invalid` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_index_duplicate` | 형식 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_scope_invalid` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_scope_outside_contract` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_status_invalid` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_reason_invalid` | 형식 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_documents_changed` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_missing` | 형식 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_invalid` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_duplicate` | 형식 | 반복 근거를 빼고 다시 검사해 통과하면 받는다(`citation_list_trimmed`). 아니면 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_too_many` | 형식 | 앞의 4개만 남기고 다시 검사해 통과하면 받는다(`citation_list_trimmed`). 아니면 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_outside_scope` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_is_document` | 형식 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_outside_documented_api` | 형식 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_range_invalid` | 형식 | 보낸 발췌 전체로 정리해 다시 검사하고 통과하면 받는다(`citation_range_unspecified`). 아니면 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_range_missing` | 형식 | `contract_comparison_code_range_invalid`와 같다 |
+| `contract_comparison_in_slice` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparisons_too_many` | 형식 | 7번째 이후 대조를 뺀다(`contract_comparison_omitted`) |
+| `contract_comparison_invalid` | 무결성 | 응답 거부. 복구 뒤에도 남으면 후속 검토 실패(앞선 대조 유지) |
+| `contract_evidence_not_new` | 무결성 | `contract_comparison_invalid`와 같다 |
+| `contract_partial_support_invalid` | 무결성 | `contract_comparison_invalid`와 같다 |
+
 ## 후보 검증과 근거 규칙
 
 - `supported`는 code 또는 test 근거 ID 하나 이상과 성립 조건 하나 이상을 요구한다.
@@ -438,22 +540,22 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - 심각도는 `high`·`medium`·`low`·`info`만 받는다. `critical`은 실행 근거나 사람의 판단이 필요하므로 모델이 줄 수 없다(`severity_not_assignable`).
 - 범주는 `correctness`, `error_handling`, `concurrency`, `resource_lifecycle`, `data_integrity`, `api_contract`, `security`, `maintainability`, `performance`, `test_gap` 중 하나다.
 - 후보마다 정확히 한 판정이 있어야 한다. 누락·중복 항목, 모르는 후보 ID는 거부한다. 다음 확인 사항(1~3개)은 명령이 아니라 읽기·검토 단계다.
-- 끝내 검증되지 않은 후보는 플랫폼이 `unreviewed`로 표시한다(`verification_quarantined`, `verification_not_completed`, `verification_budget_exceeded`).
+- 끝내 검증되지 않은 후보는 플랫폼이 `unreviewed`로 표시한다(`verification_quarantined`, `verification_not_completed`, `verification_budget_exceeded`). 형식 오류만 있는 판정은 격리하지 않고 정리해 받으며, 판정의 `limitations`에 정리 내용(`citation_range_from_candidate`, `citation_range_unspecified`, `citation_list_trimmed`, `verification_list_trimmed`)을 남긴다.
 - 파일·행·해시 검증은 인용의 출처를 확인할 뿐이다. 인용을 해석한 모델 문장의 의미적 정확성은 [평가](EVALUATION.md)의 판정으로만 잰다.
 
 ## 복구 경로
 
 모든 역할에 적용한다. 단계당 호출은 최대 3회(`record.RoleMaxCalls = 3`)이고 문서 계약 후속 검토는 최대 2회다. 각 호출은 attempt의 남은 예산을 확인한다.
 
-1. **형식 복구.** 출력이 JSON이지만 계약·근거 검사에서 거부되면, 고정 오류 코드만 담은 복구 요청을 한 번 보낸다. verify는 거부된 후보, 허용된 근거와 오류 코드만 다시 보낸다. 거부된 문서 계약 대조는 대조 번호·필드·코드를 함께 보내고, 복구 뒤에도 틀린 대조는 그 대조만 뺀다([문서 계약 대조](#문서-계약-대조)).
+1. **형식 복구.** 출력이 JSON이지만 계약·근거 검사에서 거부되면, 고정 오류 코드와 거부된 항목(`repair.items`: 목록, 1부터 세는 번호, 필드, 인용 오류이면 그 발췌 ID, 코드)을 담은 복구 요청을 한 번 보낸다. 요청 크기를 넘으면 항목은 들어가는 만큼만 싣는다. verify는 거부된 후보와 그 오류(`issues`: 필드, 인용 오류이면 그 발췌 ID, 코드), 범위 없이 인용할 수 있는 근거 ID(`accepted_evidence_ids`), 범위를 붙여야만 인용할 수 있는 발췌(`range_required_evidence`)를 다시 보낸다. 모델 서술은 어느 쪽에도 넣지 않는다. 복구 뒤에도 남은 형식 오류는 [출력 오류 분류](#출력-오류-분류)대로 정리한다.
 2. **JSON이 아닌 응답의 재시도.** JSON이 아닌 응답은 항목에 대해 아무 정보도 주지 않는다. 형식 복구 기회를 쓰지 않고 한 번 더 요청한다. 재시도 요청은 같은 입력에 복구 규칙과 오류 코드 `output_not_json`을 담은 `repair` 블록을 붙인다. 앞서 복구 요청이 있었으면 그 오류 코드(verify는 후보별 오류)를 유지하고 `output_not_json`을 더한다.
 3. **작업공간 확인값 불일치.** 완료 이벤트까지 검사한 모델 응답이 첨부의 확인값 검사를 통과하지 못하면 응답 전체를 버린다. 정리가 확인되고 단계와 attempt에 호출이 남아 있을 때 같은 요청을 새 디렉터리와 새 확인값으로 단계당 한 번 다시 보낸다. 기존 형식 복구가 있었다면 그 요청을 그대로 보낸다. 취소되거나 디렉터리·marker 쓰기, 공급자 호출 또는 정리에 실패하면 이 재시도를 하지 않는다. 원래 호출의 `workspace_unreachable` 사유와 제공된 사용량은 기록한다.
-4. **끝.** JSON이 아닌 응답이나 형식 거부가 각각 두 번 발생하거나 호출 상한에 닿으면 다시 보내지 않는다. 미수락 응답은 저장하지 않는다. 탐색 사실과 도구 관찰은 남는다.
+4. **끝.** JSON이 아닌 응답이나 형식 거부가 각각 두 번 발생하거나 호출 상한에 닿으면 다시 보내지 않는다. 그때나 뒤 호출이 실패했을 때 형식 오류만 있던 마지막 응답이 있으면 정리해 받는다(취소 제외). 미수락 응답은 저장하지 않는다. 탐색 사실과 도구 관찰은 남는다.
 5. **관찰 ID만 틀린 verify 항목.** 항목의 오류가 `evidence_id_unknown` 하나뿐이고 범위 밖 ID가 모두 그 요청에 플랫폼이 넣은 관찰 ID일 때만, 그 ID를 빼고 같은 검사를 다시 한다. 통과하면 받아들이고 그 호출의 `output_errors`에 `evidence_id_dropped`를 남긴다. 게시되는 판정은 범위 안의 근거만 인용한다.
    - 요청에 없던 ID(지어낸 `ev_…` 등)가 하나라도 있으면 원래 오류로 거부하고 형식 복구로 보낸다.
    - ID를 빼고 통과하지 못하면 원래 오류로 거부한다. 관찰 ID만으로 지지한 항목은 코드 근거가 없어 거부된다.
-6. **후속 호출 실패(verify).** 이미 수락한 판정이 하나 이상 있고, 형식 복구나 재시도 호출이 형식 이외의 이유(timeout, 거절, 모델 오류)로 실패하면 수락한 판정을 보존한다. 남은 후보는 격리하고 `verification_call_failed` 한계를 남긴다. task는 `failed`(`review_output_incomplete`)이고 실패 사유는 그 호출의 `outcome`에 남는다. 수락한 판정이 없거나 취소이면 단계 전체를 종료한다.
-7. **verify 결과.** 일부만 유효하면 사용 가능한 판정을 보존하고 task는 `failed`(`review_output_incomplete`)다. 사용 가능한 판정이 전혀 없으면 `failed`(`review_output_invalid`)다.
+6. **후속 호출 실패(verify).** 수락한 판정이나 형식 오류만 있는 판정이 하나 이상 있고, 형식 복구나 재시도 호출이 형식 이외의 이유(timeout, 거절, 모델 오류)로 실패하면 수락한 판정을 보존하고 형식 오류만 있던 판정은 정리해 받는다. 그래도 남은 후보는 격리하고 `verification_call_failed` 한계를 남긴다. 그때 task는 `failed`(`review_output_incomplete`)이고 실패 사유는 그 호출의 `outcome`에 남는다. 받을 판정이 없거나 취소이면 단계 전체를 종료한다.
+7. **verify 결과.** 일부만 유효하면 사용 가능한 판정을 보존하고 task는 `failed`(`review_output_incomplete`)다. 보고서는 그 판정을 발견에 싣고 격리한 후보만 `unreviewed`로 둔다([보고서 연결](#보고서-연결)). 사용 가능한 판정이 전혀 없으면 `failed`(`review_output_invalid`)다.
 
 ## 실패와 task 결과
 
@@ -548,7 +650,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - 근거(`evidence`)는 `id`, `path`, `sha256`, `start_line`, `end_line`, `kind`, 선택 `origin`과 `symbol`을 가진다. `kind`는 code·test·document·manifest(환경 요구 원문)다. `origin`은 context·caller·test·observation(해석 창)이고, schema 0.7에서 cited(좁힌 인용)·header(나뉜 파일의 머리)·declaration(인용을 감싸는 선언)이 더해진다. document·manifest 근거에는 origin이 없다. 요청에서만 쓰는 `within`과 원문은 기록에 없다.
 - decoder(`record.Decode`)는 기록을 그 attempt의 run ID·attempt ID·snapshot manifest digest·단계와 대조한다. 근거마다 ID가 (snapshot digest, 경로, blob SHA-256, 행 범위)에서 다시 계산되는지, 경로가 manifest에 있고 blob이 같은지 확인한다. 모든 참조는 그 기록의 근거 목록 안에 있어야 한다. 허위 경로·행·blob·근거 ID, 다른 run·attempt·snapshot의 기록은 거부된다.
 - 사용량이 없으면 `null`이다. 요청을 만들기 전에 실패하면 요청 digest가 빈 문자열일 수 있다.
-- 실패한 기록은 시도한 호출, 준 입력, 앞 단계 상태를 남기고 모델 내용은 격리한다. 수락됐다가 버려진 호출의 `outcome`은 `result_discarded`다. verify가 실패하면 후보는 모두 `unreviewed`로 남는다.
+- 실패한 기록은 시도한 호출, 준 입력, 앞 단계 상태를 남기고 모델 내용은 격리한다. 수락됐다가 버려진 호출의 `outcome`은 `result_discarded`다. verify가 실패하면 후보는 모두 `unreviewed`로 남는다. 일부 후보만 판정하고 실패한 verify(`review_output_incomplete`, `review_input_incomplete`)는 수락 기록을 남기고, 보고서는 그 판정을 싣는다([보고서 연결](#보고서-연결)).
 - 보고서가 검토 완료로 판단하려면 DB task 성공과 검증된 역할 기록을 함께 확인한다.
 
 ### schema 0.2
@@ -588,13 +690,15 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - 근거는 최대 256개다. 한 근거는 파일 전체 단위일 수 있다. origin에 cited·header·declaration이 더해진다.
 - investigate 후보는 최대 16개(`investigate_1`~`16`)이고 verify의 후보와 판정은 최대 20개다. 후보에 선택 `mechanism`(2,400바이트 이하)이 있다. 서술 필드는 1,200바이트, verify의 목록 항목은 1,200바이트 이하다.
 - 이전 schema 기록은 이전 한도(근거 40개, 후보 `_1`~`_4`, 서술 400바이트, 새 origin과 `mechanism` 없음)로만 읽는다. 이전 예시의 바이트가 그대로 읽히는지 `TestEarlierSchemaRecordsStayReadable`이 확인한다.
-- 보고서 생성기 20이 0.7 기록을 읽는다(`CitedReviewDecoder`). 서술 상한은 기록을 만든 생성기 버전으로 정한다. [보고서](REPORT.md)
+- 보고서 생성기 20부터 0.7 기록을 읽는다(`CitedReviewDecoder`). 서술 상한은 기록을 만든 생성기 버전으로 정한다. [보고서](REPORT.md)
+- 형식 오류를 정리해 받은 기록은 `review_output_degraded` 한계를 가진다. 정리한 호출은 `accepted`이면서 `output_errors`에 원래 코드를 남기고, 그 뒤에 실패한 호출이 이어질 수 있다. 호출 순서 검사는 이 한계가 있는 기록에서만 이를 받는다. 필드와 형식이 바뀌지 않았고 이전 기록에는 이 한계가 없어 같은 규칙으로 읽히므로 schema는 0.7을 유지한다.
 
 ## 보고서 연결
 
 보고서 규칙의 전체는 [보고서](REPORT.md)에 있다. 검토 기록과 직접 맞물리는 규칙은 다음과 같다.
 
-- 필수 검토 역할은 계획된 `review.*` task의 `required_for_verdict`로 정한다. 하나 이상이고 모두 수락됐을 때만 `ai_review: performed`, 하나도 없으면 `not_performed`다. 필수가 아닌 역할은 `coverage.ai_review.optional_tasks`에 결과와 사유를 적고 수행으로 세지 않는다. 검토 task가 없는 계획은 필수 역할이 없다.
+- 필수 검토 역할은 계획된 `review.*` task의 `required_for_verdict`로 정한다. 하나 이상이고 모두 수락됐을 때만 `ai_review: performed`, 하나도 없으면 `not_performed`다. 생성기 21부터 일부 후보만 판정하고 실패한 verify task(`review_output_incomplete`, `review_input_incomplete`, 전체와 slice)는 결과가 `accepted_incomplete`다. 계보 검사를 통과한 수락 기록의 판정을 발견에 싣고 판정하지 못한 후보만 사유와 함께 `unreviewed`로 둔다. 이 결과는 수락으로 센다. task는 실패로 남으므로 보고서는 `partial`이고 `review_verification_incomplete` 한계와 분석 공백 `role_accepted_incomplete`가 남는다(A59).
+- 형식 복구 뒤 뺀 항목은 분석 공백(`review_candidate_omitted`·`interpretation_items_omitted`는 코드 분석, `document_items_omitted`는 문서 분석, `environment_notes_omitted`는 환경 분석)으로 보인다. 후보나 가설을 뺀 보고서는 `no_actionable_findings` 대신 `inconclusive`다. 필수가 아닌 역할은 `coverage.ai_review.optional_tasks`에 결과와 사유를 적고 수행으로 세지 않는다. 검토 task가 없는 계획은 필수 역할이 없다.
 - `coverage.review_calls`는 호출마다 `pack_id`·`pack_version`과 호출이 든 task(`task_key`)를 싣는다. 최대 2,013개다. `llm_exposed_files`는 slice 기록이 보낸 경로도 센다.
 - 앞 단계·탐색·도구 산출물의 SHA-256, 관찰 ID, verify 후보와 앞 단계 후보가 맞지 않으면 그 단계를 `review_lineage_mismatch:<task>`로 제외한다. verify 근거 중 앞 단계와 ID가 같은 발췌는 앞 단계 항목 그대로여야 한다([인용](#인용)). 같은 발췌가 앞 단계마다 다른 출처 표시(`context`·`observation`)로 올 수 있으므로 어느 한 항목과 같으면 받는다.
 - 모델이 서술한 숫자를 run 상태나 통계로 쓰지 않는다. 도구 관찰과 모델 후보는 서로 다른 산출물이다.
@@ -615,5 +719,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - 동적 디스패치와 실제 빌드·런타임 구성이 결정하는 호출은 제공된 발췌와 실행 기록으로 판단한다. 정적으로 연결한 지원 범위는 [파일 사이의 호출 근거](#파일-사이의-호출-근거)에 있다.
 - 실행·재현 주장 거부와 민감값 패턴은 정규식이다. 다른 표현을 모두 잡지 못한다.
 - 미완료가 사라진다는 보장은 없다. 끝내 검증되지 않은 후보는 `unreviewed`로 격리하고 task는 실패한다.
+- 범위 없는 긴 발췌를 반대 근거로 인용한 verify 판정은 복구 뒤 그 후보가 인용한 범위로 정리된다(`citation_range_from_candidate`). 그 범위가 반박하는 줄을 담는다는 보장은 없다. 판정과 인용은 그대로 보이고 한계 코드가 정리했다는 사실을 밝힌다. 그 범위가 없으면 발췌 전체(`citation_range_unspecified`)라 위치가 덜 정확하다.
+- 분류는 코드 단위다. 한 코드가 여러 원인을 묶으면(예: `text_invalid`는 서술 한도와 민감값 패턴) 같은 처리를 받는다. 형식 정리의 실제 모델 응답 빈도와 정리한 항목의 품질은 측정하지 않았다.
 - `roleRules`는 "근거·관찰 ID"를 인용하라고 하고 verify 계약은 "근거 ID"만 말한다. 이 어긋남은 구조(관찰 ID 처리 규칙)로 막았고, 문구 정리는 다음 지침 개정에서 독립 작성자가 판단한다.
 - 모델의 자신감과 서술은 측정된 정확도가 아니다. 품질은 [평가](EVALUATION.md)의 판정과 지표로만 말한다.

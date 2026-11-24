@@ -22,10 +22,16 @@ func (c sectionContext) gaps() []Gap {
 		switch code, detail := splitCode(l); code {
 		case LimResultManifestMissing, LimResultManifestRejected:
 			add(SectionReport, code, nil, detail)
-		case record.LimDocumentScopeItemsOmitted, record.LimContractComparisonOmitted:
+		case record.LimDocumentScopeItemsOmitted, record.LimContractComparisonOmitted, record.LimDocumentItemsOmitted:
 			// A contract whose comparison was left out stays unchecked
 			// (status unknown) in the documents section.
 			add(SectionDocuments, code, nil, detail)
+		case record.LimEnvironmentNotesOmitted:
+			add(SectionEnvironment, code, nil, detail)
+		case record.LimCandidateOmitted, record.LimInterpretItemsOmitted:
+			// Model output items left out after the format repair
+			// (docs/REVIEW.md#출력-오류-분류).
+			add(SectionCodeReview, code, nil, detail)
 		}
 	}
 	switch r.Coverage.TestStatus {

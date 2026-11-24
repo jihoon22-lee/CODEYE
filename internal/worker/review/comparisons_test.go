@@ -500,6 +500,15 @@ func TestComparisonOmittedOnlyOnceTheRepairIsSpent(t *testing.T) {
 			!slices.Contains(run.inv.Limitations, limCandidateOmitted) || len(run.inv.ContractComparisons) != 1 {
 			t.Fatalf("investigate %+v, candidates %d, comparisons %+v, limitations %v", s, len(run.inv.Candidates), run.inv.ContractComparisons, run.inv.Limitations)
 		}
+		// The report does not read the left-out candidate as an absence of
+		// findings: a code review gap names it and the verdict stays
+		// inconclusive.
+		r := run.report
+		if r.QualityVerdict == report.VerdictNoActionable || !slices.ContainsFunc(r.Gaps, func(g report.Gap) bool {
+			return g.Section == report.SectionCodeReview && g.Code == limCandidateOmitted
+		}) {
+			t.Fatalf("report verdict %s, gaps %+v", r.QualityVerdict, r.Gaps)
+		}
 	})
 }
 

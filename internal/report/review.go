@@ -335,9 +335,6 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 	verdicts := map[string]record.Verification{}
 	evidence := map[string]record.Excerpt{}
 	if v := states["review.verify"]; verdictsUsable("review.verify", v) {
-		if verifyIncomplete("review.verify", v) {
-			limits.add(LimReviewVerificationIncomplete)
-		}
 		rec := v.reviewResult.Record
 		candidates = rec.Candidates
 		for _, x := range rec.Verifications {
@@ -365,9 +362,6 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 		var from *record.Record
 		switch {
 		case verdictsUsable("review.verify."+key, ver):
-			if verifyIncomplete("review.verify."+key, ver) {
-				limits.add(LimReviewVerificationIncomplete)
-			}
 			from = ver.reviewResult.Record
 			for _, x := range from.Verifications {
 				verdicts[x.CandidateID] = x

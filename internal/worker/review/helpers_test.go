@@ -311,5 +311,8 @@ func readRecord(t *testing.T, j analysis.Job, stage string) record.Record {
 	if err != nil {
 		t.Fatal(stage, err)
 	}
+	// Every output error code a role emits has a class
+	// (docs/REVIEW.md#출력-오류-분류).
+	requireRegisteredCodes(t, r)
 	return r
 }

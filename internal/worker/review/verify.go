@@ -27,7 +27,7 @@ import (
 const verifyContract = `For this role use exactly {"verifications":[{"candidate_id":"<id of input.candidates>","verdict":"supported|refuted|inconclusive","category":"correctness|error_handling|concurrency|resource_lifecycle|data_integrity|api_contract|security|maintainability|performance|test_gap","severity":"high|medium|low|info","severity_reason":"...","impact":"...","valid_conditions":["..."],"invalid_conditions":["..."],"supporting_evidence_ids":["ev_...:120-134"],"counterevidence_ids":["ev_...:88-96"],"unresolved_assumptions":["..."],"next_verification":["..."]}]}. Return one verdict per input candidate; each evidence list holds at most 8 distinct IDs and each condition or assumption list at most 4 items. Check callers, ownership, error paths, tests and each contract's scope. Cite only scope.excerpts IDs; for a long excerpt cite the candidate's own range or the lines that show the point, at most 80 lines, never its ID alone. Supported needs supporting code/test; refuted needs counterevidence; otherwise use inconclusive. Use observed_test_cases only for the cited assertion. Never claim reproduction. Give 1-3 next_verification items that are reading or review steps, not commands.`
 
 const verifyRepairRules = "\nFormat repair: your previous output for the candidates in input.repair.candidates was rejected with the listed platform error codes; " +
-	"evidence names each rejected citation by its field and the excerpt it cited. Return a verifications entry only for those candidates. " +
+	"issues names each fault by field and, for a citation, the excerpt it cited. Return a verifications entry only for those candidates. " +
 	"Cite an ID of input.repair.accepted_evidence_ids alone or with a range; cite an excerpt of input.repair.range_required_evidence only as " +
 	"\"<evidence id>:<start>-<end>\" inside its start_line..end_line and at most 80 lines, for example the candidate's own cited range."
 
@@ -465,7 +465,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 			items, raws, outputErrs = parseVerificationItems(reply.Output, want, cite, observationIDs, s.limit().listText, repaired, hints)
 		}
 		got, itemErrs := map[string]record.Verification{}, map[string][]string{}
-		evidence := map[string][]evidenceIssue{}
+		issues := map[string][]verifyIssue{}
 		all := addLim(nil, outputErrs...)
 		for id, it := range items {
 			if it.ok && verificationClaimsExecution(it.v) {
@@ -479,7 +479,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 				}
 				continue
 			}
-			itemErrs[id], evidence[id] = it.errs, it.evidence
+			itemErrs[id], issues[id] = it.errs, it.issues
 			if it.resolvable {
 				held[id] = heldEntry{raws[id], len(s.rec.Calls)}
 			} else {
@@ -530,7 +530,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 				continue
 			}
 			next = append(next, p)
-			item := repairItem{ID: p.ID, Errors: itemErrs[p.ID], Evidence: evidence[p.ID]}
+			item := repairItem{ID: p.ID, Errors: itemErrs[p.ID], Issues: issues[p.ID]}
 			if len(item.Errors) == 0 {
 				item = prior[p.ID]
 				item.ID = p.ID

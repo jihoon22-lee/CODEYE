@@ -53,7 +53,7 @@ func (c sectionContext) lineCoverage(doc *record.ScopeDoc, l *ReviewLedger) {
 	}
 	for _, sl := range doc.Slices {
 		investigate, accepted, why := investigationRequest(c.states[sl.InvestigateTask])
-		verified := verifiedCandidatePaths(c.states[sl.VerifyTask])
+		verified := verifiedCandidatePaths(sl.VerifyTask, c.states[sl.VerifyTask])
 		st := c.states[sl.InvestigateTask]
 		if st != nil && st.facts.Status == string(domain.TaskBudgetExhausted) && investigate == nil {
 			why = lineBudgetExhausted
@@ -91,7 +91,7 @@ func (c sectionContext) lineCoverage(doc *record.ScopeDoc, l *ReviewLedger) {
 	}
 	overview, accepted, overviewReason := investigationRequest(c.states["review.investigate"])
 	if overview != nil {
-		verified := verifiedCandidatePaths(c.states["review.verify"])
+		verified := verifiedCandidatePaths("review.verify", c.states["review.verify"])
 		charged := map[string]bool{}
 		for _, e := range overview.Evidence {
 			if f := files[e.Path]; f != nil && contextEvidence(e) && e.SHA256 == f.info.SHA256 && e.End <= f.info.TotalLines {
@@ -254,9 +254,10 @@ func investigationRequest(st *taskState) (*record.Record, bool, string) {
 }
 
 // The verify task can succeed with no candidates and no model call. Only a
-// recorded model disposition on a candidate identifies paths followed up.
-func verifiedCandidatePaths(st *taskState) map[string]bool {
-	if !reviewAccepted(st) {
+// recorded model disposition on a candidate identifies paths followed up;
+// an incomplete verify task's accepted verdicts count (verifyIncomplete).
+func verifiedCandidatePaths(key string, st *taskState) map[string]bool {
+	if !verdictsUsable(key, st) {
 		return nil
 	}
 	r := st.reviewResult.Record

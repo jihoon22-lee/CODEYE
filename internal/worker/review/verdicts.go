@@ -10,7 +10,7 @@ import (
 )
 
 // repairInput is verify's repair block: the rejected candidates with their
-// codes and the citations at fault, the IDs citable alone and the excerpts
+// codes and the fields at fault, the IDs citable alone and the excerpts
 // citable only with a line range.
 type repairInput struct {
 	OutputErrors  []string        `json:"output_errors"`
@@ -20,17 +20,74 @@ type repairInput struct {
 }
 
 type repairItem struct {
-	ID       string          `json:"candidate_id"`
-	Errors   []string        `json:"errors"`
-	Evidence []evidenceIssue `json:"evidence,omitempty"`
+	ID     string        `json:"candidate_id"`
+	Errors []string      `json:"errors"`
+	Issues []verifyIssue `json:"issues,omitempty"`
 }
 
-// evidenceIssue is one citation fault of a verification: its list, the
-// sent excerpt it names and the code (no model text).
-type evidenceIssue struct {
+// verifyIssue is one fault of a verification: the field it concerns, the
+// sent excerpt a citation fault names (an ID the request did not hold is
+// never echoed) and the code. No model text.
+type verifyIssue struct {
 	Field string `json:"field"`
-	ID    string `json:"evidence_id"`
+	ID    string `json:"evidence_id,omitempty"`
 	Error string `json:"error"`
+}
+
+// verdictFields are the fields a verdict-rule code concerns when it names
+// one field.
+var verdictFields = map[string]string{
+	"next_verification_invalid": "next_verification", "verdict_invalid": "verdict", "category_invalid": "category",
+	"severity_invalid": "severity", "severity_not_assignable": "severity", "supported_without_code_evidence": "supporting_evidence_ids",
+	"valid_conditions_missing": "valid_conditions", "refuted_without_counterevidence": "counterevidence_ids",
+	"invalid_conditions_missing": "invalid_conditions", "unresolved_assumptions_missing": "unresolved_assumptions",
+}
+
+// faultFields names the fields of m (its citations resolved) that code
+// concerns.
+func faultFields(m modelVerification, code string, catalog map[string]Excerpt, listText int) []string {
+	lists := []struct {
+		name  string
+		items []string
+	}{{"valid_conditions", m.ValidConditions}, {"invalid_conditions", m.InvalidConditions}, {"unresolved_assumptions", m.UnresolvedAssumptions}, {"next_verification", m.NextVerification}}
+	evidence := []struct {
+		name string
+		ids  []string
+	}{{"supporting_evidence_ids", m.SupportingEvidence}, {"counterevidence_ids", m.Counterevidence}}
+	var out []string
+	switch code {
+	case "list_too_long":
+		for _, l := range lists {
+			if len(l.items) > 4 {
+				out = append(out, l.name)
+			}
+		}
+	case "text_invalid":
+		if !record.SafeText(m.SeverityReason) {
+			out = append(out, "severity_reason")
+		}
+		if !record.SafeText(m.Impact) {
+			out = append(out, "impact")
+		}
+		for _, l := range lists {
+			if slices.ContainsFunc(l.items, func(s string) bool { return !record.SafeText(s) || len(s) > listText }) {
+				out = append(out, l.name)
+			}
+		}
+	case "evidence_list_too_long", "evidence_id_duplicate", "evidence_id_unknown":
+		for _, l := range evidence {
+			unknown := slices.ContainsFunc(l.ids, func(id string) bool { _, ok := catalog[id]; return !ok })
+			if (code == "evidence_list_too_long" && len(l.ids) > 8) || (code == "evidence_id_duplicate" && len(tidyIDs(l.ids, len(l.ids))) != len(l.ids)) ||
+				(code == "evidence_id_unknown" && unknown) {
+				out = append(out, l.name)
+			}
+		}
+	default:
+		if f, ok := verdictFields[code]; ok {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // rangeRequired is a sent code or test excerpt of more than
@@ -70,7 +127,7 @@ type verifyItem struct {
 	ok         bool
 	resolvable bool
 	errs       []string
-	evidence   []evidenceIssue
+	issues     []verifyIssue
 	dropped    bool // observation IDs left out of its evidence lists
 }
 
@@ -194,9 +251,7 @@ func verifyEntry(item json.RawMessage, cite *citer, droppable map[string]bool, l
 	}{{"supporting_evidence_ids", supportIssues}, {"counterevidence_ids", counterIssues}} {
 		for _, is := range x.issues {
 			r.errs = addLim(r.errs, is.code)
-			if is.id != "" {
-				r.evidence = append(r.evidence, evidenceIssue{Field: x.field, ID: is.id, Error: is.code})
-			}
+			r.issues = append(r.issues, verifyIssue{Field: x.field, ID: is.id, Error: is.code})
 		}
 	}
 	catalog := cite.catalog()
@@ -217,6 +272,11 @@ func verifyEntry(item json.RawMessage, cite *citer, droppable map[string]bool, l
 		return r
 	}
 	r.errs = addLim(r.errs, errs...)
+	for _, code := range errs {
+		for _, field := range faultFields(m, code, catalog, listText) {
+			r.issues = append(r.issues, verifyIssue{Field: field, Error: code})
+		}
+	}
 	// An unknown ID the droppable rule may clear does not stop the
 	// resolution; the rule runs again on the resolved entry.
 	faults := r.errs
