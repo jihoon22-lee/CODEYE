@@ -1,0 +1,369 @@
+# CODEYE rule pack codeye-taint (Java). Written for CODEYE from the Java SE,
+# Servlet (javax and jakarta), JDBC, JPA, Spring MVC, Spring JDBC, Spring Web
+# and Spring Expression APIs; not derived from any third-party rule set.
+# Every rule is an intra-file taint rule: the source and the sink must be in
+# the same file (calls between methods of that file are followed). Sources
+# are HTTP request input only: HttpServletRequest accessors on a request
+# whose type is declared in the file, and Spring MVC handler parameters
+# annotated @RequestParam, @PathVariable, @RequestHeader, @RequestBody or
+# @CookieValue.
+rules:
+  - id: codeye.java.command-injection
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: HTTP request input selects the program or the shell command of a new process
+    metadata: {cwe: ["CWE-78"], codeye_family: command-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern: (HttpServletRequest $REQ).$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $HANDLER(..., @$ANN $TYPE $PARAM, ...) { ... }
+              - pattern-inside: |
+                  $RET $HANDLER(..., @$ANN(...) $TYPE $PARAM, ...) { ... }
+          - pattern: $PARAM
+          - metavariable-regex:
+              metavariable: $ANN
+              regex: ^(RequestParam|PathVariable|RequestHeader|RequestBody|CookieValue)$
+    pattern-sanitizers:
+      - pattern: Integer.parseInt(...)
+      - pattern: Integer.valueOf(...)
+      - pattern: Long.parseLong(...)
+      - pattern: Long.valueOf(...)
+      - pattern: Double.parseDouble(...)
+      - pattern: Boolean.parseBoolean(...)
+    pattern-sinks:
+      # Runtime.exec(String) splits the text into a program and arguments.
+      - patterns:
+          - pattern: $RT.exec($CMD, ...)
+          - pattern-either:
+              - pattern: Runtime.getRuntime().exec(...)
+              - pattern: (Runtime $R).exec(...)
+          - pattern-not: $RT.exec(new String[]{...}, ...)
+          - pattern-not: $RT.exec((String[] $ARGV), ...)
+          - focus-metavariable: $CMD
+      # In an argument vector: the program itself.
+      - patterns:
+          - pattern-either:
+              - pattern: $RT.exec(new String[]{$PROG, ...}, ...)
+              - pattern: new ProcessBuilder((String $PROG), ...)
+              - pattern: new ProcessBuilder(Arrays.asList($PROG, ...))
+              - pattern: new ProcessBuilder(List.of($PROG, ...))
+          - focus-metavariable: $PROG
+      # In an argument vector: the command text after "sh -c".
+      - patterns:
+          - pattern-either:
+              - pattern: $RT.exec(new String[]{"$SH", "-c", $CMD, ...}, ...)
+              - pattern: new ProcessBuilder("$SH", "-c", $CMD, ...)
+              - pattern: new ProcessBuilder(Arrays.asList("$SH", "-c", $CMD, ...))
+              - pattern: new ProcessBuilder(List.of("$SH", "-c", $CMD, ...))
+          - metavariable-regex:
+              metavariable: $SH
+              regex: ^(/bin/|/usr/bin/)?(sh|bash|zsh|dash)$
+          - focus-metavariable: $CMD
+
+  - id: codeye.java.path-traversal
+    mode: taint
+    languages: [java]
+    severity: WARNING
+    message: HTTP request input selects the file path of a file system operation
+    metadata: {cwe: ["CWE-22"], codeye_family: path-traversal}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern: (HttpServletRequest $REQ).$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $HANDLER(..., @$ANN $TYPE $PARAM, ...) { ... }
+              - pattern-inside: |
+                  $RET $HANDLER(..., @$ANN(...) $TYPE $PARAM, ...) { ... }
+          - pattern: $PARAM
+          - metavariable-regex:
+              metavariable: $ANN
+              regex: ^(RequestParam|PathVariable|RequestHeader|RequestBody|CookieValue)$
+    pattern-sanitizers:
+      - pattern: Integer.parseInt(...)
+      - pattern: Long.parseLong(...)
+      - pattern: FilenameUtils.getName(...)
+      - pattern: (Path $P).getFileName()
+      - pattern: (File $F).getName()
+      - pattern: new File(...).getName()
+      # A containment check (if (!p.startsWith(root)) throw ...) makes the
+      # checked value trusted afterwards.
+      - by-side-effect: true
+        patterns:
+          - pattern: $P.startsWith(...)
+          - focus-metavariable: $P
+    # Building a File or Path is not itself a sink; the operations that
+    # open, write, list or delete it are.
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: new FileInputStream($PATH)
+              - pattern: new FileOutputStream($PATH, ...)
+              - pattern: new FileReader($PATH, ...)
+              - pattern: new FileWriter($PATH, ...)
+              - pattern: new RandomAccessFile($PATH, ...)
+          - focus-metavariable: $PATH
+      - patterns:
+          - pattern: Files.$OP($PATH, ...)
+          - metavariable-regex:
+              metavariable: $OP
+              regex: ^(readAllBytes|readAllLines|readString|lines|newInputStream|newOutputStream|newBufferedReader|newBufferedWriter|write|writeString|delete|deleteIfExists|createFile|createDirectories|list|walk|newDirectoryStream)$
+          - focus-metavariable: $PATH
+      - patterns:
+          - pattern: (File $PATH).$OP(...)
+          - metavariable-regex:
+              metavariable: $OP
+              regex: ^(delete|createNewFile|mkdir|mkdirs|renameTo|listFiles)$
+          - focus-metavariable: $PATH
+
+  - id: codeye.java.sql-injection
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: HTTP request input is built into the text of an SQL or JPQL statement
+    metadata: {cwe: ["CWE-89"], codeye_family: sql-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern: (HttpServletRequest $REQ).$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $HANDLER(..., @$ANN $TYPE $PARAM, ...) { ... }
+              - pattern-inside: |
+                  $RET $HANDLER(..., @$ANN(...) $TYPE $PARAM, ...) { ... }
+          - pattern: $PARAM
+          - metavariable-regex:
+              metavariable: $ANN
+              regex: ^(RequestParam|PathVariable|RequestHeader|RequestBody|CookieValue)$
+    pattern-sanitizers:
+      - pattern: Integer.parseInt(...)
+      - pattern: Integer.valueOf(...)
+      - pattern: Long.parseLong(...)
+      - pattern: Long.valueOf(...)
+      - pattern: Double.parseDouble(...)
+      - pattern: Boolean.parseBoolean(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $STMT.executeQuery($SQL, ...)
+              - pattern: $STMT.executeUpdate($SQL, ...)
+              - pattern: $STMT.executeLargeUpdate($SQL, ...)
+              - pattern: $CONN.prepareStatement($SQL, ...)
+              - pattern: $CONN.prepareCall($SQL, ...)
+              - pattern: (Statement $STMT).execute($SQL, ...)
+              - pattern: (Statement $STMT).addBatch($SQL)
+              - pattern: $EM.createQuery($SQL, ...)
+              - pattern: $EM.createNativeQuery($SQL, ...)
+          - focus-metavariable: $SQL
+      - patterns:
+          - pattern-either:
+              - pattern: (JdbcTemplate $JDBC).$OP($SQL, ...)
+              - pattern: (NamedParameterJdbcTemplate $JDBC).$OP($SQL, ...)
+          - metavariable-regex:
+              metavariable: $OP
+              regex: ^(query|queryForObject|queryForList|queryForMap|queryForRowSet|queryForStream|update|batchUpdate|execute)$
+          - focus-metavariable: $SQL
+
+  - id: codeye.java.ssrf
+    mode: taint
+    languages: [java]
+    severity: WARNING
+    message: HTTP request input decides the address of an outgoing HTTP request
+    metadata: {cwe: ["CWE-918"], codeye_family: ssrf}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern: (HttpServletRequest $REQ).$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $HANDLER(..., @$ANN $TYPE $PARAM, ...) { ... }
+              - pattern-inside: |
+                  $RET $HANDLER(..., @$ANN(...) $TYPE $PARAM, ...) { ... }
+          - pattern: $PARAM
+          - metavariable-regex:
+              metavariable: $ANN
+              regex: ^(RequestParam|PathVariable|RequestHeader|RequestBody|CookieValue)$
+    pattern-sanitizers:
+      - pattern: Integer.parseInt(...)
+      - pattern: Long.parseLong(...)
+      - pattern: URLEncoder.encode(...)
+      # A constant scheme, host and path prefix leaves only the path or query
+      # to the input.
+      - patterns:
+          - pattern-either:
+              - pattern: '"$PREFIX" + $X'
+              - pattern: String.format("$PREFIX", ...)
+          - metavariable-regex:
+              metavariable: $PREFIX
+              regex: ^https?://[^/{}%]+/
+    pattern-sinks:
+      # The address object (URL, URI) carries the input of its constructor.
+      - patterns:
+          - pattern-either:
+              - pattern: (URL $URL).openConnection(...)
+              - pattern: (URL $URL).openStream()
+              - pattern: new URL($URL).openConnection(...)
+              - pattern: new URL($URL).openStream()
+              - pattern: HttpRequest.newBuilder($URL)
+              - pattern: HttpRequest.newBuilder().uri($URL)
+          - focus-metavariable: $URL
+      - patterns:
+          - pattern: (RestTemplate $CLIENT).$OP($URL, ...)
+          - metavariable-regex:
+              metavariable: $OP
+              regex: ^(getForObject|getForEntity|postForObject|postForEntity|postForLocation|put|delete|exchange|execute)$
+          - focus-metavariable: $URL
+
+  - id: codeye.java.unsafe-deserialization
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: HTTP request input is deserialized by a format that can construct arbitrary objects
+    metadata: {cwe: ["CWE-502"], codeye_family: unsafe-deserialization}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern: (HttpServletRequest $REQ).$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $HANDLER(..., @$ANN $TYPE $PARAM, ...) { ... }
+              - pattern-inside: |
+                  $RET $HANDLER(..., @$ANN(...) $TYPE $PARAM, ...) { ... }
+          - pattern: $PARAM
+          - metavariable-regex:
+              metavariable: $ANN
+              regex: ^(RequestParam|PathVariable|RequestHeader|RequestBody|CookieValue)$
+    pattern-sanitizers:
+      # An ObjectInputFilter limits the classes the stream may construct.
+      - by-side-effect: true
+        patterns:
+          - pattern: $IN.setObjectInputFilter(...)
+          - focus-metavariable: $IN
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (ObjectInputStream $IN).readObject()
+              - pattern: (ObjectInputStream $IN).readUnshared()
+              - pattern: new ObjectInputStream($IN).readObject()
+              - pattern: (XMLDecoder $IN).readObject()
+              - pattern: new XMLDecoder($IN).readObject()
+              - pattern: SerializationUtils.deserialize($IN)
+          - focus-metavariable: $IN
+
+  - id: codeye.java.code-evaluation
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: HTTP request input is evaluated as script or expression language code
+    metadata: {cwe: ["CWE-95"], codeye_family: code-evaluation}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern: (HttpServletRequest $REQ).$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $HANDLER(..., @$ANN $TYPE $PARAM, ...) { ... }
+              - pattern-inside: |
+                  $RET $HANDLER(..., @$ANN(...) $TYPE $PARAM, ...) { ... }
+          - pattern: $PARAM
+          - metavariable-regex:
+              metavariable: $ANN
+              regex: ^(RequestParam|PathVariable|RequestHeader|RequestBody|CookieValue)$
+    pattern-sanitizers:
+      - pattern: Integer.parseInt(...)
+      - pattern: Integer.valueOf(...)
+      - pattern: Long.parseLong(...)
+      - pattern: Long.valueOf(...)
+      - pattern: Double.parseDouble(...)
+      - pattern: Boolean.parseBoolean(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (ScriptEngine $ENGINE).eval($CODE, ...)
+              - pattern: $MANAGER.getEngineByName(...).eval($CODE, ...)
+              - pattern: (GroovyShell $SHELL).evaluate($CODE, ...)
+              - pattern: (ExpressionParser $PARSER).parseExpression($CODE, ...)
+              - pattern: (SpelExpressionParser $PARSER).parseExpression($CODE, ...)
+              - pattern: new SpelExpressionParser().parseExpression($CODE, ...)
+          - focus-metavariable: $CODE
+
+  - id: codeye.java.html-injection
+    mode: taint
+    languages: [java]
+    severity: WARNING
+    message: HTTP request input is written into an HTML response without escaping
+    metadata: {cwe: ["CWE-79"], codeye_family: html-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern: (HttpServletRequest $REQ).$METHOD(...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RET $HANDLER(..., @$ANN $TYPE $PARAM, ...) { ... }
+              - pattern-inside: |
+                  $RET $HANDLER(..., @$ANN(...) $TYPE $PARAM, ...) { ... }
+          - pattern: $PARAM
+          - metavariable-regex:
+              metavariable: $ANN
+              regex: ^(RequestParam|PathVariable|RequestHeader|RequestBody|CookieValue)$
+    pattern-sanitizers:
+      - pattern: Integer.parseInt(...)
+      - pattern: Long.parseLong(...)
+      - pattern: Encode.forHtml(...)
+      - pattern: Encode.forHtmlContent(...)
+      - pattern: Encode.forHtmlAttribute(...)
+      - pattern: StringEscapeUtils.escapeHtml4(...)
+      - pattern: HtmlUtils.htmlEscape(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (HttpServletResponse $RESP).getWriter().$PRINT($TEXT)
+              - patterns:
+                  - pattern-either:
+                      - pattern-inside: |
+                          $W = (HttpServletResponse $RESP).getWriter();
+                          ...
+                      - pattern-inside: |
+                          $WT $W = (HttpServletResponse $RESP).getWriter();
+                          ...
+                  - pattern: $W.$PRINT($TEXT)
+          - metavariable-regex:
+              metavariable: $PRINT
+              regex: ^(print|println|write|append)$
+          # A response declared as JSON or plain text is not parsed as HTML.
+          - pattern-not-inside: |
+              $R.setContentType("=~/^(application/json|text/plain)/");
+              ...
+          - focus-metavariable: $TEXT
