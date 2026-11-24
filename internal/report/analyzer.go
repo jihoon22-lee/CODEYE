@@ -43,6 +43,40 @@ func carriesRelated(analyzerID string) bool {
 	return false
 }
 
+// taintRuleText is the impact and the action of a finding of the Opengrep
+// taint rules: the Korean rule description is one paragraph whose first two
+// sentences state the risk and why it matters and whose rest is the fix.
+// Both are fixed texts, so the code-free export keeps them (init below).
+func taintRuleText(analyzerID, ruleID string) (impact, action string, ok bool) {
+	if analyzerID != "any.opengrep" {
+		return "", "", false
+	}
+	return splitRuleDescription(koreanRuleDescriptions[analyzerID+":"+ruleID])
+}
+
+func splitRuleDescription(text string) (impact, action string, ok bool) {
+	first := strings.Index(text, ". ")
+	if first < 0 {
+		return "", "", false
+	}
+	second := strings.Index(text[first+2:], ". ")
+	if second < 0 {
+		return "", "", false
+	}
+	cut := first + 2 + second + 1
+	return text[:cut], strings.TrimSpace(text[cut:]), true
+}
+
+func init() {
+	for key, text := range koreanRuleDescriptions {
+		if strings.HasPrefix(key, "any.opengrep:") {
+			if impact, action, ok := splitRuleDescription(text); ok {
+				safeTemplates[impact], safeTemplates[action] = true, true
+			}
+		}
+	}
+}
+
 func isPromiseRejectDiagnostic(analyzerID, ruleID string) bool {
 	return analyzerID == "javascript.eslint" && ruleID == "prefer-promise-reject-errors" ||
 		analyzerID == "javascript.eslint_typed" && ruleID == "@typescript-eslint/prefer-promise-reject-errors"
@@ -268,6 +302,10 @@ func toolFinding(ctx DecodeContext, analyzerID, category string, obs []Observati
 		f.Impact = textRejectImpact
 		f.Recommendation.Summary = textRejectAction
 		f.Verification = []string{textRejectVerification}
+	}
+	if impact, action, ok := taintRuleText(analyzerID, first.RuleID); ok {
+		f.Impact = impact
+		f.Recommendation.Summary = action
 	}
 	if analyzerID == "go.gofmt" && first.RuleID == "format_mismatch" {
 		f.Impact = textFormatImpact

@@ -487,11 +487,11 @@ def run(base, root, env, *, browser=False):
         sc_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["id"] == "go.staticcheck"]
         fmt_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["id"] == "go.gofmt"]
         err_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["id"] == "go.errcheck"]
-        # (docs/ANALYZERS.md): lizard, jscpd and gitleaks are planned for every
-        # project; this node has none of their tools, so each is a visible
-        # not_run stand-in.
+        # (docs/ANALYZERS.md): lizard, jscpd, gitleaks and the Opengrep taint
+        # rules are planned for this Go project; this node has none of their
+        # tools, so each is a visible not_run stand-in.
         structure_docs = [d for d in observation_docs if d.get("kind") == "analyzer_observations" and d["analyzer"]["ecosystem"] == "any"]
-        assert len(vet_docs) == len(sc_docs) == len(fmt_docs) == len(err_docs) == 1 and len(structure_docs) == 3 and len(observation_docs) == 7, [d.get("kind") for d in observation_docs]
+        assert len(vet_docs) == len(sc_docs) == len(fmt_docs) == len(err_docs) == 1 and len(structure_docs) == 4 and len(observation_docs) == 8, [d.get("kind") for d in observation_docs]
         assert all(d["outcome"]["exit_class"] == "not_run" and d["outcome"]["reason"] == "tool_not_configured" for d in [*structure_docs, *err_docs]), [d["outcome"] for d in [*structure_docs, *err_docs]]
         doc, sc_doc = vet_docs[0], sc_docs[0]
         fmt_doc = fmt_docs[0]
@@ -529,12 +529,12 @@ def run(base, root, env, *, browser=False):
         assert env_stage["reasons"] == ["model_source_not_approved"], go_stages
         static_stage = go_stages["static_analysis"]
         # This worker runs go vet and gofmt, optionally staticcheck. The
-        # unconfigured errcheck and three cross-language tools remain visible.
+        # unconfigured errcheck and four cross-language tools remain visible.
         completed_tools = 2 + bool(staticcheck)
         assert static_stage["state"] == "partial" and static_stage["succeeded"] == completed_tools, static_stage
-        assert static_stage["counts"] == {"unsupported": 7 - completed_tools}, static_stage
+        assert static_stage["counts"] == {"unsupported": 8 - completed_tools}, static_stage
         assert static_stage["reasons"] == ["tool_not_configured"], static_stage
-        assert static_stage["planned"] == 7 and go_stages["report"]["state"] == "succeeded", go_stages
+        assert static_stage["planned"] == 8 and go_stages["report"]["state"] == "succeeded", go_stages
         # The model review was not approved for this source: excluded by policy, never success.
         assert go_stages["code_review"]["state"] == "skipped" and go_stages["code_review"]["reasons"] == ["model_source_not_approved"], go_stages
         planned_review = go_stages["code_review"]["planned"]

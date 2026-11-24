@@ -33,8 +33,16 @@ func TestOpengrepRulesHaveKoreanDescriptions(t *testing.T) {
 		}
 	}
 	for key := range Korean.RuleDescriptions {
-		if rule, ok := strings.CutPrefix(key, opengrep.AnalyzerID+":"); ok && cwe[rule] == "" {
+		rule, ok := strings.CutPrefix(key, opengrep.AnalyzerID+":")
+		if ok && cwe[rule] == "" {
 			t.Fatalf("description for an unknown rule %s", key)
+		}
+		// Titles of the other analyzers' rules stay their whole description.
+		if text := Korean.RuleDescriptions[key]; !ok && firstSentence(text) != text {
+			t.Fatalf("%s: description has more than one sentence", key)
+		}
+		if _, _, split := splitRuleDescription(Korean.RuleDescriptions[key]); ok && !split {
+			t.Fatalf("%s: description has no fix after its impact", key)
 		}
 	}
 }
@@ -79,9 +87,40 @@ func TestOpengrepFlowStepsSurviveReportProjection(t *testing.T) {
 	if err != nil || !strings.Contains(string(full), "taint flow step 4 of 6: callee parameter") {
 		t.Fatalf("render lost the flow steps: %v", err)
 	}
+	// The finding carries the rule description: its first two sentences are
+	// the impact and the rest is the fix, so a finding the review supports
+	// shows both in its action card in either format.
+	supported := r
+	supported.Findings = append([]Finding(nil), r.Findings...)
+	for i, finding := range supported.Findings {
+		if !strings.HasPrefix(finding.Impact, "요청 입력이") || !strings.Contains(finding.Impact, "(CWE-") || finding.Recommendation.Summary == textRecommendation {
+			t.Fatalf("finding text %q / %q", finding.Impact, finding.Recommendation.Summary)
+		}
+		supported.Findings[i].Validation = ValidationSupported
+	}
+	html, err := RenderHTML(supported, "test", Korean)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Markdown escapes the punctuation of the text.
+	md := string(RenderMarkdownAt(supported, "test", Korean, DetailFull))
+	if !strings.Contains(string(html), "서버 권한으로 다른 명령이 실행될 수 있습니다.") || !strings.Contains(string(html), "shlex.quote로 각 인자를 인용하세요.") ||
+		!strings.Contains(md, `서버 권한으로 다른 명령이 실행될 수 있습니다\.`) || !strings.Contains(md, `shlex\.quote로 각 인자를 인용하세요\.`) {
+		t.Fatal("the rule description's impact or fix is not rendered")
+	}
+	// Without a review the diagnostics list shows the first sentence and
+	// the code-free export keeps both fixed texts.
+	if !strings.Contains(string(full), "(CWE-78)") {
+		t.Fatal("the diagnostics list lost the rule description")
+	}
 	free := Project(r, false)
 	if err := ValidateReport(free); err != nil {
 		t.Fatal(err)
+	}
+	for _, finding := range free.Findings {
+		if !strings.Contains(finding.Impact, "(CWE-") || finding.Recommendation.Summary == textRecommendation || finding.Recommendation.Summary == textOmitted {
+			t.Fatalf("code-free finding text %q / %q", finding.Impact, finding.Recommendation.Summary)
+		}
 	}
 	for _, o := range free.Observations {
 		for _, rel := range o.Related {
