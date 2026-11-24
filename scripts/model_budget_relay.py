@@ -6,7 +6,8 @@ It exists only for a human-approved, budget-capped OpenCode integration probe.
 
 Guarantees (see docs/EVALUATION.md):
 - Listens on 127.0.0.1 only, per-run random bearer token, no CORS, Origin rejected.
-- Rebuilds every upstream payload from text-only messages with a hard output cap.
+- Rebuilds every upstream payload from text-only messages with an output cap
+  (--max-output-tokens, never above the hard maximum).
 - Upstream is pinned to https://api.openai.com/v1/responses via http.client
   (no proxy, no redirect, no retry). OPENAI_API_KEY is read once from the
   environment and never written or logged.
@@ -14,6 +15,10 @@ Guarantees (see docs/EVALUATION.md):
   is sent. Failures, missing usage and crashes are charged the full reservation.
 - Errors returned to clients use non-retryable HTTP statuses only, so SDK retry
   loops cannot silently multiply paid calls.
+- One request is upstream at a time. A queued request whose client has closed
+  its connection (OpenCode gave up at its own timeout) is dropped before it is
+  reserved or forwarded; a client that only half-closes after sending looks the
+  same and is dropped too.
 - with --forbidden-phrases FILE (the evaluation corpus answer list), a
   request whose forwarded text contains a listed phrase is never reserved or
   forwarded; a durable `blocked` ledger record (no charge) is written instead.
@@ -38,6 +43,7 @@ import json
 import os
 import re
 import secrets
+import select
 import signal
 import socket
 import ssl
@@ -57,7 +63,7 @@ ALLOWED_MODELS = ("gpt-6.2-sol", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna")
 SERVICE_TIER = "default"
 REASONING_EFFORT = "low"
 
-HARD_CAP_MICROUSD = 20_000_000  # $20 for all processes sharing one ledger
+HARD_CAP_MICROUSD = 25_000_000  # $25 for all processes sharing one ledger
 # Integer microUSD per token. $X per 1M tokens == X microUSD per token.
 # Input is priced at the worst case of standard input ($2), 30m cache write
 # ($2.50) and 12h cache write ($5). Output ($10) includes reasoning tokens.
@@ -72,20 +78,31 @@ RESERVATION_FIXED_MICROUSD = 1000
 PER_MESSAGE_TOKENS = 16
 FIXED_PROMPT_TOKENS = 256
 
-OUTPUT_TOKEN_CAP = 1536
+# Output tokens per request: the worker's default review output budget and
+# its largest (internal/worker/opencode: DefaultOutputTokens, MaxOutputTokens).
+DEFAULT_MAX_OUTPUT_TOKENS = 16384
+HARD_MAX_OUTPUT_TOKENS = 65536
 MAX_MESSAGES = 64
-DEFAULT_MAX_INPUT_BYTES = 49152
-HARD_MAX_INPUT_BYTES = 65536
+# Message text per request: the worker's request budget (default 256 KiB, at
+# most 1 MiB) plus room for OpenCode's own messages.
+OPENCODE_MESSAGE_BYTES = 16384
+DEFAULT_MAX_INPUT_BYTES = (256 << 10) + OPENCODE_MESSAGE_BYTES
+HARD_MAX_INPUT_BYTES = (1 << 20) + OPENCODE_MESSAGE_BYTES
 DEFAULT_MAX_REQUESTS = 200
 HARD_MAX_REQUESTS = 1000
 FAILURE_HALT_THRESHOLD = 3
 
-MAX_BODY_BYTES = 1 << 20
+# A request body carries its messages JSON-escaped; a response carries up to
+# HARD_MAX_OUTPUT_TOKENS of text.
+MAX_BODY_BYTES = 4 << 20
 MAX_HEADER_BYTES = 16384
-MAX_RESPONSE_BYTES = 1 << 20
+MAX_RESPONSE_BYTES = 4 << 20
 CLIENT_IO_TIMEOUT_S = 30.0
-UPSTREAM_DEADLINE_S = 240.0
-QUEUE_WAIT_S = 300.0
+# The worker's default model call timeout (opencode.DefaultTimeout).
+UPSTREAM_DEADLINE_S = 600.0
+QUEUE_WAIT_S = UPSTREAM_DEADLINE_S + 60.0
+# How often a queued request checks that its client is still connected.
+QUEUE_POLL_S = 1.0
 
 LEDGER_VERSION = 1
 PRICING = {
@@ -137,6 +154,21 @@ class RequestRejected(Exception):
         super().__init__(code)
         self.status = status
         self.code = code
+
+
+class ClientGone(Exception):
+    """The client closed its connection before its request was forwarded."""
+
+
+def client_connected(sock) -> bool:
+    """Whether a client that has sent its whole request still holds the
+    connection: an HTTP client sends nothing more until the reply, so a
+    readable socket that peeks no bytes was closed by the client."""
+    try:
+        readable, _, _ = select.select([sock], [], [], 0)
+        return not readable or sock.recv(1, socket.MSG_PEEK) != b""
+    except (OSError, ValueError):
+        return False
 
 
 class UpstreamFailure(Exception):
@@ -511,7 +543,8 @@ def _text_of(content) -> str:
     raise RequestRejected(400, "unsupported_content")
 
 
-def build_upstream_request(request, model: str, max_input_bytes: int) -> dict:
+def build_upstream_request(request, model: str, max_input_bytes: int,
+                           max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS) -> dict:
     """Rebuild a text-only upstream payload from an untrusted client request."""
     if not isinstance(request, dict):
         raise RequestRejected(400, "invalid_json_object")
@@ -534,7 +567,7 @@ def build_upstream_request(request, model: str, max_input_bytes: int) -> dict:
         if total_bytes > max_input_bytes:
             raise RequestRejected(413, "input_too_large")
         rebuilt.append({"role": message["role"], "content": text})
-    output_cap = OUTPUT_TOKEN_CAP
+    output_cap = max_output_tokens
     for key in ("max_completion_tokens", "max_tokens"):
         if key in request and request[key] is not None:
             value = request[key]
@@ -898,9 +931,13 @@ def error_body(code: str, kind: str = "qa_relay_error", extra: dict | None = Non
 class Gateway:
     def __init__(self, *, model: str, ledger: Ledger, upstream: OpenAIUpstream, token: str,
                  max_input_bytes: int = DEFAULT_MAX_INPUT_BYTES, log=None,
-                 forbidden: ForbiddenPhrases | None = None, allow_model_echo: bool = False):
+                 forbidden: ForbiddenPhrases | None = None, allow_model_echo: bool = False,
+                 max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS):
         if allow_model_echo and forbidden is None:
             raise ValueError("allow_model_echo needs an answer list")
+        if not 1 <= max_output_tokens <= HARD_MAX_OUTPUT_TOKENS:
+            raise ValueError("max_output_tokens out of range")
+        self.max_output_tokens = max_output_tokens
         self.model = model
         self.ledger = ledger
         self.upstream = upstream
@@ -922,12 +959,12 @@ class Gateway:
             return False
         return hmac.compare_digest(header[7:].encode(), self.token)
 
-    def chat(self, body: bytes) -> tuple[int, str, bytes]:
+    def chat(self, body: bytes, client_alive=None) -> tuple[int, str, bytes]:
         try:
             request = json.loads(body)
         except ValueError:
             raise RequestRejected(400, "invalid_json") from None
-        prepared = build_upstream_request(request, self.model, self.max_input_bytes)
+        prepared = build_upstream_request(request, self.model, self.max_input_bytes, self.max_output_tokens)
         texts = [m["content"] for m in prepared["payload"]["input"]]
         hint = next((m.group(1) for m in map(ROLE_HINT.search, texts) if m), None)
         echo = None
@@ -943,9 +980,21 @@ class Gateway:
                                   message_count=prepared["message_count"], role_hint=hint, echo_matches=echo)
                 self.log({"event": "blocked", "status": BLOCKED_STATUS, "match_count": len(found), "role_hint": hint})
                 raise RequestRejected(403, BLOCKED_STATUS)
-        if not self.in_flight.acquire(timeout=QUEUE_WAIT_S):
-            raise RequestRejected(424, "relay_busy")
+        # Wait for the upstream slot; a client that left meanwhile is neither
+        # reserved nor forwarded (nothing would read the answer).
+        give_up = time.monotonic() + QUEUE_WAIT_S
+        while True:
+            if client_alive is not None and not client_alive():
+                self.log({"event": "client_gone", "role_hint": hint})
+                raise ClientGone()
+            if self.in_flight.acquire(timeout=max(0.0, min(QUEUE_POLL_S, give_up - time.monotonic()))):
+                break
+            if time.monotonic() >= give_up:
+                raise RequestRejected(424, "relay_busy")
         try:
+            if client_alive is not None and not client_alive():
+                self.log({"event": "client_gone", "role_hint": hint})
+                raise ClientGone()
             try:
                 rid = self.ledger.reserve(
                     model=self.model, reserved_microusd=prepared["reserved_microusd"],
@@ -1040,6 +1089,11 @@ def make_handler(gateway: Gateway):
         def _dispatch(self):
             try:
                 self._route()
+            except ClientGone:  # nobody to answer
+                self.close_connection = True
+            except (BrokenPipeError, ConnectionResetError):  # the client left before the reply
+                gateway.log({"event": "client_gone_before_reply"})
+                self.close_connection = True
             except RequestRejected as rejected:
                 self._reply(rejected.status, "application/json",
                             error_body(rejected.code, extra=getattr(rejected, "extra", None)))
@@ -1082,7 +1136,7 @@ def make_handler(gateway: Gateway):
                 if not chunk:
                     raise RequestRejected(400, "body_incomplete")
                 body += chunk
-            status, content_type, payload = gateway.chat(bytes(body))
+            status, content_type, payload = gateway.chat(bytes(body), lambda: client_connected(self.connection))
             self._reply(status, content_type, payload)
 
         do_GET = do_POST = do_PUT = do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = _dispatch
@@ -1152,7 +1206,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-requests", type=int, default=None,
                         help=f"ledger-wide request cap (default {DEFAULT_MAX_REQUESTS}, <= {HARD_MAX_REQUESTS})")
     parser.add_argument("--max-input-bytes", type=int, default=DEFAULT_MAX_INPUT_BYTES,
-                        help=f"per-request message text cap (<= {HARD_MAX_INPUT_BYTES})")
+                        help=f"per-request message text cap (default %(default)s: the worker's default request "
+                             f"budget plus OpenCode's messages; <= {HARD_MAX_INPUT_BYTES})")
+    parser.add_argument("--max-output-tokens", type=int, default=DEFAULT_MAX_OUTPUT_TOKENS,
+                        help=f"per-request output token cap, reserved in full (default %(default)s; "
+                             f"<= {HARD_MAX_OUTPUT_TOKENS})")
     parser.add_argument("--port", type=int, default=0, help="loopback port (default: ephemeral)")
     parser.add_argument("--report", action="store_true", help="print the ledger report and exit")
     parser.add_argument("--clear-halt", metavar="REASON",
@@ -1197,6 +1255,9 @@ def main(argv=None, *, _connection_factory=None) -> int:
         return 2
     if not 1 <= args.max_input_bytes <= HARD_MAX_INPUT_BYTES:
         print("invalid --max-input-bytes", file=sys.stderr)
+        return 2
+    if not 1 <= args.max_output_tokens <= HARD_MAX_OUTPUT_TOKENS:
+        print("invalid --max-output-tokens", file=sys.stderr)
         return 2
     if not 0 <= args.port <= 65535:
         print("invalid --port", file=sys.stderr)
@@ -1246,7 +1307,7 @@ def main(argv=None, *, _connection_factory=None) -> int:
         return 1
     gateway = Gateway(model=args.model, ledger=ledger, token=secrets.token_urlsafe(32),
                       upstream=upstream, max_input_bytes=args.max_input_bytes, forbidden=forbidden,
-                      allow_model_echo=args.allow_model_echo)
+                      allow_model_echo=args.allow_model_echo, max_output_tokens=args.max_output_tokens)
     server = start_server(gateway, args.port)
     if test_port is not None and gateway.port == test_port:
         server.server_close()

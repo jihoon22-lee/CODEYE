@@ -165,6 +165,23 @@ def pack_selection(languages=ROLE_EXAMPLE_LANGUAGES) -> tuple[dict, dict]:
     return pack, roles
 
 
+def carries_upstream_evidence(record: dict, *upstream: dict) -> bool:
+    """An excerpt ID is bound to path, blob and lines: a record's excerpt
+    with the ID of an upstream excerpt is one of the upstream entries
+    unchanged (record.CarriesUpstreamEvidence)."""
+    variants = {}
+    for u in upstream:
+        for e in u.get("evidence", []):
+            variants.setdefault(e["id"], []).append(e)
+    return all(e in variants.get(e["id"], [e]) for e in record.get("evidence", []))
+
+
+def shared_excerpt(record: dict, upstream: dict) -> dict:
+    """The first excerpt of record whose ID upstream also holds."""
+    ids = {e["id"] for e in upstream["evidence"]}
+    return next(e for e in record["evidence"] if e["id"] in ids)
+
+
 def check_stage_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> None:
     """Bind the review stage examples to the fixture bytes, the pack
     files, each other (upstream SHA-256, candidates) and the scope rules."""
@@ -213,6 +230,7 @@ def check_stage_examples(docs: dict, raw: dict, pack: dict, roles: dict) -> None
     verify = docs["verify"]
     upstream = docs["investigate"].get("candidates", []) + docs["interpret"].get("candidates", [])
     ensure(verify.get("candidates", []) == upstream, "verify candidates differ from the accepted upstream candidates")
+    ensure(carries_upstream_evidence(verify, docs["investigate"], docs["interpret"]), "verify evidence changes an upstream excerpt of the same ID")
     ensure([c["id"] for c in verify.get("candidates", [])] == [v["candidate_id"] for v in verify.get("verifications", [])], "review verification coverage")
 
 
@@ -557,7 +575,7 @@ def check_slice_examples(raw: dict, validators: dict) -> int:
             doc = docs[name]
             record_v.validate(doc)
             stage = name.split(".")[0]
-            ensure(doc["schema_version"] == "0.3" and doc["stage"] == stage and doc["slice"] == {"key": entry["key"], "modules": entry["modules"]}, "slice record identity: " + name)
+            ensure(doc["schema_version"] in ("0.3", "0.7") and doc["stage"] == stage and doc.get("slice") == {"key": entry["key"], "modules": entry["modules"]}, "slice record identity: " + name)
             ensure(all(doc[k] == scope[k] for k in ("snapshot_manifest_digest", "run_id", "attempt_id", "pack")), "slice record of another attempt: " + name)
             for e in doc["evidence"]:
                 body = (root / e["path"]).read_bytes()
@@ -579,6 +597,7 @@ def check_slice_examples(raw: dict, validators: dict) -> int:
         inv = {u["source"]: u for u in verify["upstream"]}.get("review.investigate.s001", {})
         ensure(inv.get("sha256") == hashlib.sha256(compact_json(raw["investigate.s001"])).hexdigest(), "slice verify upstream investigate digest")
         ensure(verify["candidates"] == docs["investigate.s001"]["candidates"], "slice verify candidates differ from its investigate candidates")
+        ensure(carries_upstream_evidence(verify, docs["investigate.s001"]), "slice verify evidence changes an investigate excerpt of the same ID")
 
     check(docs)
 
@@ -597,6 +616,7 @@ def check_slice_examples(raw: dict, validators: dict) -> int:
         case("slice of nine modules", lambda d: d["investigate.s001"]["slice"].update(modules=[f"go:m{i}" for i in range(9)])),
         case("slice verify given an interpret candidate", lambda d: d["verify.s001"]["candidates"][0].update(origin="interpret")),
         case("slice interpret record", lambda d: d["investigate.s001"].update(stage="interpret")),
+        case("slice verify relabels an investigate excerpt", lambda d: shared_excerpt(d["verify.s001"], d["investigate.s001"]).update(origin="declaration")),
         case("whole-run record bound to a slice", lambda d: [d["investigate.s001"].pop("slice"), d["investigate.s001"].update(schema_version="0.2")]),
         case("scope file in two slices", lambda d: d["scope"]["slices"][2]["files"].append(dict(first_file(d)))),
         case("scope offered not sorted", lambda d: d["scope"]["overview"]["offered"].reverse()),

@@ -27,6 +27,13 @@ const (
 	SchemaVersionWorkflow = "0.5"
 	// SchemaVersionWorkflowReading retains submitted HTTP source context on a whole-run investigation.
 	SchemaVersionWorkflowReading = "0.6"
+	// SchemaVersionCitedLines is every role record of a worker that sends
+	// whole files and declaration units with line numbers: the shape decides
+	// the variant (a slice reference, the contract stage, a probe, workflow
+	// selections or reading), the evidence holds sent units and the narrowed
+	// line ranges the model cited (origin cited), candidates explain their
+	// mechanism and the prose bounds are wider (bounds).
+	SchemaVersionCitedLines = "0.7"
 
 	StageEnvironment = "environment"
 	StageDocuments   = "documents"
@@ -48,9 +55,27 @@ const (
 	maxEvidence     = 40
 	maxObservations = 16
 	// maxText bounds the JSON-encoded size of one review model text
-	// field, so a downstream request carrying it keeps within the request
-	// budget.
-	maxText = 400
+	// field of the earlier record versions; maxListText one verification
+	// condition, assumption or step.
+	maxText     = 400
+	maxListText = 600
+	// LegacyProseText is maxText for readers of the earlier records.
+	LegacyProseText = maxText
+	// Bounds of schema SchemaVersionCitedLines. MaxProseText bounds one
+	// model prose field, MaxMechanismText a candidate's mechanism and
+	// MaxCandidates the candidates of one investigation. The worker applies
+	// the bounds its request budget derives (never more than these).
+	MaxProseText     = 1200
+	MaxMechanismText = 2400
+	MaxCandidates    = 16
+	maxCitedEvidence = 256
+	// OriginCited marks a line range the model cited inside a sent excerpt,
+	// OriginHeader the package and import lines sent with a unit that does
+	// not start the file, OriginDeclaration the enclosing declarations a
+	// verifier gets of a cited range.
+	OriginCited       = "cited"
+	OriginHeader      = "header"
+	OriginDeclaration = "declaration"
 	// RoleMaxCalls bounds the first request, repairs and retries together.
 	RoleMaxCalls = 3
 )
@@ -204,15 +229,44 @@ type Record struct {
 // Accepted reports whether the record carries an accepted stage result.
 func (r Record) Accepted() bool { return r.Outcome == OutcomeAccepted }
 
+// bounds are the limits a record version enforces.
+type bounds struct {
+	evidence   int
+	lines      int // lines of one evidence entry (a cited range: MaxCitedLines)
+	text       int
+	mechanism  int // 0: no mechanism field
+	listText   int
+	candidates int // investigate candidates of one record
+	origins    map[string]bool
+	ids        *regexp.Regexp
+}
+
+func boundsOf(schema string) bounds {
+	if schema == SchemaVersionCitedLines {
+		return bounds{evidence: maxCitedEvidence, lines: MaxSourceBytes, text: MaxProseText, mechanism: MaxMechanismText, listText: MaxProseText,
+			candidates: MaxCandidates, origins: citedOrigins, ids: candidateIDRuleWide}
+	}
+	return bounds{evidence: maxEvidence, lines: 80, text: maxText, listText: maxListText, candidates: 4, origins: origins, ids: candidateIDRule}
+}
+
+// ProseText bounds one model prose field to limit JSON-encoded bytes (and
+// the credential and execution-claim rules of ModelText).
+func ProseText(s string, limit int) bool {
+	return SafeText(s) && JSONLen(s) <= limit && !ClaimsExecution(s)
+}
+
 var (
-	candidateIDRule = regexp.MustCompile(`^(investigate|interpret)_[1-4]$`)
-	moduleRef       = regexp.MustCompile(`^(cpp|go|java|javascript|python|rust):(\.|[^:\x00-\x1f]+)$`)
-	requirementID   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}@[^@\x00-\x1f]+$`)
-	observationID   = regexp.MustCompile(`^obs_[0-9a-f]{20}$`)
-	taskKey         = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,63}$`)
-	packID          = regexp.MustCompile(`^[a-z][a-z0-9.-]{0,63}$`)
-	kinds           = map[string]bool{"code": true, "test": true, "document": true, "manifest": true}
-	origins         = map[string]bool{"": true, "context": true, "caller": true, "test": true, "observation": true}
+	candidateIDRule     = regexp.MustCompile(`^(investigate|interpret)_[1-4]$`)
+	candidateIDRuleWide = regexp.MustCompile(`^(investigate|interpret)_([1-9]|1[0-6])$`)
+	citedOrigins        = map[string]bool{"": true, "context": true, "caller": true, "test": true, "observation": true,
+		OriginCited: true, OriginHeader: true, OriginDeclaration: true}
+	moduleRef     = regexp.MustCompile(`^(cpp|go|java|javascript|python|rust):(\.|[^:\x00-\x1f]+)$`)
+	requirementID = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}@[^@\x00-\x1f]+$`)
+	observationID = regexp.MustCompile(`^obs_[0-9a-f]{20}$`)
+	taskKey       = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,63}$`)
+	packID        = regexp.MustCompile(`^[a-z][a-z0-9.-]{0,63}$`)
+	kinds         = map[string]bool{"code": true, "test": true, "document": true, "manifest": true}
+	origins       = map[string]bool{"": true, "context": true, "caller": true, "test": true, "observation": true}
 	// Upstream sources each stage may name. Interpret names analyzer tasks:
 	// any task key outside the discovery and review namespaces (docs/ANALYZERS.md);
 	// the report binds each to that task's accepted observations artifact.
@@ -318,9 +372,25 @@ func Validate(r Record, want Expect) error {
 		if r.Slice != nil || want.Slice != "" || r.Stage != StageInvestigate || !r.Accepted() || r.WorkflowReading == nil {
 			return invalid("workflow reading requires an accepted global investigation")
 		}
+	case SchemaVersionCitedLines:
+		if (r.Slice != nil) != (want.Slice != "") {
+			return invalid("slice reference")
+		}
+		if r.Slice != nil {
+			if err := checkSlice(r, want); err != nil {
+				return err
+			}
+			if r.ContractProbe != nil || r.WorkflowReading != nil || r.WorkflowSelections != nil {
+				return invalid("whole-run content on a slice")
+			}
+		}
+		if r.WorkflowReading != nil && (r.Stage != StageInvestigate || !r.Accepted()) {
+			return invalid("workflow reading requires an accepted global investigation")
+		}
 	default:
 		return invalid("schema_version")
 	}
+	b := boundsOf(r.Schema)
 	switch {
 	case (r.Stage != StageContract && !slices.Contains(Stages, r.Stage)) || (want.Stage != "" && want.Stage != r.Stage):
 		return invalid("stage")
@@ -332,7 +402,7 @@ func Validate(r Record, want Expect) error {
 		return invalid("record belongs to another snapshot or attempt")
 	case r.Upstream == nil || r.Evidence == nil || r.Observations == nil || r.Limitations == nil || r.Calls == nil:
 		return invalid("missing list")
-	case len(r.Evidence) > maxEvidence || len(r.Observations) > maxObservations:
+	case len(r.Evidence) > b.evidence || len(r.Observations) > maxObservations:
 		return invalid("input size")
 	case !codes(r.Limitations):
 		return invalid("limitations")
@@ -354,7 +424,7 @@ func Validate(r Record, want Expect) error {
 	}
 	catalog := map[string]Excerpt{}
 	for _, e := range r.Evidence {
-		if err := checkExcerpt(e, r.Snapshot, want.Lookup); err != nil {
+		if err := checkExcerpt(e, r.Snapshot, want.Lookup, b); err != nil {
 			return err
 		}
 		if _, dup := catalog[e.ID]; dup {
@@ -373,10 +443,13 @@ func Validate(r Record, want Expect) error {
 		}
 		observations[o.ID] = o
 	}
-	if err := checkStageContent(r, catalog, observations); err != nil {
+	if err := checkCitedRanges(r); err != nil {
 		return err
 	}
-	if err := checkInsights(r, catalog); err != nil {
+	if err := checkStageContent(r, catalog, observations, b); err != nil {
+		return err
+	}
+	if err := checkInsights(r, catalog, b); err != nil {
 		return err
 	}
 	if err := checkWorkflowSelections(r); err != nil {
@@ -503,12 +576,18 @@ func checkUpstream(r Record) error {
 	return nil
 }
 
-func checkExcerpt(e Excerpt, snapshot string, lookup func(string) (string, bool)) error {
+func checkExcerpt(e Excerpt, snapshot string, lookup func(string) (string, bool), b bounds) error {
+	lines := b.lines
+	if e.Origin == OriginCited {
+		lines = MaxCitedLines
+	}
 	switch {
-	case domain.ValidateEvidencePath(e.Path) != nil || !hex64.MatchString(e.SHA256) || e.Start < 1 || e.End < e.Start || e.End-e.Start+1 > 80:
+	case domain.ValidateEvidencePath(e.Path) != nil || !hex64.MatchString(e.SHA256) || e.Start < 1 || e.End < e.Start || e.End-e.Start+1 > lines:
 		return invalid("evidence location")
-	case !kinds[e.Kind] || !origins[e.Origin] || e.Text != "" || (e.Symbol != "" && !symbol.MatchString(e.Symbol)):
+	case !kinds[e.Kind] || !b.origins[e.Origin] || e.Text != "" || e.Within != "" || (e.Symbol != "" && !symbol.MatchString(e.Symbol)):
 		return invalid("evidence attributes")
+	case (e.Origin == OriginCited || e.Origin == OriginHeader || e.Origin == OriginDeclaration) && (e.Kind != "code" && e.Kind != "test"):
+		return invalid("evidence origin")
 	case (e.Kind == "code" || e.Kind == "test") && !sourceKindMatches(e.Path, e.Kind):
 		return invalid("evidence kind")
 	case (e.Origin == "caller" || e.Origin == "test") != (e.Symbol != "") || (e.Origin == "test" && e.Kind != "test") || (e.Origin == "caller" && e.Kind != "code"):
@@ -568,7 +647,7 @@ func docsCover(ids []string, catalog map[string]Excerpt, scope string) bool {
 	return true
 }
 
-func checkStageContent(r Record, catalog map[string]Excerpt, observations map[string]ObservationRef) error {
+func checkStageContent(r Record, catalog map[string]Excerpt, observations map[string]ObservationRef, b bounds) error {
 	empty := func(n ...int) bool {
 		for _, v := range n {
 			if v != 0 {
@@ -590,7 +669,7 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 			return invalid("documents content")
 		}
 	case StageInvestigate:
-		if !empty(notes, docs, len(r.Limits), len(r.Verifications), len(r.Observations)) || len(r.Candidates) > 4 || (failed && len(r.Candidates) != 0) {
+		if !empty(notes, docs, len(r.Limits), len(r.Verifications), len(r.Observations)) || len(r.Candidates) > b.candidates || (failed && len(r.Candidates) != 0) {
 			return invalid("investigate content")
 		}
 	case StageInterpret:
@@ -599,7 +678,7 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 			return invalid("interpret content")
 		}
 	case StageVerify:
-		if !empty(notes, docs, len(r.Limits)) || len(r.Candidates) > 6 || len(r.Verifications) != len(r.Candidates) {
+		if !empty(notes, docs, len(r.Limits)) || len(r.Candidates) > b.candidates+2 || len(r.Verifications) != len(r.Candidates) {
 			return invalid("verify content")
 		}
 	case StageContract:
@@ -609,7 +688,7 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 	}
 	for _, n := range r.EnvironmentNotes {
 		if !moduleRef.MatchString(n.Module) || n.RequirementIDs == nil || n.EvidenceIDs == nil || len(n.RequirementIDs) > 4 ||
-			!ModelText(n.AffectedChecks) || !ModelText(n.StillCheckable) || !ModelText(n.NeededObservation) {
+			!ProseText(n.AffectedChecks, b.text) || !ProseText(n.StillCheckable, b.text) || !ProseText(n.NeededObservation, b.text) {
 			return invalid("environment note")
 		}
 		_, dir, _ := strings.Cut(n.Module, ":")
@@ -629,13 +708,13 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 		}
 	}
 	for _, c := range r.Contracts {
-		if !ModelText(c.Statement) || !ValidScopePath(c.AppliesTo) || !refs(c.EvidenceIDs, catalog, 4, "document") ||
+		if !ProseText(c.Statement, b.text) || !ValidScopePath(c.AppliesTo) || !refs(c.EvidenceIDs, catalog, 4, "document") ||
 			!DocumentClaimCovers(c.EvidenceIDs, catalog, c.AppliesTo, c.Statement) {
 			return invalid("contract")
 		}
 	}
 	for _, c := range r.Conflicts {
-		if !ModelText(c.Summary) || !ModelText(c.Impact) || !ValidScopePath(c.Scope) || !refs(c.FirstEvidence, catalog, 3, "document") || !refs(c.SecondEvidence, catalog, 3, "document") ||
+		if !ProseText(c.Summary, b.text) || !ProseText(c.Impact, b.text) || !ValidScopePath(c.Scope) || !refs(c.FirstEvidence, catalog, 3, "document") || !refs(c.SecondEvidence, catalog, 3, "document") ||
 			!docsCover(c.FirstEvidence, catalog, c.Scope) || !docsCover(c.SecondEvidence, catalog, c.Scope) {
 			return invalid("conflict")
 		}
@@ -648,26 +727,27 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 		}
 	}
 	for _, q := range r.Questions {
-		if !ModelText(q.Question) || !ValidScopePath(q.AppliesTo) || !refs(q.EvidenceIDs, catalog, 4, "document") ||
+		if !ProseText(q.Question, b.text) || !ValidScopePath(q.AppliesTo) || !refs(q.EvidenceIDs, catalog, 4, "document") ||
 			!DocumentClaimCovers(q.EvidenceIDs, catalog, q.AppliesTo, q.Question) {
 			return invalid("question")
 		}
 	}
 	for _, n := range r.InstructionNotes {
-		if !ModelText(n.Note) || !refs(n.EvidenceIDs, catalog, 3, "document") {
+		if !ProseText(n.Note, b.text) || !refs(n.EvidenceIDs, catalog, 3, "document") {
 			return invalid("instruction note")
 		}
 	}
 	counts := map[string]int{}
 	for _, c := range r.Candidates {
 		counts[c.Origin]++
-		if c.ID != fmt.Sprintf("%s_%d", c.Origin, counts[c.Origin]) || !candidateIDRule.MatchString(c.ID) {
+		if c.ID != fmt.Sprintf("%s_%d", c.Origin, counts[c.Origin]) || !b.ids.MatchString(c.ID) {
 			return invalid("candidate id")
 		}
 		if (r.Stage == StageInvestigate || r.Stage == StageInterpret) && c.Origin != r.Stage {
 			return invalid("candidate origin")
 		}
-		if !CandidateTextOK(c.CandidateText) || !refs(c.Evidence, catalog, 6, "code", "test", "document") || !hasKind(c.Evidence, catalog, "code") {
+		if !candidateTextWithin(c.CandidateText, b) || !refs(c.Evidence, catalog, 6, "code", "test", "document") || !hasKind(c.Evidence, catalog, "code") ||
+			(b.mechanism > 0 && (c.Origin == StageInvestigate || c.Origin == StageInterpret) && r.Stage == c.Origin && c.Mechanism == "") {
 			return invalid("candidate %s", c.ID)
 		}
 		if (c.Origin == StageInterpret) != (len(c.ObservationIDs) > 0) || len(c.ObservationIDs) > 4 {
@@ -681,7 +761,7 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 	}
 	if r.Stage == StageVerify {
 		// A slice verify checks its own slice's investigate candidates only.
-		if counts[StageInterpret] > 2 || counts[StageInvestigate] > 4 || (r.Slice != nil && counts[StageInterpret] > 0) {
+		if counts[StageInterpret] > 2 || counts[StageInvestigate] > b.candidates || (r.Slice != nil && counts[StageInterpret] > 0) {
 			return invalid("verify candidates")
 		}
 		reviewed := 0
@@ -689,7 +769,7 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 			if v.CandidateID != r.Candidates[i].ID {
 				return invalid("verification order")
 			}
-			if err := CheckVerification(v, catalog); err != nil {
+			if err := CheckVerificationWithin(v, catalog, b.listText); err != nil {
 				return err
 			}
 			for _, s := range append(append(append([]string{v.SeverityReason, v.Impact}, v.ValidConditions...), v.InvalidConditions...), append(v.UnresolvedAssumptions, v.NextVerification...)...) {
@@ -706,7 +786,7 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 		}
 	}
 	for _, l := range r.Limits {
-		if !ModelText(l.Statement) || len(l.ObservationIDs) == 0 || len(l.ObservationIDs) > 4 {
+		if !ProseText(l.Statement, b.text) || len(l.ObservationIDs) == 0 || len(l.ObservationIDs) > 4 {
 			return invalid("interpretation limit")
 		}
 		for i, id := range l.ObservationIDs {
@@ -718,16 +798,56 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 	return nil
 }
 
-// CandidateTextOK bounds the prose of a review candidate.
-func CandidateTextOK(c CandidateText) bool {
-	return ModelText(c.Title) && ModelText(c.Condition) && ModelText(c.Impact) && ModelText(c.Improvement) && ModelText(c.Counterpoint)
+// CandidateTextOK bounds the prose of a review candidate of the earlier
+// record versions (no mechanism).
+func CandidateTextOK(c CandidateText) bool { return candidateTextWithin(c, boundsOf(SchemaVersion)) }
+
+// CandidateTextWithin bounds the prose of a review candidate: text per field
+// and mechanism for the optional mechanism (0 forbids one).
+func CandidateTextWithin(c CandidateText, text, mechanism int) bool {
+	return candidateTextWithin(c, bounds{text: text, mechanism: mechanism})
+}
+
+func candidateTextWithin(c CandidateText, b bounds) bool {
+	if c.Mechanism != "" && (b.mechanism == 0 || !ProseText(c.Mechanism, b.mechanism)) {
+		return false
+	}
+	return ProseText(c.Title, b.text) && ProseText(c.Condition, b.text) && ProseText(c.Impact, b.text) &&
+		ProseText(c.Improvement, b.text) && ProseText(c.Counterpoint, b.text)
+}
+
+// checkCitedRanges keeps a cited range inside what the record sent: every
+// excerpt of origin cited lies within another excerpt of the same blob that
+// is not itself a citation. A verifier also carries the cited ranges of its
+// candidates as they came (the report binds them to the upstream record),
+// and may narrow one of those further.
+func checkCitedRanges(r Record) error {
+	cited := map[string]bool{}
+	if r.Stage == StageVerify {
+		for _, c := range r.Candidates {
+			for _, id := range c.Evidence {
+				cited[id] = true
+			}
+		}
+	}
+	for _, e := range r.Evidence {
+		if e.Origin != OriginCited || cited[e.ID] {
+			continue
+		}
+		if !slices.ContainsFunc(r.Evidence, func(x Excerpt) bool {
+			return (x.Origin != OriginCited || cited[x.ID]) && x.ID != e.ID && x.Path == e.Path && x.SHA256 == e.SHA256 && x.Start <= e.Start && e.End <= x.End
+		}) {
+			return invalid("cited range outside the sent evidence")
+		}
+	}
+	return nil
 }
 
 func checkCalls(r Record) error {
 	if len(r.Calls) > RoleMaxCalls || (r.Stage == StageContract && len(r.Calls) > ContractMaxCalls) {
 		return invalid("too many calls")
 	}
-	accepted := false
+	accepted, degraded := false, slices.Contains(r.Limitations, LimOutputDegraded)
 	for i, c := range r.Calls {
 		if c.Role != r.Stage || c.Attempt != i+1 || !ValidCode(c.Outcome) || c.PackID != r.Pack.ID || c.PackVersion != r.Pack.Version ||
 			!hex64.MatchString(c.PackDigest) || len(c.PackFiles) == 0 || len(c.PackFiles) > 24 || c.RequestBytes < 0 || c.OutputErrors == nil || !codes(c.OutputErrors) ||
@@ -742,15 +862,17 @@ func checkCalls(r Record) error {
 		ok := c.Outcome == OutcomeAccepted
 		last := i == len(r.Calls)-1
 		extra := c.Purpose != ""
-		if extra && (c.Purpose != WorkflowSelectionPurpose || r.Schema != SchemaVersionWorkflow ||
+		if extra && (c.Purpose != WorkflowSelectionPurpose || (r.Schema != SchemaVersionWorkflow && r.Schema != SchemaVersionCitedLines) ||
 			r.Stage != StageDocuments || !r.Accepted() || !accepted || !last ||
 			(ok && len(c.OutputErrors) != 0)) {
 			return invalid("workflow call sequence")
 		}
 		primaryLast := last || (i == len(r.Calls)-2 && r.Calls[i+1].Purpose == WorkflowSelectionPurpose)
 		// A verifier accepts candidates per item, so both of its calls may
-		// carry accepted items; any other stage accepts one primary output.
-		if ok && !extra && r.Stage != StageVerify && (accepted || len(c.OutputErrors) != 0 || !primaryLast) {
+		// carry accepted items; any other stage accepts one primary output,
+		// the last one unless the platform degraded an earlier output after
+		// the later calls failed (LimOutputDegraded).
+		if ok && !extra && r.Stage != StageVerify && (accepted || (!degraded && (len(c.OutputErrors) != 0 || !primaryLast))) {
 			return invalid("call sequence")
 		}
 		accepted = accepted || ok

@@ -98,7 +98,7 @@ func TestModelSecretFromEnvironment(t *testing.T) {
 	}
 	m, err := ResolveModel(c, layout, home)
 	if err != nil || m.ID != "openai/gpt-6.2-sol" || m.CredentialFile != layout.ModelSecret() || m.Source != ModelSourceSecret ||
-		m.OpenCode != filepath.Join(home.Home, ".opencode", "bin", "opencode") || m.Timeout != 180*time.Second || m.Notice != "" {
+		m.OpenCode != filepath.Join(home.Home, ".opencode", "bin", "opencode") || m.Timeout != 600*time.Second || m.Notice != "" {
 		t.Fatalf("%+v %v", m, err)
 	}
 	if !ModelProbeDue(layout, m) {

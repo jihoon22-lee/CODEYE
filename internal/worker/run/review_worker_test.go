@@ -5,6 +5,7 @@ package run
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -54,7 +55,10 @@ func (f *roleScripted) Review(_ context.Context, _ executor.Runner, q opencode.R
 			EvidenceID string `json:"evidence_id"`
 		} `json:"requirements"`
 		Scope struct {
-			Excerpts []struct{ ID, Kind, Path string } `json:"excerpts"`
+			Excerpts []struct {
+				ID, Kind, Path string
+				Start, End     int
+			} `json:"excerpts"`
 		} `json:"scope"`
 		Candidates []struct {
 			ID       string   `json:"id"`
@@ -85,20 +89,26 @@ func (f *roleScripted) Review(_ context.Context, _ executor.Runner, q opencode.R
 	case "investigate":
 		code := ""
 		for _, e := range in.Scope.Excerpts {
+			// A whole unit longer than the citation limit is cited by its
+			// first lines.
+			id := e.ID
+			if e.End-e.Start+1 > 80 {
+				id = fmt.Sprintf("%s:%d-%d", e.ID, e.Start, e.Start+79)
+			}
 			if e.Kind == "code" && e.Path == "gateway.go" {
-				code = e.ID
+				code = id
 				break
 			}
 			if e.Kind == "code" && code == "" {
-				code = e.ID
+				code = id
 			}
 		}
-		body = map[string]any{"candidates": []map[string]any{{"title": "재시도 경계가 불분명함", "condition": "하위 호출이 계속 실패하는 경우", "impact": "호출이 반복될 수 있다.",
+		body = map[string]any{"candidates": []map[string]any{{"title": "재시도 경계가 불분명함", "condition": "하위 호출이 계속 실패하는 경우", "mechanism": "실패한 호출을 같은 경로로 다시 보낸다.", "impact": "호출이 반복될 수 있다.",
 			"improvement": "재시도 한도를 문서와 맞춘다.", "counterpoint": "호출자가 한도를 보장할 수 있다.", "evidence_ids": []string{code}}}}
 	case "interpret":
 		o := in.Observations[0]
 		body = map[string]any{"hypotheses": []map[string]any{{"observation_ids": []string{o.ID}, "title": "형식 문자열과 인자 형식이 다름", "condition": "Describe가 호출되는 경우",
-			"impact": "출력 문자열이 잘못 만들어진다.", "improvement": "형식 지정자를 인자 형식과 맞춘다.", "counterpoint": "출력이 사람에게만 보이는 진단일 수 있다.", "evidence_ids": o.Evidence[:1]}},
+			"mechanism": "형식 지정자와 다른 형식의 인자가 전달된다.", "impact": "출력 문자열이 잘못 만들어진다.", "improvement": "형식 지정자를 인자 형식과 맞춘다.", "counterpoint": "출력이 사람에게만 보이는 진단일 수 있다.", "evidence_ids": o.Evidence[:1]}},
 			"limits": []any{}}
 	case "verify":
 		f.mu.Lock()
@@ -347,7 +357,7 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatalf("calls %+v exposed %v", r.Coverage.ReviewCalls, r.Coverage.LLMExposedFiles)
 			}
 			for _, call := range r.Coverage.ReviewCalls {
-				if call.PackID != "review" || call.PackVersion != "2.6.0" {
+				if call.PackID != "review" || call.PackVersion != "2.8.0" {
 					t.Fatalf("call %+v", call)
 				}
 			}
@@ -428,7 +438,7 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatal(err)
 			}
 			md := string(report.RenderMarkdown(r, strings.Repeat("0", 64), report.Korean))
-			if !strings.Contains(md, "review@2.6.0") || !strings.Contains(md, "`review.interpret`") || (tc.extra == nil && !strings.Contains(md, "`no_tool_observations`")) {
+			if !strings.Contains(md, "review@2.8.0") || !strings.Contains(md, "`review.interpret`") || (tc.extra == nil && !strings.Contains(md, "`no_tool_observations`")) {
 				t.Fatalf("markdown lacks the pack or the optional row:\n%s", md)
 			}
 		})

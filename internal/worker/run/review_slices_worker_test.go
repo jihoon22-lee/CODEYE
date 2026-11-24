@@ -101,7 +101,10 @@ func (f *sliceScripted) Review(ctx context.Context, _ executor.Runner, q opencod
 	}
 	var in struct {
 		Scope struct {
-			Excerpts []struct{ ID string } `json:"excerpts"`
+			Excerpts []struct {
+				ID         string
+				Start, End int
+			} `json:"excerpts"`
 		} `json:"scope"`
 		Candidates []struct {
 			ID       string   `json:"id"`
@@ -117,8 +120,13 @@ func (f *sliceScripted) Review(ctx context.Context, _ executor.Runner, q opencod
 	case "documents":
 		body = map[string]any{"contracts": []any{}, "conflicts": []any{}, "questions": []any{}, "instruction_notes": []any{}}
 	case "investigate":
-		body = map[string]any{"candidates": []map[string]any{{"title": "입력 검증 경계가 불분명함", "condition": "빈 입력이 들어오는 경우", "impact": "잘못된 결과를 반환할 수 있다.",
-			"improvement": "입력 계약을 확인한다.", "counterpoint": "호출자가 미리 검사할 수 있다.", "evidence_ids": []string{in.Scope.Excerpts[0].ID}}}}
+		e := in.Scope.Excerpts[0]
+		id := e.ID
+		if e.End-e.Start+1 > 80 {
+			id = fmt.Sprintf("%s:%d-%d", e.ID, e.Start, e.Start+79)
+		}
+		body = map[string]any{"candidates": []map[string]any{{"title": "입력 검증 경계가 불분명함", "condition": "빈 입력이 들어오는 경우", "mechanism": "빈 입력이 검사 없이 계산에 쓰인다.", "impact": "잘못된 결과를 반환할 수 있다.",
+			"improvement": "입력 계약을 확인한다.", "counterpoint": "호출자가 미리 검사할 수 있다.", "evidence_ids": []string{id}}}}
 	case "verify":
 		var out []map[string]any
 		for _, c := range in.Candidates {
@@ -171,7 +179,9 @@ func runSlices(t *testing.T, caller *sliceScripted, maxCalls int, cancelOnBlock 
 	if _, err := os.Stat(goExe); err != nil {
 		t.Skip("go toolchain not found at GOROOT/bin")
 	}
-	h, err := discovery.Wrap(review.Handler{Static: cleanScreen{}, Caller: caller, MaxCalls: maxCalls}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe}})
+	// The smallest request budget: the fixture then needs slices.
+	small := review.Budget{RequestBytes: review.MinRequestBytes, OutputTokens: review.MinOutputTokens}
+	h, err := discovery.Wrap(review.Handler{Static: cleanScreen{}, Caller: caller, MaxCalls: maxCalls, Budget: small}, discovery.Config{Observer: discovery.ProbeObserver{GoExecutable: goExe}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +251,7 @@ func TestReviewSlicesThroughTheWorker(t *testing.T) {
 		for _, want := range []string{"review.investigate=succeeded/true", "review.verify=succeeded/true", "review.scope=succeeded/false",
 			"review.investigate.s001=succeeded/false", "review.verify.s001=succeeded/false",
 			"review.investigate.s006=budget_exhausted/false:review_budget_exhausted", "review.verify.s006=budget_exhausted/false:review_budget_exhausted",
-			"review.investigate.s009=skipped_policy/false:no_review_scope", "review.verify.s009=skipped_policy/false:no_review_scope"} {
+			"review.investigate.s010=skipped_policy/false:no_review_scope", "review.verify.s010=skipped_policy/false:no_review_scope"} {
 			if !strings.Contains(joined, want) {
 				t.Fatalf("missing %s in %v", want, rows)
 			}

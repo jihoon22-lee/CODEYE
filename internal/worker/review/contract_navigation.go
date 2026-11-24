@@ -56,12 +56,12 @@ func (c contractNavigationCandidate) input(i int) contractCandidateInput {
 		Symbol: symbol, ContractIndices: c.indices, WorkflowRoute: c.workflowRoute}
 }
 
-func (s *roleStage) fitNavigation(in *investigateInput, candidates []contractNavigationCandidate) []contractNavigationCandidate {
+func (s *roleStage) fitNavigation(in *investigateInput, candidates []contractNavigationCandidate, contract string) []contractNavigationCandidate {
 	in.NavigationCandidates = make([]contractCandidateInput, 0, len(candidates))
 	for i, c := range candidates {
 		in.NavigationCandidates = append(in.NavigationCandidates, c.input(i))
 	}
-	instructions := s.instructions(investigateContract + investigateProbeContract)
+	instructions := s.instructions(contract + investigateProbeContract)
 	for len(candidates) > 0 {
 		b, err := marshal(in)
 		if _, ok := s.fits(instructions, b, true); err == nil && ok {

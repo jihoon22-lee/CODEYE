@@ -26,7 +26,7 @@ except ImportError as exc:
 from bundle_checks.common import ROOT, ensure, expect_invalid, json_file, make_validators, within_root, yaml_file
 from bundle_checks.report import check_analyzer, check_analyzer_observations, check_document_comparisons, check_document_excerpt_contracts, check_go_test_failure_contracts, check_observations, check_plan, check_report
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
-from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_slice_examples, check_workflow_example, pack_selection, slice_examples
+from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_slice_examples, check_workflow_example, pack_selection, shared_excerpt, slice_examples
 from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_shared_service_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
 from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_project_defect_corpus, check_markdown_anchors, check_mode_names, check_stage_labels, heading_anchors
 
@@ -268,6 +268,32 @@ def main() -> None:
     fourth = copy.deepcopy(retried)
     fourth["calls"][2]["attempt"] = 4
     expect_invalid("review call attempt 4", review_validator.validate, fourth)
+    # Schema 0.7 (docs/REVIEW.md#schema-07줄-번호-인용): narrowed citations, a
+    # candidate's mechanism, wider candidate IDs and longer prose; none of them
+    # is valid in an earlier record, which keeps its own bounds.
+    wide = copy.deepcopy(role_docs["investigate"])
+    wide["evidence"][0]["origin"] = "cited"
+    wide["candidates"][0].update(id="investigate_16", mechanism="m" * 2400, impact="i" * 1200)
+    review_validator.validate(wide)
+    earlier = copy.deepcopy(role_docs["investigate"])
+    earlier["schema_version"] = "0.2"
+    earlier["candidates"][0].pop("mechanism", None)
+    review_validator.validate(earlier)
+    seven_negatives = {
+        "0.7 mechanism over 2400 bytes": (wide, lambda d: d["candidates"][0].update(mechanism="m" * 2401)),
+        "0.7 prose over 1200 bytes": (wide, lambda d: d["candidates"][0].update(impact="i" * 1201)),
+        "0.7 candidate ID beyond 16": (wide, lambda d: d["candidates"][0].update(id="investigate_17")),
+        "0.7 unknown origin": (wide, lambda d: d["evidence"][0].update(origin="whole")),
+        "cited origin on an earlier record": (earlier, lambda d: d["evidence"][0].update(origin="cited")),
+        "mechanism on an earlier record": (earlier, lambda d: d["candidates"][0].update(mechanism="m")),
+        "fifth candidate ID on an earlier record": (earlier, lambda d: d["candidates"][0].update(id="investigate_5")),
+        "prose over 400 bytes on an earlier record": (earlier, lambda d: d["candidates"][0].update(impact="i" * 401)),
+    }
+    for name, (base, edit) in seven_negatives.items():
+        bad = copy.deepcopy(base)
+        edit(bad)
+        expect_invalid(name, review_validator.validate, bad)
+    print(f"PASS: review record schema 0.7 bounds and earlier-record bounds; {len(seven_negatives)} negative cases")
     dependencies = json_file(ROOT / "examples/dependencies.json")
     validators["dependencies.schema.json"].validate(dependencies)
     for name, edit in {
@@ -510,6 +536,7 @@ def main() -> None:
         ("review pack digest drift", "verify", set_key("calls", "0" * 64, 0, "pack_sha256"), None),
         ("review language guide outside the selection", "investigate", lambda d: d["calls"][0]["pack_files"].insert(3, "languages/python.md"), None),
         ("review altered upstream candidate", "verify", lambda d: d["candidates"][0].update(title=d["candidates"][0]["title"] + "!"), None),
+        ("review verify relabels an upstream excerpt", "verify", lambda d: shared_excerpt(d, role_docs["investigate"]).update(origin="declaration"), None),
         ("review model reproduction verdict", "verify", set_key("verifications", "reproduced", 0, "verdict"), review_validator.validate),
         ("review source text", "investigate", lambda d: d["evidence"][0].update(text="raw source"), review_validator.validate),
         ("review platform verdict in environment output", "environment", lambda d: d["environment_notes"][0].update(status="satisfied"), review_validator.validate),

@@ -184,7 +184,8 @@ func TestDocumentRequestPreservesDistinctProductEvidenceUnderMetadataPressure(t 
 	for i := range 12 {
 		files[fmt.Sprintf("README-%02d-%s.md", i, strings.Repeat("&", 64))] = "The dashboard opens a local region.\n"
 	}
-	in, stored, inventory := collectDocumentSelection(t, files)
+	// The metadata lists press on the smallest request budget.
+	in, stored, inventory := collectDocumentSelectionWith(t, files, domain.Scope{Kind: "full"}, smallBudget)
 	if len(in.Modules) >= 32 || len(in.Modules) >= len(inventory.Modules) || len(in.Overlapping) >= len(inventory.OverlappingGuidance) ||
 		!slices.Contains(in.Limitations, "document_lists_shortened") || !slices.Contains(stored.Limitations, "document_lists_shortened") ||
 		!slices.Contains(stored.Limitations, "document_excerpt_only") || !slices.Contains(stored.Limitations, "documents_outside_review_input") ||
@@ -447,6 +448,12 @@ func collectDocumentSelection(t *testing.T, files map[string]string) (docsInput,
 
 func collectDocumentSelectionInScope(t *testing.T, files map[string]string, scope domain.Scope) (docsInput, record.Record, *envdoc.Documents) {
 	t.Helper()
+	return collectDocumentSelectionWith(t, files, scope, Budget{})
+}
+
+// collectDocumentSelectionWith runs the documents role at a request budget.
+func collectDocumentSelectionWith(t *testing.T, files map[string]string, scope domain.Scope, budget Budget) (docsInput, record.Record, *envdoc.Documents) {
+	t.Helper()
 	j := treeJob(t, files)
 	j.Scope = scope
 	var in docsInput
@@ -457,7 +464,7 @@ func collectDocumentSelectionInScope(t *testing.T, files map[string]string, scop
 				Questions: []record.Question{}, InstructionNotes: []record.InstructionNote{}})
 		},
 	}}
-	h, err := discovery.Wrap(Handler{Static: vetStub{}, Caller: caller}, discovery.Config{})
+	h, err := discovery.Wrap(Handler{Static: vetStub{}, Caller: caller, Budget: budget}, discovery.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}

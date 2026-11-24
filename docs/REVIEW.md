@@ -4,7 +4,7 @@
 
 - 구현 위치: [`internal/worker/review`](../internal/worker/review), [`internal/worker/review/record`](../internal/worker/review/record), [`internal/worker/opencode`](../internal/worker/opencode), [`prompts/review`](../prompts/review)
 - 요구사항: REQ-004/005/009/010/011/012/013/026/027/030, NFR-007/008/010([요구사항](REQUIREMENTS.md))
-- 수용 시험: TC-05, TC-10~12, TC-16, TC-18, TC-33, TC-34, TC-76~79, TC-85~89, TC-97, TC-100, TC-123, TC-128, TC-129([시험](TESTING.md))
+- 수용 시험: TC-05, TC-10~12, TC-16, TC-18, TC-33, TC-34, TC-76~79, TC-85~89, TC-97, TC-100, TC-123, TC-128, TC-129, TC-287, TC-288([시험](TESTING.md))
 - 품질 평가와 지침 개정 절차: [평가](EVALUATION.md)
 
 ## 공통 경계
@@ -24,7 +24,7 @@
 
 | `pack.yaml` id·version | 기록 schema | 역할 |
 |---|---|---|
-| `review` 2.6.0 | `0.2`, slice `0.3`, 계약 후속 검토 `0.4`, HTTP 경로를 고른 문서 `0.5`, 함께 읽은 HTTP 근거 `0.6` | environment, documents, investigate, interpret, verify, contract |
+| `review` 2.8.0 | `0.7`(줄 번호 인용, 모든 역할과 slice). 이전 워커의 `0.2`, slice `0.3`, 계약 후속 검토 `0.4`, HTTP 경로를 고른 문서 `0.5`, 함께 읽은 HTTP 근거 `0.6`도 읽는다 | environment, documents, investigate, interpret, verify, contract |
 
 - 지침 개정은 이 지침 하나에 한다. 개정의 검증 절차는 [평가](EVALUATION.md)에 있다.
 - 보고서는 Go가 만들므로 종합·보고 역할에 모델을 호출하지 않는다.
@@ -55,7 +55,7 @@
 |---|---|---|---|---|---|
 | `review.environment` | `environment` | 아니오 | 선언된 요구가 모두 `satisfied`면 `no_environment_gap`. 탐색 산출물을 쓸 수 없으면 `dependency_failed` | 차이가 있는 모듈의 요구·근거 ID·노드 관측·판정 | gap 모듈마다 영향 메모 하나. 플랫폼 판정은 바꾸지 못한다 |
 | `review.documents` | `documents` | 계획 시 범위 안에 안내 문서가 있을 때만 | 문서 없음 `no_documents`(필수 아님), 선택된 문서 없음 `documents_not_selected`, `dependency_failed` | 선택 문서 발췌 | 적용 경로가 있는 계약·충돌·질문, 지침성 문구 메모, 근거가 있는 문서 품질 판단 |
-| `review.investigate` | `code_review` | 예 | — | 수락된 문서·환경 결과, 모듈별 코드·테스트 발췌. 원시 도구 진단은 넣지 않는다(REQ-009) | 후보 `investigate_N`(0~4개), 구현 근거가 있는 강점, 전체 조사에서 문서 계약과 코드의 대조 |
+| `review.investigate` | `code_review` | 예 | — | 수락된 문서·환경 결과, 모듈별 코드·테스트의 [검토 단위](#검토-단위). 원시 도구 진단은 넣지 않는다(REQ-009) | 후보 `investigate_N`(0개부터 보낸 코드 양과 출력 한도가 정한 상한까지, 최대 12개), 구현 근거가 있는 강점, 전체 조사에서 문서 계약과 코드의 대조 |
 | `review.interpret` | `code_review` | 아니오 | 해석할 도구 관찰이 없으면 `no_tool_observations` | 관찰 ID·규칙·위치와 주변 줄 창 | 관찰에 연결한 가설 `interpret_N`(최대 2) 또는 해석 한계 |
 | `review.verify` | `code_review` | 예 | investigate·interpret가 모두 수락되지 않으면 `dependency_failed`. 후보가 없으면 호출 없이 성공(`no_candidates_to_verify`) | 수락된 두 역할의 후보, 문서 계약, 관찰, 발췌와 호출자·테스트 확장 | 후보별 판정 |
 | `review.contract` | `code_review` | 아니오 | 유효한 선택과 새 구현 줄이 없으면 `no_review_scope`, 선행 기록이 없거나 맞지 않으면 `dependency_failed`, 호출 상한이면 `review_budget_exhausted` | 수락된 문서와 앞선 미확인 판정, 다시 읽은 범위 안의 발췌 | 같은 계약에 대한 대조 한 건 |
@@ -72,7 +72,7 @@
 | [문서 계약 후속 검토](../prompts/review/contract.md) | 문서 약속과 원래 판단, 새 구현과 관련 호출자·테스트 발췌 | 적용 범위와 문서 근거가 같은 대조 또는 미확인 |
 
 - 도구 진단 해석은 독립 조사와 별도 입력으로 수행하고 원시 메시지·규칙·위치를 보존한다. 도구의 실행 상태, finding 수, 심각도를 다시 말하지 않고, 진단이 없다는 사실을 깨끗한 코드로 서술하지 않는다.
-- 출력 개수 한도: documents는 계약 6, 충돌 3, 질문 4, 지침성 문구 메모 3개까지. interpret는 가설 2, 한계 3개까지이고 합해서 하나 이상. investigate는 후보 4개와 강점 3개까지다. 문서 검토는 명확성·완전성·실행 가능성·일관성에 관한 근거 있는 판단을 4개까지, 전체 조사 역할은 고른 문서 계약과 코드의 대조를 6개까지 기록한다. 대조는 계약 순번과 그 문서 근거에 묶인다. 일치·부분 일치·불일치에는 해당 경로의 구현 코드 근거가 필요하고, 미확인은 근거 부족을 설명한다. 보고서에서 대조가 없는 수락 계약은 미확인으로 표시한다.
+- 출력 개수 한도: documents는 계약 6, 충돌 3, 질문 4, 지침성 문구 메모 3개까지. interpret는 가설 2, 한계 3개까지이고 합해서 하나 이상. investigate 후보는 줄 번호를 붙여 보낸 코드·테스트 원문이 32 KiB 이하이면 4개, 32 KiB마다 하나씩 늘어 출력 한도가 정한 상한(4~12개, [요청 크기](#요청-크기))까지이고 요청에 그 수를 적는다. 강점은 3개까지다. 문서 검토는 명확성·완전성·실행 가능성·일관성에 관한 근거 있는 판단을 4개까지, 전체 조사 역할은 고른 문서 계약과 코드의 대조를 6개까지 기록한다. 대조는 계약 순번과 그 문서 근거에 묶인다. 일치·부분 일치·불일치에는 해당 경로의 구현 코드 근거가 필요하고, 미확인은 근거 부족을 설명한다. 보고서에서 대조가 없는 수락 계약은 미확인으로 표시한다([문서 계약 대조](#문서-계약-대조)). 후보와 interpret 가설은 근거 ID를 6개까지, verify의 근거 목록은 8개, 조건·가정 목록은 4개까지 인용한다. 이 한도는 역할 계약 문자열에도 적는다.
 - 문서 응답의 계약·질문·문서 품질 항목은 각각 서로 다른 근거 ID를 1~4개 인용한다. 지침성 문구 메모와 충돌의 각 편은 각각 1~3개다. 요청은 가장 직접적인 한 근거를 우선하도록 안내하고, 형식 복구 오류 코드에는 문제가 있는 근거 ID 필드 이름을 함께 표시한다.
 - 문서 검토는 README·사용 안내·공개 인터페이스에서 사용자가 확인할 수 있는 동작을 우선 고른다. 하나의 계약이 한 조건과 관찰 가능한 결과를 설명하며, 지원 범위와 예외는 별도로 판정할 수 있을 때 각각 기록한다. 설계에서 읽은 기대에는 구현을 확인할 질문을 연결한다.
 - 조사 역할은 사용자 진입점에서 결정적인 분기를 거쳐 결과가 전달되는 근거를 대조한다. 계약이 함수 자체의 동작으로 한정되면 그 함수의 구현을 대조한다. 확인하지 못한 호출 경로나 결과는 미확인으로 남긴다. 검토에서 읽은 테스트 단언은 해당 조건의 보조 근거다.
@@ -136,7 +136,7 @@
 - JS/TS 계약과 인용 원문에 명시된 옵션이나 공개 API가 있으면, 같은 범위에서 ESM으로 공개한 함수와 리터럴 기본값, 옵션이 가르는 반환·오류 경로를 우선 발췌한다. 상대 import로 같은 함수를 부르고 나머지 리터럴 입력이 같은 테스트를 찾아 기본값과 반대 조건을 검사하는 단언을 함께 보낸다. 비동기 함수는 기다린 결과나 명시적인 Promise 결과를 확인한다. 바인딩이 여러 개이거나 콜백 전달만 보이면 이 연결을 만들지 않는다. 테스트는 스냅샷의 코드 근거다.
 - 계약에 관련된 출발 위치에서 [파일 사이의 호출 근거](#파일-사이의-호출-근거)를 찾아 호출문과 실제 정의를 함께 고른다. 읽기는 기존 탐색 한도를 공유한다. 같은 시도에서 스냅샷 경로 목록과 검증한 blob의 자격증명 양식 검사 결과를 다시 쓴다. 각 역할은 읽는 바이트의 해시와 현재 비밀값 선별 결과를 확인하고 해당 역할의 탐색 한도를 적용한다.
 - 일반 발췌에서 이미 두 위치를 볼 수 있으면 일반 순회를 따른다. 우선 선택한 두 발췌가 실제 요청에 남으면 `scope.direct_calls`에 발췌 ID 두 개와 함수 이름을 넣는다. 모델은 이 연결을 위치 탐색에 쓰며, 문서 계약 판단과 보고서 인용은 각 발췌의 입력 조건·구현 결과·테스트 단언에 근거한다.
-- 남은 선택은 일반 순회를 따른다. 일반 발췌는 파일 첫 줄부터 최대 50줄·2,400바이트다. 전체 합계는 8개·12,000바이트이며 남은 예산이 128바이트 미만이면 멈춘다. 파일 일부만 발췌하면 `excerpt_only`, 고르지 못한 후보 파일이 있으면 `files_outside_review_context`를 남긴다. 토큰 일치는 검토할 위치를 고르는 기준이다. 계약과 구현의 대조는 모델이 제공된 근거를 인용해 판정한다.
+- 남은 자리는 일반 순회 순서의 파일을 [검토 단위](#검토-단위)로 채운다. 발췌 수와 줄 번호를 붙인 코드·테스트 원문 바이트의 합계는 요청 크기에서 정한다(기본 64개·213,952바이트, 최소 예산에서 8개·12,000바이트). 남은 예산이 128바이트 미만이면 멈춘다. 파일 일부만 발췌하면 `excerpt_only`, 고르지 못한 후보 파일이 있으면 `files_outside_review_context`를 남긴다. 위 선택기들의 창별 줄·바이트 한도는 그대로다. 토큰 일치는 검토할 위치를 고르는 기준이다. 계약과 구현의 대조는 모델이 제공된 근거를 인용해 판정한다.
 - 전체 조사에서 이름이나 경로가 인용 문서와 연결된 짧은 구현의 일부를 먼저 골랐으면 이미 검증한 원문으로 앞쪽의 관련 분기와 반환도 함께 보낼 수 있다. 원문 전체는 50줄·2,400바이트 이내이며 기존 발췌를 모두 둔 상태로 전체 코드와 요청 한도에 들어가야 한다. 이 파일을 참조하는 직접 호출·테스트 연결이나 다른 발췌가 있으면 기존 줄 범위를 유지한다. 원문 전체를 보낼 때는 그 줄 범위로 근거 ID와 실제 노출량을 기록한다.
 - 수락한 계약과 같은 적용 범위의 인용 원문에 Python 공개 함수 호출이 있고 선택한 구현 창이 그 함수의 본문에 속하면, 같은 파일의 선언 한 곳을 별도 근거로 보낼 수 있다. 이름과 스코프를 확인하고 여러 줄 매개변수·기본값·반환 형식을 원문 그대로 보낸다. 중복 선언·가려진 이름·동적 바인딩·데코레이터 때문에 함수 관계를 확인할 수 없으면 추가하지 않는다. 기존 구현과 테스트를 먼저 유지하고 같은 파일·전체 발췌 한도를 공유한다. 두 위치는 코드 근거이며 대조 판정은 별도로 기록한다.
 - Go 설정의 기본값을 명시한 계약과 인용 원문에 같은 설정 이름이 있으면, 그 이름이 쓰인 구조체 초기화나 생략 시 적용되는 반환·대입 분기의 원문을 먼저 선택한다. 스냅샷 읽기와 적용 범위는 기존 문서 근거 검색 한도를 쓴다. 구조체 필드 선언, 주석, 유효성 검사 반환을 기본 동작 근거로 고르지 않는다. 선택한 발췌는 대조에 쓰이며 문서 약속의 충족 여부는 모델이 검토한다.
@@ -152,6 +152,17 @@
 - 범위 안 소스가 모두 제외 디렉터리 아래 있거나 발췌가 하나도 없으면 investigate는 `failed`(`review_input_unavailable`)다.
 
 - 수락된 미확인 대조의 이유가 선택한 위치를 후속 확인 지점으로 명시하면 요청 별칭을 검증한 파일과 줄 범위로 바꿔 기록한다. 보고서는 그 위치를 앞으로 확인할 곳으로 읽는다.
+
+### 검토 단위
+
+코드·테스트 발췌의 기본 단위는 파일 전체다([`units.go`](../internal/worker/review/units.go), [`corpus_units.go`](../internal/worker/review/corpus_units.go)). 모델은 한 모듈의 파일과 선언을 함께 읽고 파일 사이의 호출을 따라간다.
+
+- 단위 크기는 줄 번호를 붙인 원문의 JSON 바이트로 잰다. 상한은 [요청 크기](#요청-크기)에서 정한다(기본 42,790바이트, 최소 예산 2,400바이트).
+- 한 단위에 들어가는 파일은 통째로 보낸다. 더 큰 파일은 최상위 선언의 시작(바로 위 주석·데코레이터·attribute 포함)에서 연속한 단위로 나누고, 단위마다 선언을 들어가는 만큼 담는다. Go는 `go/parser`로 경계를 찾고 파싱하지 못하면 중괄호 판별로 돌아간다. C/C++·Java·Kotlin·Scala·C#·Rust·Swift·JavaScript·TypeScript는 문자열·문자·주석을 건너뛰는 중괄호 깊이, Python은 들여쓰기 없는 문장과 그 위의 주석·데코레이터로 판별한다. JavaScript·TypeScript는 피연산자 자리의 `/`를 정규식 리터럴로 보고 건너뛴다. JSX의 닫는 태그(`</b>`)와 스스로 닫는 태그(`/>`)는 정규식이 아니다. C/C++는 전처리 줄의 중괄호를 세지 않고, `#if`/`#else`로 갈린 대안 분기는 첫 분기를 지난 깊이로 이어 간다. CRLF 파일은 줄 끝의 `\r`을 무시해 LF 파일과 같은 경계에서 나뉜다. Python의 CRLF 빈 줄도 문장이 아니다. 한 선언이 단위보다 크면 그 안의 멤버 경계에서 자르고, 경계가 없으면 줄에서 자른다. 외부 파서·cgo는 쓰지 않는다. 판별기는 구문 분석기가 아니므로 비정형 코드에서는 경계가 덜 정확할 수 있다. 그래도 단위는 항상 연속한 줄이고 근거 ID는 실제 줄 범위로 계산한다.
+- 파일 첫 줄에서 시작하지 않는 단위는 그 파일의 머리(package 절·import·include·use 등, 최대 80줄)와 함께 간다. 여러 줄에 걸친 import는 괄호가 닫힐 때까지, `#define`은 줄 끝 `\`가 이어지는 동안 머리에 든다. overview는 파일의 단위를 순서대로 보내므로 첫 단위가 머리를 담는다. slice는 머리 줄을 `origin: header` 발췌로 붙이고 그 바이트를 slot 계획에 포함한다. 같은 slot이 그 파일의 첫 단위도 보내면 머리를 따로 붙이지 않는다. 첫 단위가 머리를 담고, 머리와 정확히 같은 단위이면 같은 근거 ID가 두 번 갈 것이기 때문이다.
+- overview 순서: 문서 계약·호출 근거·진단 등 선택기 발췌를 먼저 두고, 남은 예산을 모듈 순회 순서의 파일 단위로 채운다. 선택기가 보여 주지 않은 파일이 먼저다. 모든 파일의 첫 단위가 어느 파일의 두 번째 단위보다 먼저 들어간다. 파일의 단위는 순서대로 들어가고 들어가지 않는 첫 단위에서 그 파일을 멈춘다. 요청 안에서는 선택기 발췌 뒤에 모듈·디렉터리·경로·시작 줄 순으로 나열해 관련 코드가 함께 간다.
+- 선택기 발췌가 같은 요청의 다른 발췌 안에 있으면 원문을 다시 보내지 않는다. 요청에서 그 발췌는 원문 없이 `within`에 감싸는 발췌의 근거 ID를 가진 참조다. 근거 ID, 출처 표시, 검토 기록은 바뀌지 않고 인용도 그대로 받는다.
+- slice도 같은 단위를 쓴다. `review.scope`는 overview가 보내지 않은 줄을 단위로 나눠 slot에 배정한다. 배정은 overview처럼 너비 우선이다. 모든 파일이 앞 단위를 받기 전에는 어느 파일도 다음 단위를 받지 않는다. 한 파일의 단위는 순서대로 가고 각 단위는 파일 머리와 함께 간다. 범위 산출물의 `limits`는 그 노드의 요청 크기에서 정한 값이고 `max_file_lines`는 `max_file_bytes`와 같다(단위는 바이트로만 제한한다). slot 수와 작업 키는 요청 크기와 무관하게 manifest와 범위로 정한다(A37).
 
 ### 문서 발췌(documents)
 
@@ -207,12 +218,13 @@
 ### 검증 입력과 호출자 확장(verify)
 
 - 후보가 인용한 발췌를 스냅샷에서 다시 읽어 ID 연결을 확인한다. 확인하지 못하면 `review_input_unavailable`이다.
+- 인용된 코드·테스트 범위마다 그 범위를 감싸는 선언(첫 줄을 담은 선언부터 끝 줄을 담은 선언까지, 앞 주석 포함)을 다시 읽는다. 인용보다 넓고 한 단위에 들어가면 `origin: declaration` 발췌로 인용 바로 뒤에 보낸다. 검증자는 조사자가 고른 줄만이 아니라 그 줄이 속한 함수·메서드·타입 전체를 읽는다([`verify_declarations.go`](../internal/worker/review/verify_declarations.go)).
 - 기존 Go 확장은 후보가 인용한 줄과 겹치는 패키지 함수와 구체 수신자 메서드를 합쳐 최대 8개 고른다. 여기에 [파일 사이의 호출 근거](#파일-사이의-호출-근거)로 확인한 직접 호출이나 구현 원문을 추가할 수 있다. 후보가 인용한 위치에서 시작하며 연결된 발췌는 인용하지 않은 일반 문맥보다 먼저 보낸다.
-- 추가 발췌는 두 경로를 합쳐 최대 6개·8,000바이트이며, 한 발췌는 최대 60줄·2,400바이트다. 파일 사이의 호출 탐색은 최대 80개 파일·8 MiB를 읽는다. manifest 크기와 SHA-256을 확인하고 승인한 범위와 PR 변경 경계를 적용한다. 비밀값 선별에서 보류된 파일은 읽지 않으며 `secret_files_withheld`를 남긴다.
+- 추가 발췌는 두 경로를 합쳐 요청 크기에서 정한 수와 바이트까지다(최소 예산 6개·8,000바이트, 기본 24개·136,000바이트). 한 발췌는 최대 60줄·2,400바이트다. 확장은 인용된 발췌만 기준으로 찾으므로, 앞 역할의 긴 단위 안에 있는 호출자도 별도 창으로 간다. 그 창이 요청에 다시 보내는 단위 안에 있으면 참조로 간다. 파일 사이의 호출 탐색은 최대 80개 파일·8 MiB를 읽는다. manifest 크기와 SHA-256을 확인하고 승인한 범위와 PR 변경 경계를 적용한다. 비밀값 선별에서 보류된 파일은 읽지 않으며 `secret_files_withheld`를 남긴다.
 - 기존 Go 확장 기록에는 `caller_expansion_go_only`나 `caller_expansion_package_functions_only`가 남을 수 있다. 적격 선언을 찾지 못하면 `no_symbol_for_expansion`, 호출을 찾지 못하면 `no_callers_found`, 읽기 또는 발췌 예산을 넘기면 `callers_outside_review_context`를 남긴다. 파일 사이의 호출 근거를 얻으면 이전 Go 확장 실패 사유를 적용하지 않는다.
 
 - 검증 지침은 코드로 확인한 프로그램 상태, 근거로 확인한 런타임 동작, 실제 호출 경로에서 선택 가능한 지원 입력·설정을 유효 조건으로 쓸 수 있게 한다. 후보의 발동이나 영향에 필요한 외부 동작이 아직 확인되지 않았으면 `inconclusive`를 반환하고 미확인 전제를 적는다.
-- verify 요청의 발췌는 인용 발췌, 확장, 인용되지 않은 문맥 순으로 최대 40개다(인용 발췌는 항상 남는다). 요청이 한도를 넘으면 확장·비인용 문맥·문서 계약을 먼저 줄인다(`review_input_trimmed`, `callers_outside_review_context`, `contracts_outside_verify_input`). 이어서 발췌의 SHA-256을 요청에서만 생략할 수 있다(`verification_excerpt_hashes_omitted`). 근거 ID와 경로·줄·코드 원문은 유지하고 검토 기록에는 스냅샷과 대조한 해시를 저장한다. 그래도 넘으면 후보를 앞에서부터(investigate 다음 interpret) 보낼 수 있는 만큼만 보낸다. 보내지 못한 후보는 `unreviewed`(`verification_budget_exceeded`)로 남고 task는 `failed`(`review_input_incomplete`)다.
+- verify 요청의 발췌는 인용 발췌, 감싸는 선언, 확장(호출자·테스트·직접 호출), 인용한 파일의 긴 단위, 그 밖의 80줄 이하 문맥 순이다. 개수는 요청 크기에서 정한다(최소 예산 40개, 기본·최대 128개). 인용 발췌는 항상 남는다. 요청이 한도를 넘으면 확장·비인용 문맥·문서 계약을 먼저 줄인다(`review_input_trimmed`, `callers_outside_review_context`, `contracts_outside_verify_input`). 이어서 발췌의 SHA-256을 요청에서만 생략할 수 있다(`verification_excerpt_hashes_omitted`). 근거 ID와 경로·줄·코드 원문은 유지하고 검토 기록에는 스냅샷과 대조한 해시를 저장한다. 그래도 넘으면 후보를 앞에서부터(investigate 다음 interpret) 보낼 수 있는 만큼만 보낸다. 보내지 못한 후보는 `unreviewed`(`verification_budget_exceeded`)로 남고 task는 `failed`(`review_input_incomplete`)다.
 
 - Go 입력의 요청 바이트는 `TestGoReviewInputsUnchanged`가 역할마다 지침 해시와 입력 해시로 고정한다.
 
@@ -223,21 +235,44 @@
 
 ### 요청 크기
 
+한 요청의 크기는 노드 운영자의 요청 예산 하나에서 정한다([`budget.go`](../internal/worker/review/budget.go)). `codeye agent --review-request-bytes N --review-output-tokens N`, 서비스 설정 `agent.model.review_request_bytes`·`review_output_tokens`가 값을 정하고 Hello의 같은 이름 필드로 워커에 간다. 모든 역할과 slice가 같은 규칙으로 상한을 계산하므로 작은 예산은 같은 모양의 작은 요청을 만든다. 계획은 예산과 무관하다.
+
+| 설정 | 기본 | 범위 | 뜻 |
+|---|---|---|---|
+| 요청 바이트 | 262,144(256 KiB) | 40,000~1,048,576 | 한 요청의 전체 메시지 텍스트(`opencode.Prompt`: 지침, 계약, 복구 규칙, 입력, 감싸는 문장) |
+| 출력 토큰 | 16,384 | 1,536~65,536 | 호출당 모델이 쓸 수 있는 출력. 서술 길이와 후보 수를 정하고 relay 프로필의 출력 한도가 된다 |
+
+요청 바이트 `R`과 출력 토큰 `O`에서 상한을 이렇게 계산한다. 40,000은 지침·계약·문서·환경 메모·도구 관찰처럼 자체 상한을 가진 고정 부분의 몫이다.
+
+| 상한 | 규칙 | 최소 예산 | 기본 | 최대 |
+|---|---|---|---|---|
+| 복구 여유 | max(3,072, R/32) | 3,072 | 8,192 | 32,768 |
+| 조사 코드 원문(줄 번호 포함) | max(0.3R, R−40,000−복구 여유) | 12,000 | 213,952 | 975,808 |
+| 검토 단위 | max(2,400, 코드 원문/5) | 2,400 | 42,790 | 195,161 |
+| 조사 발췌 수 | 코드 원문/1,500, 8~64 | 8 | 64 | 64 |
+| verify 발췌 수 | 코드 원문/300, 40~128 | 40 | 128 | 128 |
+| verify 확장 | 6×배수(최대 24)개, 8,000×배수 바이트. 배수 = 코드 원문/12,000 | 6·8,000 | 24·136,000 | 24·648,000 |
+| 서술 필드 | O×1,200/16,384, 400~1,200바이트(지침에는 그 3/10 글자) | 400(120자) | 1,200(360자) | 1,200 |
+| 후보의 실패 과정(`mechanism`) | 서술 필드의 두 배, 최대 2,400 | 800 | 2,400 | 2,400 |
+| 조사 후보 | (O−4,096)/1,536, 4~12. 보낸 코드 32 KiB까지 4개, 이후 32 KiB마다 하나 | 4 | 8 | 12 |
+
 | 한도 | 값 | 적용 |
 |---|---|---|
-| 요청 한도 `PromptBudget` | 40,000바이트 | 한 요청의 전체 메시지 텍스트(`opencode.Prompt`: 지침, 계약, 복구 규칙, 입력, 감싸는 문장) |
-| 복구 여유 | 3,072바이트 | 첫 요청을 만들 때 형식 복구 요청이 들어갈 자리를 남긴다 |
-| OpenCode 어댑터 입력 한도 | 64 KiB | 지침 + 입력. 넘으면 `invalid_review_input` |
-| QA 예산 relay 입력 한도 | 49,152바이트(기본) | relay가 받는 요청당 메시지 텍스트. 40,000바이트와의 차이는 OpenCode 클라이언트 자체 메시지 몫이다([평가](EVALUATION.md)) |
-| 출력 | relay 기본 1,536 토큰 | OpenCode 관리 설정의 모델 출력 한도와 같다 |
+| OpenCode 어댑터 입력 한도 | 1,048,576바이트 | 지침 + 입력. 넘으면 `invalid_review_input` |
+| OpenCode 응답 보관 한도 | 524,288바이트 | 출력 토큰 최대치의 8배. 넘으면 `model_output_incomplete` |
+| relay 프로필 | 출력 = 출력 토큰, 문맥 = 요청 바이트 + 16,384 + 출력 토큰 | 관리형 OpenCode 설정이 relay 모델에 선언하는 한도. 토큰은 요청의 1바이트 이상이므로 요청 바이트가 입력 토큰의 상한이다 |
+| QA 예산 relay | 입력 기본 278,528바이트(최대 1,064,960), 출력 기본 16,384 토큰(`--max-output-tokens`, 최대 65,536) | relay가 받는 요청당 메시지 텍스트와 출력. 운영은 [평가](EVALUATION.md)에 있다 |
+| 호출 제한시간 | 600초(1초~30분) | `--model-timeout`. 기본 요청을 읽고 출력 한도까지 쓰는 호출이 멈췄을 때의 상한이며 측정한 지연 시간이 아니다. CODEYE가 쓰는 OpenCode provider 설정(relay, 키 파일 provider, 운영자 OpenCode 설정을 옮긴 native provider)은 응답 헤더와 다음 스트림 조각을 이 시간만큼 기다린다(`headerTimeout`·`chunkTimeout`, 밀리초). 설정하지 않으면 OpenCode 1.19.5는 각각 300초에 요청을 끊는다. native provider에 운영자가 정한 값은 그대로 둔다 |
 
 - 요청은 메시지 하나이고 도구 정의를 쓰지 않는다.
 - 보내기 전에 메시지 바이트를 재고, 넘으면 발췌를 뒤에서부터 줄이고 `review_input_trimmed`를 남긴다. 최소 발췌로도 넘으면 task는 `failed`(`review_input_too_large`)다.
-- 예산이 모자라면 목록 뒤쪽이 먼저 빠진다. 첫 순회에서 생태계 이름 순으로 뒤인 언어의 발췌가 여기에 해당한다. 여섯 생태계가 모두 범위에 있으면 언어 지침이 커져 코드 발췌가 줄고, 최대 길이 후보가 많은 verify는 일부 후보를 보내지 못할 수 있다. 요청 한도와 역할별 지침 구성의 변경은 소유자 결정이다.
+- 예산이 모자라면 목록 뒤쪽이 먼저 빠진다. 첫 순회에서 생태계 이름 순으로 뒤인 언어의 발췌가 여기에 해당한다. 여섯 생태계가 모두 범위에 있으면 언어 지침이 커져 코드 발췌가 줄고, 최대 길이 후보가 많은 verify는 일부 후보를 보내지 못할 수 있다. 합성 최악 입력(모든 서술 필드를 최대 길이로 쓴 후보)에서 최소 예산의 verify는 후보 6개 중 4개를 보내고, 기본과 최대 예산은 모두 보낸다(`TestReviewRequestSizeWorstCase`). 보내지 못한 후보는 `unreviewed`(`verification_budget_exceeded`)다.
+- 서술 필드 한도와 조사 후보 상한은 출력 토큰에서만 정한다. 후보 수는 그 상한 안에서 보낸 코드에 따라 는다. 작은 요청 바이트에 큰 출력 토큰을 짝지으면 후보 서술이 verify 요청의 자리를 차지해, 최대 길이로 쓴 후보는 일부만 검증되고 나머지는 `unreviewed`(`verification_budget_exceeded`, task `review_input_incomplete`)로 남는다. 합성 최악 입력에서 최소 요청 바이트(40,000)에 기본 출력 토큰(16,384)을 짝지으면 verify는 후보 6개 중 2개만 보낸다. 최소 출력 토큰과 짝지으면 4개다(`TestReviewRequestSizeWorstCase`). 요청 바이트를 줄일 때는 출력 토큰도 함께 줄인다.
+- 비용은 요청과 출력 크기에 비례한다. 요청 바이트를 줄이면 한 번에 읽는 코드가 줄고 남은 줄은 slice로 넘어간다. 출력 토큰을 줄이면 서술과 후보 수가 준다. 호출 수는 `review_max_calls`가 정한다. 실제 비용과 지연 시간은 측정하지 않았다.
 
 ## 모듈 단위 검토 분할
 
-overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 줄을 후속 검토에 넣는다. `review.scope`가 스냅샷을 다시 읽고 수락된 overview의 실제 발췌 범위를 뺀다. 파일 앞부분이나 문서 계약 주변만 보냈으면 같은 파일의 나머지 줄도 대상이 된다. 한 번의 요청에 연속 범위 최대 8개, 범위당 50줄·2,400바이트, 원문 합계 최대 12,000 JSON 바이트를 넣는다. 전체 메시지는 지침과 복구 여유를 포함해 40,000바이트 이하다. [계획과 범위 계산](../internal/worker/review/slice_coverage.go) · [실행](../internal/worker/review/slice_run.go)
+overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 줄을 후속 검토에 넣는다. `review.scope`가 스냅샷을 다시 읽고 수락된 overview의 실제 발췌 범위를 뺀다. 파일 앞부분이나 문서 계약 주변만 보냈으면 같은 파일의 나머지 줄도 대상이 된다. 남은 줄은 [검토 단위](#검토-단위)로 나눈다. 한 번의 요청에 담는 단위 수, 단위 크기, 원문 합계는 overview와 같은 [요청 크기](#요청-크기) 규칙을 따른다(최소 예산에서 8개, 단위 2,400바이트, 합계 12,000바이트). 전체 메시지는 지침과 복구 여유를 포함해 요청 바이트 이하다. [계획과 범위 계산](../internal/worker/review/slice_coverage.go) · [실행](../internal/worker/review/slice_run.go)
 
 | task | 단계 | 판정 필수 | 모델 호출 | 내용 |
 |---|---|---|---|---|
@@ -252,7 +287,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 
 - 모듈 ID는 `<ecosystem>:<dir>`이다. 소스는 해당 생태계의 가장 깊은 선언 디렉터리에 속하고, 선언이 없으면 루트(`.`)에 속한다. `discovered`는 모듈 탐색에서도 같은 ID를 찾았는지 나타낸다. 각 모듈의 적격 파일 수와 실제 검토 범위를 각각 기록한다.
 - 일반 검토는 manifest에서 필요한 작업 수를 추정하며 최대 96개의 후속 조사·확인 쌍을 계획한다. 실패하거나 취소된 실행을 고정 스냅샷에서 재시도할 때 이전 작업 키가 모두 필요하므로 기존 추정 규칙을 유지한다. 확장 코드 검토는 스냅샷의 검증된 원문에서 필요한 발췌 수를 산정해 최대 999개의 작업 쌍을 계획한다. 같은 스냅샷·범위에서 노드 호출 상한을 바꾸거나 재시도해도 작업 키가 같다. `review.scope`는 실제 JSON 바이트 크기를 기준으로 발췌를 배정한다.
-- 일반 실행은 아직 수락된 발췌가 없는 모듈에 공백이 아닌 소스 발췌를 하나씩 먼저 배정한다. 주요 소스의 모듈을 먼저 배정하고, 부차 소스만 남은 모듈에도 첫 발췌를 배정한 뒤 모듈의 추가 파일과 나머지 줄로 넘어간다. PR은 변경 파일, 변경 파일과 같은 디렉터리의 파일, 그 밖의 파일 순을 유지하며 각 단계 안에서 같은 배정 순서를 쓴다. 한 slot에 여러 모듈의 짧은 발췌를 담을 수 있다.
+- 일반 실행은 아직 수락된 발췌가 없는 모듈에 가장 앞선 파일의 첫 단위를 먼저 배정한다. 주요 소스의 모듈을 먼저 배정하고, 부차 소스만 남은 모듈에도 첫 단위를 배정한 뒤, overview가 보여 주지 않은 파일의 첫 단위, 그다음 모든 파일의 남은 단위를 차례로 돌며 배정한다. 단위는 파일 전체이거나 선언 경계로 나눈 부분이다([검토 단위](#검토-단위)). PR은 변경 파일, 변경 파일과 같은 디렉터리의 파일, 그 밖의 파일 순을 유지하며 각 단계 안에서 같은 배정 순서를 쓴다. 한 slot에 여러 모듈의 짧은 발췌를 담을 수 있다.
 - 같은 순서에서 비지표 도구 진단의 심각도와 수, 필수 분석기 실패, 진입점, 소스, 테스트, 경로를 사용한다. 파일 안에서는 해당 진단 위치, 그다음 실행문이 있는 발췌를 우선한다. 억제된 진단과 지표는 진단 우선순위에 포함하지 않는다. `priority.secondary`에는 예제·시험 입력·의존성·생성물 경로를 식별하는 규칙이 남는다. 첫 10줄에 생성 표지가 있는 파일도 부차 파일이다. [분류 규칙](../internal/worker/review/record/priority.go)
 - 원문 길이 한도에 걸린 줄은 `review_line_input_limit`을 남기고 다음 줄을 검토한다. 공백으로만 이루어진 발췌는 `source_blank_range`로 기록한다. slot 한도 뒤의 파일과 줄은 `review_slice_limit`로 남는다. 원문 입력 크기 상한, 읽을 수 없는 텍스트와 빈 파일, 비밀값 선별에 걸린 파일에도 실제 이유가 남는다.
 
@@ -338,14 +373,164 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - 이와 별도로 민감값 패턴(`record.Sensitive`: 개인 키 블록, `sk-`·`gh?_` 형식 토큰, Authorization 헤더 값, 따옴표로 감싼 api_key·password·client_secret 값)에 걸린 파일은 발췌하지 않는다. 이 패턴은 완전한 비밀 탐지를 보장하지 않는다.
 - 모델이 쓴 서술도 같은 패턴에 걸리면 기록에 남지 않는다(`record.SafeText`).
 
+## 인용
+
+코드·테스트 원문은 줄 번호를 붙여 보낸다. 요청에서 각 줄은 `<줄 번호>| <원문>`이다. 줄 번호는 요청을 인코딩할 때만 붙고, 워커가 들고 있는 원문과 검토 기록에는 없다([`record/request.go`](../internal/worker/review/record/request.go), [`citations.go`](../internal/worker/review/citations.go)).
+
+- 모델은 코드·테스트 발췌를 `<근거 ID>:<시작>-<끝>`(한 줄이면 `<근거 ID>:<줄>`)으로 인용한다. 범위는 그 발췌 안이고 80줄 이하다. 80줄보다 긴 발췌(대개 파일 전체 단위)는 범위 없이 인용할 수 없다(`citation_range_missing`). 문서·manifest 근거와 80줄 이하 발췌는 ID만으로 인용할 수 있다.
+- 워커는 범위가 보낸 발췌 안에 있는지 확인하고 인용을 그 범위의 근거 ID로 바꾼다. 같은 경로·blob·종류에 (snapshot digest, 경로, blob SHA-256, 행 범위)로 계산한 ID이고 출처 표시는 `cited`다. 후보, 판정, 해석 가설, 강점의 근거와 보고서 발췌는 이 좁힌 범위를 가리킨다. 좁힌 범위도 다른 근거처럼 decoder가 ID와 blob을 다시 계산해 확인한다.
+- 범위 형식이 틀리거나, 80줄을 넘거나, 문서 근거에 범위를 붙이면 `citation_range_invalid`다. 범위가 보낸 발췌에 없는 줄을 가리키면 `citation_range_outside`다. 보내지 않은 ID는 기존처럼 `evidence_id_unknown`이다. 모두 형식 복구 요청에 오류 코드로 가고, 그 항목(목록과 번호, verify는 후보 ID)·필드·인용한 발췌 ID도 함께 간다. 보내지 않은 ID는 되돌려 보내지 않는다.
+- `citation_range_missing`·`citation_range_invalid`는 실제로 보낸 발췌를 가리키므로 형식 오류다. 복구 뒤에도 남으면 플랫폼이 그 인용을 정리하거나 그 항목을 뺀다. `citation_range_outside`·`evidence_id_unknown`은 무결성 오류다([출력 오류 분류](#출력-오류-분류)).
+- 역할 계약 문자열과 복구 규칙은 긴 발췌의 유효한 인용(ID와 범위, 80줄 이하, 요청의 ID 형식을 따른 예시)을 함께 적는다. 이 문구는 지침 팩 밖의 Go 고정 문자열(`citationRule`, `repairRules`)이다.
+- 전체 조사의 문서 계약 대조도 후보처럼 인용한 범위를 저장한다([문서 계약 대조](#문서-계약-대조)). 계약 후속 검토의 코드 근거만 범위를 확인한 뒤 발췌의 원래 ID를 저장한다. 후속 검토는 새로 읽은 창 단위로 새 구현 여부를 정하기 때문이다.
+- verify는 앞 역할이 좁힌 범위를 인용 발췌로 받고, 그 범위를 다시 좁혀 인용할 수 있다.
+- 근거 ID는 위치(경로·blob·행 범위)에 묶이므로 verify가 만든 범위가 앞 역할의 발췌와 정확히 같을 수 있다. 감싸는 선언이 앞 역할이 보낸 단위 전체이거나, 확장 창이 앞 역할의 창이거나, 검증자가 다시 보내지 않은 앞 역할의 창과 같은 줄을 좁혀 인용하는 경우다. 그때 verify는 그 발췌를 앞 역할의 항목 그대로(출처 표시·심볼 포함) 보내고 기록한다. 워커는 기록을 쓰기 전에 이를 확인하고, 어긋나면 그 task를 `failed`(`review_lineage_mismatch`)로 끝낸다. 보고서도 같은 규칙으로 다시 확인한다([`record/lineage.go`](../internal/worker/review/record/lineage.go)).
+- 기록에 남는 좁힌 범위(`cited`)는 그것을 담은 발췌가 같은 기록에 있어야 한다. verify는 후보가 인용하지 않은 앞 역할의 좁힌 범위(강점·계약 대조의 범위 등)를 그 범위를 담은 발췌가 요청에 함께 남을 때만 보낸다. 담은 단위를 다시 보내지 않는 파일(후보가 인용하지 않은 긴 파일)이나 예산에서 잘린 단위의 범위는 보내지 않는다. 계약 후속 검토도 앞선 대조가 인용한 범위를 같은 규칙으로 보낸다.
+
+## 문서 계약 대조
+
+전체 조사(`whole_run`)는 수락된 문서 계약을 최대 6건 구현과 대조한다(`contract_comparisons`, [`comparisons.go`](../internal/worker/review/comparisons.go)). 대조는 선택 항목이다. 후보와 강점이 유효하면 대조 하나가 틀렸다고 필수 검토를 잃지 않는다.
+
+- 코드 근거(`code_evidence_ids`)는 후보와 같은 규칙으로 인용하고 좁힌 범위를 저장한다. 80줄보다 긴 발췌는 범위를 붙여야 한다. 범위 없는 긴 단위는 어느 줄이 계약을 구현하는지 말하지 않으므로 형식 복구를 요청한다. 복구 뒤에도 범위가 없거나 틀리면 보낸 발췌 전체를 근거로 다시 검사하고(`citation_range_unspecified`), 통과하지 못하면 그 대조만 뺀다. 같은 단위의 두 범위는 서로 다른 근거다.
+- 구현이 인용한 문서 자체이면 안 된다는 규칙과, 문서화된 API의 본문 안이어야 한다는 규칙은 좁힌 범위로 판단한다. 같은 소스 파일에 문서가 있는 API(Java Javadoc, 안내 문서가 가리키는 Python docstring·rustdoc)는 파일 전체 단위가 문서 줄도 담는다. 그래서 단위 전체를 근거로 쓰면 이 규칙을 만족할 수 없고, 본문 줄을 범위로 인용해야 한다.
+- 문서 근거(`document_evidence_ids`)는 계약의 `evidence_ids`를 범위 없이 그대로 쓴다.
+- 대조 한 건의 거부는 조건마다 고정 코드다. 형식 복구 요청의 `output_errors`에 코드가 가고, `repair.items`에는 목록 `contract_comparisons`와 1부터 세는 대조 번호, 필드 이름, 인용 오류이면 그 발췌 ID, 코드가 간다. 요청 크기를 넘으면 들어가는 만큼만 싣는다. 모델 서술은 어느 쪽에도 넣지 않는다.
+
+| 코드 | 필드 | 조건 |
+|---|---|---|
+| `contract_comparison_index_invalid` | `contract_index` | 입력의 계약 번호가 아니다 |
+| `contract_comparison_index_duplicate` | `contract_index` | 이미 수락한 대조와 같은 계약이다 |
+| `contract_comparison_scope_invalid` | `applies_to` | 경로 형식이 틀리거나 스냅샷의 디렉터리가 아니다 |
+| `contract_comparison_scope_outside_contract` | `applies_to` | 계약의 적용 범위보다 넓거나 문서 근거가 그 범위를 뒷받침하지 않는다 |
+| `contract_comparison_status_invalid` | `status` | `match`·`partial`·`mismatch`·`unknown`이 아니다 |
+| `contract_comparison_reason_invalid` | `reason` | 비었거나 서술 한도를 넘거나 민감값 패턴에 걸린다 |
+| `insight_prose_requires_korean` | `reason` | 한국어가 아닌 한자 서술이다 |
+| `execution_claim` | `reason` | 실행·재현을 주장한다(다른 역할과 같은 코드) |
+| `contract_comparison_documents_changed` | `document_evidence_ids` | 계약의 근거 ID와 다르다(범위를 붙인 경우 포함) |
+| `contract_comparison_code_missing` | `code_evidence_ids` | `unknown`이 아닌데 code 근거가 없다(test만 인용한 경우 포함) |
+| `contract_comparison_code_invalid` | `code_evidence_ids` | 보내지 않은 ID이거나 code·test가 아니다 |
+| `contract_comparison_code_duplicate` | `code_evidence_ids` | 같은 근거를 두 번 인용했다 |
+| `contract_comparison_code_too_many` | `code_evidence_ids` | 근거가 4개를 넘는다 |
+| `contract_comparison_code_outside_scope` | `code_evidence_ids` | 근거가 대조의 적용 범위 밖이다 |
+| `contract_comparison_code_range_invalid` | `code_evidence_ids` | 범위 형식이 틀리거나 발췌 밖이거나 80줄을 넘는다 |
+| `contract_comparison_code_range_missing` | `code_evidence_ids` | 80줄보다 긴 발췌를 범위 없이 인용했다 |
+| `contract_comparison_code_is_document` | `code_evidence_ids` | 모든 code 근거가 인용한 소스 안 문서와 겹친다 |
+| `contract_comparison_code_outside_documented_api` | `code_evidence_ids` | 문서화된 Java 메서드·Rust 항목의 본문 밖이다 |
+| `contract_comparison_in_slice` | `contract_comparisons` | slice 출력이 대조를 냈다 |
+| `contract_comparisons_too_many` | `contract_comparisons` | 7번째 이후 대조다 |
+
+- 형식 복구 기회가 남아 있으면 틀린 대조는 응답 전체를 거부하고 복구를 요청한다. 복구를 이미 썼거나 보낼 수 없으면, 인용의 형식 오류(반복, 4개 초과, 범위 없음·틀림)를 정리해 다시 검사하고 그래도 틀린 대조만 빼고 응답을 받는다. 기록에는 `contract_comparison_omitted` 한계가 남는다. JSON이 아닌 응답 뒤의 재시도는 복구 기회를 쓰지 않으므로 빼지 않는다. 후보와 다른 항목의 오류는 [출력 오류 분류](#출력-오류-분류)를 따른다.
+- 보고서는 뺀 대조의 계약을 미확인(`unknown`, 대조 결과 없음)으로 보이고, 문서 절의 분석 공백에 `contract_comparison_omitted`를 남긴다.
+
 ## 출력 검사
 
 - 출력은 `workspace_proof`와 `result`를 가진 JSON 객체 하나여야 한다. `result`는 역할 계약의 엄격한 JSON이다. 계약의 목록 key는 모두 배열로 있어야 하고 알 수 없는 필드는 거부한다(`output_schema_invalid`).
 - 그 호출에 준 근거·관찰 ID만 인용할 수 있다. 오류 코드: `evidence_id_unknown`, `evidence_id_duplicate`, `evidence_kind_invalid`, `evidence_missing`, `evidence_list_too_long`, `observation_id_unknown`, `evidence_not_at_observation`, `code_evidence_missing`.
 - 탐색에서 정한 문서의 적용 경로보다 상위로 넓히면 거부한다(`scope_generalized`, `scope_unknown_path`, `scope_invalid`). 충돌의 두 쪽은 서로 다른 문서를 인용해야 한다(`conflict_same_document`).
 - 실행·재현·테스트 통과를 주장하는 서술은 거부한다. 호출 오류 코드는 `execution_claim`이고, 단계 기록에는 `execution_claim_rejected` 한계가 남는다. 이 검사는 정규식 휴리스틱이다. 놓친 주장이 있어도 상태·재현·통계는 구조화 기록에서만 정하므로 모델 서술이 판정을 바꾸지 못한다.
-- 서술 필드는 JSON 인코딩 400바이트 이하다(지침은 120자 이하를 요구한다). 기록에 남는 모델 서술은 2,400바이트 이하이고 민감값 패턴에 걸리지 않아야 한다.
+- 서술 필드는 출력 토큰이 정한 JSON 인코딩 바이트 이하다([요청 크기](#요청-크기), 기본 1,200바이트, 최소 출력 예산 400바이트). 요청은 그 3/10 글자 이하의 간결한 한국어를 요구한다(기본 360자, 짧은 문단 하나). 후보는 무엇이 잘못되는지(`title`), 발생 조건(`condition`), 인용한 줄이 실패를 만드는 과정(`mechanism`, 서술 필드의 두 배까지), 영향, 수정이 지켜야 할 속성(`improvement`), 반박 근거나 남은 불확실성(`counterpoint`)을 쓴다. `mechanism`은 선택이다. 기록에 남는 모델 서술은 schema 0.7에서 1,200바이트(`mechanism` 2,400바이트), 이전 schema에서 400바이트 이하이고 민감값 패턴에 걸리지 않아야 한다.
 - 환경 메모는 플랫폼 판정을 다시 쓰거나 올리지 못한다. 판정 필드를 붙인 출력은 거부한다.
+
+### 출력 오류 분류
+
+출력 오류 코드는 모두 두 분류 중 하나다([`output_codes.go`](../internal/worker/review/output_codes.go)). 등록하지 않은 코드는 무결성으로 다룬다. 아래 표와 등록이 같은지 `TestOutputCodesMatchTheReviewTable`이 확인하고, 시험이 읽는 모든 기록의 `output_errors`가 등록된 코드인지도 확인한다.
+
+- **무결성.** 플랫폼이 받을 수 없는 내용이다. 요청에 없던 근거·관찰 ID, 보내지 않은 줄, 실행 주장, 넓힌 적용 범위, 플랫폼만 정하는 심각도, 규칙이 요구하는 근거가 없는 판정, 읽을 수 없는 결과가 여기에 든다. 처리는 이전과 같다. 응답을 거부하고 형식 복구 뒤에도 남으면 역할이 실패한다. verify는 그 후보를 격리하고, 선택 항목(강점, 문서 계약 대조)은 그 항목만 뺀다.
+- **형식.** 인용한 발췌는 실제로 보낸 것이거나, 항목 하나가 자기 규칙을 어겼다. 형식 복구를 한 번 요청한다. 복구 뒤에도 남거나 복구를 보낼 수 없으면 플랫폼이 그 항목 안에서 정리하거나 그 항목만 빼고, 한계를 남기고 단계를 유지한다. 항목의 형식 오류로 단계를 잃지 않는다.
+
+정리 규칙은 다음과 같다.
+
+- **범위가 없거나 틀린 긴 발췌 인용**(`citation_range_missing`, `citation_range_invalid`). 80줄을 넘는 범위는 자르지 않고 범위를 정하지 않은 인용으로 본다. 자르면 모델이 가리킨 줄이 잘릴 수 있지만 보낸 발췌 전체는 그 줄을 모두 담기 때문이다.
+  - verify의 근거·반대 근거: 같은 후보가 인용한 범위가 그 발췌 안에 있으면 그 범위(`citation_range_from_candidate`), 없으면 보낸 발췌 전체(`citation_range_unspecified`)다.
+  - 강점, 문서 계약 대조, 계약 후속 검토: 보낸 발췌 전체(`citation_range_unspecified`)다. 정리한 대조는 대조 규칙으로 다시 검사한다.
+  - 조사 후보, 해석 가설: 그 항목을 뺀다(`review_candidate_omitted`, `interpretation_items_omitted`). 후보의 근거는 결함이 있는 줄을 가리켜야 하는데 파일 전체는 그 위치를 말하지 않기 때문이다.
+  - 문서·manifest 근거에 붙인 범위: 범위를 지우고 그 근거 ID로 받는다(`citation_range_unspecified`). 문서·환경 역할도 이를 요청에 없던 ID가 아니라 이 형식 오류로 본다.
+- **반복·초과 인용과 목록**(`evidence_id_duplicate`, `evidence_list_too_long`, `observation_id_duplicate`, `requirement_id_duplicate`, 문서 항목의 `*_evidence_ids_invalid`, `list_too_long`). 반복을 빼고 앞에서부터 한도까지 남긴다(`citation_list_trimmed`, verify 목록은 `verification_list_trimmed`).
+- **항목 규칙**(서술, 실패 과정, 근거 누락, 요구 누락, 같은 문서 충돌). 그 항목을 뺀다. 한계는 조사 후보 `review_candidate_omitted`, 해석 `interpretation_items_omitted`, 문서 `document_items_omitted`, 환경 `environment_notes_omitted`다. verify의 조건·가정·다음 확인 항목은 그 항목만 뺀다(`verification_list_trimmed`).
+- 정리한 응답의 호출은 `accepted`이고 `output_errors`에 원래 코드를 유지한다. 기록에는 `review_output_degraded`와 정리 한계가 남고, verify는 판정마다 정리 한계를 남긴다. 복구를 보낼 수 없었으면(호출 상한, 요청 크기, 입력) `output_repair_not_sent`도 남는다. 항목을 빼서 역할 규칙(environment·interpret는 항목 하나 이상)을 어기면 응답은 거부된다.
+- 형식 오류만 있던 응답은 그 뒤 호출이 실패해도(timeout, 거절, 모델 오류, 두 번째 형식 거부, JSON이 아닌 응답) 정리해 받는다. 취소된 단계는 정리하지 않는다.
+- 보고서는 뺀 항목을 그 절의 분석 공백으로 보인다. 후보나 가설을 뺀 보고서는 `no_actionable_findings`를 게시하지 않고 판단 보류로 둔다([보고서 연결](#보고서-연결)).
+
+| 코드 | 분류 | 복구 뒤 처리 |
+|---|---|---|
+| `output_not_json` | 무결성 | 재시도 한 번(복구 기회를 쓰지 않음). 두 번째도 JSON이 아니면 앞서 받아 둔 형식 오류 응답을 정리하거나 역할 실패 |
+| `output_schema_invalid` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `item_schema_invalid` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패(verify는 그 후보 격리) |
+| `no_items` | 무결성 | 응답 거부(environment·interpret는 항목이 하나 이상이어야 한다). 복구 뒤 모든 항목을 빼서 비어도 같다 |
+| `too_many_items` | 형식 | 한도를 넘는 항목을 빼고 한계(각 역할의 `*_omitted`) |
+| `citation_range_outside` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패(verify는 후보 격리, 대조는 그 대조만 뺌) |
+| `citation_range_missing` | 형식 | 후보·가설은 그 항목을 뺀다(`review_candidate_omitted`·`interpretation_items_omitted`). verify 근거는 같은 후보가 인용한 범위가 그 발췌 안에 있으면 그 범위(`citation_range_from_candidate`), 없으면 보낸 발췌 전체(`citation_range_unspecified`) |
+| `citation_range_invalid` | 형식 | `citation_range_missing`과 같다. 강점은 복구 없이 바로 발췌 전체로, 계약 후속 검토는 보낸 창으로 받는다. 문서·manifest 근거에 붙인 범위는 범위를 지우고 그 근거 ID로 받는다(`citation_range_unspecified`, 문서·환경 역할 포함) |
+| `evidence_id_unknown` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패(verify는 후보 격리. 요청의 관찰 ID만이면 빼고 받는다) |
+| `evidence_kind_invalid` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `evidence_id_duplicate` | 형식 | 반복 ID를 빼고 받는다(`citation_list_trimmed`) |
+| `evidence_list_too_long` | 형식 | 앞에서부터 한도까지 남기고 받는다(`citation_list_trimmed`) |
+| `evidence_missing` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`) |
+| `code_evidence_missing` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`) |
+| `execution_claim` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패(verify는 후보 격리, 대조는 그 대조만 뺌). `execution_claim_rejected` |
+| `text_invalid` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`). verify의 조건·가정·다음 확인 항목은 그 항목만 뺀다(`verification_list_trimmed`) |
+| `mechanism_missing` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`) |
+| `insight_prose_requires_korean` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`). 대조는 그 대조만 뺀다 |
+| `evidence_not_at_observation` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `observation_id_unknown` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `observation_id_duplicate` | 형식 | 반복 ID를 빼고 받는다(`citation_list_trimmed`) |
+| `observation_ids_invalid` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`) |
+| `module_out_of_scope` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `requirement_id_unknown` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `requirement_of_other_module` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `evidence_of_other_requirement` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
+| `module_duplicate` | 형식 | 뒤의 메모를 뺀다(`environment_notes_omitted`) |
+| `requirement_id_duplicate` | 형식 | 반복 ID를 빼고 받는다(`citation_list_trimmed`) |
+| `requirement_missing` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`) |
+| `scope_invalid` | 무결성 | 응답 거부. 범위 복구 뒤에는 다른 항목이 남으면 그 항목만 빼고 `document_scope_items_omitted` |
+| `scope_unknown_path` | 무결성 | `scope_invalid`와 같다 |
+| `scope_generalized` | 무결성 | `scope_invalid`와 같다(패키지 범위로 좁힐 수 있으면 좁힌다) |
+| `conflict_same_document` | 형식 | 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`) |
+| `document_quality_invalid` | 형식 | 근거 목록을 정리해 통과하면 받고(`citation_list_trimmed`), 아니면 그 항목을 빼고 한계(`review_candidate_omitted`·`interpretation_items_omitted`·`document_items_omitted`·`environment_notes_omitted`) |
+| `contracts_evidence_ids_invalid` | 형식 | 목록을 한도까지 줄여 통과하면 받고(`citation_list_trimmed`), 아니면 그 항목을 뺀다(`document_items_omitted`) |
+| `conflicts_first_evidence_ids_invalid` | 형식 | `contracts_evidence_ids_invalid`와 같다 |
+| `conflicts_second_evidence_ids_invalid` | 형식 | `contracts_evidence_ids_invalid`와 같다 |
+| `questions_evidence_ids_invalid` | 형식 | `contracts_evidence_ids_invalid`와 같다 |
+| `instruction_notes_evidence_ids_invalid` | 형식 | `contracts_evidence_ids_invalid`와 같다 |
+| `document_quality_evidence_ids_invalid` | 형식 | `contracts_evidence_ids_invalid`와 같다 |
+| `unknown_candidate_id` | 무결성 | 그 항목을 버린다. 답하지 않은 후보는 복구 뒤 격리 |
+| `duplicate_candidate_verification` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `verification_missing` | 무결성 | 복구 요청에 그 후보를 다시 싣는다. 끝내 없으면 격리(앞서 받아 둔 형식 오류 판정이 있으면 정리해 받는다) |
+| `verdict_invalid` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `category_invalid` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `severity_invalid` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `severity_not_assignable` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `supported_without_code_evidence` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `refuted_without_counterevidence` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `valid_conditions_missing` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `invalid_conditions_missing` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `unresolved_assumptions_missing` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `verification_invalid` | 무결성 | 그 후보의 판정 거부. 복구 뒤에도 남으면 후보 격리(`verification_quarantined`) |
+| `list_too_long` | 형식 | 앞의 4개(다음 확인은 3개)만 남기고 받는다(`verification_list_trimmed`) |
+| `next_verification_invalid` | 형식 | 3개를 넘으면 앞의 3개만 남긴다(`verification_list_trimmed`). 비었으면 후보 격리 |
+| `evidence_id_dropped` | 형식 | 이미 정리된 표시다. 요청의 관찰 ID를 근거에서 빼고 받았다 |
+| `workflow_selection_invalid` | 무결성 | 선택 호출이라 복구하지 않는다. 묶을 수 없는 선택만 빼고 한계 |
+| `contract_comparison_index_invalid` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_index_duplicate` | 형식 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_scope_invalid` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_scope_outside_contract` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_status_invalid` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_reason_invalid` | 형식 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_documents_changed` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_missing` | 형식 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_invalid` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_duplicate` | 형식 | 반복 근거를 빼고 다시 검사해 통과하면 받는다(`citation_list_trimmed`). 아니면 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_too_many` | 형식 | 앞의 4개만 남기고 다시 검사해 통과하면 받는다(`citation_list_trimmed`). 아니면 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_outside_scope` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_is_document` | 형식 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_outside_documented_api` | 형식 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_range_invalid` | 형식 | 보낸 발췌 전체로 정리해 다시 검사하고 통과하면 받는다(`citation_range_unspecified`). 아니면 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparison_code_range_missing` | 형식 | `contract_comparison_code_range_invalid`와 같다 |
+| `contract_comparison_in_slice` | 무결성 | 그 대조만 빼고 `contract_comparison_omitted`(계약은 미확인) |
+| `contract_comparisons_too_many` | 형식 | 7번째 이후 대조를 뺀다(`contract_comparison_omitted`) |
+| `contract_comparison_invalid` | 무결성 | 응답 거부. 복구 뒤에도 남으면 후속 검토 실패(앞선 대조 유지) |
+| `contract_evidence_not_new` | 무결성 | `contract_comparison_invalid`와 같다 |
+| `contract_partial_support_invalid` | 무결성 | `contract_comparison_invalid`와 같다 |
 
 ## 후보 검증과 근거 규칙
 
@@ -356,22 +541,22 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - 심각도는 `high`·`medium`·`low`·`info`만 받는다. `critical`은 실행 근거나 사람의 판단이 필요하므로 모델이 줄 수 없다(`severity_not_assignable`).
 - 범주는 `correctness`, `error_handling`, `concurrency`, `resource_lifecycle`, `data_integrity`, `api_contract`, `security`, `maintainability`, `performance`, `test_gap` 중 하나다.
 - 후보마다 정확히 한 판정이 있어야 한다. 누락·중복 항목, 모르는 후보 ID는 거부한다. 다음 확인 사항(1~3개)은 명령이 아니라 읽기·검토 단계다.
-- 끝내 검증되지 않은 후보는 플랫폼이 `unreviewed`로 표시한다(`verification_quarantined`, `verification_not_completed`, `verification_budget_exceeded`).
+- 끝내 검증되지 않은 후보는 플랫폼이 `unreviewed`로 표시한다(`verification_quarantined`, `verification_not_completed`, `verification_budget_exceeded`). 형식 오류만 있는 판정은 격리하지 않고 정리해 받으며, 판정의 `limitations`에 정리 내용(`citation_range_from_candidate`, `citation_range_unspecified`, `citation_list_trimmed`, `verification_list_trimmed`)을 남긴다.
 - 파일·행·해시 검증은 인용의 출처를 확인할 뿐이다. 인용을 해석한 모델 문장의 의미적 정확성은 [평가](EVALUATION.md)의 판정으로만 잰다.
 
 ## 복구 경로
 
 모든 역할에 적용한다. 단계당 호출은 최대 3회(`record.RoleMaxCalls = 3`)이고 문서 계약 후속 검토는 최대 2회다. 각 호출은 attempt의 남은 예산을 확인한다.
 
-1. **형식 복구.** 출력이 JSON이지만 계약·근거 검사에서 거부되면, 고정 오류 코드만 담은 복구 요청을 한 번 보낸다. verify는 거부된 후보, 허용된 근거와 오류 코드만 다시 보낸다.
+1. **형식 복구.** 출력이 JSON이지만 계약·근거 검사에서 거부되면, 고정 오류 코드와 거부된 항목(`repair.items`: 목록, 1부터 세는 번호, 필드, 인용 오류이면 그 발췌 ID, 코드)을 담은 복구 요청을 한 번 보낸다. 요청 크기를 넘으면 항목은 들어가는 만큼만 싣는다. verify는 거부된 후보와 그 오류(`issues`: 필드, 인용 오류이면 그 발췌 ID, 코드), 범위 없이 인용할 수 있는 근거 ID(`accepted_evidence_ids`), 범위를 붙여야만 인용할 수 있는 발췌(`range_required_evidence`)를 다시 보낸다. 모델 서술은 어느 쪽에도 넣지 않는다. 복구 뒤에도 남은 형식 오류는 [출력 오류 분류](#출력-오류-분류)대로 정리한다.
 2. **JSON이 아닌 응답의 재시도.** JSON이 아닌 응답은 항목에 대해 아무 정보도 주지 않는다. 형식 복구 기회를 쓰지 않고 한 번 더 요청한다. 재시도 요청은 같은 입력에 복구 규칙과 오류 코드 `output_not_json`을 담은 `repair` 블록을 붙인다. 앞서 복구 요청이 있었으면 그 오류 코드(verify는 후보별 오류)를 유지하고 `output_not_json`을 더한다.
 3. **작업공간 확인값 불일치.** 완료 이벤트까지 검사한 모델 응답이 첨부의 확인값 검사를 통과하지 못하면 응답 전체를 버린다. 정리가 확인되고 단계와 attempt에 호출이 남아 있을 때 같은 요청을 새 디렉터리와 새 확인값으로 단계당 한 번 다시 보낸다. 기존 형식 복구가 있었다면 그 요청을 그대로 보낸다. 취소되거나 디렉터리·marker 쓰기, 공급자 호출 또는 정리에 실패하면 이 재시도를 하지 않는다. 원래 호출의 `workspace_unreachable` 사유와 제공된 사용량은 기록한다.
-4. **끝.** JSON이 아닌 응답이나 형식 거부가 각각 두 번 발생하거나 호출 상한에 닿으면 다시 보내지 않는다. 미수락 응답은 저장하지 않는다. 탐색 사실과 도구 관찰은 남는다.
+4. **끝.** JSON이 아닌 응답이나 형식 거부가 각각 두 번 발생하거나 호출 상한에 닿으면 다시 보내지 않는다. 그때나 뒤 호출이 실패했을 때 형식 오류만 있던 마지막 응답이 있으면 정리해 받는다(취소 제외). 미수락 응답은 저장하지 않는다. 탐색 사실과 도구 관찰은 남는다.
 5. **관찰 ID만 틀린 verify 항목.** 항목의 오류가 `evidence_id_unknown` 하나뿐이고 범위 밖 ID가 모두 그 요청에 플랫폼이 넣은 관찰 ID일 때만, 그 ID를 빼고 같은 검사를 다시 한다. 통과하면 받아들이고 그 호출의 `output_errors`에 `evidence_id_dropped`를 남긴다. 게시되는 판정은 범위 안의 근거만 인용한다.
    - 요청에 없던 ID(지어낸 `ev_…` 등)가 하나라도 있으면 원래 오류로 거부하고 형식 복구로 보낸다.
    - ID를 빼고 통과하지 못하면 원래 오류로 거부한다. 관찰 ID만으로 지지한 항목은 코드 근거가 없어 거부된다.
-6. **후속 호출 실패(verify).** 이미 수락한 판정이 하나 이상 있고, 형식 복구나 재시도 호출이 형식 이외의 이유(timeout, 거절, 모델 오류)로 실패하면 수락한 판정을 보존한다. 남은 후보는 격리하고 `verification_call_failed` 한계를 남긴다. task는 `failed`(`review_output_incomplete`)이고 실패 사유는 그 호출의 `outcome`에 남는다. 수락한 판정이 없거나 취소이면 단계 전체를 종료한다.
-7. **verify 결과.** 일부만 유효하면 사용 가능한 판정을 보존하고 task는 `failed`(`review_output_incomplete`)다. 사용 가능한 판정이 전혀 없으면 `failed`(`review_output_invalid`)다.
+6. **후속 호출 실패(verify).** 수락한 판정이나 형식 오류만 있는 판정이 하나 이상 있고, 형식 복구나 재시도 호출이 형식 이외의 이유(timeout, 거절, 모델 오류)로 실패하면 수락한 판정을 보존하고 형식 오류만 있던 판정은 정리해 받는다. 그래도 남은 후보는 격리하고 `verification_call_failed` 한계를 남긴다. 그때 task는 `failed`(`review_output_incomplete`)이고 실패 사유는 그 호출의 `outcome`에 남는다. 받을 판정이 없거나 취소이면 단계 전체를 종료한다.
+7. **verify 결과.** 일부만 유효하면 사용 가능한 판정을 보존하고 task는 `failed`(`review_output_incomplete`)다. 보고서는 그 판정을 발견에 싣고 격리한 후보만 `unreviewed`로 둔다([보고서 연결](#보고서-연결)). 사용 가능한 판정이 전혀 없으면 `failed`(`review_output_invalid`)다.
 
 ## 실패와 task 결과
 
@@ -400,6 +585,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 | 보내지 못한 verify 후보 | `failed`(`review_input_incomplete`) |
 | 출력 무효(복구 뒤에도) | `failed`(`review_output_invalid`) |
 | verify 일부 판정만 유효 | `failed`(`review_output_incomplete`) |
+| verify 근거가 앞 역할의 같은 ID 발췌와 다름 | `failed`(`review_lineage_mismatch`) |
 | 지침 팩을 읽지 못함 | `failed`(`review_instructions_invalid`) |
 | 기록을 쓰지 못함 | `failed`(`review_record_failed`) |
 
@@ -412,15 +598,15 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 모델은 관리형 로컬 OpenCode CLI로 호출한다([`client.go`](../internal/worker/opencode/client.go), [`executor/opencode.go`](../internal/worker/executor/opencode.go)). 실행 규칙(argv, 제한시간, 프로세스 트리 정리)은 [실행](EXECUTION.md)을 따른다. 원격 OpenCode attach나 별도 serve 연결은 구현하지 않았다. 추가할 때는 인증·버전·취소·workspace marker/digest를 대상 환경에서 검증한다.
 
 - **버전.** 시험한 버전은 OpenCode 1.19.5다(`opencode.Version`). 호출마다 먼저 `--version`을 실행하며 확인에는 설정한 호출 제한시간과 30초 중 짧은 값을 적용한다. 실행 중인 버전 확인이 제한시간을 넘기면 모델 호출 전에 `opencode_version_timeout`을 기록한다. 확인과 요청은 호출당 전체 제한시간을 함께 사용한다. 다른 릴리스(`MAJOR.MINOR.PATCH[-…]`)도 실행하고 그 단계 기록에 `opencode_version_untested`를 남긴다. 릴리스 형식이 아닌 응답만 `opencode_version_unsupported`다. `codeye doctor`의 버전 확인은 모델 비용을 쓰지 않는다.
-- **운영자 설정.** 실행 파일은 절대 경로다. 모델 ID는 `PROVIDER/MODEL`이다. provider는 소문자·숫자·`._-`, 모델 부분은 영숫자와 `._:@+-/`이고 `.`·`..` 경로 조각은 받지 않는다(라우터식 `vendor/model`은 받는다). 평가용 `codeye-gateway`의 Sol·Terra·Luna 모델은 relay 파일이 있을 때만 쓴다. 호출당 제한시간은 `--model-timeout`(기본 180초, 1초~30분)이다. 설정이 없거나 형식이 틀리면 요청을 보내지 않는다(`model_not_configured`). 공급자 변경은 운영자 선택이다([모델 설정](#모델-설정)).
+- **운영자 설정.** 실행 파일은 절대 경로다. 모델 ID는 `PROVIDER/MODEL`이다. provider는 소문자·숫자·`._-`, 모델 부분은 영숫자와 `._:@+-/`이고 `.`·`..` 경로 조각은 받지 않는다(라우터식 `vendor/model`은 받는다). 평가용 `codeye-gateway`의 Sol·Terra·Luna 모델은 relay 파일이 있을 때만 쓴다. relay 모델의 출력·문맥 한도는 요청 예산에서 정한다([요청 크기](#요청-크기)). 호출당 제한시간은 `--model-timeout`(기본 600초, 1초~30분)이다. 설정이 없거나 형식이 틀리면 요청을 보내지 않는다(`model_not_configured`). 공급자 변경은 운영자 선택이다([모델 설정](#모델-설정)).
 - **작업 디렉터리와 workspace digest.** 요청마다 attempt scratch 아래 새 디렉터리를 만든다. 그 안의 `identity.txt`에 snapshot digest, 요청 digest, 무작위 32바이트 nonce에 묶인 확인값을 쓰고 첨부로 준다. 응답의 `workspace_proof`가 이 값과 다르면 `workspace_unreachable`이다. 프롬프트와 선택된 데이터는 표준 입력으로만 전달한다. 요청 digest는 정확한 메시지 텍스트의 SHA-256이다.
 - **권한 차단.** `run --pure`로 실행하고, 실행별 HOME/TMP와 플랫폼이 만든 설정(`OPENCODE_CONFIG_CONTENT`)만 쓴다. 설정은 `permission: deny`, 모든 도구 `false`, share·snapshot·autoupdate·LSP·formatter·plugin 끔, 허용 provider 하나다. 프로젝트 설정, 기본 플러그인, 외부 skill, 모델 목록 조회, LSP 다운로드는 환경변수로 끈다. 사용자 설정과 대상 프로젝트 설정을 읽는 경로를 분리한다. 스냅샷 디렉터리는 보호 루트로 넘긴다.
-- **응답 수집.** 한 세션·한 메시지의 완료된 응답만 받는다. `tool_use`·`permission` 이벤트는 `policy_blocked`, `error`는 `model_unavailable`, 세션 불일치·순서 위반은 `model_output_invalid`, 완료 사유가 `stop`이 아니거나 잘린 출력(64 KiB 초과)은 `model_output_incomplete`다. `reasoning` 이벤트는 버린다. 공급자 사용량 제한 메시지는 `model_rate_limited`로만 남긴다.
+- **응답 수집.** 한 세션·한 메시지의 완료된 응답만 받는다. `tool_use`·`permission` 이벤트는 `policy_blocked`, `error`는 `model_unavailable`, 세션 불일치·순서 위반은 `model_output_invalid`, 완료 사유가 `stop`이 아니거나 잘린 출력(512 KiB 초과)은 `model_output_incomplete`다. `reasoning` 이벤트는 버린다. 공급자 사용량 제한 메시지는 `model_rate_limited`로만 남긴다.
 - **공급자와 인증.** 워커는 선택한 provider와 모델만 요청별 `OPENCODE_CONFIG_CONTENT`에 넣는다. OpenCode의 전송 방식·엔드포인트·인증은 [모델 설정](#모델-설정)을 따른다. 키 값은 argv에 넣지 않으며 실행 기록과 표준 출력·오류에서 가린다. 워커는 격리한 HOME과 환경변수로 실행한다.
 - **relay 파일.** 예산 relay를 쓸 때 ready 파일은 일반 파일이고 그룹·기타 권한이 없어야 하며(Windows 제외) 4,096바이트 이하다. `base_url`은 `http://127.0.0.1:PORT/v1`, token은 32~256자다. OpenCode에는 이 임시 로컬 token만 넘기고 실행 기록에서 가린다. 상위 API 키는 relay만 가진다. relay 운영은 [평가](EVALUATION.md)에 있다.
 - **취소.** 컨텍스트 취소·제한시간은 프로세스 트리 정리까지 확인한다. 정리를 확인하지 못하면 `recovery_required`로 남기고 작업 디렉터리를 지우지 않는다. 이미 전송된 공급자 추론은 취소 뒤에도 청구될 수 있다. 공급자 측 생성의 확정 중단은 보장하지 않는다.
 - **실패 분류.** `opencode run`이 실패하면 JSON 오류 이벤트의 HTTP 상태와 오류 이름만 읽는다. 401·403은 `model_auth_failed`, 404는 `model_not_found`, 429는 `model_rate_limited`, 나머지는 `model_unavailable`이다. 공급자의 오류 문장은 남기지 않는다. OpenCode는 5xx를 몇 번 다시 시도하므로 실패까지 1분 넘게 걸릴 수 있다.
-- **직접 확인.** `codeye model probe`는 합성 입력으로 실제 추론을 한 번 요청한다. 비용이 드는 명령이다. 인자 없이(또는 `--config PATH`) 실행하면 서비스 설정에서 `codeye start`와 같은 방법으로 모델을 정해 확인한다. `--executable ABSOLUTE_PATH --model PROVIDER/MODEL [--credential-file PATH | --relay-file PATH]`는 그 설정 그대로 확인한다. `--timeout`(기본 180초), `--json`. 출력은 provider, 모델, OpenCode 버전(시험한 버전인지), 성공 또는 실패한 단계(`configuration`·`credential`·`opencode`·`request`·`output`)와 사유 코드다. 실패하면 종료 코드 1이고, 분석은 그대로 실행된다.
+- **직접 확인.** `codeye model probe`는 합성 입력으로 실제 추론을 한 번 요청한다. 비용이 드는 명령이다. 인자 없이(또는 `--config PATH`) 실행하면 서비스 설정에서 `codeye start`와 같은 방법으로 모델을 정해 확인한다. `--executable ABSOLUTE_PATH --model PROVIDER/MODEL [--credential-file PATH | --relay-file PATH]`는 그 설정 그대로 확인한다. `--timeout`(기본 600초), `--json`. 출력은 provider, 모델, OpenCode 버전(시험한 버전인지), 성공 또는 실패한 단계(`configuration`·`credential`·`opencode`·`request`·`output`)와 사유 코드다. 실패하면 종료 코드 1이고, 분석은 그대로 실행된다.
 - 네트워크 차단의 OS 수준 강제는 배포 환경에 의존한다([보안](SECURITY.md)).
 
 ## 모델 설정
@@ -429,10 +615,10 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 
 설정 파일은 OpenCode 1.x의 JSON·JSONC 형식이다. 모델을 비워 두면 파일의 `model`을 쓰고, 값을 입력하면 그 모델을 선택한다. 사내 OpenAI 호환 서버는 선택한 `provider`의 `npm`과 `options.baseURL`로 연결한다. 인증 파일을 함께 지정하면 그 파일의 provider 키를 사용한다. 키 파일은 서비스 계정만 읽을 수 있게 둔다. 관리자가 지정한 모델 연결 항목만 읽으며, 프로젝트의 플러그인이나 도구 권한은 실행 설정으로 가져오지 않는다.
 
-- **에이전트.** `codeye agent --opencode ABSOLUTE_PATH --model PROVIDER/MODEL [--model-credential-file ABSOLUTE_PATH | --model-relay-file ABSOLUTE_PATH] [--model-timeout 180s]`. 키 파일 경로와 제한시간은 Hello의 `model_credential_file`, `model_timeout_seconds`로 워커에 간다. 키 파일 없이 고른 provider는 키가 필요 없는 경우(OpenCode Zen의 무료 모델)에만 답한다.
+- **에이전트.** `codeye agent --opencode ABSOLUTE_PATH --model PROVIDER/MODEL [--model-credential-file ABSOLUTE_PATH | --model-relay-file ABSOLUTE_PATH] [--model-timeout 600s] [--review-request-bytes N] [--review-output-tokens N]`. 키 파일 경로, 제한시간, 요청 예산은 Hello의 `model_credential_file`, `model_timeout_seconds`, `review_request_bytes`, `review_output_tokens`로 워커에 간다. 키 파일 없이 고른 provider는 키가 필요 없는 경우(OpenCode Zen의 무료 모델)에만 답한다.
 - **키 파일 형식.** CODEYE 키 파일 `{"schema_version":"0.1","provider":"openai","api_key":"…","base_url":"…","openai_compatible":false}`(`base_url`·`openai_compatible` 선택, 알 수 없는 필드 거부) 또는 OpenCode의 `auth.json`이다. `auth.json`은 모델 provider의 항목이 `{"type":"api","key":"…"}`일 때만 쓴다(OAuth 항목은 쓰지 않는다). `base_url`은 http·https URL이다. OpenAI 호환 서버, 프록시, 시험용 가짜 upstream에 쓴다.
 - **OpenCode 설정 파일을 지정하지 않았을 때의 키.** 순서대로 찾는다. (1) `agent.model.credential_file`, (2) `<state_dir>/secrets/model.json`(0600, 디렉터리 0700), (3) 사용자의 OpenCode `auth.json`(`$XDG_DATA_HOME/opencode/auth.json`, 기본 `~/.local/share/opencode/auth.json`)에서 모델 provider의 `api` 항목. `agent.model.name`이 없으면 (3)은 아래 표의 provider를 표 순서로 찾는다. 환경변수 `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENCODE_API_KEY` 중 처음 있는 것을 `codeye up`이 (2)에 쓴다(`instance.WriteModelSecretFromEnv`). 같은 키면 파일을 다시 쓰지 않는다.
-- **OpenCode 설정 파일을 지정하지 않았을 때의 모델.** `agent.model.name`(`PROVIDER/MODEL`, 또는 키 provider의 모델 이름), 없으면 사용자 OpenCode 설정(`~/.config/opencode/opencode.json`, 주석 없는 JSON일 때)의 `model` 중 그 provider의 것, 없으면 provider별 기본값이다. OpenCode 실행 파일은 `agent.model.opencode`, 없으면 `~/.opencode/bin/opencode`, 없으면 PATH의 `opencode`다. 제한시간은 `agent.model.timeout_seconds`(1~1800, 기본 180)다.
+- **OpenCode 설정 파일을 지정하지 않았을 때의 모델.** `agent.model.name`(`PROVIDER/MODEL`, 또는 키 provider의 모델 이름), 없으면 사용자 OpenCode 설정(`~/.config/opencode/opencode.json`, 주석 없는 JSON일 때)의 `model` 중 그 provider의 것, 없으면 provider별 기본값이다. OpenCode 실행 파일은 `agent.model.opencode`, 없으면 `~/.opencode/bin/opencode`, 없으면 PATH의 `opencode`다. 제한시간은 `agent.model.timeout_seconds`(1~1800, 기본 600)다. 요청 예산은 `agent.model.review_request_bytes`(40,000~1,048,576, 기본 262,144)와 `review_output_tokens`(1,536~65,536, 기본 16,384)다.
 
 | provider | 키 환경변수 | 기본 모델 |
 |---|---|---|
@@ -457,15 +643,15 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 
 ## 검토 기록
 
-검토 task마다 산출물 하나를 role `other`, media type `application/vnd.codeye.review+json`으로 올린다. 크기는 256 KiB 이하다. 보고서 registry는 `schema_version`으로 decoder를 고른다. [스키마](../schemas/review-record.schema.json) · [예시](../examples/review/verify.json)(scripted caller로 만든 다섯 단계 기록 중 하나)
+검토 task마다 산출물 하나를 role `other`, media type `application/vnd.codeye.review+json`으로 올린다. 크기는 1 MiB 이하다(파일 전체 단위의 근거와 긴 서술 때문에 256 KiB에서 넓혔다). 보고서 registry는 `schema_version`으로 decoder를 고른다. [스키마](../schemas/review-record.schema.json) · [예시](../examples/review/verify.json)(scripted caller로 만든 다섯 단계 기록 중 하나)
 
 공통 규칙:
 
 - 메타데이터와 모델의 판정문·근거 참조만 담는다. 발췌의 원문(`text`), 원시 프롬프트, 내부 추론, 프로세스 출력은 저장하지 않는다.
-- 근거(`evidence`)는 `id`, `path`, `sha256`, `start_line`, `end_line`, `kind`, 선택 `origin`과 `symbol`을 가진다. `kind`는 code·test·document·manifest(환경 요구 원문)다. `origin`은 context·caller·test·observation(해석 창)이다. document·manifest 근거에는 origin이 없다.
+- 근거(`evidence`)는 `id`, `path`, `sha256`, `start_line`, `end_line`, `kind`, 선택 `origin`과 `symbol`을 가진다. `kind`는 code·test·document·manifest(환경 요구 원문)다. `origin`은 context·caller·test·observation(해석 창)이고, schema 0.7에서 cited(좁힌 인용)·header(나뉜 파일의 머리)·declaration(인용을 감싸는 선언)이 더해진다. document·manifest 근거에는 origin이 없다. 요청에서만 쓰는 `within`과 원문은 기록에 없다.
 - decoder(`record.Decode`)는 기록을 그 attempt의 run ID·attempt ID·snapshot manifest digest·단계와 대조한다. 근거마다 ID가 (snapshot digest, 경로, blob SHA-256, 행 범위)에서 다시 계산되는지, 경로가 manifest에 있고 blob이 같은지 확인한다. 모든 참조는 그 기록의 근거 목록 안에 있어야 한다. 허위 경로·행·blob·근거 ID, 다른 run·attempt·snapshot의 기록은 거부된다.
 - 사용량이 없으면 `null`이다. 요청을 만들기 전에 실패하면 요청 digest가 빈 문자열일 수 있다.
-- 실패한 기록은 시도한 호출, 준 입력, 앞 단계 상태를 남기고 모델 내용은 격리한다. 수락됐다가 버려진 호출의 `outcome`은 `result_discarded`다. verify가 실패하면 후보는 모두 `unreviewed`로 남는다.
+- 실패한 기록은 시도한 호출, 준 입력, 앞 단계 상태를 남기고 모델 내용은 격리한다. 수락됐다가 버려진 호출의 `outcome`은 `result_discarded`다. verify가 실패하면 후보는 모두 `unreviewed`로 남는다. 일부 후보만 판정하고 실패한 verify(`review_output_incomplete`, `review_input_incomplete`)는 수락 기록을 남기고, 보고서는 그 판정을 싣는다([보고서 연결](#보고서-연결)).
 - 보고서가 검토 완료로 판단하려면 DB task 성공과 검증된 역할 기록을 함께 확인한다.
 
 ### schema 0.2
@@ -499,25 +685,44 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - 수락된 전체 조사에서 선택한 경로의 조회·변경 처리기와 관련 테스트를 실제로 한 요청에 보냈을 때 `workflow_reading` 한 건을 기록한다. 최종 요청에서 조회 등록 또는 세 발췌 중 하나라도 빠지면 생략한다. 기록은 `contract_index`와 선택 경로의 `route_digest`, 서로 다른 `read_evidence_id`·`change_evidence_id`·`test_evidence_id`만 담는다. 문서 기록의 digest, 같은 run·attempt·스냅샷, 원래 계약의 적용 범위, 발췌 종류와 경로를 게시할 때 다시 확인한다.
 - 함께 읽은 근거의 위치는 모델이 인용한 대조와 별도로 보존된다. 테스트 발췌는 작성된 단언이다. [선행 문서](../examples/review/documents-workflow-reading.json) · [전체 조사](../examples/review/investigate-workflow-reading.json)
 
+### schema 0.7(줄 번호 인용)
+
+- 줄 번호를 붙여 보내는 워커는 모든 역할과 slice에 0.7을 쓴다. 0.3~0.6의 선택 필드(`slice`, `contract_probe`·`contract_comparisons`, `workflow_selections`, `workflow_reading`)를 같은 규칙으로 가진다.
+- 근거는 최대 256개다. 한 근거는 파일 전체 단위일 수 있다. origin에 cited·header·declaration이 더해진다.
+- investigate 후보는 최대 16개(`investigate_1`~`16`)이고 verify의 후보와 판정은 최대 20개다. 후보에 선택 `mechanism`(2,400바이트 이하)이 있다. 서술 필드는 1,200바이트, verify의 목록 항목은 1,200바이트 이하다.
+- 이전 schema 기록은 이전 한도(근거 40개, 후보 `_1`~`_4`, 서술 400바이트, 새 origin과 `mechanism` 없음)로만 읽는다. 이전 예시의 바이트가 그대로 읽히는지 `TestEarlierSchemaRecordsStayReadable`이 확인한다.
+- 보고서 생성기 20부터 0.7 기록을 읽는다(`CitedReviewDecoder`). 서술 상한은 기록을 만든 생성기 버전으로 정한다. [보고서](REPORT.md)
+- 형식 오류를 정리해 받은 기록은 `review_output_degraded` 한계를 가진다. 정리한 호출은 `accepted`이면서 `output_errors`에 원래 코드를 남기고, 그 뒤에 실패한 호출이 이어질 수 있다. 호출 순서 검사는 이 한계가 있는 기록에서만 이를 받는다. 필드와 형식이 바뀌지 않았고 이전 기록에는 이 한계가 없어 같은 규칙으로 읽히므로 schema는 0.7을 유지한다.
+
 ## 보고서 연결
 
 보고서 규칙의 전체는 [보고서](REPORT.md)에 있다. 검토 기록과 직접 맞물리는 규칙은 다음과 같다.
 
-- 필수 검토 역할은 계획된 `review.*` task의 `required_for_verdict`로 정한다. 하나 이상이고 모두 수락됐을 때만 `ai_review: performed`, 하나도 없으면 `not_performed`다. 필수가 아닌 역할은 `coverage.ai_review.optional_tasks`에 결과와 사유를 적고 수행으로 세지 않는다. 검토 task가 없는 계획은 필수 역할이 없다.
+- 필수 검토 역할은 계획된 `review.*` task의 `required_for_verdict`로 정한다. 하나 이상이고 모두 수락됐을 때만 `ai_review: performed`, 하나도 없으면 `not_performed`다. 생성기 21부터 일부 후보만 판정하고 실패한 verify task(`review_output_incomplete`, `review_input_incomplete`, 전체와 slice)는 결과가 `accepted_incomplete`다. 계보 검사를 통과한 수락 기록의 판정을 발견에 싣고 판정하지 못한 후보만 사유와 함께 `unreviewed`로 둔다. 이 결과는 수락으로 센다. task는 실패로 남으므로 보고서는 `partial`이고 `review_verification_incomplete` 한계와 분석 공백 `role_accepted_incomplete`가 남는다(A59).
+- 형식 복구 뒤 뺀 항목은 분석 공백(`review_candidate_omitted`·`interpretation_items_omitted`는 코드 분석, `document_items_omitted`는 문서 분석, `environment_notes_omitted`는 환경 분석)으로 보인다. 후보나 가설을 뺀 보고서는 `no_actionable_findings` 대신 `inconclusive`다. 필수가 아닌 역할은 `coverage.ai_review.optional_tasks`에 결과와 사유를 적고 수행으로 세지 않는다. 검토 task가 없는 계획은 필수 역할이 없다.
 - `coverage.review_calls`는 호출마다 `pack_id`·`pack_version`과 호출이 든 task(`task_key`)를 싣는다. 최대 2,013개다. `llm_exposed_files`는 slice 기록이 보낸 경로도 센다.
-- 앞 단계·탐색·도구 산출물의 SHA-256, 관찰 ID, verify 후보와 앞 단계 후보가 맞지 않으면 그 단계를 `review_lineage_mismatch:<task>`로 제외한다. 같은 발췌가 앞 단계마다 다른 출처 표시(`context`·`observation`)로 올 수 있으므로 어느 한 표시와 같으면 받는다.
+- 앞 단계·탐색·도구 산출물의 SHA-256, 관찰 ID, verify 후보와 앞 단계 후보가 맞지 않으면 그 단계를 `review_lineage_mismatch:<task>`로 제외한다. verify 근거 중 앞 단계와 ID가 같은 발췌는 앞 단계 항목 그대로여야 한다([인용](#인용)). 같은 발췌가 앞 단계마다 다른 출처 표시(`context`·`observation`)로 올 수 있으므로 어느 한 항목과 같으면 받는다.
 - 모델이 서술한 숫자를 run 상태나 통계로 쓰지 않는다. 도구 관찰과 모델 후보는 서로 다른 산출물이다.
 
 ## 시험
 
 - 회귀: `go test -race ./internal/worker/review/... ./internal/worker/run`. 실제 OpenCode와 가짜 upstream으로 `codeye start`의 키 파일 경로 전체(시작, probe, 검토 단계 수락, 키 거부 사유, 시험하지 않은 버전, 키 미노출)를 `python3 scripts/test_postgres.py --smokes-only --instance-model`이 확인한다(비용 없음). 예시와 부정 입력: `python3 scripts/validate_bundle.py`. 일반 CI는 유료 모델을 호출하지 않으며 scripted caller만 쓴다. scripted caller 결과는 플랫폼 검사의 근거이고 지침 품질의 근거가 아니다.
-- 실모델 시험은 명시적으로 환경을 준 경우에만 실행한다. `CODEYE_TEST_OPENCODE_BIN`과 `CODEYE_TEST_REVIEW_RELAY`(필요하면 `CODEYE_TEST_REVIEW_MODEL`, `CODEYE_TEST_REVIEW_LEDGER`, `CODEYE_TEST_OPENCODE_MODEL`)를 주고 `go test -v -count=1 -run '^TestLiveVerifier$' ./internal/worker/review`처럼 하나씩 실행한다. 대상은 `TestLiveOpenCode`(키 파일은 `CODEYE_TEST_MODEL_CREDENTIAL`), `TestLiveInFlightCancel`(`internal/worker/opencode`)이다. 검토 역할 전체를 실모델로 돌리는 경로는 회귀 파일럿(`scripts/regression_pilot.py --pilot`, [평가](EVALUATION.md))이다. 비용이 든다. 시험 체계는 [시험](TESTING.md)에 있다.
+- 실모델 시험은 명시적으로 환경을 준 경우에만 실행한다. `CODEYE_TEST_OPENCODE_BIN`과 `CODEYE_TEST_REVIEW_RELAY`(필요하면 `CODEYE_TEST_REVIEW_MODEL`, `CODEYE_TEST_REVIEW_LEDGER`, `CODEYE_TEST_OPENCODE_MODEL`)를 주고 `go test -v -count=1 -run '^TestLiveVerifier$' ./internal/worker/review`처럼 하나씩 실행한다. 대상은 `TestLiveOpenCode`(키 파일은 `CODEYE_TEST_MODEL_CREDENTIAL`), `TestLiveInFlightCancel`, `TestLiveRelaySlowAnswer`(`internal/worker/opencode`)이다. `TestLiveRelaySlowAnswer`는 비용 없이 relay 뒤에 `scripts/fake_model_upstream.py --delay-seconds 320`을 두고 `CODEYE_TEST_MODEL_TIMEOUT=400s`로 OpenCode의 기본 300초 대기를 넘는 응답이 검토에 닿는지 본다. 검토 역할 전체를 실모델로 돌리는 경로는 회귀 파일럿(`scripts/regression_pilot.py --pilot`, [평가](EVALUATION.md))이다. 비용이 든다. 시험 체계는 [시험](TESTING.md)에 있다.
 
 ## 한계
 
-- overview는 문서 계약이나 도구 진단에 관련된 줄과 다른 파일의 앞부분을 발췌한다. 후속 검토는 아직 전송하지 않은 줄을 다루며 호출·요청·slot 상한이 남은 줄을 결정한다.
+- overview는 문서 계약이나 도구 진단에 관련된 줄과 모듈의 파일 전체 또는 선언 단위를 발췌한다. 후속 검토는 아직 전송하지 않은 줄을 다루며 호출·요청·slot 상한이 남은 줄을 결정한다.
+- 모델은 도구를 쓰지 않는다. 요청에 없는 파일을 직접 열거나 검색하지 못하므로 한 요청의 단위 밖에 있는 호출 관계는 verify 확장과 slice로만 보인다.
+- 선언 경계 판별은 Go 외 언어에서 구문 분석이 아니다. 매크로·전처리·비정형 들여쓰기에서는 경계가 덜 정확할 수 있다. C/C++ 전처리 분기는 첫 분기의 깊이를 따르므로, 분기마다 중괄호 균형이 다르고 대안 관계도 아닌 코드는 경계를 잃을 수 있다. JavaScript 정규식 리터럴은 앞 문자로 짐작하므로 `)` 뒤의 정규식(`if (x) /re/.test(s)`)은 나눗셈으로 읽는다.
+- 보고서 검증기는 schema 0.7 조사 기록이 HTTP 코드와 테스트를 함께 읽었는지(`workflow_reading`) 보고서 본문만으로 알 수 없다. 0.6 기록은 그 읽기가 있을 때만 쓰였으므로 decoder 이름이 증거였지만, 0.7은 모든 역할이 쓴다. 그래서 문서 대조의 관련 흐름은 0.7 조사 산출물이 수락되었고 세 인용(호출 코드, 변경 코드, 테스트)이 같은 범위의 Go 근거일 때 받는다. 보고서 생성기는 기록의 `workflow_reading`이 있을 때만 관련 흐름을 만들고 문서 기록과 대조한다([보고서 연결](#보고서-연결)).
+- 보고서의 표시용 발췌는 인용의 첫 50줄·1,800바이트까지다. 80줄까지의 인용은 근거 범위 전체가 기록에 남지만 화면에는 앞부분만 보인다([보고서](REPORT.md)).
+- 큰 요청 예산의 실제 모델 품질·지연 시간·비용은 측정하지 않았다. 제한시간 600초와 기본 예산은 추정이며 실제 호출을 보고 다시 정한다(A58).
 - 동적 디스패치와 실제 빌드·런타임 구성이 결정하는 호출은 제공된 발췌와 실행 기록으로 판단한다. 정적으로 연결한 지원 범위는 [파일 사이의 호출 근거](#파일-사이의-호출-근거)에 있다.
 - 실행·재현 주장 거부와 민감값 패턴은 정규식이다. 다른 표현을 모두 잡지 못한다.
 - 미완료가 사라진다는 보장은 없다. 끝내 검증되지 않은 후보는 `unreviewed`로 격리하고 task는 실패한다.
+- 범위 없는 긴 발췌를 반대 근거로 인용한 verify 판정은 복구 뒤 그 후보가 인용한 범위로 정리된다(`citation_range_from_candidate`). 그 범위가 반박하는 줄을 담는다는 보장은 없다. 판정과 인용은 그대로 보이고 한계 코드가 정리했다는 사실을 밝힌다. 그 범위가 없으면 발췌 전체(`citation_range_unspecified`)라 위치가 덜 정확하다.
+- 분류는 코드 단위다. 한 코드가 여러 원인을 묶으면(예: `text_invalid`는 서술 한도와 민감값 패턴) 같은 처리를 받는다. 형식 정리의 실제 모델 응답 빈도와 정리한 항목의 품질은 측정하지 않았다.
+- 형식 오류로 항목을 모두 빼면 environment·interpret는 항목이 하나 이상이어야 하므로 응답을 거부하고 그 역할이 실패한다. 두 역할은 필수가 아니어서 AI 검토 상태는 바뀌지 않지만, 해석 가설은 검증으로 이어지지 않는다.
+- 역할 계약 문자열의 인용 예시(`ev_5f0c2a9e1b7d4c3a8e6f2b10:120-134`)는 요청에 없는 ID다. 모델이 예시를 그대로 옮기면 무결성 오류(`evidence_id_unknown`)다.
 - `roleRules`는 "근거·관찰 ID"를 인용하라고 하고 verify 계약은 "근거 ID"만 말한다. 이 어긋남은 구조(관찰 ID 처리 규칙)로 막았고, 문구 정리는 다음 지침 개정에서 독립 작성자가 판단한다.
 - 모델의 자신감과 서술은 측정된 정확도가 아니다. 품질은 [평가](EVALUATION.md)의 판정과 지표로만 말한다.

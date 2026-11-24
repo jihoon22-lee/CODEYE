@@ -68,6 +68,8 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	modelInstance := fs.String("model-instance-config", "", "")
 	modelTimeout := fs.Duration("model-timeout", opencode.DefaultTimeout, "")
 	reviewMaxCalls := fs.Int("review-max-calls", review.DefaultMaxCalls, "")
+	reviewRequestBytes := fs.Int("review-request-bytes", review.DefaultRequestBytes, "")
+	reviewOutputTokens := fs.Int("review-output-tokens", review.DefaultOutputTokens, "")
 	fs.Var(&modelRoots, "model-source-root", "")
 	// The repository-code grant (docs/ANALYZERS.md#저장소-코드-실행-허가) is a node operator setting
 	// per local source root, like the model-source grant; nothing in a run
@@ -149,6 +151,14 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "invalid --review-max-calls; expected 15..2013 (default 99)")
 		return agent.ExitUsage
 	}
+	if !review.ValidRequestBytes(*reviewRequestBytes) {
+		fmt.Fprintf(stderr, "invalid --review-request-bytes; expected %d..%d (default %d)\n", review.MinRequestBytes, review.MaxRequestBytes, review.DefaultRequestBytes)
+		return agent.ExitUsage
+	}
+	if !review.ValidOutputTokens(*reviewOutputTokens) {
+		fmt.Fprintf(stderr, "invalid --review-output-tokens; expected %d..%d (default %d)\n", review.MinOutputTokens, review.MaxOutputTokens, review.DefaultOutputTokens)
+		return agent.ExitUsage
+	}
 	if len(testSettings.GoRun) > 512 || strings.ContainsAny(testSettings.GoRun, "\x00\r\n") {
 		fmt.Fprintln(stderr, "invalid --test-go-run; expected one line of at most 512 bytes")
 		return agent.ExitUsage
@@ -221,6 +231,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		SourceRoots: mapping, Workers: *workers, Autoscale: *autoscale, MaxWorkers: *maxWorkers,
 		ToolPath: *toolPath, JavaClasspathCatalog: *javaClasspath, GitExecutable: *git, GitHosts: gitHosts, GitCredentialFile: *gitCredential, GoExecutable: *goExe, GoModCache: *goModCache, AnalyzerTools: tools,
 		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelCredentialFile: *modelCredential, ModelTimeout: *modelTimeout, ModelSourceRoots: approved, ReviewMaxCalls: *reviewMaxCalls,
+		ReviewRequestBytes: *reviewRequestBytes, ReviewOutputTokens: *reviewOutputTokens,
 		RepositoryCodeSourceRoots: codeApproved,
 		StorageQuota:              limits,
 		StorageLogDir:             *storageLogDir,
@@ -312,7 +323,8 @@ func workerModel(h *workerproto.Hello) opencode.Config {
 		timeout = time.Duration(h.ModelTimeoutSeconds) * time.Second
 	}
 	return opencode.Config{Executable: h.ModelExecutable, Model: h.ModelName, RelayFile: h.ModelRelayFile, CredentialFile: h.ModelCredentialFile,
-		ConfigFile: h.ModelConfigFile, Timeout: timeout, Offline: h.Offline, CABundle: h.CABundle}
+		ConfigFile: h.ModelConfigFile, Timeout: timeout, Offline: h.Offline, CABundle: h.CABundle,
+		OutputTokens: h.ReviewOutputTokens, RequestBytes: h.ReviewRequestBytes}
 }
 
 // workerHandlers registers the handlers of this build. Without a usable
@@ -333,6 +345,9 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 func workerHandlersWithCaller(ctx context.Context, h *workerproto.Hello, runner executor.Runner, caller review.Caller) ([]analysis.Handler, []string, error) {
 	if h.ReviewMaxCalls != 0 && !review.ValidMaxCalls(h.ReviewMaxCalls) {
 		return nil, nil, errors.New("review call ceiling out of range")
+	}
+	if !review.ValidRequestBytes(h.ReviewRequestBytes) || !review.ValidOutputTokens(h.ReviewOutputTokens) {
+		return nil, nil, errors.New("review request budget out of range")
 	}
 	cfg := builtin.Config{GoExecutable: h.GoExecutable, GoModCache: h.GoModCache, Tools: h.AnalyzerTools, ProbeDir: h.ScratchRoot, ToolPath: h.ToolPath, JavaClasspathCatalog: h.JavaClasspathCatalog}
 	var depCfg deps.Config
@@ -370,7 +385,8 @@ func workerHandlersWithCaller(ctx context.Context, h *workerproto.Hello, runner 
 	var testHandler analysis.Handler
 	for i, handler := range hs {
 		if handler.Info().Name == analyzerpack.CompositeName {
-			reviewed := review.Handler{Static: handler, Caller: caller, MaxCalls: h.ReviewMaxCalls}
+			reviewed := review.Handler{Static: handler, Caller: caller, MaxCalls: h.ReviewMaxCalls,
+				Budget: review.Budget{RequestBytes: h.ReviewRequestBytes, OutputTokens: h.ReviewOutputTokens}}
 			// C/C++ compile DB generation runs after the dependency tasks and
 			// before the analyzers that read it (docs/ANALYZERS.md#compile-db-생성).
 			generated, err := cpp.WrapGeneration(reviewed, cpp.GenerationHandlerConfig{Generate: cpp.GenerateConfig{ToolPath: h.ToolPath},

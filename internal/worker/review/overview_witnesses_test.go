@@ -65,7 +65,7 @@ func TestOverviewIncludesCompleteDocumentedShortRuntime(t *testing.T) {
 			DocumentEvidenceIDs: in.Documents.Contracts[0].EvidenceIDs, CodeEvidenceIDs: []string{x.ID},
 		}}})
 	}
-	runRole(t, j, langStub{eco: "javascript", manifest: "package.json", path: codePath, line: 34}, &scriptedCaller{script: script}, "1.27.4")
+	runRoleSmall(t, j, langStub{eco: "javascript", manifest: "package.json", path: codePath, line: 34}, &scriptedCaller{script: script}, "1.27.4")
 	if !handled || len(readRecord(t, j, "investigate").ContractComparisons) != 1 {
 		t.Fatalf("the complete file's evidence ID was not accepted")
 	}
@@ -105,7 +105,7 @@ func TestOverviewKeepsExactWitnessesWhenWideningWouldDisplaceInput(t *testing.T)
 			if tc.change != nil {
 				tc.change(initial, &links)
 			}
-			got, changed := s.widenOverviewWitnesses(initial, links, investigateContract, build)
+			got, changed := s.widenOverviewWitnesses(initial, links, fmt.Sprintf(investigateContract, 4), build)
 			if changed || !slices.Equal(got, initial) {
 				t.Fatalf("widening displaced or changed an existing window: %+v", got)
 			}

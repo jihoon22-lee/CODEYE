@@ -14,8 +14,8 @@
       "id": "0195f3a0-0000-7000-8000-000000000707",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "86bef15336ca724526bfd06742a521d61413bdc0284bc06e1cf02ebfbf1c54e9",
-      "size_bytes": 52286,
+      "sha256": "9bfc164182f0f12474d7428ccc929a9a804c48883bc2ab8b0d76bb9833f14839",
+      "size_bytes": 52273,
       "task_key": null
     },
     {
@@ -334,39 +334,39 @@
       "task_key": "docs.discover"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-000000000632",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "cfd2e3e135566462a9f97e988240986e3743c5834a6f35977e5bd4cb5dfa9dba",
+      "sha256": "176f79c5a5f5ef1d2ff61ed71b3198a40c2187dda23a345aaeccfebda292dc6b",
       "size_bytes": 4193,
       "task_key": "review.environment"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-000000000634",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "39c37a054acc123d9b19008cd0d77f07e3f3c1e773c28ed39b2ae5630f8844a2",
+      "sha256": "a135b337009538a7422558a1393b92bae272cb65135f3eb064d4881946145dff",
       "size_bytes": 1341,
       "task_key": "review.documents"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-000000000636",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "b1352e57a4307107deda7f7a9f17360f190a3e991cceb5a3c1f6a3749ac56fa9",
-      "size_bytes": 3314,
+      "sha256": "cb753f15ca0a0309947c989bda29c275a74a2c08573e7a8570ec1ab80d71bba4",
+      "size_bytes": 3378,
       "task_key": "review.investigate"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.2",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-000000000639",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "f5ba2902527a49ebb8fdbb06cfd42b0d9917245f03f475f9cc30931f9d984602",
-      "size_bytes": 4050,
+      "sha256": "9c61209869e92188808182b1023856815c0ebd5c683ce31622ed5f71aaee5055",
+      "size_bytes": 4309,
       "task_key": "review.verify"
     },
     {
@@ -374,98 +374,98 @@
       "id": "0195f3a0-0000-7000-8000-00000000063b",
       "media_type": "application/vnd.codeye.review-scope+json",
       "role": "other",
-      "sha256": "015083a194200b32c4de1aed9f7e1876320966235cc26c966a8a46544d5cbfb3",
-      "size_bytes": 21410,
+      "sha256": "243790b269354aef9d55bff6fafdd64b0b4bf058aa239c1f11018a8ee3928456",
+      "size_bytes": 21574,
       "task_key": "review.scope"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-00000000063d",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "25b0a23eb56ff23e42888dc1a50dc2586dcafe5dae3595e6a329578b5021309e",
-      "size_bytes": 3486,
+      "sha256": "4eb690889eacace7844b01b6740f81c9ca482d993229c9504c02f1cbb9466af2",
+      "size_bytes": 3153,
       "task_key": "review.investigate.s001"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-00000000063f",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "4076569500ffec8bdd6e3ee9edeb9323b24b88ddd480522d50a1688531780682",
-      "size_bytes": 4111,
+      "sha256": "9cbeda2e0bb47ad4b9f0a3ca970b1cd3e190b920f6ad8875b645b87d3b8cab84",
+      "size_bytes": 3778,
       "task_key": "review.verify.s001"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-000000000641",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "46e5a9c4bbf115206cce8b30885177534c51e88efdf4b66363d17f5c72252d46",
-      "size_bytes": 3480,
+      "sha256": "a01d41bb14a01afe6b7e11ccbf2277c77d90ea4c03c3e738322b4c8250e6b0e0",
+      "size_bytes": 3146,
       "task_key": "review.investigate.s002"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-000000000643",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "b1e690b0b60eacbad8f0773a747809399b8d34ef4f6897fd2710ef2ed1175659",
-      "size_bytes": 4105,
+      "sha256": "b623f411d965cac6c70794c9af74a56458b9169f596e65c9a8e15b19c92014f4",
+      "size_bytes": 3771,
       "task_key": "review.verify.s002"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-000000000645",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "9a05fa4929ddc24fced29d29ebfc6e7883f6bf0e7d04848adb76239ceda1b7d4",
-      "size_bytes": 3487,
+      "sha256": "85dd8a14f4888137cc5ed2282143a2dd54321ea03aeea44c1b914a010f1d8904",
+      "size_bytes": 3143,
       "task_key": "review.investigate.s003"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-000000000647",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "884eb3c89fe4af17779e50256e07f3fee0ae56db224a63ad627e1f6e2b58f19c",
-      "size_bytes": 4112,
+      "sha256": "90e1027af6b2f51ce152f0605c91a4c453900ddbab259e38ee29d1c91279ef98",
+      "size_bytes": 3768,
       "task_key": "review.verify.s003"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-000000000649",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "d19d70219bfadffb9e152e6a63110b8d5d81fe4ef7c6960a3e57c4344c0d728c",
-      "size_bytes": 3548,
+      "sha256": "856b19d9132309d93682bb625ca87519767ad695a3095748dbe6a253cdd77648",
+      "size_bytes": 3154,
       "task_key": "review.investigate.s004"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-00000000064b",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "dcccd0adef1641cd015e9ec65a9a73b340cb3a9ad8b9fd53ef689496a9a4d15b",
-      "size_bytes": 4172,
+      "sha256": "0e72f57c7808804ce2968e6e81e0983e764cebb4dc172b7cdacac855e962a4fe",
+      "size_bytes": 3779,
       "task_key": "review.verify.s004"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-00000000064d",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "3401406193ed418061ee71f26c2a777443661466b2d370cfe301bdbbaeba17e4",
-      "size_bytes": 3496,
+      "sha256": "74a516ed4fd0d3f46c7e3712755c0b1af0593fe08d4a4784e85851a2daf45b33",
+      "size_bytes": 3809,
       "task_key": "review.investigate.s005"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.3",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-00000000064f",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "67ddee6711c8a98f700c8cb4089fc8d9e1e3343e34f6724a5c9e71aa944091d7",
-      "size_bytes": 4128,
+      "sha256": "4995d75d2d2a172cf0bdeb075f4aecb0c7490159ae6a9315406c406fb023a298",
+      "size_bytes": 4434,
       "task_key": "review.verify.s005"
     }
   ],
@@ -479,9 +479,9 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "f97483e4272dad88c5ac40211bd86b613999c225eead80883ad271a51ae40f6f",
+    "input_digest": "d751706ce8539e88ef94132551b068c743795e2f3afb1bf4cab8349f9624ec62",
     "result_manifest_artifact_id": null,
-    "version": "19"
+    "version": "21"
   },
   "code_review": {
     "accepted_calls": 14,
@@ -540,72 +540,120 @@
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/cache.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/codec.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/compact.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/cursor.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/delete.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/encode.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/evict.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
           "investigation": "accepted",
           "module_id": "go:store",
           "path": "store/flush.go",
-          "remaining": [],
-          "reviewed_lines": 89,
-          "sent_lines": 89,
+          "remaining": [
+            {
+              "end_line": 89,
+              "reason": "review_budget_exhausted",
+              "start_line": 72
+            }
+          ],
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -616,11 +664,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -631,11 +679,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -646,11 +694,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -661,11 +709,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -676,11 +724,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -691,11 +739,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -706,11 +754,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -721,11 +769,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -736,11 +784,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -751,11 +799,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -766,11 +814,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -781,11 +829,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -796,11 +844,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -811,11 +859,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -826,11 +874,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -841,11 +889,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -856,11 +904,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -871,11 +919,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -886,11 +934,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -901,11 +949,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -916,11 +964,11 @@
             {
               "end_line": 89,
               "reason": "review_budget_exhausted",
-              "start_line": 51
+              "start_line": 72
             }
           ],
-          "reviewed_lines": 50,
-          "sent_lines": 50,
+          "reviewed_lines": 71,
+          "sent_lines": 71,
           "total_lines": 89
         },
         {
@@ -994,24 +1042,24 @@
           "files_sent_to_model": 3,
           "files_truncated": 0,
           "files_unreadable": 0,
-          "files_with_completed_review": 1,
+          "files_with_completed_review": 2,
           "files_withheld": 0,
           "module_id": "go:api",
           "slices": [
             {
               "reason": null,
               "status": "succeeded",
-              "task_key": "review.investigate.s004"
+              "task_key": "review.investigate.s005"
             },
             {
               "reason": null,
               "status": "succeeded",
-              "task_key": "review.verify.s004"
+              "task_key": "review.verify.s005"
             }
           ]
         },
         {
-          "bytes_sent": 45459,
+          "bytes_sent": 51812,
           "class": "primary",
           "discovered": true,
           "files_accepted": 30,
@@ -1021,9 +1069,9 @@
           "files_not_sent": 0,
           "files_requested": 30,
           "files_sent_to_model": 30,
-          "files_truncated": 21,
+          "files_truncated": 29,
           "files_unreadable": 0,
-          "files_with_completed_review": 5,
+          "files_with_completed_review": 4,
           "files_withheld": 0,
           "module_id": "go:store",
           "slices": [
@@ -1106,6 +1154,16 @@
               "reason": "review_budget_exhausted",
               "status": "budget_exhausted",
               "task_key": "review.verify.s008"
+            },
+            {
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.investigate.s009"
+            },
+            {
+              "reason": "review_budget_exhausted",
+              "status": "budget_exhausted",
+              "task_key": "review.verify.s009"
             }
           ]
         },
@@ -1129,12 +1187,12 @@
             {
               "reason": null,
               "status": "succeeded",
-              "task_key": "review.investigate.s004"
+              "task_key": "review.investigate.s005"
             },
             {
               "reason": null,
               "status": "succeeded",
-              "task_key": "review.verify.s004"
+              "task_key": "review.verify.s005"
             }
           ]
         },
@@ -1158,18 +1216,18 @@
             {
               "reason": null,
               "status": "succeeded",
-              "task_key": "review.investigate.s004"
+              "task_key": "review.investigate.s005"
             },
             {
               "reason": null,
               "status": "succeeded",
-              "task_key": "review.verify.s004"
+              "task_key": "review.verify.s005"
             }
           ]
         }
       ],
-      "primary_slots_budget_exhausted": 3,
-      "request_bytes_sent": 359923,
+      "primary_slots_budget_exhausted": 4,
+      "request_bytes_sent": 408848,
       "scope": {
         "key": "review.scope",
         "result": "accepted",
@@ -1178,8 +1236,8 @@
       "status": "partial"
     },
     "pack_id": "review",
-    "pack_version": "2.6.0",
-    "request_bytes": 359923,
+    "pack_version": "2.8.0",
+    "request_bytes": 408848,
     "roles": [
       {
         "key": "review.investigate",
@@ -1206,8 +1264,8 @@
     ],
     "stage": {
       "counts": {
-        "budget_exhausted": 6,
-        "skipped_policy": 178
+        "budget_exhausted": 8,
+        "skipped_policy": 176
       },
       "reasons": [
         "no_review_scope",
@@ -1285,9 +1343,9 @@
         },
         {
           "key": "review.investigate.s009",
-          "reason": "no_review_scope",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "reason": "review_budget_exhausted",
+          "result": "not_succeeded",
+          "task_status": "budget_exhausted"
         },
         {
           "key": "review.investigate.s010",
@@ -1861,9 +1919,9 @@
         },
         {
           "key": "review.verify.s009",
-          "reason": "no_review_scope",
-          "result": "skipped",
-          "task_status": "skipped_policy"
+          "reason": "review_budget_exhausted",
+          "result": "not_succeeded",
+          "task_status": "budget_exhausted"
         },
         {
           "key": "review.verify.s010",
@@ -2421,9 +2479,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "8259e46816eae75401902e9e69f56eda4ad5bea68d16dc98706081c0935d45a6",
-        "pack_version": "2.6.0",
-        "request_sha256": "952b7f85ff5eeebbfe795c14f078524a0fafee3d929208d6c6b2facca791c52b",
+        "pack_sha256": "0324e4fef1de15c0e19132757035191e3a553a76caa55500cfbfdd944a1ed6c9",
+        "pack_version": "2.8.0",
+        "request_sha256": "e1a4e9486f920f8f62cc8f33026e6304c638a1b7cd3d872b0aff914c2c2c4fd8",
         "role": "environment",
         "task_key": "review.environment"
       },
@@ -2432,9 +2490,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "6b97260fd4735b89c6855e2b7d1db30ae5c5f18a891db749bfe4799fc4d98a8b",
-        "pack_version": "2.6.0",
-        "request_sha256": "d034787740e3b8853b55edfaff414dfa3a668ae11b559688f0fea7c39111934f",
+        "pack_sha256": "cdb7277b45e6204ce161292c3338ac23e96d10c98f1218b89ef7e57a6b7c8a4f",
+        "pack_version": "2.8.0",
+        "request_sha256": "b02312fe04ee32215a9488510fb64113eee81b05162a27beec7eee530672ec63",
         "role": "documents",
         "task_key": "review.documents"
       },
@@ -2443,9 +2501,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "7b63eef1d93eee855d0d18df2c0b3da67b73b5c1836231b5355a1eb851f58f48",
-        "pack_version": "2.6.0",
-        "request_sha256": "8b48783cbf30c30189311694905dfc0cc0ed0d7883319b343cd6392eb2c79e9c",
+        "pack_sha256": "301998f8fddcafc342b2946a02bcd520e0eb5f31dfc745e4358c27bca1445e32",
+        "pack_version": "2.8.0",
+        "request_sha256": "c597faaff7f2d8119305ff816b84e315de0e3b267e5aceaadf8c973572a69ece",
         "role": "investigate",
         "task_key": "review.investigate"
       },
@@ -2454,9 +2512,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "da4e178132aff3807b98185735b3311b4202d756fade647fdff6ee499ec7ef15",
-        "pack_version": "2.6.0",
-        "request_sha256": "e53535a0dcc8034311d3b481deaeba12392a26e0328c78b1805a2008159ecede",
+        "pack_sha256": "2e02246c97782e71b3679aff2a70ad5810d492439765c45ab61b068767a568f2",
+        "pack_version": "2.8.0",
+        "request_sha256": "db4a98ccddc68f84564f3ef6962dc3354a0ccc295fc4743a36c48491ea569e64",
         "role": "verify",
         "task_key": "review.verify"
       },
@@ -2465,9 +2523,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "7b63eef1d93eee855d0d18df2c0b3da67b73b5c1836231b5355a1eb851f58f48",
-        "pack_version": "2.6.0",
-        "request_sha256": "9541363ed2a2620c47bb38cb5ae894e0f6866d0d0507ec1e9d42fde73af8205a",
+        "pack_sha256": "301998f8fddcafc342b2946a02bcd520e0eb5f31dfc745e4358c27bca1445e32",
+        "pack_version": "2.8.0",
+        "request_sha256": "1c67cec4050d2acf4e5d413aeb1ceebddab60f3d6d5dfe6c0201f8e790d06f8c",
         "role": "investigate",
         "task_key": "review.investigate.s001"
       },
@@ -2476,9 +2534,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "da4e178132aff3807b98185735b3311b4202d756fade647fdff6ee499ec7ef15",
-        "pack_version": "2.6.0",
-        "request_sha256": "e71fec1a397768c007ab7b0daf5c7545cfef9d335e1e8a13bfa5cb1adecac8c1",
+        "pack_sha256": "2e02246c97782e71b3679aff2a70ad5810d492439765c45ab61b068767a568f2",
+        "pack_version": "2.8.0",
+        "request_sha256": "beabdf1b781e381f311f9a51a15e7b5f46baf31699676c8bd18479649da32fab",
         "role": "verify",
         "task_key": "review.verify.s001"
       },
@@ -2487,9 +2545,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "7b63eef1d93eee855d0d18df2c0b3da67b73b5c1836231b5355a1eb851f58f48",
-        "pack_version": "2.6.0",
-        "request_sha256": "ee338519dc28d41f428755684dbc39f406cd07de9e1868b9185fa7a0b96b831f",
+        "pack_sha256": "301998f8fddcafc342b2946a02bcd520e0eb5f31dfc745e4358c27bca1445e32",
+        "pack_version": "2.8.0",
+        "request_sha256": "944771a88f750eb9a02c31dfdec59acca210d520e7d555e4a78f7e6587c3d999",
         "role": "investigate",
         "task_key": "review.investigate.s002"
       },
@@ -2498,9 +2556,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "da4e178132aff3807b98185735b3311b4202d756fade647fdff6ee499ec7ef15",
-        "pack_version": "2.6.0",
-        "request_sha256": "80536d64c4d3f9d54e5a6fcfa74ac68ea0b7acc484f593647ad9adc502b39575",
+        "pack_sha256": "2e02246c97782e71b3679aff2a70ad5810d492439765c45ab61b068767a568f2",
+        "pack_version": "2.8.0",
+        "request_sha256": "89c2ef65da4abb3c878bf9f3c161d6626bf6633a3a40259b5aaf9e0a443d8a58",
         "role": "verify",
         "task_key": "review.verify.s002"
       },
@@ -2509,9 +2567,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "7b63eef1d93eee855d0d18df2c0b3da67b73b5c1836231b5355a1eb851f58f48",
-        "pack_version": "2.6.0",
-        "request_sha256": "53d7b73ff72872aea89c979f8daff07f8f26b35f888597ae9ffd6ef96ab456f0",
+        "pack_sha256": "301998f8fddcafc342b2946a02bcd520e0eb5f31dfc745e4358c27bca1445e32",
+        "pack_version": "2.8.0",
+        "request_sha256": "f09be63a0c7d2bb480f2a0c31f76f56956e3d05628624adb04416ff709a9e75e",
         "role": "investigate",
         "task_key": "review.investigate.s003"
       },
@@ -2520,9 +2578,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "da4e178132aff3807b98185735b3311b4202d756fade647fdff6ee499ec7ef15",
-        "pack_version": "2.6.0",
-        "request_sha256": "4c7b32a1726993e5b903d7696c497bfe22fa5ac3c3a6ea66cdc9ca94fd816b00",
+        "pack_sha256": "2e02246c97782e71b3679aff2a70ad5810d492439765c45ab61b068767a568f2",
+        "pack_version": "2.8.0",
+        "request_sha256": "8e56a9d9eabd98bac1149577fbcc62445d98fb15312030ca8c01d68984c37aa3",
         "role": "verify",
         "task_key": "review.verify.s003"
       },
@@ -2531,9 +2589,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "7b63eef1d93eee855d0d18df2c0b3da67b73b5c1836231b5355a1eb851f58f48",
-        "pack_version": "2.6.0",
-        "request_sha256": "8efe636fe046568fabd8001c3a4bdfb1b10f3e8db06af6523bbbeb6d4528e73e",
+        "pack_sha256": "301998f8fddcafc342b2946a02bcd520e0eb5f31dfc745e4358c27bca1445e32",
+        "pack_version": "2.8.0",
+        "request_sha256": "d25a76ee30133d622ea2e6e395d2f5f9c7039dd35498d691e9d2a9a8cb5ee8f1",
         "role": "investigate",
         "task_key": "review.investigate.s004"
       },
@@ -2542,9 +2600,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "da4e178132aff3807b98185735b3311b4202d756fade647fdff6ee499ec7ef15",
-        "pack_version": "2.6.0",
-        "request_sha256": "522613bf6b01ff34b8d3e72303c08f0074b8047d203a43a40811018529e3a4ef",
+        "pack_sha256": "2e02246c97782e71b3679aff2a70ad5810d492439765c45ab61b068767a568f2",
+        "pack_version": "2.8.0",
+        "request_sha256": "c137e32c67842cb2e3fc8d3fdd2b6d5a141fa705633d698d1447b19233ba00b7",
         "role": "verify",
         "task_key": "review.verify.s004"
       },
@@ -2553,9 +2611,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "7b63eef1d93eee855d0d18df2c0b3da67b73b5c1836231b5355a1eb851f58f48",
-        "pack_version": "2.6.0",
-        "request_sha256": "aeb10da98aa0f8f33a24aee4283e29f877bd7059332c64ff12ec6beefa22c7e0",
+        "pack_sha256": "301998f8fddcafc342b2946a02bcd520e0eb5f31dfc745e4358c27bca1445e32",
+        "pack_version": "2.8.0",
+        "request_sha256": "40839b56e1164cc8a6d4ca7943fcae4367d57b16d3e99034a28b125b9aaf1b32",
         "role": "investigate",
         "task_key": "review.investigate.s005"
       },
@@ -2564,9 +2622,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "da4e178132aff3807b98185735b3311b4202d756fade647fdff6ee499ec7ef15",
-        "pack_version": "2.6.0",
-        "request_sha256": "d99eef0cf7067ebed9fa98ff6497348f23de7a0d4374daf6aad476fd05cf0fe8",
+        "pack_sha256": "2e02246c97782e71b3679aff2a70ad5810d492439765c45ab61b068767a568f2",
+        "pack_version": "2.8.0",
+        "request_sha256": "03e89259aee2783ec4796d53bf3a86bb96fdcff198cc3e1b2e7302360eef60e0",
         "role": "verify",
         "task_key": "review.verify.s005"
       }
@@ -3519,14 +3577,21 @@
         {
           "assertion": "설정 주소 검증 누락",
           "evidence_ids": [
-            "ev_7598f744a473d4f167c7b428"
+            "ev_e909e06423121c89211aa189"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "빈 주소가 검사 없이 연결에 쓰인다.",
+          "evidence_ids": [
+            "ev_e909e06423121c89211aa189"
           ],
           "kind": "inferred"
         },
         {
           "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
           "evidence_ids": [
-            "ev_7598f744a473d4f167c7b428"
+            "ev_e909e06423121c89211aa189"
           ],
           "kind": "inferred"
         }
@@ -3534,7 +3599,7 @@
       "conditions": [
         {
           "evidence_ids": [
-            "ev_7598f744a473d4f167c7b428"
+            "ev_e909e06423121c89211aa189"
           ],
           "statement": "주소가 비어 있는 경우",
           "status": "assumed"
@@ -3544,25 +3609,25 @@
       "disposition": "open",
       "evidence": [
         {
-          "blob_sha256": "053e0c3191066ffd4e58976387606574b28f45f6b4826e506e1dcc677d2eca0d",
+          "blob_sha256": "7d44ca6fd3f465e7652f0e8bc5e27a737cfc86becf15714907baa7df8c6fcdc2",
           "description": "고정 스냅샷의 code 발췌 위치",
-          "id": "ev_7598f744a473d4f167c7b428",
+          "id": "ev_e909e06423121c89211aa189",
           "kind": "code",
           "location": {
-            "end_line": 12,
-            "path": "api/main.go",
+            "end_line": 20,
+            "path": "api/handler.go",
             "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
             "start_line": 1
           }
         }
       ],
-      "fingerprint": "fp2:45b06f5ccc250e128e61ff06e619d9817940ac3ba08ec426e0929567c552c93f",
+      "fingerprint": "fp2:a1722adba4b7c9fafa9d10ff6f1ee11db195f5a3840aa38e17d5055f6bce5536",
       "fingerprint_basis": {
         "analyzer": "review",
         "context": "unavailable",
         "move_key": "",
         "paths": [
-          "api/main.go"
+          "api/handler.go"
         ],
         "producer": "model",
         "rule": "candidate:error_handling",
@@ -3576,8 +3641,8 @@
       ],
       "locations": [
         {
-          "end_line": 12,
-          "path": "api/main.go",
+          "end_line": 20,
+          "path": "api/handler.go",
           "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
           "start_line": 1
         }
@@ -3602,14 +3667,21 @@
         {
           "assertion": "설정 주소 검증 누락",
           "evidence_ids": [
-            "ev_4d69c1b5adfcfdd889b8f4f5"
+            "ev_1e0dc6fad5ef460d4a8467a8"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "빈 주소가 검사 없이 연결에 쓰인다.",
+          "evidence_ids": [
+            "ev_1e0dc6fad5ef460d4a8467a8"
           ],
           "kind": "inferred"
         },
         {
           "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
           "evidence_ids": [
-            "ev_4d69c1b5adfcfdd889b8f4f5"
+            "ev_1e0dc6fad5ef460d4a8467a8"
           ],
           "kind": "inferred"
         }
@@ -3617,7 +3689,7 @@
       "conditions": [
         {
           "evidence_ids": [
-            "ev_4d69c1b5adfcfdd889b8f4f5"
+            "ev_1e0dc6fad5ef460d4a8467a8"
           ],
           "statement": "주소가 비어 있는 경우",
           "status": "assumed"
@@ -3627,25 +3699,25 @@
       "disposition": "open",
       "evidence": [
         {
-          "blob_sha256": "d45a70570fb87e528f95cf91dadead3d81d43212e049f989a1c9e25834c7d8b1",
-          "description": "고정 스냅샷의 code 발췌 위치",
-          "id": "ev_4d69c1b5adfcfdd889b8f4f5",
+          "blob_sha256": "ca753b233587c9ff67892275eeac14362812d2b12209298a73bd67464a0dadf6",
+          "description": "고정 스냅샷의 test 발췌 위치",
+          "id": "ev_1e0dc6fad5ef460d4a8467a8",
           "kind": "code",
           "location": {
-            "end_line": 89,
-            "path": "store/cache.go",
+            "end_line": 14,
+            "path": "api/handler_test.go",
             "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
-            "start_line": 51
+            "start_line": 1
           }
         }
       ],
-      "fingerprint": "fp2:e2afd596123aca495bd1a482d121c61268ca6df18a36af6b01204e3d429f2e5d",
+      "fingerprint": "fp2:11b687bfb932cdb4623572cdf83f5879e7ba12df53898cf62f273a4e8a822cf7",
       "fingerprint_basis": {
         "analyzer": "review",
         "context": "unavailable",
         "move_key": "",
         "paths": [
-          "store/cache.go"
+          "api/handler_test.go"
         ],
         "producer": "model",
         "rule": "candidate:error_handling",
@@ -3659,10 +3731,10 @@
       ],
       "locations": [
         {
-          "end_line": 89,
-          "path": "store/cache.go",
+          "end_line": 14,
+          "path": "api/handler_test.go",
           "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
-          "start_line": 51
+          "start_line": 1
         }
       ],
       "observation_ids": [],
@@ -3685,14 +3757,21 @@
         {
           "assertion": "설정 주소 검증 누락",
           "evidence_ids": [
-            "ev_79e28e56234d66d1a4784bae"
+            "ev_2869a1711ebab54a8cdb5f82"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "빈 주소가 검사 없이 연결에 쓰인다.",
+          "evidence_ids": [
+            "ev_2869a1711ebab54a8cdb5f82"
           ],
           "kind": "inferred"
         },
         {
           "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
           "evidence_ids": [
-            "ev_79e28e56234d66d1a4784bae"
+            "ev_2869a1711ebab54a8cdb5f82"
           ],
           "kind": "inferred"
         }
@@ -3700,7 +3779,7 @@
       "conditions": [
         {
           "evidence_ids": [
-            "ev_79e28e56234d66d1a4784bae"
+            "ev_2869a1711ebab54a8cdb5f82"
           ],
           "statement": "주소가 비어 있는 경우",
           "status": "assumed"
@@ -3712,10 +3791,10 @@
         {
           "blob_sha256": "93f73314c5264c8dadf0f380e68a37ee6af6c6707019a72f9427661d1906b3d5",
           "description": "고정 스냅샷의 code 발췌 위치",
-          "id": "ev_79e28e56234d66d1a4784bae",
+          "id": "ev_2869a1711ebab54a8cdb5f82",
           "kind": "code",
           "location": {
-            "end_line": 50,
+            "end_line": 71,
             "path": "store/codec.go",
             "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
             "start_line": 1
@@ -3742,7 +3821,7 @@
       ],
       "locations": [
         {
-          "end_line": 50,
+          "end_line": 71,
           "path": "store/codec.go",
           "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
           "start_line": 1
@@ -3768,14 +3847,21 @@
         {
           "assertion": "설정 주소 검증 누락",
           "evidence_ids": [
-            "ev_2f95d899a1b8b55c3c1a5c46"
+            "ev_dff01031983cb5ed4eeb01d8"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "빈 주소가 검사 없이 연결에 쓰인다.",
+          "evidence_ids": [
+            "ev_dff01031983cb5ed4eeb01d8"
           ],
           "kind": "inferred"
         },
         {
           "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
           "evidence_ids": [
-            "ev_2f95d899a1b8b55c3c1a5c46"
+            "ev_dff01031983cb5ed4eeb01d8"
           ],
           "kind": "inferred"
         }
@@ -3783,7 +3869,7 @@
       "conditions": [
         {
           "evidence_ids": [
-            "ev_2f95d899a1b8b55c3c1a5c46"
+            "ev_dff01031983cb5ed4eeb01d8"
           ],
           "statement": "주소가 비어 있는 경우",
           "status": "assumed"
@@ -3793,25 +3879,25 @@
       "disposition": "open",
       "evidence": [
         {
-          "blob_sha256": "c81d385a0a4cad23c363de433ca119f871ca6b26184585b441c5a470221850d5",
+          "blob_sha256": "77252f002872da47ace9a0d0439b028bb7c2405761ba9d6f43a262ea311e5dee",
           "description": "고정 스냅샷의 code 발췌 위치",
-          "id": "ev_2f95d899a1b8b55c3c1a5c46",
+          "id": "ev_dff01031983cb5ed4eeb01d8",
           "kind": "code",
           "location": {
-            "end_line": 50,
-            "path": "store/index.go",
+            "end_line": 71,
+            "path": "store/flush.go",
             "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
             "start_line": 1
           }
         }
       ],
-      "fingerprint": "fp2:6f9b1628c59b2d3735f2eb49805c5b5f775bf58f54149979de5b941b54b7cee1",
+      "fingerprint": "fp2:56440864f938f95574f94ea215a9b0219b67ecec19f41139504869283472b1b9",
       "fingerprint_basis": {
         "analyzer": "review",
         "context": "unavailable",
         "move_key": "",
         "paths": [
-          "store/index.go"
+          "store/flush.go"
         ],
         "producer": "model",
         "rule": "candidate:error_handling",
@@ -3825,8 +3911,8 @@
       ],
       "locations": [
         {
-          "end_line": 50,
-          "path": "store/index.go",
+          "end_line": 71,
+          "path": "store/flush.go",
           "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
           "start_line": 1
         }
@@ -3851,14 +3937,21 @@
         {
           "assertion": "설정 주소 검증 누락",
           "evidence_ids": [
-            "ev_7a7d2771b5b755a0eae1dd07"
+            "ev_128c8cdad1bc92d9fa1f6d03"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "빈 주소가 검사 없이 연결에 쓰인다.",
+          "evidence_ids": [
+            "ev_128c8cdad1bc92d9fa1f6d03"
           ],
           "kind": "inferred"
         },
         {
           "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
           "evidence_ids": [
-            "ev_7a7d2771b5b755a0eae1dd07"
+            "ev_128c8cdad1bc92d9fa1f6d03"
           ],
           "kind": "inferred"
         }
@@ -3866,7 +3959,7 @@
       "conditions": [
         {
           "evidence_ids": [
-            "ev_7a7d2771b5b755a0eae1dd07"
+            "ev_128c8cdad1bc92d9fa1f6d03"
           ],
           "statement": "주소가 비어 있는 경우",
           "status": "assumed"
@@ -3876,25 +3969,25 @@
       "disposition": "open",
       "evidence": [
         {
-          "blob_sha256": "c0792bbaba93ac809a2aa1e68bad58368342130f6d2f44a0100b1c37c41e6d15",
+          "blob_sha256": "084d12650e95e9abe8b92f24376ae4d586fbc0c82518e2219e226bfc8f73a714",
           "description": "고정 스냅샷의 code 발췌 위치",
-          "id": "ev_7a7d2771b5b755a0eae1dd07",
+          "id": "ev_128c8cdad1bc92d9fa1f6d03",
           "kind": "code",
           "location": {
-            "end_line": 50,
-            "path": "store/put.go",
+            "end_line": 71,
+            "path": "store/merge.go",
             "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
             "start_line": 1
           }
         }
       ],
-      "fingerprint": "fp2:21924a34c8c80e7c623c5cdc7a2037ed7055cbc06f4c35071e045a4c943d9e4f",
+      "fingerprint": "fp2:e0135c8894019c7908edcf8fa5a021db037f7cabbbbbd662da99b4fcd1a33811",
       "fingerprint_basis": {
         "analyzer": "review",
         "context": "unavailable",
         "move_key": "",
         "paths": [
-          "store/put.go"
+          "store/merge.go"
         ],
         "producer": "model",
         "rule": "candidate:error_handling",
@@ -3908,8 +4001,8 @@
       ],
       "locations": [
         {
-          "end_line": 50,
-          "path": "store/put.go",
+          "end_line": 71,
+          "path": "store/merge.go",
           "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
           "start_line": 1
         }
@@ -3934,14 +4027,21 @@
         {
           "assertion": "설정 주소 검증 누락",
           "evidence_ids": [
-            "ev_3d0bf8126be3f1469a223332"
+            "ev_971cc54b80197c7dd76a7390"
+          ],
+          "kind": "inferred"
+        },
+        {
+          "assertion": "빈 주소가 검사 없이 연결에 쓰인다.",
+          "evidence_ids": [
+            "ev_971cc54b80197c7dd76a7390"
           ],
           "kind": "inferred"
         },
         {
           "assertion": "실패 처리 방식이 모듈 안내와 다를 수 있다.",
           "evidence_ids": [
-            "ev_3d0bf8126be3f1469a223332"
+            "ev_971cc54b80197c7dd76a7390"
           ],
           "kind": "inferred"
         }
@@ -3949,7 +4049,7 @@
       "conditions": [
         {
           "evidence_ids": [
-            "ev_3d0bf8126be3f1469a223332"
+            "ev_971cc54b80197c7dd76a7390"
           ],
           "statement": "주소가 비어 있는 경우",
           "status": "assumed"
@@ -3959,25 +4059,25 @@
       "disposition": "open",
       "evidence": [
         {
-          "blob_sha256": "166293aac82b552a67d74817fd533324313d6a0dcbe36e4ae526c079661af9da",
+          "blob_sha256": "5fdd39435bb0af44c3e37a506ac0fd9b6900a7c095e48d91063d9c37301e4e15",
           "description": "고정 스냅샷의 code 발췌 위치",
-          "id": "ev_3d0bf8126be3f1469a223332",
+          "id": "ev_971cc54b80197c7dd76a7390",
           "kind": "code",
           "location": {
-            "end_line": 50,
-            "path": "store/sync.go",
+            "end_line": 71,
+            "path": "store/recover.go",
             "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
             "start_line": 1
           }
         }
       ],
-      "fingerprint": "fp2:59827dd5a9eb54fea52607508a0b0867889ab3c37e092c2f8d42409688a1b92d",
+      "fingerprint": "fp2:1d896258ad5fa921b00110eabc033601ff3c8d6affd65978fd5f162648b75d32",
       "fingerprint_basis": {
         "analyzer": "review",
         "context": "unavailable",
         "move_key": "",
         "paths": [
-          "store/sync.go"
+          "store/recover.go"
         ],
         "producer": "model",
         "rule": "candidate:error_handling",
@@ -3991,8 +4091,8 @@
       ],
       "locations": [
         {
-          "end_line": 50,
-          "path": "store/sync.go",
+          "end_line": 71,
+          "path": "store/recover.go",
           "snapshot_id": "0195f3a0-0000-7000-8000-000000000603",
           "start_line": 1
         }
@@ -4084,7 +4184,6 @@
     "excerpt_only",
     "files_outside_review_context",
     "no_callers_found",
-    "no_symbol_for_expansion",
     "static_analysis_gap:javascript",
     "static_analysis_gap:python",
     "upstream_interpret_skipped"
@@ -4525,9 +4624,9 @@
     {
       "id": "0195f3a0-0000-7000-8000-000000000656",
       "key": "review.investigate.s009",
-      "reason": "no_review_scope",
+      "reason": "review_budget_exhausted",
       "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "budget_exhausted"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000658",
@@ -5211,9 +5310,9 @@
     {
       "id": "0195f3a0-0000-7000-8000-000000000657",
       "key": "review.verify.s009",
-      "reason": "no_review_scope",
+      "reason": "review_budget_exhausted",
       "required_for_verdict": false,
-      "status": "skipped_policy"
+      "status": "budget_exhausted"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000659",

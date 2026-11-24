@@ -176,7 +176,7 @@ func prepare(spec Spec) (*prepared, *specError) {
 		if !validOpenCode(spec.OpenCodeModel, spec.OpenCodeProvider) {
 			return nil, reject("invalid_opencode_model", "invalid model identifier")
 		}
-		for key, value := range managedOpenCodeEnv(spec.OpenCodeModel, spec.OpenCodeProvider) {
+		for key, value := range managedOpenCodeEnv(spec.OpenCodeModel, spec.OpenCodeProvider, spec.Timeout) {
 			env[key] = value
 		}
 		if p := spec.OpenCodeProvider; p != nil && p.Native != nil {

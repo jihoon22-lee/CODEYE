@@ -28,7 +28,7 @@ func TestSliceExampleRecords(t *testing.T) {
 	j := coverageJob(t)
 	j.Snapshot.Digest, j.RunID, j.AttemptID = sliceExampleSnapshot, sliceExampleRun, sliceExampleAttempt
 	f := &scriptedCaller{script: coverageScript(t)}
-	_, res := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: f, MaxCalls: DefaultMaxCalls}, "1.27.4")
+	_, res := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: f, MaxCalls: DefaultMaxCalls, Budget: smallBudget}, "1.27.4")
 	update := os.Getenv("CODEYE_UPDATE_EXAMPLES") == "1"
 	files := map[string]string{
 		"scope.json":            scopePath(j),

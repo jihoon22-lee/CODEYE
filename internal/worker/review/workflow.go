@@ -221,7 +221,7 @@ func (s *roleStage) fitWorkflowRoutes(in *docsInput, routes []workflowRoute, ins
 			continue
 		}
 		sent = append(sent, route)
-		remaining = min(workflowCatalogBytes-(len(b)-len(base)), PromptBudget-promptSize)
+		remaining = min(workflowCatalogBytes-(len(b)-len(base)), s.limit().request-promptSize)
 	}
 	if len(sent) == 0 {
 		in.WorkflowRouteScope = ""
@@ -409,7 +409,7 @@ func (s *roleStage) supplementWorkflowChoices(routes []workflowRoute, contracts 
 	q := opencode.Request{Role: s.role, Scratch: s.j.Scratch, SnapshotDigest: s.j.Snapshot.Digest, Instructions: instructions,
 		Input: input, ProtectedRoots: []string{s.j.Snapshot.SnapshotDir}}
 	size := len(opencode.Prompt(q))
-	if size > PromptBudget || s.reserveCall() != nil {
+	if size > s.limit().request || s.reserveCall() != nil {
 		return nil
 	}
 	reply := s.h.Caller.Review(s.ctx, s.runner, q)
@@ -441,7 +441,6 @@ func (s *roleStage) supplementWorkflowChoices(routes []workflowRoute, contracts 
 		call.Outcome = "model_unavailable"
 	}
 	s.rec.Calls = append(s.rec.Calls, call)
-	s.rec.Schema = record.SchemaVersionWorkflow
 	return selected
 }
 

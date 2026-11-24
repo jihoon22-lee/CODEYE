@@ -546,7 +546,8 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
   const reviewRest = reviewPrimary.filter(f => !supported(f));
   const reviewSecondary = reviewable.filter(secondaryReviewFinding);
   const hasCodeReview = cr.findings.length > 0 || cr.strengths.length > 0 || cr.roles.some(role =>
-    role.result === 'accepted' && (role.key === 'review.investigate' || role.key === 'review.verify')
+    (role.result === 'accepted' && role.key === 'review.investigate') ||
+    ((role.result === 'accepted' || role.result === 'accepted_incomplete') && role.key === 'review.verify')
   ) || cr.ledger?.modules.some(module => module.completed > 0);
   const allDiagnostics = staticTools.flatMap(tool => tool.observations);
   const suppressed = allDiagnostics.filter((id) => byID.get(id)?.suppressed && !byID.get(id)?.metric).length;

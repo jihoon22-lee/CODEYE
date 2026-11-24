@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 	"github.com/jihoon22-lee/CODEYE/internal/quota"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
@@ -51,16 +53,21 @@ type Config struct {
 	ModelCredentialFile string
 	ModelConfigFile     string
 	ModelSettings       *workerproto.ModelSettings
-	// ModelTimeout bounds one model call (--model-timeout); 0 means 180 s.
+	// ModelTimeout bounds one model call (--model-timeout); 0 means 600 s.
 	ModelTimeout time.Duration
 	// ReviewMaxCalls is the model call ceiling per review attempt
 	// (--review-max-calls); 0 means record.DefaultMaxCalls.
-	ReviewMaxCalls   int
-	ModelSourceRoots map[string]bool
-	ControllerURL    string
-	StateDir         string
-	Name             string
-	EnrollTokenFile  string
+	ReviewMaxCalls int
+	// ReviewRequestBytes and ReviewOutputTokens are the review request
+	// budget (--review-request-bytes, --review-output-tokens); 0 means the
+	// default.
+	ReviewRequestBytes int
+	ReviewOutputTokens int
+	ModelSourceRoots   map[string]bool
+	ControllerURL      string
+	StateDir           string
+	Name               string
+	EnrollTokenFile    string
 	// SourceRoots is the private mapping source_root_id → absolute path.
 	SourceRoots map[string]string
 	// RepositoryCodeSourceRoots are the local source roots whose jobs may run
@@ -250,6 +257,12 @@ func New(cfg Config) (*Agent, error) {
 		cfg.ReviewMaxCalls = record.DefaultMaxCalls
 	} else if !record.ValidMaxCalls(cfg.ReviewMaxCalls) {
 		return nil, &ExitError{ExitUsage, "--review-max-calls must be between 15 and 2013"}
+	}
+	if !opencode.ValidRequestBytes(cfg.ReviewRequestBytes) {
+		return nil, &ExitError{ExitUsage, fmt.Sprintf("--review-request-bytes must be between %d and %d", opencode.MinRequestBytes, opencode.MaxRequestBytes)}
+	}
+	if !opencode.ValidOutputTokens(cfg.ReviewOutputTokens) {
+		return nil, &ExitError{ExitUsage, fmt.Sprintf("--review-output-tokens must be between %d and %d", opencode.MinOutputTokens, opencode.MaxOutputTokens)}
 	}
 	if cfg.ModelRelayFile != "" && cfg.ModelCredentialFile != "" {
 		return nil, &ExitError{ExitUsage, "--model-relay-file and --model-credential-file are alternatives"}

@@ -190,7 +190,7 @@ func TestOverviewPrioritizesDocumentedJavaScriptDefaultAndOverride(t *testing.T)
 		if !slices.Contains(in.Scope.DirectCalls, directCall{CallerEvidenceID: tests.ID, CalleeEvidenceID: code.ID, Symbol: "schedule"}) {
 			t.Fatalf("missing relative import binding from test to API: %+v", in.Scope.DirectCalls)
 		}
-		if len(in.Scope.Excerpts) > roleMaxCodeFiles || len(opencode.Prompt(q)) > PromptBudget {
+		if len(in.Scope.Excerpts) > roleMaxCodeFiles || len(opencode.Prompt(q)) > MinRequestBytes {
 			t.Fatal("JavaScript option witnesses exceeded the existing input budget")
 		}
 		return asJSON(map[string]any{"candidates": []any{}, "contract_comparisons": []record.ContractComparison{{
@@ -198,7 +198,7 @@ func TestOverviewPrioritizesDocumentedJavaScriptDefaultAndOverride(t *testing.T)
 			DocumentEvidenceIDs: in.Documents.Contracts[0].EvidenceIDs, CodeEvidenceIDs: []string{code.ID, tests.ID},
 		}}})
 	}
-	runRole(t, j, langStub{eco: "javascript", manifest: "package.json", path: jsOptionImplementationPath, line: 87},
+	runRoleSmall(t, j, langStub{eco: "javascript", manifest: "package.json", path: jsOptionImplementationPath, line: 87},
 		&scriptedCaller{script: script}, "1.27.4")
 	r := readRecord(t, j, "investigate")
 	if !handled || !slices.ContainsFunc(r.ContractComparisons, func(c record.ContractComparison) bool {

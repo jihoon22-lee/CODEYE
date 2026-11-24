@@ -51,7 +51,7 @@ func TestDocumentedGoDefaultsReadActualDecisions(t *testing.T) {
 		in := decodeAs[investigateInput](t, q)
 		if in.Scope.WholeRun {
 			overview = in.Scope.Excerpts
-			if len(opencode.Prompt(q)) > PromptBudget || len(overview) > roleMaxCodeFiles {
+			if len(opencode.Prompt(q)) > MinRequestBytes || len(overview) > roleMaxCodeFiles {
 				t.Fatal("the default witnesses exceeded the ordinary request bounds")
 			}
 			for _, option := range in.NavigationCandidates {
@@ -62,7 +62,7 @@ func TestDocumentedGoDefaultsReadActualDecisions(t *testing.T) {
 		}
 		return asJSON(map[string]any{"candidates": []any{}})
 	}
-	_, res := runRoleWith(t, j, Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: script}}, "1.27.4")
+	_, res := runRoleWith(t, j, Handler{Budget: smallBudget, Static: secretsStub{}, Caller: &scriptedCaller{script: script}}, "1.27.4")
 	if res["review.investigate"].Status != domain.TaskSucceeded {
 		t.Fatalf("overview: %+v", res["review.investigate"])
 	}

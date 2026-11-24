@@ -137,15 +137,19 @@ func TestJavaDocumentContractReachesSameClassImplementation(t *testing.T) {
 
 	// Simulate an overview whose input budget only reached the declaration
 	// and whose ordinary navigation probe found the unrelated overload.
+	// The overview read the whole file as one unit; drop every excerpt
+	// holding the helper's lines.
 	helper := catalogOf(inv.Evidence)[helperID]
-	inv.Evidence = slices.DeleteFunc(inv.Evidence, func(x record.Excerpt) bool { return x.ID == helperID })
+	inv.Evidence = slices.DeleteFunc(inv.Evidence, func(x record.Excerpt) bool {
+		return x.ID == helperID || x.Path == helper.Path && x.Start <= helper.Start && helper.End <= x.End
+	})
 	inv.ContractComparisons[0].Status = "unknown"
 	inv.ContractComparisons[0].CodeEvidenceIDs = []string{entryID}
 	inv.ContractProbe = &record.ContractProbe{ContractIndex: 1, Candidates: []record.ContractLocation{{
 		ID:   record.ContractLocationID(j.Snapshot.Digest, javaDocSource, helper.SHA256, 10, 10),
 		Path: javaDocSource, SHA256: helper.SHA256, Start: 10, End: 10, Kind: "code",
 	}}}
-	inv.Schema = record.SchemaVersionContract
+	inv.Schema = record.SchemaVersionCitedLines
 	if _, err := persistRecord(j, inv); err != nil {
 		t.Fatal(err)
 	}

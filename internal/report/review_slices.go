@@ -158,7 +158,7 @@ func sentPaths(states map[string]*taskState, keys []string) map[string]bool {
 	out := map[string]bool{}
 	for _, k := range keys {
 		st := states[k]
-		if !reviewAccepted(st) && !(k == record.TaskContract && contractCallRecord(st)) {
+		if !reviewAccepted(st) && !verifyIncomplete(k, st) && !(k == record.TaskContract && contractCallRecord(st)) {
 			continue
 		}
 		rec := st.reviewResult.Record
@@ -213,7 +213,7 @@ func (c sectionContext) ledger() *ReviewLedger {
 		}
 		whole := !isSliceTask(k) && k != record.TaskContract
 		switch {
-		case reviewAccepted(st), k == record.TaskContract && contractCallRecord(st),
+		case reviewAccepted(st), verifyIncomplete(k, st), k == record.TaskContract && contractCallRecord(st),
 			doc != nil && doc.LineCoverage() && !st.rejected && st.reviewResult != nil && st.reviewResult.Record != nil:
 			for _, call := range st.reviewResult.Record.Calls {
 				if k == record.TaskContract && call.RequestDigest == "" {

@@ -298,9 +298,11 @@ func TestDocumentedPackageRespectsPullRequestTiersAndScope(t *testing.T) {
 	id := record.ExcerptID(manifest, packageGuide, document.SHA256, 1, n)
 	docs := record.Record{Evidence: evidence.excerpts, Contracts: []record.Contract{{Statement: "`displayPrice`는 센트 입력을 변환한다.",
 		AppliesTo: examplePackage, EvidenceIDs: []string{id}}}}
+	// The unchanged implementation may follow the changed source as an
+	// ordinary unit (the whole file), never as a promoted package window.
 	code, _, _, err := s.codeCorpus(docs)
 	if err != nil || len(code) == 0 || code[0].Path != changed || slices.ContainsFunc(code, func(e record.Excerpt) bool {
-		return e.Path == packageRuntime && (e.Start > 1 || strings.Contains(e.Text, "formatPrice"))
+		return e.Path == packageRuntime && e.Start > 1
 	}) {
 		t.Fatalf("unchanged implementation was promoted over changed source: %v, %+v", err, code)
 	}

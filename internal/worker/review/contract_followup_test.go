@@ -237,6 +237,7 @@ func TestContractFollowupPreservesPriorOnBudgetOrInvalidOutput(t *testing.T) {
 		{"accept", 1, "", domain.TaskSucceeded, 1, "match"},
 		{"hold unknown", 1, "unknown", domain.TaskSucceeded, 1, "unknown"},
 		{"repair when possible", 2, "repair", domain.TaskSucceeded, 2, "match"},
+		{"malformed range resolved after the repair", 2, "malformed", domain.TaskSucceeded, 2, "match"},
 		{"failed repair quarantined", 2, "wrong kind", domain.TaskFailed, 2, ""},
 		{"repair skipped at ceiling", 1, "repair", domain.TaskBudgetExhausted, 1, ""},
 		{"no remaining budget", 0, "", domain.TaskBudgetExhausted, 0, ""},
@@ -332,6 +333,15 @@ func TestContractFollowupPreservesPriorOnBudgetOrInvalidOutput(t *testing.T) {
 						c.AppliesTo = "svc/b"
 					case test.mode == "wrong kind":
 						c.CodeEvidenceIDs = []string{c.DocumentEvidenceIDs[0]}
+					case test.mode == "malformed":
+						// A fault of form on both calls: the repair names it,
+						// then the citation stands for the sent window.
+						if n == 2 && !slices.ContainsFunc(in.Repair.Items, func(x itemIssue) bool {
+							return x.Field == "code_evidence_ids" && x.ID == c.CodeEvidenceIDs[0] && x.Error == errCitationInvalid
+						}) {
+							t.Fatalf("repair %+v", in.Repair)
+						}
+						c.CodeEvidenceIDs = []string{c.CodeEvidenceIDs[0] + ":x"}
 					case test.mode == "bad partial":
 						c.Status = "partial"
 					case fakePath != "":
@@ -357,7 +367,7 @@ func TestContractFollowupPreservesPriorOnBudgetOrInvalidOutput(t *testing.T) {
 				return
 			}
 			r := readRecord(t, j, record.StageContract)
-			if r.Schema != record.SchemaVersionContract || len(r.Calls) != test.wantCalls || r.Calls[0].RequestDigest == "" || r.Calls[0].Usage == nil {
+			if r.Schema != record.SchemaVersionCitedLines || len(r.Calls) != test.wantCalls || r.Calls[0].RequestDigest == "" || r.Calls[0].Usage == nil {
 				t.Fatalf("contract record %+v", r)
 			}
 			if test.wantResult == "" {
@@ -370,6 +380,9 @@ func TestContractFollowupPreservesPriorOnBudgetOrInvalidOutput(t *testing.T) {
 			if !record.ValidateContractFollowup(r, docs, inv) || r.ContractComparisons[0].Status != test.wantResult ||
 				(slices.Contains(r.Limitations, limContractInconclusive) != (test.wantResult == "unknown")) {
 				t.Fatalf("contract comparison %+v", r)
+			}
+			if test.mode == "malformed" {
+				requireResolvedCalls(t, r, []string{errCitationInvalid}, nil)
 			}
 			if test.name == "accept" {
 				for _, stage := range []string{record.StageDocuments, record.StageInvestigate, record.StageContract} {
@@ -404,7 +417,8 @@ func TestContractFollowupPlansLastOnlyWithApprovedModelAndEligibleSource(t *test
 
 func TestContractFollowupRereadsAcceptedSliceEvidence(t *testing.T) {
 	j := coverageJob(t)
-	h := Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: coverageScript(t)}}
+	// At the smallest budget the overview leaves files to the slices.
+	h := Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: coverageScript(t)}, Budget: smallBudget}
 	runRoleWith(t, j, h, "1.27.4")
 	stage := roleStage{h: h, j: j, ctx: t.Context()}
 	_, docs := stage.prior(record.StageDocuments)
@@ -454,7 +468,7 @@ func TestContractFollowupPrioritizesSelectedLateSliceBeforeOrdinaryReadLimit(t *
 	script["investigate"] = func(_ int, _ opencode.Request) opencode.Reply {
 		return asJSON(map[string]any{"candidates": []any{}})
 	}
-	h := Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: script}}
+	h := Handler{Static: secretsStub{}, Caller: &scriptedCaller{script: script}, Budget: smallBudget}
 	runRoleWith(t, j, h, "1.27.4")
 	stage := roleStage{h: h, j: j, ctx: t.Context()}
 	_, docs := stage.prior(record.StageDocuments)

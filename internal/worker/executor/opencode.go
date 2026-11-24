@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // openCodeModel is a PROVIDER/MODEL identifier. The model part may hold
@@ -38,6 +39,11 @@ type LocalModelRelay struct {
 	BaseURL string `json:"base_url"`
 	Token   string `json:"token"`
 	Model   string `json:"model"`
+	// OutputTokens and ContextTokens are the limits the profile declares
+	// for the model, set by the adapter from the review budget (never read
+	// from the descriptor).
+	OutputTokens  int `json:"-"`
+	ContextTokens int `json:"-"`
 }
 
 // ModelProvider is the one provider of the managed OpenCode profile: the
@@ -143,8 +149,18 @@ func ValidBaseURL(s string) bool {
 }
 
 // Arbitrary OPENCODE_* values in Spec.Env still follow the credential filter.
-func managedOpenCodeEnv(model string, p *ModelProvider) map[string]string {
+// timeout is the call's wall-clock limit (Spec.Timeout).
+func managedOpenCodeEnv(model string, p *ModelProvider, timeout time.Duration) map[string]string {
 	provider, name, _ := strings.Cut(model, "/")
+	// OpenCode aborts a provider request that gets no response headers, or
+	// no next stream chunk, within headerTimeout or chunkTimeout (300,000 ms
+	// each unless set; OpenCode 1.19.5). The relay sends its headers only
+	// once the upstream answer is complete, so the provider profiles CODEYE
+	// writes wait as long as the call may run.
+	waits := map[string]any{}
+	if ms := timeout.Milliseconds(); ms > 0 {
+		waits["headerTimeout"], waits["chunkTimeout"] = ms, ms
+	}
 	settings := map[string]any{
 		"enabled_providers": []string{provider}, "model": model, "small_model": model,
 		"permission": "deny", "tools": map[string]bool{"*": false}, "share": "disabled", "snapshot": false,
@@ -155,12 +171,13 @@ func managedOpenCodeEnv(model string, p *ModelProvider) map[string]string {
 		r := p.relay
 		settings["provider"] = map[string]any{provider: map[string]any{
 			"npm": "@ai-sdk/openai-compatible", "name": "CODEYE budgeted QA relay",
-			"options": map[string]any{"apiKey": r.Token, "baseURL": r.BaseURL},
-			"models":  map[string]any{r.Model: map[string]any{"id": r.Model, "name": r.Model, "tool_call": false, "limit": map[string]int{"context": 64000, "output": 1536}}},
+			"options": withWaits(map[string]any{"apiKey": r.Token, "baseURL": r.BaseURL}, waits),
+			"models":  map[string]any{r.Model: relayModel(r)},
 		}}
 	case p != nil && p.Native != nil:
 		n := p.Native
-		options := map[string]any{}
+		// The operator's own timeouts stay as set.
+		options := withWaits(map[string]any{}, waits)
 		for key, value := range n.Timeouts {
 			options[key] = value
 		}
@@ -192,7 +209,7 @@ func managedOpenCodeEnv(model string, p *ModelProvider) map[string]string {
 		}
 		settings["provider"] = map[string]any{provider: block}
 	case p != nil:
-		options := map[string]any{"apiKey": p.APIKey}
+		options := withWaits(map[string]any{"apiKey": p.APIKey}, waits)
 		if p.BaseURL != "" {
 			options["baseURL"] = p.BaseURL
 		}
@@ -221,6 +238,24 @@ func managedOpenCodeEnv(model string, p *ModelProvider) map[string]string {
 	}
 }
 
+func withWaits(options, waits map[string]any) map[string]any {
+	for key, value := range waits {
+		options[key] = value
+	}
+	return options
+}
+
 // OpenCodeNpmRegistry is the npm registry of the managed OpenCode profile: a
 // loopback port nothing listens on (discard), so the lookup fails at once.
 const OpenCodeNpmRegistry = "http://127.0.0.1:9/"
+
+// relayModel is the relay's one model entry. Its token limits are the
+// review budget's (the adapter sets them); a relay without them declares
+// none.
+func relayModel(r *LocalModelRelay) map[string]any {
+	m := map[string]any{"id": r.Model, "name": r.Model, "tool_call": false}
+	if r.OutputTokens > 0 && r.ContextTokens > 0 {
+		m["limit"] = map[string]int{"context": r.ContextTokens, "output": r.OutputTokens}
+	}
+	return m
+}

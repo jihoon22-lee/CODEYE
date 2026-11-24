@@ -41,11 +41,11 @@ type langCase struct {
 
 var langCases = []langCase{
 	{eco: "cpp",
-		role: []sel{{"src/main.cc", "code"}, {"include/ring.h", "code"}, {"src/ring.cc", "code"}, {"tests/ring_test.cc", "test"}}, obsPath: "src/ring.cc", obsLine: 8},
+		role: []sel{{"include/ring.h", "code"}, {"src/main.cc", "code"}, {"src/ring.cc", "code"}, {"tests/ring_test.cc", "test"}}, obsPath: "src/ring.cc", obsLine: 8},
 	{eco: "python",
-		role: []sel{{"app/__main__.py", "code"}, {"app/__init__.py", "code"}, {"app/store.py", "code"}, {"tests/test_store.py", "test"}}, obsPath: "app/store.py", obsLine: 16},
+		role: []sel{{"app/__init__.py", "code"}, {"app/__main__.py", "code"}, {"app/store.py", "code"}, {"tests/test_store.py", "test"}}, obsPath: "app/store.py", obsLine: 16},
 	{eco: "javascript",
-		role: []sel{{"src/index.ts", "code"}, {"src/queue.ts", "code"}, {"src/queue.test.ts", "test"}}, obsPath: "src/queue.ts", obsLine: 29},
+		role: []sel{{"src/index.ts", "code"}, {"src/queue.test.ts", "test"}, {"src/queue.ts", "code"}}, obsPath: "src/queue.ts", obsLine: 29},
 	{eco: "rust",
 		role: []sel{{"src/lib.rs", "code"}, {"src/main.rs", "code"}, {"src/parse.rs", "code"}, {"tests/parse.rs", "test"}}, obsPath: "src/parse.rs", obsLine: 11},
 }
@@ -271,8 +271,9 @@ func TestReviewInputsPerLanguage(t *testing.T) {
 }
 
 // A polyglot snapshot: the review code corpus reaches every ecosystem in
-// its first round (groupOrder), and each file is grouped under the module
-// root of its own ecosystem.
+// its first round (groupOrder) when the budget holds few units, lists the
+// units module by module, and each file is grouped under the module root
+// of its own ecosystem.
 func TestReviewPolyglotRoundRobin(t *testing.T) {
 	tree := map[string]string{}
 	for _, c := range langCases {
@@ -293,17 +294,32 @@ func TestReviewPolyglotRoundRobin(t *testing.T) {
 	tree["go.mod"] = "module example.test/poly\n\ngo 1.23\n"
 	tree["main.go"] = "package main\n\nfunc main() {}\n"
 	j := treeJob(t, tree)
-	s := &roleStage{h: Handler{Caller: &scriptedCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
+	small := Handler{Caller: &scriptedCaller{}, Budget: Budget{RequestBytes: MinRequestBytes, OutputTokens: MinOutputTokens}}
+	s := &roleStage{h: small, ctx: t.Context(), j: j, role: "investigate"}
 	code, _, lims, err := s.codeCorpus(record.Record{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var first []string
-	for _, e := range code[:5] {
-		first = append(first, e.Path)
+	var paths []string
+	for _, e := range code {
+		paths = append(paths, e.Path)
 	}
-	if !slices.Equal(first, []string{"cpp/src/main.cc", "main.go", "javascript/src/index.ts", "python/app/__main__.py", "rust/src/lib.rs"}) {
-		t.Fatalf("first round %v", first)
+	for _, p := range []string{"cpp/src/main.cc", "main.go", "javascript/src/index.ts", "python/app/__main__.py", "rust/src/lib.rs"} {
+		if !slices.Contains(paths, p) {
+			t.Fatalf("first round lacks %s: %v", p, paths)
+		}
+	}
+	order := []string{"cpp/", "", "javascript/", "python/", "rust/"}
+	last := 0
+	for _, p := range paths {
+		at := slices.IndexFunc(order, func(prefix string) bool { return prefix != "" && strings.HasPrefix(p, prefix) })
+		if at < 0 {
+			at = 1
+		}
+		if at < last {
+			t.Fatalf("units not listed module by module: %v", paths)
+		}
+		last = at
 	}
 	if len(code) != roleMaxCodeFiles || !slices.Contains(lims, "files_outside_review_context") {
 		t.Fatalf("corpus %d files, limitations %v", len(code), lims)
@@ -514,18 +530,24 @@ func TestBarrelIndexIsNotAnEntryPoint(t *testing.T) {
 		tree["src/"+d+"/index.ts"] = "export * from \"./" + d + ".js\";\n"
 	}
 	j := treeJob(t, tree)
-	s := &roleStage{h: Handler{Caller: &scriptedCaller{}}, ctx: t.Context(), j: j, role: "investigate"}
+	// Four units: the groups "." and "pkgs/p" alternate; within "." the root
+	// index, then src/real.ts before any nested index file.
+	small := Handler{Caller: &scriptedCaller{}, Budget: Budget{RequestBytes: MinRequestBytes, OutputTokens: MinOutputTokens}}
+	s := &roleStage{h: small, ctx: t.Context(), j: j, role: "investigate"}
 	code, _, _, err := s.codeCorpus(record.Record{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var got []string
-	for _, e := range code[:4] {
+	for _, e := range code {
 		got = append(got, e.Path)
 	}
-	// Groups "." and "pkgs/p" alternate; within "." the root index, then
-	// src/real.ts and src/util.ts before any nested index file.
-	if !slices.Equal(got, []string{"src/index.ts", "pkgs/p/index.js", "src/real.ts", "src/util.ts"}) {
-		t.Fatalf("code corpus %v", got)
+	for _, p := range []string{"src/index.ts", "pkgs/p/index.js", "src/real.ts", "src/util.ts"} {
+		if !slices.Contains(got, p) {
+			t.Fatalf("code corpus %v lacks %s", got, p)
+		}
+	}
+	if slices.Contains(got, "src/e/index.ts") {
+		t.Fatalf("the deepest nested index was taken before the other sources: %v", got)
 	}
 }

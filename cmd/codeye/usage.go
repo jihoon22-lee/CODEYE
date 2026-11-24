@@ -41,8 +41,8 @@ var usageGroups = []usageGroup{
 		{"cleanup", "codeye cleanup [--config PATH | --artifact-dir DIR] [--agent-state-dir DIR] [--older-than 30d] [--apply] [--format text|json]", "Remove old raw evidence and work copies (a dry run unless --apply)."},
 		{"service", "codeye service install|uninstall|print [--config PATH] [--name codeye]", "A systemd user unit running codeye start/stop (Linux)."},
 		{"run recover", "codeye run recover --id RUN_ID --confirm-cleanup [--config PATH]", "Finish a recovery_required run after you checked that none of its processes is left on the node."},
-		{"model probe", "codeye model probe [--config PATH] [--timeout 180s] [--json]", "Ask the configured review model one small question."},
-		{"model probe", "codeye model probe --executable PATH --model PROVIDER/MODEL [--credential-file PATH | --relay-file PATH] [--timeout 180s] [--json]", "The same for a given OpenCode and model."},
+		{"model probe", "codeye model probe [--config PATH] [--timeout 600s] [--json]", "Ask the configured review model one small question."},
+		{"model probe", "codeye model probe --executable PATH --model PROVIDER/MODEL [--credential-file PATH | --relay-file PATH] [--timeout 600s] [--json]", "The same for a given OpenCode and model."},
 	}},
 	{"Administration of a separately run controller and nodes (CODEYE_DATABASE_URL)", []usageEntry{
 		{"migrate", "codeye migrate", ""},
@@ -78,6 +78,7 @@ var usageGroups = []usageGroup{
 			"             [--lizard /abs/lizard] [--jscpd /abs/jscpd/run-jscpd.js] [--gitleaks /abs/gitleaks]\n" +
 			"             [--repo-code-source-root ID ...] [--project-analysis-policy] [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]\n" +
 			"             [--opencode /abs/opencode --model PROVIDER/MODEL [--model-config-file PATH] [--model-credential-file PATH | --model-relay-file PATH]] [--model-source-root ID ...] [--review-max-calls 15..2013]\n" +
+			"             [--review-request-bytes 40000..1048576] [--review-output-tokens 1536..65536]\n" +
 			"             [--offline] [--ca-bundle /abs/ca-bundle.pem]",
 			"A node agent. --offline: no built-in public registry or model endpoint; --ca-bundle: the CAs the fetch, Git and model processes trust."},
 	}},

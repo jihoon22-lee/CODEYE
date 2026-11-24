@@ -73,7 +73,7 @@ func TestDocumentedMemberEffectsReachOverview(t *testing.T) {
 					}
 					return asJSON(map[string]any{"candidates": []any{}})
 				}
-				if len(in.Scope.Excerpts) > roleMaxCodeFiles || len(in.Scope.Excerpts) < 2 {
+				if len(in.Scope.Excerpts) < 2 {
 					t.Fatalf("unexpected excerpt count %d", len(in.Scope.Excerpts))
 				}
 				source, assertion := in.Scope.Excerpts[0], in.Scope.Excerpts[1]
@@ -87,19 +87,10 @@ func TestDocumentedMemberEffectsReachOverview(t *testing.T) {
 				if in.Scope.MemberTest == nil || *in.Scope.MemberTest != wantHint {
 					t.Fatalf("request did not link the exact emitted windows: %+v", in.Scope.MemberTest)
 				}
-				total := 0
-				byPathLines, byPathBytes := map[string]int{}, map[string]int{}
-				for _, e := range in.Scope.Excerpts {
-					n := record.JSONLen(e.Text)
-					total += n
-					byPathLines[e.Path] += e.End - e.Start + 1
-					byPathBytes[e.Path] += n
-					if byPathLines[e.Path] > roleMaxCodeLines || byPathBytes[e.Path] > roleMaxCodeFile {
-						t.Fatalf("per-file budget exceeded by %s", e.Path)
-					}
-				}
-				if total > roleMaxCodeBytes {
-					t.Fatalf("overview exceeds byte budget: %d", total)
+				// The selector windows come first; the units of the
+				// files follow, and the request budget bounds them all.
+				if n := len(opencode.Prompt(q)); n > MinRequestBytes {
+					t.Fatalf("overview exceeds the request budget: %d", n)
 				}
 				comparison := record.ContractComparison{
 					ContractIndex: 6, AppliesTo: ".", Status: "match", Reason: "거절 옵션이 켜졌을 때 대기 초안을 거절한 뒤 비운다.",
@@ -112,7 +103,7 @@ func TestDocumentedMemberEffectsReachOverview(t *testing.T) {
 				}
 				return asJSON(map[string]any{"candidates": []any{}, "contract_comparisons": []record.ContractComparison{comparison}})
 			}
-			_, results := runRole(t, j, langStub{eco: "javascript", manifest: "package.json", path: implementation, line: 69}, &scriptedCaller{script: script}, "1.27.4")
+			_, results := runRoleSmall(t, j, langStub{eco: "javascript", manifest: "package.json", path: implementation, line: 69}, &scriptedCaller{script: script}, "1.27.4")
 			if results["review.investigate"].Status != domain.TaskSucceeded {
 				t.Fatalf("%+v", results["review.investigate"])
 			}

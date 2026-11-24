@@ -11,7 +11,31 @@ http://127.0.0.1:PORT`.
 Replies satisfy the relay's settlement rules (model `<requested>-fake`,
 `service_tier: default`, usage within the request bounds) and the CODEYE review
 output contract: `workspace_proof` is copied from the attached identity file and
-only evidence ids present in `<review-input>` are cited.
+only evidence ids present in `<review-input>` are cited. A code or test excerpt
+longer than the citation limit is cited as a line range inside it
+(`ev_…:START-END`), and a candidate states a mechanism.
+
+The documents role states one contract for each of the first three input
+documents, in-source API documentation (Javadoc, docstring, rustdoc) first.
+The whole-run investigate compares every input contract: an in-source document
+is compared on one line of the documented declaration's body, cited as a range
+of the code excerpt holding it; another contract on the first code excerpt in
+its scope, cited as candidates are. An even-numbered contract with a code
+excerpt longer than the citation limit in its scope cites that excerpt without
+a range, which the product rejects; the same answer after the format repair
+stands for the whole excerpt (`citation_range_unspecified`).
+
+`--shape-errors RATE` (0 to 1, default 0: replies unchanged) makes a share of
+the items carry a fault of form on every call, the format repair included, so
+the product's repair-then-resolve path runs: a verdict cites the long excerpt
+holding its candidate's range without a range (`citation_range_missing`), a
+candidate, document contract or environment note repeats an ID, an
+interpretation limit repeats its observation ID. `--integrity-errors RATE`
+makes a share of the verdicts cite an evidence ID the request did not hold
+(`evidence_id_unknown`), which the product keeps rejecting: the candidate is
+quarantined and the verify task ends incomplete. The choice of an item depends
+on its role, the snapshot digest and the item (candidate ID or position), not
+on the repair block, so the repair of an item gets the same fault.
 
 Modes: `normal` (small usage), `expensive` (usage at the relay's bounds, to
 exhaust a small ledger cap quickly), `fail` (HTTP 500, charged in full by the relay),
@@ -21,6 +45,8 @@ the relay) gets the same reply as a Responses event stream; its `input` content
 may be a list of `input_text` parts.
 `--tls-cert CERT --tls-key KEY` serves HTTPS (an internal endpoint behind a private
 CA, docs/OPERATIONS.md#사내-ca); the key and certificate are the caller's test files.
+`--delay-seconds N` answers each request N seconds late, to see a slow model through the
+relay (which sends its headers only once the answer is complete) and OpenCode's waits.
 `--echo-text TEXT` appends an operator-chosen text to every investigate candidate
 title, to see whether a model's own words reach the verify request (the relay's
 `--allow-model-echo` path). The text comes from the operator, never from labels.
@@ -30,6 +56,7 @@ Stdlib only.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import http.server
 import json
 import os
@@ -47,10 +74,15 @@ REVIEW_INPUT = re.compile(r"<review-input>\n(.*)\n</review-input>", re.S)
 ROLE = re.compile(r"^Role: ([a-z]+)$", re.M)
 CODE_SUFFIX = re.compile(r"\.(go|py|pyi|js|jsx|mjs|cjs|ts|tsx|mts|cts|rs|c|cc|cpp|cxx|h|hh|hpp|hxx)$")
 TEXT = "Placeholder from the dry-run upstream; no model produced this text."
+# The longest code or test excerpt a citation may name whole, and the longest
+# cited range (record.WholeCitationLines, record.MaxCitedLines).
+CITED_LINES = 80
 
 
-def _evidence(node, out):
-    """Collect (id, kind) of every cited-able excerpt in the review input."""
+def _evidence(node, out, ranges=None):
+    """Collect (id, kind) of every cited-able excerpt in the review input, and
+    into ranges the citation of each one: its id, or its first lines as a
+    range when it is longer than CITED_LINES."""
     if isinstance(node, dict):
         ident, path = node.get("id") or node.get("evidence_id"), node.get("path")
         if isinstance(ident, str) and ident.startswith("ev_") and isinstance(path, str):
@@ -58,11 +90,17 @@ def _evidence(node, out):
             if kind not in ("code", "document"):
                 kind = "code" if CODE_SUFFIX.search(path) else "document"
             out.setdefault(ident, kind)
+            start, end = node.get("start_line"), node.get("end_line")
+            if ranges is not None and ident not in ranges:
+                ranges[ident] = ident
+                if (isinstance(start, int) and isinstance(end, int) and end - start + 1 > CITED_LINES
+                        and node.get("origin") != "cited"):
+                    ranges[ident] = f"{ident}:{start}-{start + CITED_LINES - 1}"
         for value in node.values():
-            _evidence(value, out)
+            _evidence(value, out, ranges)
     elif isinstance(node, list):
         for value in node:
-            _evidence(value, out)
+            _evidence(value, out, ranges)
 
 
 def _candidates(node, out):
@@ -80,45 +118,168 @@ def _candidates(node, out):
             _candidates(value, out)
 
 
-def result_for(role: str, review_input, echo: str | None = None) -> dict:
+def _pick(rate: float, role: str, review_input, item) -> bool:
+    """Whether the item gets an injected fault: a deterministic share rate of
+    the items, keyed by role, snapshot digest and item."""
+    if rate <= 0:
+        return False
+    snapshot = ""
+    if isinstance(review_input, dict):
+        scope = review_input.get("scope")
+        snapshot = str((scope if isinstance(scope, dict) else review_input).get("snapshot_manifest_digest", ""))
+    digest = hashlib.sha256(f"{role}\x00{snapshot}\x00{item}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") < rate * 2**64
+
+
+def _holder(review_input, ident: str) -> str | None:
+    """The id of a code excerpt longer than CITED_LINES that the request sends
+    and that holds the excerpt ident's lines: citing it alone is the fault
+    citation_range_missing."""
+    excerpts = []
+    scope = review_input.get("scope") if isinstance(review_input, dict) else None
+    if isinstance(scope, dict):
+        excerpts = [e for e in scope.get("excerpts") or [] if isinstance(e, dict)]
+    inner = next((e for e in excerpts if e.get("id") == ident), None)
+    if inner is None:
+        return None
+    for e in excerpts:
+        if (e.get("id") != ident and e.get("path") == inner.get("path") and e.get("origin") != "cited"
+                and isinstance(e.get("start_line"), int) and isinstance(e.get("end_line"), int)
+                and e["end_line"] - e["start_line"] + 1 > CITED_LINES
+                and e["start_line"] <= inner.get("start_line", 0) and inner.get("end_line", 0) <= e["end_line"]):
+            return e["id"]
+    return None
+
+
+def _under(path: str, scope: str) -> bool:
+    return scope in (".", "") or path == scope or path.startswith(scope.rstrip("/") + "/")
+
+
+def _body_line(doc: dict, lines: dict[int, str]) -> int | None:
+    """One line of the declaration an in-source document describes: the line
+    after a docstring, else the first line after the opening brace of the
+    first declaration below the comment."""
+    end = doc.get("end_line")
+    if not isinstance(end, int):
+        return None
+    if str(doc.get("path", "")).endswith((".py", ".pyi")):
+        return end + 1 if end + 1 in lines else None
+    n = end + 1
+    while n in lines and "{" not in lines[n]:
+        n += 1
+    if n not in lines:
+        return None
+    rest = lines[n].split("{", 1)[1].strip()
+    if rest and rest != "}":
+        return n
+    return n + 1 if n + 1 in lines else None
+
+
+def _comparisons(data: dict) -> list[dict]:
+    """One comparison per input contract (see the module docstring)."""
+    scope = data.get("scope") if isinstance(data.get("scope"), dict) else {}
+    excerpts = [e for e in scope.get("excerpts") or [] if isinstance(e, dict) and isinstance(e.get("id"), str)
+                and isinstance(e.get("path"), str) and isinstance(e.get("start_line"), int) and isinstance(e.get("end_line"), int)]
+    code = [e for e in excerpts if e.get("kind") == "code"]
+    text: dict[str, dict[int, str]] = {}
+    for e in excerpts:
+        if isinstance(e.get("text"), str):
+            for n, line in enumerate(e["text"].split("\n")):
+                text.setdefault(e["path"], {}).setdefault(e["start_line"] + n, line)
+    documents = data.get("documents") if isinstance(data.get("documents"), dict) else {}
+    in_source = {d["id"]: d for d in documents.get("evidence") or [] if isinstance(d, dict) and isinstance(d.get("id"), str)
+                 and (d.get("directive_path") or str(d.get("path", "")).endswith(".java"))}
+    out = []
+    for index, contract in enumerate((documents.get("contracts") or [])[:6], start=1):
+        if not isinstance(contract, dict) or not isinstance(contract.get("applies_to"), str):
+            continue
+        applies, refs = contract["applies_to"], [r for r in contract.get("evidence_ids") or [] if isinstance(r, str)]
+        cite = None
+        doc = next((in_source[r] for r in refs if r in in_source), None)
+        if doc is not None:
+            line = _body_line(doc, text.get(doc.get("path"), {}))
+            holder = next((e for e in code if line is not None and e["path"] == doc.get("path") and _under(e["path"], applies)
+                           and e["start_line"] <= line <= e["end_line"]), None)
+            if holder is not None:
+                cite = f"{holder['id']}:{line}-{line}"
+        else:
+            scoped = [e for e in code if _under(e["path"], applies) and e.get("origin") != "cited"]
+            long = [e for e in scoped if e["end_line"] - e["start_line"] + 1 > CITED_LINES]
+            if index % 2 == 0 and long:
+                cite = long[0]["id"]  # rejected: a long excerpt needs a range
+            elif scoped:
+                e = scoped[0]
+                cite = e["id"] if e["end_line"] - e["start_line"] + 1 <= CITED_LINES else \
+                    f"{e['id']}:{e['start_line']}-{e['start_line'] + CITED_LINES - 1}"
+        out.append({"contract_index": index, "applies_to": applies, "status": "match" if cite else "unknown",
+                    "reason": TEXT, "document_evidence_ids": refs, "code_evidence_ids": [cite] if cite else []})
+    return out
+
+
+def result_for(role: str, review_input, echo: str | None = None, shape: float = 0.0, integrity: float = 0.0) -> dict:
     evidence: dict[str, str] = {}
-    _evidence(review_input, evidence)
-    code = [i for i, k in evidence.items() if k == "code"]
+    cited: dict[str, str] = {}
+    _evidence(review_input, evidence, cited)
+    code = [cited[i] for i, k in evidence.items() if k == "code"]
     title = "Placeholder candidate (dry run)" + (": " + echo if echo else "")
-    candidate = {"title": title, "condition": TEXT, "impact": TEXT,
+    candidate = {"title": title, "condition": TEXT, "mechanism": TEXT, "impact": TEXT,
                  "improvement": TEXT, "counterpoint": TEXT, "evidence_ids": code[:1]}
     if role == "probe":  # codeye model probe: {"a": int, "b": int} -> {"sum": a + b}
         data = review_input if isinstance(review_input, dict) else {}
         a, b = data.get("a"), data.get("b")
         return {"sum": a + b} if isinstance(a, int) and isinstance(b, int) else {}
     if role == "investigate":
-        return {"candidates": [candidate] if code else []}
+        data = review_input if isinstance(review_input, dict) else {}
+        if code and _pick(shape, role, review_input, 0):
+            candidate["evidence_ids"] = code[:1] * 2  # evidence_id_duplicate
+        out = {"candidates": [candidate] if code else []}
+        if isinstance(data.get("scope"), dict) and data["scope"].get("whole_run") is True:
+            comparisons = _comparisons(data)
+            if comparisons:
+                out["contract_comparisons"] = comparisons
+        return out
     if role == "verify":
         found: list[tuple[str, list[str]]] = []
         _candidates(review_input, found)
         out = []
         for ident, refs in found:
+            cite = refs[:1]
+            if cite and _pick(integrity, role + ".integrity", review_input, ident):
+                cite = ["ev_" + "0" * 24]  # evidence_id_unknown
+            elif cite and _pick(shape, role, review_input, ident):
+                holder = _holder(review_input, cite[0])
+                cite = [holder] if holder else cite * 2  # citation_range_missing, else evidence_id_duplicate
             out.append({"candidate_id": ident, "verdict": "supported", "category": "correctness", "severity": "low",
                         "severity_reason": TEXT, "impact": TEXT, "valid_conditions": [TEXT], "invalid_conditions": [],
-                        "supporting_evidence_ids": refs[:1], "counterevidence_ids": [], "unresolved_assumptions": [],
+                        "supporting_evidence_ids": cite, "counterevidence_ids": [], "unresolved_assumptions": [],
                         "next_verification": [TEXT]})
         return {"verifications": out}
     if role == "documents":
-        return {"contracts": [], "conflicts": [], "questions": [], "instruction_notes": []}
+        data = review_input if isinstance(review_input, dict) else {}
+        docs = [d for d in data.get("documents") or [] if isinstance(d, dict)
+                and isinstance(d.get("evidence_id"), str) and isinstance(d.get("applies_to"), str)]
+        docs.sort(key=lambda d: not (d.get("public_api") or d.get("directive_path")))
+        contracts = [{"statement": TEXT, "applies_to": d["applies_to"], "evidence_ids": [d["evidence_id"]]} for d in docs[:3]]
+        for index, contract in enumerate(contracts):
+            if _pick(shape, role, review_input, index):
+                contract["evidence_ids"] = contract["evidence_ids"] * 2  # evidence_id_duplicate
+        return {"contracts": contracts, "conflicts": [], "questions": [], "instruction_notes": []}
     if role == "environment":  # one note per gap module, citing that module's requirements
         data = review_input if isinstance(review_input, dict) else {}
         reqs = [r for r in data.get("requirements") or [] if isinstance(r, dict)]
         notes = []
         for module in data.get("gap_modules") or []:
             own = [r for r in reqs if r.get("module") == module]
-            notes.append({"module": module, "requirement_ids": [r.get("id") for r in own if r.get("id")],
+            repeat = 2 if _pick(shape, role, review_input, module) else 1  # requirement_id_duplicate
+            notes.append({"module": module, "requirement_ids": [r.get("id") for r in own if r.get("id")] * repeat,
                           "evidence_ids": sorted({r.get("evidence_id") for r in own if r.get("evidence_id")}),
                           "affected_checks": TEXT, "still_checkable": TEXT, "needed_observation": TEXT})
         return {"notes": notes}
     if role == "interpret":  # at least one item; a limit for the first observation
         data = review_input if isinstance(review_input, dict) else {}
         ids = [o.get("id") for o in data.get("observations") or [] if isinstance(o, dict) and o.get("id")]
-        return {"hypotheses": [], "limits": [{"observation_ids": ids[:1], "statement": TEXT}] if ids else []}
+        repeat = 2 if _pick(shape, role, review_input, 0) else 1  # observation_id_duplicate
+        return {"hypotheses": [], "limits": [{"observation_ids": ids[:1] * repeat, "statement": TEXT}] if ids else []}
     return {}
 
 
@@ -133,7 +294,7 @@ def content_text(content) -> str:
     return ""
 
 
-def reply_text(payload: dict, echo: str | None = None) -> tuple[str, str]:
+def reply_text(payload: dict, echo: str | None = None, shape: float = 0.0, integrity: float = 0.0) -> tuple[str, str]:
     """Return (role, assistant text) for a Responses payload."""
     texts = [content_text(m.get("content", "")) for m in payload.get("input", [])
              if isinstance(m, dict) and m.get("role") == "user"]
@@ -150,13 +311,17 @@ def reply_text(payload: dict, echo: str | None = None) -> tuple[str, str]:
     head = prompt[:found.start()] if found else prompt  # the attachment precedes the prompt
     proofs = PROOF.findall(head)
     proof = proofs[-1] if proofs else ""
-    return role, json.dumps({"workspace_proof": proof, "result": result_for(role, review_input, echo)},
+    return role, json.dumps({"workspace_proof": proof, "result": result_for(role, review_input, echo, shape, integrity)},
                             ensure_ascii=False)
 
 
 class FakeUpstream:
-    def __init__(self, mode: str, dump: Path | None, echo: str | None = None):
+    def __init__(self, mode: str, dump: Path | None, echo: str | None = None, delay: float = 0.0,
+                 shape: float = 0.0, integrity: float = 0.0):
         self.mode = mode
+        self.shape = shape
+        self.integrity = integrity
+        self.delay = delay
         self.dump = dump
         self.echo = echo
         self.calls = 0
@@ -168,11 +333,13 @@ class FakeUpstream:
             number = self.calls
         if self.dump is not None:
             (self.dump / f"{number:04d}.json").write_text(json.dumps(payload, ensure_ascii=False, indent=1))
+        if self.delay > 0:
+            time.sleep(self.delay)
         if self.mode == "fail":
             return 500, {"error": {"message": "fake failure", "type": "server_error", "code": "fake_failure"}}
         if self.mode == "unauthorized":
             return 401, {"error": {"message": "fake: invalid api key", "type": "invalid_request_error", "code": "invalid_api_key"}}
-        role, text = reply_text(payload, self.echo)
+        role, text = reply_text(payload, self.echo, self.shape, self.integrity)
         messages = payload.get("input", [])
         input_bytes = sum(len(content_text(m.get("content", "")).encode()) for m in messages if isinstance(m, dict))
         cap = int(payload.get("max_output_tokens") or 1)
@@ -253,6 +420,11 @@ def main(argv=None) -> int:
     parser.add_argument("--mode", choices=("normal", "expensive", "fail", "unauthorized"), default="normal")
     parser.add_argument("--dump", type=Path, help="write every received payload here (dry-run analysis only)")
     parser.add_argument("--echo-text", help="append this operator text to investigate candidate titles")
+    parser.add_argument("--delay-seconds", type=float, default=0.0, help="answer every request this many seconds late")
+    parser.add_argument("--shape-errors", type=float, default=0.0, metavar="RATE",
+                        help="share (0-1) of items answered with a fault of form on every call")
+    parser.add_argument("--integrity-errors", type=float, default=0.0, metavar="RATE",
+                        help="share (0-1) of verdicts citing an evidence id the request did not hold")
     parser.add_argument("--tls-cert", type=Path, help="serve HTTPS with this certificate chain (PEM)")
     parser.add_argument("--tls-key", type=Path, help="the private key of --tls-cert (PEM)")
     args = parser.parse_args(argv)
@@ -264,7 +436,13 @@ def main(argv=None) -> int:
         return 2
     if args.dump is not None:
         args.dump.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fake = FakeUpstream(args.mode, args.dump, args.echo_text)
+    if not 0 <= args.delay_seconds <= 3600:
+        print("--delay-seconds is between 0 and 3600", file=sys.stderr)
+        return 2
+    if not (0 <= args.shape_errors <= 1 and 0 <= args.integrity_errors <= 1):
+        print("--shape-errors and --integrity-errors are between 0 and 1", file=sys.stderr)
+        return 2
+    fake = FakeUpstream(args.mode, args.dump, args.echo_text, args.delay_seconds, args.shape_errors, args.integrity_errors)
     server = make_server(fake)
     if args.tls_cert is not None:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

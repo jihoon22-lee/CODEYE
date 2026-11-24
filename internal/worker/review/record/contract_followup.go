@@ -22,7 +22,7 @@ type ContractConditionEvidence struct {
 	EvidenceID string `json:"evidence_id"`
 }
 
-func validContractPartial(c ContractComparison, p *ContractPartialSupport, catalog map[string]Excerpt) bool {
+func validContractPartial(c ContractComparison, p *ContractPartialSupport, catalog map[string]Excerpt, text int) bool {
 	if c.Status != "partial" {
 		return p == nil
 	}
@@ -36,7 +36,7 @@ func validContractPartial(c ContractComparison, p *ContractPartialSupport, catal
 		return false
 	}
 	return a.EvidenceID != b.EvidenceID && !strings.EqualFold(strings.TrimSpace(a.Condition), strings.TrimSpace(b.Condition)) &&
-		insightText(a.Condition) && insightText(b.Condition) &&
+		insightTextWithin(a.Condition, text) && insightTextWithin(b.Condition, text) &&
 		slices.Contains(c.CodeEvidenceIDs, a.EvidenceID) && slices.Contains(c.CodeEvidenceIDs, b.EvidenceID) &&
 		first.Kind == "code" && SourceKind(first.Path) == "code" &&
 		second.Kind == "code" && SourceKind(second.Path) == "code"
@@ -106,7 +106,8 @@ func ValidateContractFollowup(final, documents, investigate Record) bool {
 		return false
 	}
 	byID := contractEvidence(final.Evidence)
-	if !x.Valid(byID) || !validContractPartial(x, final.PartialSupport, byID) {
+	text := boundsOf(final.Schema).text
+	if !x.ValidWithin(byID, text) || !validContractPartial(x, final.PartialSupport, byID, text) {
 		return false
 	}
 	docs, old := contractEvidence(documents.Evidence), contractEvidence(investigate.Evidence)

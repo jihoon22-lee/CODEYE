@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -83,7 +85,7 @@ func TestDocumentsFitKeepsExcerptsWhenModuleLinksExceedBudget(t *testing.T) {
 			input := decodeAs[docsInput](t, q)
 			if len(input.Documents) == 0 || !strings.Contains(input.Documents[0].Text, "queued values") ||
 				len(input.Modules) >= modules || !slices.Contains(input.Limitations, "document_lists_shortened") ||
-				len(opencode.Prompt(q)) > PromptBudget {
+				len(opencode.Prompt(q)) > MinRequestBytes {
 				t.Fatalf("document request did not fit with genuine excerpts: %d docs, %d modules, %v, %d bytes",
 					len(input.Documents), len(input.Modules), input.Limitations, len(opencode.Prompt(q)))
 			}
@@ -92,7 +94,8 @@ func TestDocumentsFitKeepsExcerptsWhenModuleLinksExceedBudget(t *testing.T) {
 		},
 	}
 	caller := &scriptedCaller{script: script}
-	h, err := discovery.Wrap(Handler{Static: vetStub{}, Caller: caller}, discovery.Config{})
+	// The module links press on the smallest request budget.
+	h, err := discovery.Wrap(Handler{Static: vetStub{}, Caller: caller, Budget: smallBudget}, discovery.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,21 +121,38 @@ func TestDocumentsFitKeepsExcerptsWhenModuleLinksExceedBudget(t *testing.T) {
 	}
 }
 
-// longText is a maximal accepted text field (JSON size at the limit).
+// longText is a maximal text field of the smallest budget.
 func longText(prefix string) string {
+	return longTextN(prefix, smallBudget.limits().text)
+}
+
+// longTextN is a maximal accepted text field of limit bytes (JSON size at
+// the limit).
+func longTextN(prefix string, limit int) string {
 	// This rune adds exactly its UTF-8 size to the JSON string. Compute
 	// the same maximum without encoding every possible shorter string.
 	const fill = "가"
-	s := prefix + strings.Repeat(fill, (400-record.JSONLen(prefix))/len(fill))
-	if !record.ModelText(s) {
+	s := prefix + strings.Repeat(fill, (limit-record.JSONLen(prefix))/len(fill))
+	if !record.ProseText(s, limit) {
 		panic("longText not accepted")
 	}
 	return s
 }
 
-// maxScript returns the largest valid outputs each role allows, so the
-// downstream requests carry the most upstream content.
+var atMostCandidates = regexp.MustCompile(`Return at most (\d+) candidates`)
+
+// maxScript is maxScriptFor at the smallest budget: its outputs are valid
+// at every budget.
 func maxScript(t *testing.T) map[string]func(int, opencode.Request) opencode.Reply {
+	return maxScriptFor(t, smallBudget)
+}
+
+// maxScriptFor returns the largest valid outputs each role allows at budget
+// b (prose at its limits, as many candidates as the request allows), so the
+// downstream requests carry the most upstream content.
+func maxScriptFor(t *testing.T, b Budget) map[string]func(int, opencode.Request) opencode.Reply {
+	l := b.limits()
+	long := func(prefix string) string { return longTextN(prefix, l.text) }
 	return map[string]func(int, opencode.Request) opencode.Reply{
 		"environment": func(_ int, q opencode.Request) opencode.Reply {
 			in := decodeAs[envInput](t, q)
@@ -144,7 +164,7 @@ func maxScript(t *testing.T) map[string]func(int, opencode.Request) opencode.Rep
 						req, ev = append(req, r.ID), append(ev, r.EvidenceID)
 					}
 				}
-				notes = append(notes, map[string]any{"module": m, "requirement_ids": req, "evidence_ids": ev, "affected_checks": longText("a"), "still_checkable": longText("b"), "needed_observation": longText("c")})
+				notes = append(notes, map[string]any{"module": m, "requirement_ids": req, "evidence_ids": ev, "affected_checks": long("a"), "still_checkable": long("b"), "needed_observation": long("c")})
 			}
 			return asJSON(map[string]any{"notes": notes})
 		},
@@ -153,25 +173,30 @@ func maxScript(t *testing.T) map[string]func(int, opencode.Request) opencode.Rep
 			d0, d1 := in.Documents[0], in.Documents[len(in.Documents)-1]
 			var contracts, questions, notes, conflicts []map[string]any
 			for i := range 6 {
-				contracts = append(contracts, map[string]any{"statement": longText(fmt.Sprint(i)), "applies_to": d1.AppliesTo, "evidence_ids": []string{d1.EvidenceID}})
+				contracts = append(contracts, map[string]any{"statement": long(fmt.Sprint(i)), "applies_to": d1.AppliesTo, "evidence_ids": []string{d1.EvidenceID}})
 			}
 			for i := range 4 {
-				questions = append(questions, map[string]any{"question": longText(fmt.Sprint(i)), "applies_to": d1.AppliesTo, "evidence_ids": []string{d1.EvidenceID}})
+				questions = append(questions, map[string]any{"question": long(fmt.Sprint(i)), "applies_to": d1.AppliesTo, "evidence_ids": []string{d1.EvidenceID}})
 			}
 			for i := range 3 {
-				notes = append(notes, map[string]any{"note": longText(fmt.Sprint(i)), "evidence_ids": []string{d0.EvidenceID}})
+				notes = append(notes, map[string]any{"note": long(fmt.Sprint(i)), "evidence_ids": []string{d0.EvidenceID}})
 				if d0.Path != d1.Path && record.ScopeUnder(d1.AppliesTo, d0.AppliesTo) {
-					conflicts = append(conflicts, map[string]any{"scope": d1.AppliesTo, "summary": longText("s"), "impact": longText("i"), "first_evidence_ids": []string{d0.EvidenceID}, "second_evidence_ids": []string{d1.EvidenceID}})
+					conflicts = append(conflicts, map[string]any{"scope": d1.AppliesTo, "summary": long("s"), "impact": long("i"), "first_evidence_ids": []string{d0.EvidenceID}, "second_evidence_ids": []string{d1.EvidenceID}})
 				}
 			}
 			return asJSON(map[string]any{"contracts": contracts, "conflicts": nonNilList(conflicts), "questions": questions, "instruction_notes": notes})
 		},
 		"investigate": func(_ int, q opencode.Request) opencode.Reply {
 			in := decodeAs[investigateInput](t, q)
+			n := l.candidates
+			if m := atMostCandidates.FindStringSubmatch(q.Instructions); m != nil {
+				n, _ = strconv.Atoi(m[1])
+				n = min(n, l.candidates)
+			}
 			var cands []map[string]any
-			for i := range 4 {
+			for i := range n {
 				e := in.Scope.Excerpts[i%len(in.Scope.Excerpts)]
-				cands = append(cands, map[string]any{"title": longText(fmt.Sprint(i)), "condition": longText("c"), "impact": longText("i"), "improvement": longText("m"), "counterpoint": longText("p"), "evidence_ids": []string{e.ID}})
+				cands = append(cands, map[string]any{"title": long(fmt.Sprint(i)), "condition": long("c"), "mechanism": longTextN("x", l.mechanism), "impact": long("i"), "improvement": long("m"), "counterpoint": long("p"), "evidence_ids": []string{cite(e)}})
 			}
 			return asJSON(map[string]any{"candidates": cands})
 		},
@@ -180,9 +205,9 @@ func maxScript(t *testing.T) map[string]func(int, opencode.Request) opencode.Rep
 			var hyps, limits []map[string]any
 			for _, o := range in.Observations {
 				if len(o.EvidenceIDs) > 0 && len(hyps) < 2 {
-					hyps = append(hyps, map[string]any{"observation_ids": []string{o.ID}, "title": longText("t"), "condition": longText("c"), "impact": longText("i"), "improvement": longText("m"), "counterpoint": longText("p"), "evidence_ids": o.EvidenceIDs})
+					hyps = append(hyps, map[string]any{"observation_ids": []string{o.ID}, "title": long("t"), "condition": long("c"), "mechanism": longTextN("x", l.mechanism), "impact": long("i"), "improvement": long("m"), "counterpoint": long("p"), "evidence_ids": o.EvidenceIDs})
 				} else if len(limits) < 3 {
-					limits = append(limits, map[string]any{"observation_ids": []string{o.ID}, "statement": longText("l")})
+					limits = append(limits, map[string]any{"observation_ids": []string{o.ID}, "statement": long("l")})
 				}
 			}
 			return asJSON(map[string]any{"hypotheses": nonNilList(hyps), "limits": nonNilList(limits)})
@@ -230,28 +255,51 @@ func worstCaseObservations(j analysis.Job) []govet.Observation {
 }
 
 // The synthetic worst case with many observations and maximal role
-// outputs. Every request still fits PromptBudget because each role trims
-// its excerpts first and records it.
+// outputs, at the smallest, the default and the largest budget, and at the
+// smallest request with the default output. Every request still fits the
+// budget because each role trims its excerpts first and records it. At the
+// smallest request the verifier may carry fewer than all maximal
+// candidates (each carries a mechanism, and the default output allows
+// longer prose than the minimum): the rest stay unreviewed with
+// verification_budget_exceeded and verify fails with
+// review_input_incomplete.
 func TestReviewRequestSizeWorstCase(t *testing.T) {
-	j := worstCaseJob(t, nil)
-	obs := worstCaseObservations
-	f := &scriptedCaller{script: maxScript(t)}
-	plan, res := runRole(t, j, vetStub{obs: obs}, f, "1.27.4")
-	for _, p := range plan {
-		if wholeRunRole(p.Key) && res[p.Key].Status != domain.TaskSucceeded {
-			t.Fatalf("%s %+v", p.Key, res[p.Key])
-		}
-	}
-	sizes := maxPrompt(f)
-	t.Logf("largest worst-case request per role (bytes): %v", sizes)
-	for _, role := range []string{"environment", "documents", "investigate", "interpret", "verify"} {
-		if sizes[role] == 0 || sizes[role] > PromptBudget {
-			t.Fatalf("%s request %d", role, sizes[role])
-		}
-	}
-	v := readRecord(t, j, "verify")
-	if len(v.Candidates) != 6 {
-		t.Fatalf("verify candidates %d", len(v.Candidates))
+	for _, b := range []Budget{smallBudget, {RequestBytes: MinRequestBytes}, {}, {RequestBytes: MaxRequestBytes, OutputTokens: MaxOutputTokens}} {
+		t.Run(fmt.Sprintf("%d-%d", b.limits().request, b.OutputTokens), func(t *testing.T) {
+			j := worstCaseJob(t, nil)
+			obs := worstCaseObservations
+			f := &scriptedCaller{script: maxScriptFor(t, b)}
+			plan, res := runRoleWith(t, j, Handler{Static: vetStub{obs: obs}, Caller: f, Budget: b}, "1.27.4")
+			for _, p := range plan {
+				r := res[p.Key]
+				small := b.RequestBytes == MinRequestBytes
+				dropped := p.Key == "review.verify" && small && r.Status == domain.TaskFailed && r.Reason == "review_input_incomplete"
+				if wholeRunRole(p.Key) && r.Status != domain.TaskSucceeded && !dropped {
+					t.Fatalf("%s %+v", p.Key, r)
+				}
+			}
+			sizes := maxPrompt(f)
+			t.Logf("largest worst-case request per role (bytes): %v", sizes)
+			for _, role := range []string{"environment", "documents", "investigate", "interpret", "verify"} {
+				if sizes[role] == 0 || sizes[role] > b.limits().request {
+					t.Fatalf("%s request %d", role, sizes[role])
+				}
+			}
+			inv, interp, v := readRecord(t, j, "investigate"), readRecord(t, j, "interpret"), readRecord(t, j, "verify")
+			if len(inv.Candidates) < 4 || len(v.Candidates) != len(inv.Candidates)+len(interp.Candidates) {
+				t.Fatalf("verify candidates %d of %d+%d", len(v.Candidates), len(inv.Candidates), len(interp.Candidates))
+			}
+			unsent := 0
+			for _, x := range v.Verifications {
+				if slices.Contains(x.Limitations, limVerifyBudget) {
+					unsent++
+					if x.Verdict != record.VerdictUnreviewed || b.RequestBytes != MinRequestBytes {
+						t.Fatalf("budget-dropped candidate %s verdict %s", x.CandidateID, x.Verdict)
+					}
+				}
+			}
+			t.Logf("verified %d of %d candidates", len(v.Verifications)-unsent, len(v.Candidates))
+		})
 	}
 }
 
@@ -307,16 +355,17 @@ func polyglotObservations(j analysis.Job) []govet.Observation {
 	return out
 }
 
-// allLanguagesRun runs a worst case with maximal role outputs and checks the
-// size rules: every request fits PromptBudget, no role fails for size and
-// only verify may fail. The verifier may carry fewer than the six maximal
-// candidates: the record keeps all six, every candidate it could not send is
-// unreviewed with verification_budget_exceeded, and the required verify task
-// fails with review_input_incomplete instead of succeeding. It returns the
-// stage records, the largest request per role and the dropped count.
+// allLanguagesRun runs a worst case with maximal role outputs of the default
+// budget and checks the size rules: every request fits PromptBudget, no
+// role fails for size and only verify may fail. The verifier may carry
+// fewer than all maximal candidates: the record keeps them all, every
+// candidate it could not send is unreviewed with
+// verification_budget_exceeded, and the required verify task fails with
+// review_input_incomplete instead of succeeding. It returns the stage
+// records, the largest request per role and the dropped count.
 func allLanguagesRun(t *testing.T, j analysis.Job, obs func(analysis.Job) []govet.Observation) (map[string]record.Record, map[string]int, int) {
 	t.Helper()
-	f := &scriptedCaller{script: maxScript(t)}
+	f := &scriptedCaller{script: maxScriptFor(t, Budget{})}
 	plan, res := runRole(t, j, vetStub{obs: obs}, f, "1.27.4")
 	for _, p := range plan {
 		r := res[p.Key]
@@ -335,8 +384,9 @@ func allLanguagesRun(t *testing.T, j analysis.Job, obs func(analysis.Job) []gove
 		recs[stage] = readRecord(t, j, stage)
 	}
 	v := recs["verify"]
-	if len(v.Candidates) != 6 || len(v.Verifications) != 6 {
-		t.Fatalf("verify candidates %d, verifications %d", len(v.Candidates), len(v.Verifications))
+	want := len(recs["investigate"].Candidates) + len(recs["interpret"].Candidates)
+	if len(recs["investigate"].Candidates) < 4 || len(v.Candidates) != want || len(v.Verifications) != want {
+		t.Fatalf("verify candidates %d, verifications %d of %d", len(v.Candidates), len(v.Verifications), want)
 	}
 	dropped := 0
 	for _, x := range v.Verifications {
@@ -386,7 +436,7 @@ func TestReviewRequestSizeWorstCaseAllLanguages(t *testing.T) {
 					code++
 				}
 			}
-			t.Logf("investigate code excerpts %d (limitations %v), verify: %d of 6 maximal candidates left unreviewed for the budget", code, recs["investigate"].Limitations, dropped)
+			t.Logf("investigate code excerpts %d (limitations %v), verify: %d of %d maximal candidates left unreviewed for the budget", code, recs["investigate"].Limitations, dropped, len(recs["verify"].Candidates))
 			for _, stage := range record.Stages {
 				for _, call := range recs[stage].Calls {
 					if len(guideFiles(call.PackFiles)) != 6 {

@@ -436,7 +436,7 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 
 **테스트 케이스.** 생성기 19부터 `executions[].test_cases`는 이번 `test.run`에 연결된 `runner`, `counts.{passed,failed,skipped}`를 제공한다. 코드 포함 응답의 선택 필드 `cases`는 최대 128개이며 검증한 위치만 경로·줄을 갖는다. 전체 개수는 표본 길이와 다를 수 있다. 코드 미포함 응답에서는 `cases`를 생략한다. [보고서 스키마](../schemas/report.schema.json)
 
-**문서와 구현 대조.** 기존 미확인 계약의 판정이 바뀌면 비교에 `followup: true`와 새 근거를 싣는다. 결론을 유지하며 추가로 읽은 구현은 `additional_observation`에 둔다. `related_workflow`는 같은 동작의 조회 코드·변경 코드·테스트를 각각 근거 ID로 연결한다. 테스트 실행 여부는 `coverage.test_status`에서 확인한다. 조사 범위를 벗어나 생략한 항목은 `gaps[]`의 `document_scope_items_omitted`에 기록한다. [연결된 근거 예시](../examples/review/investigate-workflow-reading.json)
+**문서와 구현 대조.** 기존 미확인 계약의 판정이 바뀌면 비교에 `followup: true`와 새 근거를 싣는다. 결론을 유지하며 추가로 읽은 구현은 `additional_observation`에 둔다. `related_workflow`는 같은 동작의 조회 코드·변경 코드·테스트를 각각 근거 ID로 연결한다. 테스트 실행 여부는 `coverage.test_status`에서 확인한다. 조사 범위를 벗어나 생략한 항목은 `gaps[]`의 `document_scope_items_omitted`에 기록한다. 형식 복구 뒤에도 검사를 통과하지 못해 뺀 대조는 `gaps[]`의 `contract_comparison_omitted`에 기록하고 그 계약은 미확인으로 둔다. 형식 복구 뒤 뺀 다른 모델 출력 항목도 그 절의 `gaps[]`에 남는다(`document_items_omitted`, `environment_notes_omitted`, `review_candidate_omitted`, `interpretation_items_omitted`). 일부 후보만 판정한 검증은 `coverage.ai_review`의 task 결과 `accepted_incomplete`와 한계 `review_verification_incomplete`로 보인다([AI 검토 상태](REPORT.md#ai-검토-상태)). [연결된 근거 예시](../examples/review/investigate-workflow-reading.json)
 
 **발췌와 내보내기.** 발췌는 고정 스냅샷에 저장한 원문이다. 도구 진단 문맥은 최대 9줄, 새 모델의 코드 발췌는 최대 50줄·JSON 인코딩 1,800바이트, 생성기 18의 문서 인용은 최대 40줄·2,000바이트다. `include_code=false`는 발췌를 생략하고 경로·줄·근거 참조를 보존한다. [코드 미포함 응답](REPORT.md#코드-미포함-내보내기)
 

@@ -66,6 +66,9 @@ func ValidateReport(r Report) error {
 	if !aiStatuses[r.Coverage.AIReview.Status] || (r.Coverage.AIReview.Reason == nil) != (r.Coverage.AIReview.Status == AIReviewPerformed || r.Coverage.AIReview.Status == AIReviewNotRequested) {
 		return invalidf("ai_review is inconsistent")
 	}
+	if err := validIncompleteVerify(r); err != nil {
+		return err
+	}
 	if want := ComputeSummary(r.Findings, r.Observations); !reflect.DeepEqual(want, r.Summary) {
 		return invalidf("summary counts differ from findings/observations")
 	}
@@ -93,6 +96,7 @@ func ValidateReport(r Report) error {
 	artifactSizes := map[string]int64{}
 	workflowKey := (WorkflowReviewDecoder{}).Key()
 	readingKey := (WorkflowReadingDecoder{}).Key()
+	citedKey := (CitedReviewDecoder{}).Key()
 	for _, a := range r.Artifacts {
 		if !domain.ValidID(a.ID) || arts[a.ID] || !hex64.MatchString(a.SHA256) || a.SizeBytes < 0 {
 			return invalidf("artifact %s is invalid", a.ID)
@@ -102,6 +106,13 @@ func ValidateReport(r Report) error {
 			if err != nil || version < WorkflowReviewSince || strconv.Itoa(version) != r.Builder.Version ||
 				deref(a.TaskKey) != "review.documents" || a.Role != "other" || a.MediaType != workflowKey.MediaType {
 				return invalidf("workflow review artifact %s requires its document task and builder", a.ID)
+			}
+		}
+		if a.Decoder != nil && *a.Decoder == citedKey.String() {
+			version, err := strconv.Atoi(r.Builder.Version)
+			if err != nil || version < CitedLinesSince || strconv.Itoa(version) != r.Builder.Version ||
+				!strings.HasPrefix(deref(a.TaskKey), "review.") || a.Role != "other" || a.MediaType != citedKey.MediaType {
+				return invalidf("review artifact %s of schema %s requires a review task and its builder", a.ID, citedKey.SchemaVersion)
 			}
 		}
 		if a.Decoder != nil && *a.Decoder == readingKey.String() {

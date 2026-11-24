@@ -32,7 +32,7 @@ func TestNormalVerifierReceivesMatchingExecutedTest(t *testing.T) {
 		if len(refs) < 2 {
 			return asJSON(map[string]any{"candidates": []any{}})
 		}
-		return asJSON(map[string]any{"candidates": []record.CandidateText{{Title: "저장 결과가 표시되지 않음", Condition: "저장 뒤 값을 조회할 때", Impact: "표시 상태가 거짓으로 남는다.", Improvement: "저장 뒤 표시 상태를 반영한다.", Counterpoint: "호출자가 별도 상태를 조합할 수 있다.", Evidence: refs[:2]}}})
+		return asJSON(map[string]any{"candidates": []record.CandidateText{{Title: "저장 결과가 표시되지 않음", Condition: "저장 뒤 값을 조회할 때", Mechanism: "저장 결과가 표시 상태에 반영되지 않는다.", Impact: "표시 상태가 거짓으로 남는다.", Improvement: "저장 뒤 표시 상태를 반영한다.", Counterpoint: "호출자가 별도 상태를 조합할 수 있다.", Evidence: refs[:2]}}})
 	}
 	original := answers[record.StageVerify]
 	seen := false

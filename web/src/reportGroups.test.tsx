@@ -157,7 +157,7 @@ describe('summary grouping', () => {
     const runs = slotRuns(ledger);
     expect(runs.map((x) => [x.first, x.last, x.status])).toEqual([
       ['s001', 's005', 'succeeded'],
-      ['s006', 's008', 'budget_exhausted'],
+      ['s006', 's009', 'budget_exhausted'],
     ]);
     const gaps = r.sections!.gaps;
     expect(gapGroups(gaps).reduce((n, g) => n + g.subjects.length, 0)).toBe(gaps.length);
@@ -201,7 +201,7 @@ describe('summary grouping', () => {
     const ledger = r.sections!.codeReview.ledger!;
     const project = { analysis: null } as never;
     const hints = improvementHints(r.sections!.gaps, null, project, ledger);
-    expect(hints.find((h) => h.key === 'budget')!.text).toBe(ko.improve.budgetCalls(14, 3, 20));
+    expect(hints.find((h) => h.key === 'budget')!.text).toBe(ko.improve.budgetCalls(14, 4, 22));
     expect(improvementHints(r.sections!.gaps, null, project).find((h) => h.key === 'budget')!.text).toBe(ko.improve.budget);
     const many = { ...ledger, callsUsed: 99, primarySlotsRefused: 60 };
     expect(improvementHints(r.sections!.gaps, null, project, many).find((h) => h.key === 'budget')!.text).toBe(ko.improve.budgetCallsMax(99, 60, 99 + 118 + 2));

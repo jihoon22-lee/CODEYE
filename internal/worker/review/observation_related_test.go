@@ -115,7 +115,7 @@ func TestInterpretLinksVerifiedCppConditionWithinOrdinaryBudget(t *testing.T) {
 					}
 					selected = main.EvidenceIDs
 					return asJSON(map[string]any{"hypotheses": []hypothesis{{ObservationIDs: []string{main.ID}, Evidence: selected,
-						Title: "상태 갱신의 조건 검토", Condition: "쓰기 동작을 호출한다.", Impact: "상태 갱신에 영향을 준다.",
+						Title: "상태 갱신의 조건 검토", Condition: "쓰기 동작을 호출한다.", Mechanism: "쓰기가 상태를 바로 바꾼다.", Impact: "상태 갱신에 영향을 준다.",
 						Improvement: "호출 조건을 확인한다.", Counterpoint: "상위에서 쓰기를 제한할 수 있다."}}, "limits": []any{}})
 				},
 			}}

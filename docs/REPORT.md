@@ -162,14 +162,14 @@ builder 9부터 pull request run([pull request 분석](GITHUB.md#pull-request-�
 | `quality_verdict` | 조건(처음 맞는 것) |
 |---|---|
 | `attention_required` | 조치 항목이 있거나, 문서와 구현 대조에서 불일치·부분 일치가 확인됐다. 문서 대조 결과는 발견 건수와 별도로 센다. 확인할 항목이 없고 근거가 부족한 문서 계약만 남으면 판정을 보류한다. |
-| `inconclusive` | 상태가 `completed`가 아니거나, AI 검토가 `performed`가 아니거나, 미확정 후보나 위치 미확인 진단이 남아 있다. |
+| `inconclusive` | 상태가 `completed`가 아니거나, AI 검토가 `performed`가 아니거나, 미확정 후보나 위치 미확인 진단이 남아 있거나, 형식 복구 뒤 근거 위치를 확정하지 못해 뺀 모델 후보·해석 가설이 있다(한계 `review_candidate_omitted`·`interpretation_items_omitted`). |
 | `no_actionable_findings` | 확인한 범위에서 조치할 항목을 찾지 못했다. |
 
 `completed` 보고서는 필수 task가 모두 성공하고 AI 검토가 `performed`여야 한다. 검증이 이 규칙과 판정 규칙을 저장 시와 조회 시에 다시 확인한다. 검토가 수행되지 않은 보고서의 builder 문구에는 "검토 완료", "문제 없음" 같은 완료 주장을 넣지 못한다. 검토 기록이 없거나 필수 도구 결과가 누락되면 `no_actionable_findings`를 게시할 수 없다.
 
 ### AI 검토 상태
 
-`coverage.ai_review.status`는 필수 검토 task가 실제로 수락됐는지를 나타낸다. task 행이 성공하고 등록된 decoder가 그 결과 바이트를 수락해야 수락으로 센다. task가 성공해도 결과를 수락하지 못하면 미수행이다.
+`coverage.ai_review.status`는 필수 검토 task가 실제로 수락됐는지를 나타낸다. task 행이 성공하고 등록된 decoder가 그 결과 바이트를 수락해야 수락으로 센다. task가 성공해도 결과를 수락하지 못하면 미수행이다. 예외는 일부 후보만 판정한 verify다(생성기 21부터, A59). verify task가 판정하지 못한 후보 때문에만 실패했고(`review_output_incomplete`, `review_input_incomplete`, 전체와 slice) 그 수락 기록이 계보 검사를 통과하면 결과는 `accepted_incomplete`이고 수락으로 센다. 그 판정은 발견에 실리고 판정하지 못한 후보만 사유와 함께 `unreviewed`다. task는 실패로 남으므로 보고서는 `partial`이고, 한계 `review_verification_incomplete`와 분석 공백 `role_accepted_incomplete`(절 `code_review`)가 남는다. 생성기 20 이하의 보고서가 `accepted_incomplete`를 가지거나 그 결과와 한계가 어긋나면 검증 실패다.
 
 | 상태 | 뜻 |
 |---|---|
@@ -178,7 +178,7 @@ builder 9부터 pull request run([pull request 분석](GITHUB.md#pull-request-�
 | `not_performed` | 필수 검토 task가 계획되지 않았거나(`review_tasks_not_planned`) 수락된 것이 없다(`review_results_not_accepted`). |
 | `not_requested` | 스키마 enum에 있으나 현재 builder는 쓰지 않는다. |
 
-필수 역할은 계획에서 정한다. `required_for_verdict`인 `review.*` task가 필수이고, 나머지는 `optional_tasks`에 결과·사유와 함께 적으며 수행으로 세지 않는다. 검토 task가 없는 계획은 필수 역할이 없고 AI 검토는 `not_performed`(`review_tasks_not_planned`)다. task별 `result`는 `accepted`, `not_planned`, `not_succeeded`, `result_missing`, `result_rejected`, `skipped`(정책 생략)다.
+필수 역할은 계획에서 정한다. `required_for_verdict`인 `review.*` task가 필수이고, 나머지는 `optional_tasks`에 결과·사유와 함께 적으며 수행으로 세지 않는다. 검토 task가 없는 계획은 필수 역할이 없고 AI 검토는 `not_performed`(`review_tasks_not_planned`)다. task별 `result`는 `accepted`, `accepted_incomplete`(일부 후보만 판정한 verify), `not_planned`, `not_succeeded`, `result_missing`, `result_rejected`, `skipped`(정책 생략)다.
 
 `coverage.review_calls`는 검토 기록이 있는 리비전에서 호출마다 역할·모델·OpenCode 버전·지침 id·version·digest·요청 SHA-256·호출 결과를 실제 담당 역할에 한 번씩 싣는다. 호출 결과가 `accepted`여도 후보의 판정은 `refuted`일 수 있다. 수락한 응답이 실제 실행이나 사람의 확인을 대신하지 않는다. 검토 산출물의 수락 조건과 단계 연결 검사(`review_lineage_mismatch:<task>`)는 [검토](REVIEW.md)에 있다.
 
@@ -238,6 +238,8 @@ builder 9부터 pull request run([pull request 분석](GITHUB.md#pull-request-�
 | 코드 | 뜻 |
 |---|---|
 | `ai_review_not_performed`, `ai_review_partial` | 필수 AI 검토가 수행·검증되지 않았거나 일부만 검증됐다. |
+| `review_verification_incomplete` | 검증 task가 일부 후보만 판정하고 끝났다. 수락한 판정은 발견에 싣고 나머지 후보는 사유와 함께 미검토로 남겼다. |
+| `review_candidate_omitted`, `interpretation_items_omitted`, `document_items_omitted`, `environment_notes_omitted` | 형식 복구 뒤에도 규칙을 통과하지 못한 모델 출력 항목을 뺐다. 각각 코드 분석·문서 분석·환경 분석 절의 분석 공백으로도 보인다. [출력 오류 분류](REVIEW.md#출력-오류-분류) |
 | `result_manifest_unavailable`, `result_manifest_rejected:<사유>` | 결과 manifest가 없거나 거부돼 DB task 행만 보여준다. |
 | `required_task_not_succeeded` | 성공하지 않은 필수 task가 있다. |
 | `analysis_artifact_missing:<task>`, `artifact_rejected:<task>` | 분석 산출물을 읽지 못했거나 검증에 실패해 그 task 결과를 뺐다. |
@@ -252,7 +254,7 @@ builder 9부터 pull request run([pull request 분석](GITHUB.md#pull-request-�
 | `run_cancelled`, `run_failed` | 실행이 취소·실패했다. |
 | `compile_db_generated`, `compile_db_generation_partial`, `compile_db_generation_not_allowed`, `cmake_not_found`, `cmake_generator_not_found`, `repository_code_executed` 등 | C/C++ [compile DB 생성](ANALYZERS.md#compile-db-생성) 작업(`compile-db`)의 제약. 이 작업은 관찰 envelope를 쓰지 않으므로 builder가 결과 manifest의 그 task 제약 중 `cmake_*`·`compile_db_*`(`compile_db_generator_cmake` 제외)와 `repository_code_executed`를 보고서 한계로 옮긴다. |
 
-**compile DB 생성 작업.** `compile-db` task는 분석기 task가 아니므로 정적 분석 절의 도구 행이 되지 않는다(산출물이 없다는 `result_missing` 공백도 생기지 않는다). 성공하지 않았으면 분석 공백 `compile_db_not_generated`(절 `static_analysis`, `subject` `compile-db`, `detail`은 task 사유)가 생긴다. 이 task는 이 처리를 더한 worker부터 있으므로, 같은 사실에서 builder 19의 결과가 달라지지 않아 builder 버전은 그대로다.
+**compile DB 생성 작업.** `compile-db` task는 분석기 task가 아니므로 정적 분석 절의 도구 행이 되지 않는다(산출물이 없다는 `result_missing` 공백도 생기지 않는다). 성공하지 않았으면 분석 공백 `compile_db_not_generated`(절 `static_analysis`, `subject` `compile-db`, `detail`은 task 사유)가 생긴다. 이 task는 이 처리를 더한 worker부터 있으므로 같은 사실에서 이전 생성기의 결과가 달라지지 않는다. 그래서 이 처리 때문에 builder 버전을 올리지 않았다.
 
 ### 현재 보고서에 없는 것
 
@@ -263,7 +265,7 @@ builder 9부터 pull request run([pull request 분석](GITHUB.md#pull-request-�
 
 ### 근거 발췌와 문서 대조
 
-표시용 발췌는 워커가 크기와 blob SHA-256을 대조한 고정 스냅샷에서 가져온다. 워커는 비밀값 탐지 결과가 가리키는 파일, 자격증명 경로나 패턴에 해당하는 파일, 바이너리를 건너뛴다. 도구 진단은 표시 줄 주변 최대 9줄을 저장한다. 모델 인용은 인용의 첫 줄부터 끝까지 최대 50줄을 연속해서 저장한다. JSON 문자열로 인코딩한 크기가 1,800바이트를 넘기기 전의 마지막 완전한 줄에서 멈춘다. 생성기 18은 검증한 문서 인용의 전체 구간이 최대 40줄·2,000바이트에 맞을 때 마지막 인용 줄까지 저장할 수 있다. 이 문서 전용 창은 `source-excerpts` 산출물 `0.3`의 `kind: document` 항목으로 분리한다. 한 시도의 상한은 128개와 384 KiB다.
+표시용 발췌는 워커가 크기와 blob SHA-256을 대조한 고정 스냅샷에서 가져온다. 워커는 비밀값 탐지 결과가 가리키는 파일, 자격증명 경로나 패턴에 해당하는 파일, 바이너리를 건너뛴다. 도구 진단은 표시 줄 주변 최대 9줄을 저장한다. 모델 인용은 인용의 첫 줄부터 끝까지 최대 50줄을 연속해서 저장한다. 검토 기록 0.7의 인용은 워커가 좁힌 줄 범위(최대 80줄)이므로 대개 인용 전체가 보이고, 더 긴 인용은 앞부분만 보인다([인용](REVIEW.md#인용)). JSON 문자열로 인코딩한 크기가 1,800바이트를 넘기기 전의 마지막 완전한 줄에서 멈춘다. 생성기 18은 검증한 문서 인용의 전체 구간이 최대 40줄·2,000바이트에 맞을 때 마지막 인용 줄까지 저장할 수 있다. 이 문서 전용 창은 `source-excerpts` 산출물 `0.3`의 `kind: document` 항목으로 분리한다. 한 시도의 상한은 128개와 384 KiB다.
 
 관리 서버는 시도와 스냅샷이 일치하는 산출물을 확인한 뒤 인용 위치에 발췌를 붙인다. 발췌 산출물 `0.2` 이상에서는 같은 시작 줄에도 도구 문맥과 모델 인용이 각각 있을 수 있다. 같은 시작 줄을 가리키는 모델 인용은 저장한 공통 범위에서 각각의 인용 끝 줄까지 사용한다. 이전 산출물(`0.1`)과 이전 보고서는 당시 저장한 문맥을 읽는다. 인용과 발췌의 줄 범위가 다르면 실제 저장된 줄을 표시하고 사용할 수 있는 경우 고정 커밋의 인용 범위로 연결한다. 화면을 열 때 스냅샷이나 Git에서 원문을 다시 가져오지 않는다. 보고서에 붙이는 발췌 원문 상한은 256 KiB이며 코드 미포함 내보내기는 발췌 필드를 생략한다.
 

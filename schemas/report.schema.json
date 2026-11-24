@@ -160,7 +160,7 @@
       "properties": {
         "key": {"type": "string"},
         "task_status": {"type": ["string", "null"]},
-        "result": {"enum": ["accepted", "not_planned", "not_succeeded", "result_missing", "result_rejected", "skipped"]},
+        "result": {"enum": ["accepted", "accepted_incomplete", "not_planned", "not_succeeded", "result_missing", "result_rejected", "skipped"]},
         "reason": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$", "description": "task reason code"}
       }
     },

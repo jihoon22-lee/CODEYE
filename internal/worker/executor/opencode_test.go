@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestManagedModelEnvironment(t *testing.T) {
@@ -43,7 +44,7 @@ func TestManagedModelEnvironment(t *testing.T) {
 			t.Fatalf("accepted %+v", bad)
 		}
 	}
-	env := managedOpenCodeEnv("opencode/test", nil)
+	env := managedOpenCodeEnv("opencode/test", nil, 0)
 	var settings struct {
 		Providers  []string `json:"enabled_providers"`
 		Model      string
@@ -66,19 +67,27 @@ func TestManagedModelEnvironment(t *testing.T) {
 	}
 }
 
-// The QA relay's profile is byte-for-byte what the regression pilot ran
-// with before the relay became one instance of the general provider.
+// The QA relay's profile is pinned byte for byte. Its token limits are the
+// review budget's, here the default (16384 output tokens; the 256 KiB
+// request, OpenCode's overhead and the output as context); a relay
+// without limits declares none. OpenCode waits for the relay's headers and
+// chunks as long as the call may run (600 s here), not its 300 s default.
 func TestRelayProfileUnchanged(t *testing.T) {
-	r := &LocalModelRelay{BaseURL: "http://127.0.0.1:4567/v1", Token: "tok-0123456789abcdef0123456789abcdef", Model: "gpt-6.2-sol"}
+	bare := &LocalModelRelay{BaseURL: "http://127.0.0.1:4567/v1", Token: "tok-0123456789abcdef0123456789abcdef", Model: "gpt-6.2-sol"}
+	if got := managedOpenCodeEnv("codeye-gateway/gpt-6.2-sol", RelayProvider(bare), 0)["OPENCODE_CONFIG_CONTENT"]; strings.Contains(got, `"limit"`) {
+		t.Fatalf("relay without limits declared some: %s", got)
+	}
+	r := &LocalModelRelay{BaseURL: "http://127.0.0.1:4567/v1", Token: "tok-0123456789abcdef0123456789abcdef", Model: "gpt-6.2-sol",
+		OutputTokens: 16384, ContextTokens: 262144 + 16384 + 16384}
 	p := RelayProvider(r)
 	if !validOpenCode("codeye-gateway/gpt-6.2-sol", p) || validOpenCode("codeye-gateway/gpt-6.1-sol", p) {
 		t.Fatal("relay model rule")
 	}
-	want := `{"autoupdate":false,"enabled_providers":["codeye-gateway"],"formatter":false,"lsp":false,"model":"codeye-gateway/gpt-6.2-sol","permission":"deny","plugin":[],"provider":{"codeye-gateway":{"models":{"gpt-6.2-sol":{"id":"gpt-6.2-sol","limit":{"context":64000,"output":1536},"name":"gpt-6.2-sol","tool_call":false}},"name":"CODEYE budgeted QA relay","npm":"@ai-sdk/openai-compatible","options":{"apiKey":"tok-0123456789abcdef0123456789abcdef","baseURL":"http://127.0.0.1:4567/v1"}}},"share":"disabled","small_model":"codeye-gateway/gpt-6.2-sol","snapshot":false,"tools":{"*":false}}`
-	if got := managedOpenCodeEnv("codeye-gateway/gpt-6.2-sol", p)["OPENCODE_CONFIG_CONTENT"]; got != want {
+	want := `{"autoupdate":false,"enabled_providers":["codeye-gateway"],"formatter":false,"lsp":false,"model":"codeye-gateway/gpt-6.2-sol","permission":"deny","plugin":[],"provider":{"codeye-gateway":{"models":{"gpt-6.2-sol":{"id":"gpt-6.2-sol","limit":{"context":294912,"output":16384},"name":"gpt-6.2-sol","tool_call":false}},"name":"CODEYE budgeted QA relay","npm":"@ai-sdk/openai-compatible","options":{"apiKey":"tok-0123456789abcdef0123456789abcdef","baseURL":"http://127.0.0.1:4567/v1","chunkTimeout":600000,"headerTimeout":600000}}},"share":"disabled","small_model":"codeye-gateway/gpt-6.2-sol","snapshot":false,"tools":{"*":false}}`
+	if got := managedOpenCodeEnv("codeye-gateway/gpt-6.2-sol", p, 600*time.Second)["OPENCODE_CONFIG_CONTENT"]; got != want {
 		t.Fatalf("relay profile changed:\n got %s\nwant %s", got, want)
 	}
-	if got := managedOpenCodeEnv("opencode/big-pickle", nil)["OPENCODE_CONFIG_CONTENT"]; got != `{"autoupdate":false,"enabled_providers":["opencode"],"formatter":false,"lsp":false,"model":"opencode/big-pickle","permission":"deny","plugin":[],"share":"disabled","small_model":"opencode/big-pickle","snapshot":false,"tools":{"*":false}}` {
+	if got := managedOpenCodeEnv("opencode/big-pickle", nil, 600*time.Second)["OPENCODE_CONFIG_CONTENT"]; got != `{"autoupdate":false,"enabled_providers":["opencode"],"formatter":false,"lsp":false,"model":"opencode/big-pickle","permission":"deny","plugin":[],"share":"disabled","small_model":"opencode/big-pickle","snapshot":false,"tools":{"*":false}}` {
 		t.Fatalf("credential-free profile changed: %s", got)
 	}
 }
@@ -87,8 +96,8 @@ func TestRelayProfileUnchanged(t *testing.T) {
 // not list it) and passes the key and endpoint only in the profile.
 func TestProviderProfile(t *testing.T) {
 	p := &ModelProvider{ID: "openai", APIKey: "sk-test-0123456789", BaseURL: "http://127.0.0.1:9/v1"}
-	got := managedOpenCodeEnv("openai/gpt-6.2-sol", p)["OPENCODE_CONFIG_CONTENT"]
-	want := `{"autoupdate":false,"enabled_providers":["openai"],"formatter":false,"lsp":false,"model":"openai/gpt-6.2-sol","permission":"deny","plugin":[],"provider":{"openai":{"models":{"gpt-6.2-sol":{"name":"gpt-6.2-sol"}},"options":{"apiKey":"sk-test-0123456789","baseURL":"http://127.0.0.1:9/v1"}}},"share":"disabled","small_model":"openai/gpt-6.2-sol","snapshot":false,"tools":{"*":false}}`
+	got := managedOpenCodeEnv("openai/gpt-6.2-sol", p, 600*time.Second)["OPENCODE_CONFIG_CONTENT"]
+	want := `{"autoupdate":false,"enabled_providers":["openai"],"formatter":false,"lsp":false,"model":"openai/gpt-6.2-sol","permission":"deny","plugin":[],"provider":{"openai":{"models":{"gpt-6.2-sol":{"name":"gpt-6.2-sol"}},"options":{"apiKey":"sk-test-0123456789","baseURL":"http://127.0.0.1:9/v1","chunkTimeout":600000,"headerTimeout":600000}}},"share":"disabled","small_model":"openai/gpt-6.2-sol","snapshot":false,"tools":{"*":false}}`
 	if got != want {
 		t.Fatalf("got %s", got)
 	}
@@ -99,7 +108,7 @@ func TestProviderProfile(t *testing.T) {
 			Models map[string]map[string]any `json:"models"`
 		}
 	}
-	if err := json.Unmarshal([]byte(managedOpenCodeEnv("local/qwen/coder", compat)["OPENCODE_CONFIG_CONTENT"]), &s); err != nil {
+	if err := json.Unmarshal([]byte(managedOpenCodeEnv("local/qwen/coder", compat, 0)["OPENCODE_CONFIG_CONTENT"]), &s); err != nil {
 		t.Fatal(err)
 	}
 	if s.Provider["local"].NPM != "@ai-sdk/openai-compatible" || s.Provider["local"].Models["qwen/coder"]["tool_call"] != false {
@@ -129,7 +138,7 @@ func TestNativeProviderProfileKeepsIsolationAndMasksHeaders(t *testing.T) {
 			Models  map[string]map[string]any `json:"models"`
 		} `json:"provider"`
 	}
-	if err := json.Unmarshal([]byte(managedOpenCodeEnv("internal/alias", p)["OPENCODE_CONFIG_CONTENT"]), &profile); err != nil {
+	if err := json.Unmarshal([]byte(managedOpenCodeEnv("internal/alias", p, 0)["OPENCODE_CONFIG_CONTENT"]), &profile); err != nil {
 		t.Fatal(err)
 	}
 	provider := profile.Provider["internal"]
@@ -140,5 +149,14 @@ func TestNativeProviderProfileKeepsIsolationAndMasksHeaders(t *testing.T) {
 	secrets := secretValues(Spec{OpenCodeProvider: p})
 	if output := redactString("Bearer private-token, private-token, fixture", secrets); strings.Contains(output, "private-token") || strings.Contains(output, "fixture") {
 		t.Fatal("native header credentials survived redaction")
+	}
+	// The operator's own timeouts stay; the ones it left unset wait as long
+	// as the call may run.
+	p.Native.Timeouts = map[string]any{"headerTimeout": 120000, "timeout": false}
+	if err := json.Unmarshal([]byte(managedOpenCodeEnv("internal/alias", p, 600*time.Second)["OPENCODE_CONFIG_CONTENT"]), &profile); err != nil {
+		t.Fatal(err)
+	}
+	if o := profile.Provider["internal"].Options; o["headerTimeout"] != float64(120000) || o["timeout"] != false || o["chunkTimeout"] != float64(600000) {
+		t.Fatalf("native timeouts %v", o)
 	}
 }

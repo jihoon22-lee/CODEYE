@@ -6,6 +6,7 @@ package report
 import (
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -23,12 +24,47 @@ const ContractReviewSince = 12
 const WorkflowReviewSince = 14
 const WorkflowReadingSince = 15
 
+// CitedLinesSince is the first builder that reads review records of schema
+// 0.7 (record.SchemaVersionCitedLines): line-numbered requests, narrowed
+// citations, a candidate's mechanism and the request budget's longer prose.
+const CitedLinesSince = 20
+
 type (
 	ReviewDecoder          struct{}
 	ContractReviewDecoder  struct{}
 	WorkflowReviewDecoder  struct{}
 	WorkflowReadingDecoder struct{}
+	CitedReviewDecoder     struct{}
 )
+
+// CitedReviewDecoder reads a record of schema 0.7, which every role and
+// slice writes: the task it is attached to decides the stage and slice
+// the record must name, as the earlier decoders did for their variants.
+func (CitedReviewDecoder) Key() DecoderKey {
+	return DecoderKey{MediaType: record.MediaType, SchemaVersion: record.SchemaVersionCitedLines}
+}
+
+func (CitedReviewDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Contribution, error) {
+	if art.Role != "other" {
+		return Contribution{}, invalidf("review record attached to unexpected role")
+	}
+	if _, _, ok := record.SliceTask(ctx.Task.Key); ok {
+		return SliceReviewDecoder{}.Decode(ctx, art, body)
+	}
+	if ctx.Task.Key == record.TaskContract {
+		return ContractReviewDecoder{}.Decode(ctx, art, body)
+	}
+	return ReviewDecoder{}.Decode(ctx, art, body)
+}
+
+// proseLimit is the longest model prose field a report of this builder
+// version keeps.
+func proseLimit(version string) int {
+	if n, err := strconv.Atoi(version); err == nil && n >= CitedLinesSince {
+		return record.MaxProseText
+	}
+	return record.LegacyProseText
+}
 
 func (WorkflowReadingDecoder) Key() DecoderKey {
 	return DecoderKey{MediaType: record.MediaType, SchemaVersion: record.SchemaVersionWorkflowReading}
@@ -181,7 +217,7 @@ func reviewLineage(rec *record.Record, states map[string]*taskState, obs map[str
 	// One excerpt ID (bound to path, blob and range) may reach verify from
 	// both stages with a different origin label (context vs observation);
 	// verify must carry one of the upstream variants unchanged.
-	evidence := map[string][]record.Excerpt{}
+	var priors []record.Record
 	// A slice verify checks its own slice's investigate candidates.
 	sources := []string{"review." + record.StageInvestigate, "review." + record.StageInterpret}
 	if rec.Slice != nil {
@@ -194,19 +230,12 @@ func reviewLineage(rec *record.Record, states map[string]*taskState, obs map[str
 		}
 		prior := states[source].reviewResult.Record
 		want = append(want, prior.Candidates...)
-		for _, e := range prior.Evidence {
-			evidence[e.ID] = append(evidence[e.ID], e)
-		}
+		priors = append(priors, *prior)
 	}
 	if !reflect.DeepEqual(nonNilCandidates(want), nonNilCandidates(rec.Candidates)) {
 		return false
 	}
-	for _, e := range rec.Evidence {
-		if variants, ok := evidence[e.ID]; ok && !slices.Contains(variants, e) {
-			return false
-		}
-	}
-	return true
+	return record.CarriesUpstreamEvidence(*rec, priors...)
 }
 
 // The optional follow-up can use a later slot only when one of its named,
@@ -240,8 +269,10 @@ func nonNilCandidates(l []record.Candidate) []record.Candidate {
 
 // composeReviews joins the review stage records: lineage, call
 // provenance (with the pack identity), exposed files and findings. Findings
-// carry verifier verdicts only from a succeeded verify task with an accepted
-// record; otherwise the accepted candidates stay unreviewed.
+// carry verifier verdicts from a verify task with an accepted record that
+// succeeded or ended incomplete (verifyIncomplete: the candidates it did not
+// verify are unreviewed with their reason); otherwise the accepted
+// candidates stay unreviewed.
 func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) {
 	obs := map[string]Observation{}
 	for _, o := range r.Observations {
@@ -303,7 +334,7 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 	var candidates []record.Candidate
 	verdicts := map[string]record.Verification{}
 	evidence := map[string]record.Excerpt{}
-	if v := states["review.verify"]; reviewAccepted(v) {
+	if v := states["review.verify"]; verdictsUsable("review.verify", v) {
 		rec := v.reviewResult.Record
 		candidates = rec.Candidates
 		for _, x := range rec.Verifications {
@@ -330,7 +361,7 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 		verdicts, evidence := map[string]record.Verification{}, map[string]record.Excerpt{}
 		var from *record.Record
 		switch {
-		case reviewAccepted(ver):
+		case verdictsUsable("review.verify."+key, ver):
 			from = ver.reviewResult.Record
 			for _, x := range from.Verifications {
 				verdicts[x.CandidateID] = x
@@ -375,6 +406,11 @@ func reviewFinding(snapshot string, c record.CandidateText, v record.Verificatio
 		CounterevidenceIDs: []string{}, ObservationIDs: []string{}, Limitations: append([]string{}, v.Limitations...),
 		Recommendation: Recommendation{Summary: c.Improvement, Tradeoffs: []string{}},
 		Verification:   []string{"호출자와 테스트에서 후보의 발생 조건을 확인하세요."}}
+	if c.Mechanism != "" {
+		// How the cited lines produce the failure: a claim on the same
+		// evidence as the candidate.
+		f.Claims = append(f.Claims, Claim{Assertion: c.Mechanism, Kind: "inferred", EvidenceIDs: c.Evidence})
+	}
 	if v.Verdict != "" && v.Verdict != record.VerdictUnreviewed {
 		f.Validation, f.Category, f.Severity, f.SeverityReason = v.Verdict, v.Category, v.Severity, v.SeverityReason
 		f.Impact, f.Verification = v.Impact, v.NextVerification

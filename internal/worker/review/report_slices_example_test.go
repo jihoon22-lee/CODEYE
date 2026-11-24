@@ -44,7 +44,7 @@ func TestReportSlicesExample(t *testing.T) {
 	pinExampleSnapshot(t, &j)
 	ids := &exampleIDs{n: 0x102}
 	caller := &scriptedCaller{script: coverageScript(t)}
-	h, err := discovery.Wrap(Handler{Static: sliceExampleStatic(t), Caller: caller, MaxCalls: sliceExampleCap}, discovery.Config{Observer: exampleObserver{t: t}})
+	h, err := discovery.Wrap(Handler{Static: sliceExampleStatic(t), Caller: caller, MaxCalls: sliceExampleCap, Budget: smallBudget}, discovery.Config{Observer: exampleObserver{t: t}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,10 +98,12 @@ func sliceReport(t *testing.T, j analysis.Job, static analysis.Handler, maxCalls
 	return sliceReportWithCaller(t, j, static, maxCalls, ids, &scriptedCaller{script: coverageScript(t)})
 }
 
+// sliceReportWithCaller runs the review at the smallest request budget,
+// where the slice fixtures exceed the overview.
 func sliceReportWithCaller(t *testing.T, j analysis.Job, static analysis.Handler, maxCalls int, ids *exampleIDs, caller *scriptedCaller) report.Report {
 	t.Helper()
 	pinExampleSnapshot(t, &j)
-	h, err := discovery.Wrap(Handler{Static: static, Caller: caller, MaxCalls: maxCalls}, discovery.Config{Observer: exampleObserver{t: t}})
+	h, err := discovery.Wrap(Handler{Static: static, Caller: caller, MaxCalls: maxCalls, Budget: smallBudget}, discovery.Config{Observer: exampleObserver{t: t}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +269,7 @@ func TestReportLineCoverageAcrossModules(t *testing.T) {
 		for _, e := range in.Scope.Excerpts {
 			if e.Path == longFile && strings.Contains(e.Text, "func FinalEntry()") {
 				return asJSON(map[string]any{"candidates": []record.CandidateText{{
-					Title: tailCandidate, Condition: "마지막 항목을 읽는다.", Impact: "항목 번호가 달라진다.",
+					Title: tailCandidate, Condition: "마지막 항목을 읽는다.", Mechanism: "반환값이 마지막 번호로 고정된다.", Impact: "항목 번호가 달라진다.",
 					Improvement: "마지막 항목의 반환값을 확인한다.", Counterpoint: "별도의 허용 번호가 지정될 수 있다.", Evidence: []string{e.ID},
 				}}})
 			}
@@ -387,7 +389,7 @@ func TestInvestigationKeepsCandidateWhenStrengthCitesOnlyImportAndComment(t *tes
 		main := excerptID(in.Scope.Excerpts, "main.go")
 		imports := excerptID(in.Scope.Excerpts, "imports.go")
 		return asJSON(map[string]any{
-			"candidates": []record.CandidateText{{Title: "조건 없이 성공하는 반환", Condition: "Allow를 직접 호출한다.",
+			"candidates": []record.CandidateText{{Title: "조건 없이 성공하는 반환", Condition: "Allow를 직접 호출한다.", Mechanism: "Allow가 입력과 무관하게 참을 돌려준다.",
 				Impact: "부정 입력을 별도로 확인해야 한다.", Improvement: "호출자가 전달한 상태를 확인한다.",
 				Counterpoint: "모든 호출자가 이미 상태를 확인할 수 있다.", Evidence: []string{main}}},
 			"strengths": []record.Strength{{Title: "라우트 응답 검사", Benefit: "응답 누락을 방지한다.", Scope: ".", EvidenceIDs: []string{imports}}},
@@ -407,13 +409,12 @@ func TestExtendedCoverageReadsPastOrdinarySlotLimitOnRetry(t *testing.T) {
 	const tail = "late.go"
 	const marker = "return catalogueSize + 1"
 	tree := map[string]string{"go.mod": "module sample.test/catalogue\n\ngo 1.23\n"}
-	for i := range 390 {
-		// Seventy-five short lines force two windows per file without
-		// depending on the byte budget or synthetic padding in prompts.
-		tree[fmt.Sprintf("file%03d.go", i)] = fmt.Sprintf("package catalogue\nfunc Entry%03d() int {\n", i) +
-			strings.Repeat("_ = 0\n", 71) + fmt.Sprintf("return %d\n}\n", i)
+	for i := range 800 {
+		// Each short file is one unit: more files than the ordinary slots
+		// hold at the smallest budget's eight units per slot.
+		tree[fmt.Sprintf("file%03d.go", i)] = fmt.Sprintf("package catalogue\nfunc Entry%03d() int {\nreturn %d\n}\n", i, i)
 	}
-	tree[tail] = "package catalogue\nfunc Last(catalogueSize int) int {\n" + strings.Repeat("_ = 0\n", 71) + marker + "\n}\n"
+	tree[tail] = "package catalogue\nfunc Last(catalogueSize int) int {\n" + marker + "\n}\n"
 	j := treeJob(t, tree)
 	j.Scope = domain.Scope{Kind: "full", ReviewCoverage: domain.ReviewCoverageExtended}
 	pinExampleSnapshot(t, &j)

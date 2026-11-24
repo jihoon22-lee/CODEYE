@@ -50,7 +50,7 @@ func TestSlotSlackCoversRunTimeOrder(t *testing.T) {
 			cursors = append(cursors, &coverageCursor{file: sf, tier: f.Tier, severity: f.Severity, windows: []record.ScopeFile{sf}})
 		}
 		doc := record.ScopeDoc{Limits: record.ScopeLimits{Slots: coverageSlots(plan)}}
-		scheduleCoverage(&doc, cursors, nil)
+		scheduleCoverageWithin(&doc, cursors, nil, nil)
 		worst = max(worst, len(doc.Slices)-len(plan.Slices))
 		for _, cur := range cursors {
 			if len(cur.windows) != 0 && len(doc.Slices) != doc.Limits.Slots {
