@@ -29,6 +29,16 @@ func (l Locale) ruleDescription(analyzer, rule, fallback string) string {
 	return fallback
 }
 
+// firstSentence is the description up to its first sentence end: a title
+// carries the statement of the problem, the full paragraph (why it matters
+// and how to fix it) stays in the overview.
+func firstSentence(description string) string {
+	if i := strings.Index(description, ". "); i >= 0 {
+		return description[:i+1]
+	}
+	return description
+}
+
 func genericDiagnosticMessage(analyzer, rule, message string) bool {
 	switch analyzer {
 	case "java.pmd":
@@ -48,7 +58,7 @@ func diagnosticFindingTitle(l Locale, f Finding, o Observation) string {
 			raw := optText(o.RawMessage, "")
 			description := l.ruleDescription(o.Tool, o.RuleID, raw)
 			if description != "" && description != raw {
-				return prefix + " · " + description
+				return prefix + " · " + firstSentence(description)
 			}
 			if genericDiagnosticMessage(o.Tool, o.RuleID, raw) {
 				return prefix

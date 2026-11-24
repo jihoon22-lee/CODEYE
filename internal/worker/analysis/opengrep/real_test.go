@@ -93,6 +93,37 @@ func assertFixtureResult(t *testing.T, files map[string][]byte, doc obsdoc.Docum
 	}
 }
 
+// The published example (examples/observations-opengrep.json) is the
+// envelope of a real run over three fixture files: a Python command flow
+// through a helper function, a TypeScript SQL flow and the suppressed file.
+// CODEYE_OPENGREP_EXAMPLE=/abs/observations-opengrep.json rewrites it.
+func TestRealOpengrepExample(t *testing.T) {
+	a, err := New(Settings{Executable: testOpengrep(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := fixtureFiles(t)
+	files := map[string][]byte{}
+	for _, p := range []string{"python/command_injection.py", "javascript/sql_injection.ts", "suppressed/app.py"} {
+		files[p] = all[p]
+	}
+	fx := anypacktest.New(t, "", files, domain.Scope{})
+	res := packtest.RunTask(t, a, fx.Job, Name, &executor.Executor{})
+	doc, raw := anypacktest.ReadEnvelope(t, fx.Job, res)
+	if res.Status != domain.TaskSucceeded || len(doc.Observations) == 0 {
+		t.Fatalf("%s/%s observations %d", res.Status, res.Reason, len(doc.Observations))
+	}
+	packtest.AssertNoNodePaths(t, raw, fx.Job.Scratch, fx.Job.Snapshot.WorkspaceDir)
+	if out := os.Getenv("CODEYE_OPENGREP_EXAMPLE"); out != "" {
+		if bytes.Contains(raw, []byte("/home/")) || bytes.Contains(raw, []byte("/tmp/")) {
+			t.Fatal("example holds a node path")
+		}
+		if err := os.WriteFile(out, raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func capture(t *testing.T, scratch string, r executor.Result) {
 	t.Helper()
 	dir := os.Getenv("CODEYE_OPENGREP_CAPTURE")

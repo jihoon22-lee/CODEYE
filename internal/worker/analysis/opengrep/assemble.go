@@ -35,9 +35,11 @@ const (
 	// LimIntraFile: a flow is found only when its source and its sink are in
 	// the same file; calls between functions of that file are followed.
 	LimIntraFile = "intra_file_flows_only"
-	// LimRequestSources: the rules start from HTTP request input; command
-	// line arguments, environment, files and databases are not sources.
-	LimRequestSources = "http_request_sources_only"
+	// LimRequestSources: the rules start from request input (HTTP request
+	// input; for C and C++ bytes received from a socket and CGI request
+	// variables); command line arguments, other environment variables,
+	// files and databases are not sources.
+	LimRequestSources = "request_input_sources_only"
 	// LimSourceText: the recorded SARIF stream quotes the matched source
 	// text (snippets and flow step messages); the envelope does not.
 	LimSourceText = "tool_output_holds_source_text"
@@ -226,7 +228,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	for _, l := range in.Loaded {
 		names = append(names, l.Name)
 	}
-	doc.Target.Properties = map[string]string{"analysis": "intra_file_taint", "sources": "http_request_input", "rule_languages": strings.Join(names, ",")}
+	doc.Target.Properties = map[string]string{"analysis": "intra_file_taint", "sources": "request_input", "rule_languages": strings.Join(names, ",")}
 	if len(names) == 0 {
 		doc.Target.Properties["rule_languages"] = "none"
 	}

@@ -18,12 +18,19 @@ export function diagnosticDescription(analyzer: string, rule: string, raw?: stri
   if (!raw || genericDiagnosticMessage(analyzer, rule, raw)) return descriptions[analyzer + ':*'];
 }
 
+// A title carries the statement of the problem; the full description (why it
+// matters and how to fix it) is shown where the diagnostic is explained.
+function firstSentence(description: string) {
+  const end = description.indexOf('. ');
+  return end < 0 ? description : description.slice(0, end + 1);
+}
+
 export function diagnosticFindingTitle(title: string, analyzer: string, rule: string, raw: string | null) {
   if (!analyzer || !rule) return;
   const prefix = analyzer + ' ' + rule;
   if (!title.startsWith(prefix + ': ') && !title.startsWith(prefix + ' 진단')) return;
   const explanation = diagnosticDescription(analyzer, rule, raw);
-  if (explanation) return prefix + ' · ' + explanation;
+  if (explanation) return prefix + ' · ' + firstSentence(explanation);
   if (raw && genericDiagnosticMessage(analyzer, rule, raw)) return prefix;
 }
 const summaryNumber = new Intl.NumberFormat('ko-KR');
@@ -259,6 +266,15 @@ export const reportKo = {
     opencode_version_timeout: '모델 호출 전 OpenCode 버전 확인이 제한시간을 넘겼습니다.',
     secret_files_withheld: '비밀값이 탐지된 파일은 모델 입력에서 뺐습니다.',
     data_directories_excluded: '숨김·testdata·vendor·node_modules 아래 파일은 측정하지 않았습니다.',
+    // (docs/ANALYZERS.md#opengrep-패턴taint-팩) pattern taint rules.
+    intra_file_flows_only: 'opengrep은 입력이 들어오는 곳과 위험한 호출이 같은 파일에 있는 흐름만 찾았습니다. 파일 사이의 흐름은 찾지 않았습니다.',
+    request_input_sources_only: 'opengrep은 HTTP 요청 입력(C·C++는 소켓 수신 바이트와 CGI 요청 변수)에서 시작하는 흐름만 찾았습니다.',
+    tool_output_holds_source_text: 'opengrep의 원시 SARIF 출력에는 일치한 소스 코드 조각이 들어 있습니다. 흐름 단계 문구에는 코드를 넣지 않았습니다.',
+    files_not_fully_analyzed: 'opengrep이 일부만 해석했거나 규칙 제한시간을 넘긴 파일은 처리 파일로 세지 않았습니다.',
+    flow_steps_truncated: '흐름 단계가 64개를 넘는 opengrep 결과는 앞 단계와 마지막 위험 호출만 남겼습니다.',
+    files_over_size_limit_skipped: '크기 한도(1MB)를 넘는 파일은 opengrep으로 검사하지 않았습니다.',
+    non_text_files_skipped: 'UTF-8 텍스트가 아닌 파일은 opengrep으로 검사하지 않았습니다.',
+    planned_files_not_scanned: '계획한 파일 중 opengrep이 검사했다고 보고하지 않은 파일이 있습니다.',
     gofmt_failed: 'gofmt가 입력을 끝까지 읽지 못했습니다. 구문 오류나 파일 읽기 오류는 작업의 stderr에 기록됩니다.',
     format_input_limit: '형식 검사 입력 한도를 넘은 파일은 검사하지 않았습니다.',
     third_party_directories_excluded: 'third-party·third_party·thirdparty 디렉터리는 구조·중복 측정에서 제외했습니다.',

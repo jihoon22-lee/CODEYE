@@ -1,4 +1,4 @@
-"""Contract checks for the analyzer packs (Staticcheck, Python, C/C++, JS/TS, Rust, structure and secrets)."""
+"""Contract checks for the analyzer packs (Staticcheck, Python, C/C++, JS/TS, Rust, structure and secrets, pattern taint)."""
 
 from __future__ import annotations
 
@@ -545,3 +545,92 @@ def check_structure_pack_contracts(validators: dict) -> int:
     bad["summary"]["metric_observations"] = 0
     expect_invalid("report zero metric count (omitted when 0)", validators["report.schema.json"].validate, bad)
     return negatives + 2
+
+
+def check_opengrep_pack(validators: dict) -> int:
+    """(docs/ANALYZERS.md#opengrep-패턴taint-팩) the Opengrep descriptor and the real envelope.
+
+    The rule pack is CODEYE's own embedded files only (no registry, URL or
+    interfile switch), the rule list matches the embedded rule IDs with one
+    CWE each, flow steps are tool_flow_step notes with fixed texts inside the
+    result's raw range, and in-source suppressions are reported. Returns the
+    number of negative cases."""
+    negatives = 0
+    envelope_validator = validators["analyzer-observations.schema.json"]
+    package = ROOT / "internal/worker/analysis/opengrep"
+    descriptor = yaml_file(ROOT / "examples/analyzer-opengrep.yaml")
+    validators["analyzer.schema.json"].validate(descriptor)
+    check_analyzer(descriptor)
+    argv = descriptor["execute"]["argv"]
+    ensure(descriptor["id"] == go_string_constant(package / "opengrep.go", "AnalyzerID") and descriptor["network_policy"] == "none"
+           and not descriptor["executes_repository_code"] and not descriptor["requires_build"], "opengrep: identity, offline, no repository code")
+    ensure({"--taint-intrafile", "--sarif", "--dataflow-traces", "--no-rewrite-rule-ids"} <= set(argv) and argv[-2] == "--", "opengrep: intra-file taint, SARIF with traces, files after --")
+    ensure(not any(a in ("--enable-interfile", "auto") or a.startswith(("p/", "r/", "git+")) or "://" in a for a in argv), "opengrep: no interfile analysis, registry, URL or git rules")
+    ensure(descriptor["exit_codes"] == {"clean": [0], "findings": [], "error": [2, 4, 5, 7, 8]}, "opengrep exit-code contract changed")
+    ids = set()
+    cwe = {}
+    for rules_file in sorted((package / "rules").glob("*.yaml")):
+        text = rules_file.read_text(encoding="utf-8")
+        for block in re.split(r"(?m)^  - id: ", text)[1:]:
+            rule = block.split()[0]
+            match = re.search(r'cwe: \["(CWE-\d+)"\]', block)
+            ensure(rule.startswith("codeye." + rules_file.stem + ".") and match is not None, f"{rule}: CODEYE rule ID with a CWE")
+            ids.add(rule)
+            cwe[rule] = match.group(1)
+    envelope = json_file(ROOT / "examples/observations-opengrep.json")
+
+    def check(doc: dict) -> None:
+        envelope_validator.validate(doc)
+        check_analyzer_observations(doc)
+        ensure(doc["analyzer"] == {"id": descriptor["id"], "ecosystem": "any", "required": False}, "opengrep is an optional depth analyzer")
+        pack = doc["rule_pack"]
+        ensure(pack["id"] == go_string_constant(package / "opengrep.go", "RulePackID") and pack["version"] == go_string_constant(package / "opengrep.go", "RulePackVersion"),
+               "opengrep: rule pack identity differs from the Go constants")
+        ensure(pack["repository_config"] == "overridden" and pack["config_files"] == [] and pack["source_suppressions"] == "reported", "opengrep rule context")
+        ensure([r for r in pack["selection"] if r.startswith("rules/")] == sorted(f"rules/{p.stem}.yaml@" + hashlib.sha256(p.read_bytes()).hexdigest()[:12] for p in (package / "rules").glob("*.yaml")),
+               "opengrep: selection digests differ from the embedded rule files")
+        listed = {r["id"]: r for r in doc["rules"]}
+        ensure(set(listed) <= ids and all(listed[i]["cwe"] == [cwe[i]] for i in listed), "opengrep: envelope rules are embedded rules with their CWE")
+        ensure({"intra_file_flows_only", "request_input_sources_only", "tool_output_holds_source_text"} <= set(doc["limitations"]), "opengrep limitations")
+        scan = next(e for e in doc["executions"] if e["name"] == "opengrep.scan")["stdout"]
+        for o in doc["observations"]:
+            ensure(o["rule_id"] in listed and o["category"] == "security", "opengrep observation rule and category")
+            ensure(o["raw_ref"]["stream_sha256"] == scan["sha256"] and o["raw_ref"]["json_pointer"].startswith("/runs/0/results/"), "opengrep raw reference")
+            ensure(not re.search(r"\.(?:py|js|ts|go|java|c|rs)\b|[(){};=]", o["raw_message"]), "opengrep observation text quotes no code")
+            for n, step in enumerate(o["related"], 1):
+                ensure(step["kind"] == "tool_flow_step" and re.fullmatch(r"taint flow step \d+ of \d+: (source|sink|call|callee parameter|callee return|propagation)", step["raw_message"]) is not None,
+                       "opengrep flow step kind and fixed text")
+        ensure(any(o["suppressed"] for o in doc["observations"]) and any(len(o["related"]) > 2 for o in doc["observations"]), "opengrep example shows suppression and a flow through a call")
+
+    check(envelope)
+
+    def without_configs(args: list[str]) -> list[str]:
+        """The argv without its --config pairs (one per rule language) and the files after --."""
+        out, i = [], 0
+        while i < len(args) and args[i] != "--":
+            if args[i] == "--config":
+                i += 2
+                continue
+            out.append(args[i].replace("${scratch}", "[REDACTED]"))
+            i += 1
+        return out
+
+    recorded = next(e for e in envelope["executions"] if e["name"] == "opengrep.scan")["command"]["argv"]
+    ensure(recorded[0] == "[REDACTED]" and without_configs(recorded[1:]) == without_configs(argv), "Descriptor argv differs from the recorded opengrep.scan command")
+    ensure(all(recorded[i + 1].startswith("[REDACTED]/analyzers/opengrep/rules/") for i, a in enumerate(recorded) if a == "--config"), "opengrep reads only the rule files CODEYE wrote")
+
+    def case(label, edit):
+        nonlocal negatives
+        bad = copy.deepcopy(envelope)
+        edit(bad)
+        expect_invalid("opengrep: " + label, check, bad)
+        negatives += 1
+
+    case("registry configuration recorded", lambda d: d["rule_pack"].update(repository_config="honored"))
+    case("rule outside the pack", lambda d: d["rules"].append({"id": "codeye.python.zzz", "short_description": "x", "cwe": ["CWE-1"]}))
+    case("rule with another CWE", lambda d: d["rules"][0].update(cwe=["CWE-1"]))
+    case("flow step quoting code", lambda d: next(o for o in d["observations"] if o["related"])["related"][0].update(raw_message="taint flow step 1 of 3: source request.args"))
+    case("flow step of another kind", lambda d: next(o for o in d["observations"] if o["related"])["related"][0].update(kind="note"))
+    case("suppressions honored", lambda d: d["rule_pack"].update(source_suppressions="honored"))
+    case("required analyzer", lambda d: d["analyzer"].update(required=True))
+    return negatives

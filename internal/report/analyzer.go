@@ -32,6 +32,17 @@ const (
 	textRejectVerification = "해당 실패 경로를 실행해 기존 오류 처리 계약과 사용자 안내 문구가 유지되고 오류 처리부가 메시지와 스택을 얻는지 확인한다."
 )
 
+// carriesRelated reports whether the analyzer's observations keep their
+// related locations: the notes and path events of the C/C++ analyzers and
+// the taint flow steps of Opengrep.
+func carriesRelated(analyzerID string) bool {
+	switch analyzerID {
+	case "cpp.cppcheck", "cpp.clang_tidy", "cpp.gcc_analyzer", "any.opengrep":
+		return true
+	}
+	return false
+}
+
 func isPromiseRejectDiagnostic(analyzerID, ruleID string) bool {
 	return analyzerID == "javascript.eslint" && ruleID == "prefer-promise-reject-errors" ||
 		analyzerID == "javascript.eslint_typed" && ruleID == "@typescript-eslint/prefer-promise-reject-errors"
@@ -124,7 +135,7 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 		obs := Observation{ID: o.ID, TaskKey: ctx.Task.Key, TaskExecutionID: ctx.TaskExecutionID, Tool: d.Analyzer.ID, ToolVersion: d.Tool.Version, RuleID: o.RuleID,
 			RawSeverity: severity, RawMessage: &msg, LocationState: o.LocationState, EvidenceState: EvidenceUnresolved, SuggestedFixes: o.SuggestedFixes, Suppressed: o.Suppressed,
 			RawRef: RawRef{ArtifactID: a.ID, SHA256: a.SHA256, StreamIndex: o.RawRef.RecordIndex, JSONPointer: o.RawRef.JSONPointer, ByteStart: o.RawRef.ByteStart, ByteEnd: o.RawRef.ByteEnd}}
-		if obs.Tool == "cpp.cppcheck" || obs.Tool == "cpp.clang_tidy" || obs.Tool == "cpp.gcc_analyzer" {
+		if carriesRelated(obs.Tool) {
 			for _, r := range o.Related {
 				kind := r.Kind
 				if kind == "" {

@@ -331,7 +331,7 @@ export function parseAnalysisReport(
   })();
   for (const observation of observations) {
     if (observation.related.length > 64 || observation.related.length > 0 &&
-      (!['cpp.cppcheck', 'cpp.clang_tidy', 'cpp.gcc_analyzer'].includes(observation.tool ?? '') ||
+      (!['cpp.cppcheck', 'cpp.clang_tidy', 'cpp.gcc_analyzer', 'any.opengrep'].includes(observation.tool ?? '') ||
         observation.related.some(note => !includesCode && (note.message !== null || note.excerpt !== null)))) invalid();
     const metric: Observation['metric'] = observation.metric;
     if (!metric) continue;
