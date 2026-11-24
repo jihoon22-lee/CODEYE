@@ -1,0 +1,333 @@
+# CODEYE rule pack codeye-taint (Rust). Written for CODEYE from the Rust
+# standard library (std::process, std::fs) and the axum, actix-web, reqwest,
+# sqlx, rusqlite and tokio::fs APIs; not derived from any third-party rule
+# set. Every rule is an intra-file taint rule: the source and the sink must
+# be in the same file (calls between functions of that file are followed).
+# Sources are HTTP request input: handler parameters taken with the Query,
+# Path, Json or Form extractors (axum and actix-web, web:: prefixed or not)
+# and the query string, URI and headers of an actix-web HttpRequest. Rust
+# has no rule for unsafe deserialization or code evaluation: serde decoders
+# do not run code and the language has no eval.
+rules:
+  - id: codeye.rust.command-injection
+    mode: taint
+    languages: [rust]
+    severity: ERROR
+    message: HTTP request input selects the program or the shell command that is run
+    metadata: {cwe: ["CWE-78"], codeye_family: command-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  fn $F(..., $EX($P): $EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $EX($P): $EX<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., web::$EX($P): web::$EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., web::$EX($P): web::$EX<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: $EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: $EX<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: web::$EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: web::$EX<$T>, ...) { ... }
+          - metavariable-regex:
+              metavariable: $EX
+              regex: ^(Query|Path|Json|Form)$
+          - pattern: $P
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  fn $F(..., $REQ: HttpRequest, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $REQ: &HttpRequest, ...) -> $R { ... }
+          - pattern-either:
+              - pattern: $REQ.query_string()
+              - pattern: $REQ.uri()
+              - pattern: $REQ.path()
+              - pattern: $REQ.headers()
+              - pattern: $REQ.match_info()
+    pattern-sanitizers:
+      - pattern: $X.parse::<$T>()
+    pattern-sinks:
+      - patterns:
+          - pattern: Command::new($PROG)
+          - focus-metavariable: $PROG
+      - patterns:
+          - pattern-either:
+              - pattern: Command::new("$SH").arg("-c").arg($CMD)
+              - pattern: Command::new("$SH").args(["-c", $CMD])
+              - pattern: Command::new("$SH").args(&["-c", $CMD])
+          - metavariable-regex:
+              metavariable: $SH
+              regex: ^(/bin/|/usr/bin/)?(sh|bash|zsh|dash)$
+          - focus-metavariable: $CMD
+
+  - id: codeye.rust.path-traversal
+    mode: taint
+    languages: [rust]
+    severity: WARNING
+    message: HTTP request input selects the file path of a file system operation
+    metadata: {cwe: ["CWE-22"], codeye_family: path-traversal}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  fn $F(..., $EX($P): $EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $EX($P): $EX<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., web::$EX($P): web::$EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., web::$EX($P): web::$EX<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: $EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: $EX<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: web::$EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: web::$EX<$T>, ...) { ... }
+          - metavariable-regex:
+              metavariable: $EX
+              regex: ^(Query|Path|Json|Form)$
+          - pattern: $P
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  fn $F(..., $REQ: HttpRequest, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $REQ: &HttpRequest, ...) -> $R { ... }
+          - pattern-either:
+              - pattern: $REQ.query_string()
+              - pattern: $REQ.uri()
+              - pattern: $REQ.path()
+              - pattern: $REQ.headers()
+              - pattern: $REQ.match_info()
+    pattern-sanitizers:
+      - pattern: $X.parse::<$T>()
+      - pattern: $P.file_name()
+      # A containment check (if !p.starts_with(&root) { return ... }) makes
+      # the checked value trusted afterwards.
+      - by-side-effect: true
+        patterns:
+          - pattern: $P.starts_with(...)
+          - focus-metavariable: $P
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fs::$FN($PATH, ...)
+              - pattern: std::fs::$FN($PATH, ...)
+              - pattern: tokio::fs::$FN($PATH, ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(read|read_to_string|read_dir|write|remove_file|remove_dir|remove_dir_all|create_dir|create_dir_all|copy|rename)$
+          - focus-metavariable: $PATH
+      - patterns:
+          - pattern-either:
+              - pattern: File::open($PATH)
+              - pattern: File::create($PATH)
+              - pattern: std::fs::File::open($PATH)
+              - pattern: std::fs::File::create($PATH)
+              - pattern: tokio::fs::File::open($PATH)
+              - pattern: tokio::fs::File::create($PATH)
+              - pattern: NamedFile::open($PATH)
+              - pattern: NamedFile::open_async($PATH)
+          - focus-metavariable: $PATH
+
+  - id: codeye.rust.sql-injection
+    mode: taint
+    languages: [rust]
+    severity: ERROR
+    message: HTTP request input is built into the text of an SQL statement
+    metadata: {cwe: ["CWE-89"], codeye_family: sql-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  fn $F(..., $EX($P): $EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $EX($P): $EX<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., web::$EX($P): web::$EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., web::$EX($P): web::$EX<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: $EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: $EX<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: web::$EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: web::$EX<$T>, ...) { ... }
+          - metavariable-regex:
+              metavariable: $EX
+              regex: ^(Query|Path|Json|Form)$
+          - pattern: $P
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  fn $F(..., $REQ: HttpRequest, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $REQ: &HttpRequest, ...) -> $R { ... }
+          - pattern-either:
+              - pattern: $REQ.query_string()
+              - pattern: $REQ.uri()
+              - pattern: $REQ.path()
+              - pattern: $REQ.headers()
+              - pattern: $REQ.match_info()
+    pattern-sanitizers:
+      - pattern: $X.parse::<$T>()
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: sqlx::query($SQL)
+              - pattern: sqlx::query_as::<$T>($SQL)
+              - pattern: sqlx::query_as::<$D, $T>($SQL)
+              - pattern: sqlx::query_scalar($SQL)
+              - pattern: sqlx::raw_sql($SQL)
+              - pattern: diesel::sql_query($SQL)
+              # rusqlite and tokio-postgres: statement text, then parameters.
+              - pattern: $CONN.execute($SQL, $PARAMS)
+              - pattern: $CONN.query($SQL, $PARAMS)
+              - pattern: $CONN.query_row($SQL, $PARAMS, ...)
+              - pattern: $CONN.execute_batch($SQL)
+              - pattern: $CONN.batch_execute($SQL)
+          - focus-metavariable: $SQL
+
+  - id: codeye.rust.ssrf
+    mode: taint
+    languages: [rust]
+    severity: WARNING
+    message: HTTP request input decides the address of an outgoing HTTP request
+    metadata: {cwe: ["CWE-918"], codeye_family: ssrf}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  fn $F(..., $EX($P): $EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $EX($P): $EX<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., web::$EX($P): web::$EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., web::$EX($P): web::$EX<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: $EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: $EX<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: web::$EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: web::$EX<$T>, ...) { ... }
+          - metavariable-regex:
+              metavariable: $EX
+              regex: ^(Query|Path|Json|Form)$
+          - pattern: $P
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  fn $F(..., $REQ: HttpRequest, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $REQ: &HttpRequest, ...) -> $R { ... }
+          - pattern-either:
+              - pattern: $REQ.query_string()
+              - pattern: $REQ.uri()
+              - pattern: $REQ.path()
+              - pattern: $REQ.headers()
+              - pattern: $REQ.match_info()
+    pattern-sanitizers:
+      - pattern: $X.parse::<$T>()
+      - pattern: urlencoding::encode(...)
+      # A constant scheme, host and path prefix leaves only the path or query
+      # to the input.
+      - patterns:
+          - pattern: format!("$PREFIX", ...)
+          - metavariable-regex:
+              metavariable: $PREFIX
+              regex: ^https?://[^/{}%]+/
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: reqwest::get($URL)
+              - pattern: reqwest::blocking::get($URL)
+          - focus-metavariable: $URL
+      # A reqwest request builder that is sent.
+      - patterns:
+          - pattern-either:
+              - pattern: $C.$M($URL).send()
+              - pattern: $C.$M($URL).$A(...).send()
+              - pattern: $C.$M($URL).$A(...).$B(...).send()
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(get|post|put|patch|delete|head)$
+          - focus-metavariable: $URL
+
+  - id: codeye.rust.html-injection
+    mode: taint
+    languages: [rust]
+    severity: WARNING
+    message: HTTP request input reaches HTML output without escaping
+    metadata: {cwe: ["CWE-79"], codeye_family: html-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  fn $F(..., $EX($P): $EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $EX($P): $EX<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., web::$EX($P): web::$EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., web::$EX($P): web::$EX<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: $EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: $EX<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: web::$EX<$T>, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: web::$EX<$T>, ...) { ... }
+          - metavariable-regex:
+              metavariable: $EX
+              regex: ^(Query|Path|Json|Form)$
+          - pattern: $P
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  fn $F(..., $REQ: HttpRequest, ...) -> $R { ... }
+              - pattern-inside: |
+                  fn $F(..., $REQ: &HttpRequest, ...) -> $R { ... }
+          - pattern-either:
+              - pattern: $REQ.query_string()
+              - pattern: $REQ.uri()
+              - pattern: $REQ.path()
+              - pattern: $REQ.headers()
+              - pattern: $REQ.match_info()
+    pattern-sanitizers:
+      - pattern: $X.parse::<$T>()
+      - pattern: html_escape::encode_text(...)
+      - pattern: html_escape::encode_safe(...)
+      - pattern: v_htmlescape::escape(...)
+      - pattern: askama_escape::escape(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Html($HTML)
+              - pattern: axum::response::Html($HTML)
+              - pattern: $RESP.content_type(ContentType::html()).body($HTML)
+          - focus-metavariable: $HTML
+      - patterns:
+          - pattern: $RESP.content_type("$CT").body($HTML)
+          - metavariable-regex:
+              metavariable: $CT
+              regex: ^text/html
+          - focus-metavariable: $HTML
