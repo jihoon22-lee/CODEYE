@@ -83,6 +83,15 @@
       "hint": "download a release from https://github.com/gitleaks/gitleaks/releases into ~/.local/share/codeye-tools/bin or set `agent.tools.gitleaks`"
     },
     {
+      "name": "opengrep",
+      "status": "found",
+      "path": "/home/user/.local/share/codeye-tools/bin/opengrep",
+      "version": "2.0.0",
+      "version_tested": true,
+      "source": "codeye-tools/bin",
+      "tested_series": "2.0"
+    },
+    {
       "name": "ruff",
       "status": "found",
       "path": "/home/user/.local/bin/ruff",

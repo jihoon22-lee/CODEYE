@@ -126,6 +126,8 @@ CODEYE 웹 계정은 프로젝트를 열거나 실행할 권한을 정한다. �
 | C/C++ | Cppcheck, clang-tidy. C 소스에는 GCC 분석기의 파일 디스크립터 검사도 적용 가능. 저장소에 `compile_commands.json`이 없으면 build 스크립트 실행을 허용한 프로젝트에서 CMake configure로 만들어 쓴다(서비스 머신에 cmake·make 필요) | CMake·CTest. GoogleTest·Catch2 등은 CTest 등록 방식에 따라 결과를 읽는다. |
 | Rust | Cargo·Clippy와 rustdoc의 API 문서 참조 검사 | Cargo 단위·통합·문서 테스트, 선택한 cargo-nextest |
 
+여섯 언어 모두에서 Opengrep을 설치하면 CODEYE 규칙 팩으로 한 파일 안에서 요청 입력이 명령 실행·파일 경로·SQL·외부 요청·역직렬화·코드 평가·HTML 출력에 닿는 흐름을 찾는다. 파일 사이 흐름은 찾지 않는다. 설치는 릴리스 실행 파일 하나를 `~/.local/share/codeye-tools/bin/opengrep`에 두는 것이다. [Opengrep 패턴·taint 팩](ANALYZERS.md#opengrep-패턴taint-팩)
+
 분석 노드에 설치한 도구, 프로젝트 설정, 읽을 수 있는 의존성이 실제 범위를 결정한다. 런타임에서만 결정되는 호출이나 다른 빌드 구성의 동작은 코드에서 확인한 경로와 구분한다. [도구와 규칙](ANALYZERS.md) · [테스트 실행 조건](EXECUTION.md#기존-테스트-실행)
 
 Java를 처음 분석할 때는 웹의 **도구** 화면이나 `./codeye tools`에서 JDK·PMD·SpotBugs의 탐색 결과를 확인한다. 외부 JAR가 필요한 프로젝트는 노드의 로컬 클래스패스 목록을 설정한다. 기존 Java 테스트까지 실행하려면 해당 빌드에 필요한 Maven 또는 Gradle과 의존성 캐시를 준비한다. [Java 클래스패스](ANALYZERS.md#java-로컬-클래스패스) · [테스트 실행 조건](EXECUTION.md#기존-테스트-실행)

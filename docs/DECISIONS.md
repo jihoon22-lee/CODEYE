@@ -336,6 +336,20 @@
 
 [분석기](ANALYZERS.md) · [모델 검토](REVIEW.md#모델-입력의-비밀값-선별)
 
+**A60 — SARIF 입력 어댑터와 CODEYE 규칙의 Opengrep 파일 안 taint 팩.** (기록 2026-11-25) REQ-007/008/012/013, NFR-006과 TC-289~291에 대해 다음을 확정한다. [분석기](ANALYZERS.md#설계-계약미구현)의 설계 계약 두 항목(SARIF 입력 어댑터, 승인된 로컬 패턴 규칙)을 구현으로 옮긴다.
+
+1. **SARIF는 팩 안의 입력 형식이다.** 공통 관찰 모델로 옮기는 어댑터(`internal/worker/analysis/sarif`)는 팩이 실행한 도구의 출력만 읽는다. 다른 곳에서 만든 SARIF를 올려 결과로 받는 경로는 만들지 않았다. 외부 결과를 받으면 실행 기록·규칙 문맥·원시 stream 근거가 없는 관찰이 생기고, 기존 CI 결과 수집을 하지 않는다는 제품 방향과 맞지 않는다. 모델링한 부분집합 밖의 입력은 형태 오류이며 0건이 아니다.
+2. **엔진은 Opengrep 2.0.0(LGPL-2.1), 규칙은 CODEYE가 새로 쓴다.** 규칙 팩 `codeye-taint` v1은 여섯 언어의 요청 입력 출발점과 명령·경로·SQL·SSRF·역직렬화·코드 평가·HTML 출력 위험 호출만 담는다(35개). Semgrep 레지스트리 규칙은 Semgrep Rules License v1.0이라 쓰지 않았고, 라이선스를 확인하지 않은 규칙 집합도 쓰지 않았다. 바이너리는 저장소에 넣거나 내려받지 않고 운영자가 설치하며, 없으면 `tool_not_configured`다.
+3. **파일 안 흐름만 주장한다.** `--taint-intrafile`만 켜고 `--enable-interfile`은 켜지 않는다(2.0.0에 이 스위치가 있음을 확인했다). 파일 사이 데이터 흐름을 분석했다고 표시하지 않고 `intra_file_flows_only`·`request_input_sources_only`를 항상 남긴다.
+4. **SARIF가 근거, JSON 사본은 대조.** 한 번의 scan이 stdout에 SARIF를, `--json-output`으로 scratch에 JSON을 쓴다. SARIF에는 검사한 파일 목록이 없고 오류 경로가 문구 안에만 있으므로, 처리 파일과 파일별 오류는 JSON 사본에서 읽고 결과 집합을 서로 대조한다. 두 번 실행하는 안은 시간이 두 배이고 두 실행 사이에 결과가 달라질 수 있어 채택하지 않았다. 일부만 해석했거나 규칙 제한시간을 넘긴 파일은 처리 파일로 주장하지 않는다.
+5. **규칙 문맥.** 파일을 명시해 넘기므로 저장소 `.semgrepignore`·`.gitignore`가 적용되지 않는다(측정: 디렉터리 대상은 적용, 파일 대상은 미적용). 그래서 `repository_config=overridden`이다. `nosemgrep`·`nosem`은 도구가 적용하고 SARIF가 알리므로 `source_suppressions=reported`다.
+6. **흐름 단계는 관련 위치다.** `--dataflow-traces`의 단계를 새 관련 위치 종류 `tool_flow_step`으로 보고서까지 싣는다. 관련 위치를 싣는 분석기 목록(보고서 builder·validator, 웹 parser, 번들 검사)에 `any.opengrep`을 더했다. 단계 문구는 고정 문장으로 만들어 코드를 인용하지 않는다. 원시 SARIF에는 소스 조각이 남으므로 `tool_output_holds_source_text`를 기록한다.
+7. **규칙 설명은 한 문단, 제목은 첫 문장.** 규칙마다 위험한 이유와 고치는 방법을 담은 한국어 설명(CWE 포함)을 규칙 설명 표에 둔다. 진단 제목에는 첫 문장만 쓴다(Go 보고서와 웹 모두). 기존 설명은 한 문장이라 제목이 바뀌지 않는다.
+8. **엔진 중복.** bandit, ESLint 기준·type-aware, go vet·Staticcheck·errcheck, SpotBugs, clang-tidy(`bugprone-command-processor` = cert-env33-c), cppcheck를 같은 fixture에 실행했다. 모든 규칙에 다른 도구가 보고하지 않는 변형이 있어 규칙을 하나도 빼지 않았다. 같은 줄의 두 보고는 각자 관찰로 남는다([엔진 중복](ANALYZERS.md#엔진-중복)).
+9. **측정.** 실제 프로젝트 결함 집합 dev 분할 11건의 분석기만 실행에서 Opengrep은 모든 사례의 범위 파일(합계 509개)을 끝까지 검사했고 진단은 0건이었다. 도구 진단의 결함 줄 적중(±2줄)은 전후 모두 1/11이다. 결과가 나오도록 규칙을 사례에 맞추지 않았다. 이 집합에서는 품질 향상이 측정되지 않았다.
+
+[분석기](ANALYZERS.md#opengrep-패턴taint-팩) · [SARIF 입력 어댑터](ANALYZERS.md#sarif-입력-어댑터)
+
 ## 모델 검토
 
 **A21 — 단계 기록과 필수 검토 역할.** (기록 2026-11-18) REQ-009/010/011/013/027과 TC-97에 대해 다음을 확정한다.
