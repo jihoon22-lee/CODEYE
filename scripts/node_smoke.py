@@ -549,9 +549,9 @@ def run(base, root, env, *, browser=False):
         assert code_free["summary"] == full["summary"]
         assert full["summary"]["raw_observations"] == len(doc["observations"]) + len(sc_doc["observations"])
         tool_rows = {row["task_key"]: row for row in full["coverage"]["tools"]}
-        assert sorted(tool_rows) == ["errcheck", "gitl" "eaks", "go-vet", "gofmt", "jscpd", "lizard", "staticcheck"], tool_rows
+        assert sorted(tool_rows) == ["errcheck", "gitl" "eaks", "go-vet", "gofmt", "jscpd", "lizard", "opengrep", "staticcheck"], tool_rows
         assert tool_rows["gofmt"]["exit_class"] == "success_without_findings" and tool_rows["gofmt"]["processed_files"] == 1, tool_rows
-        assert all(tool_rows[k]["exit_class"] == "not_run" for k in ("errcheck", "lizard", "jscpd", "gitl" "eaks")), tool_rows
+        assert all(tool_rows[k]["exit_class"] == "not_run" for k in ("errcheck", "lizard", "jscpd", "gitl" "eaks", "opengrep")), tool_rows
         assert tool_rows["staticcheck"]["analyzer"] == "go.staticcheck"
         assert tool_rows["staticcheck"]["exit_class"] == ("success_without_findings" if staticcheck else "not_run"), tool_rows
         decoders = {a["task_key"]: a["decoder"] for a in full["artifacts"] if a["role"] == "observations"}
@@ -568,11 +568,11 @@ def run(base, root, env, *, browser=False):
         assert all(statuses[k] == "skipped_policy" for k in ("review.investigate", "review.interpret", "review.verify", "review.scope")), statuses
         assert statuses["env.discover"] == statuses["docs.discover"] == "succeeded"
         assert statuses["staticcheck"] == ("succeeded" if staticcheck else "unsupported"), statuses
-        assert statuses["errcheck"] == statuses["lizard"] == statuses["jscpd"] == statuses["gitl" "eaks"] == "unsupported", statuses
+        assert statuses["errcheck"] == statuses["lizard"] == statuses["jscpd"] == statuses["gitl" "eaks"] == statuses["opengrep"] == "unsupported", statuses
         # Startup codes of the worker (handler_unavailable) reach the agent log.
         agent_log = (directory / "go.log").read_text(errors="replace")
         assert ("staticcheck:not_configured" in agent_log) == (not staticcheck), "startup codes not in the agent log"
-        assert all(f"{t}:not_configured" in agent_log for t in ("lizard", "jscpd", "gitl" "eaks")), "startup codes not in the agent log"
+        assert all(f"{t}:not_configured" in agent_log for t in ("lizard", "jscpd", "gitl" "eaks", "opengrep")), "startup codes not in the agent log"
         if node_toolchain:
             assert not any(f"node:{r}" in agent_log for r in ("invalid_config", "probe_failed", "unknown_tool")), "node toolchain rejected"
         for tool in ("ruff", "mypy", "pyright", "bandit"):
@@ -593,7 +593,7 @@ def run(base, root, env, *, browser=False):
         assert full["overview"] == code_free["overview"], (full["overview"], code_free["overview"])
         section_tools = {t["task_key"]: t for language in full["static_analysis"]["languages"] for t in language["tools"]}
         assert all(section_tools[k]["task_status"] == "unsupported" and section_tools[k]["exit_class"] == "not_run"
-                   for k in ("lizard", "jscpd", "gitl" "eaks")), section_tools
+                   for k in ("lizard", "jscpd", "gitl" "eaks", "opengrep")), section_tools
         for key in ("environment", "static_analysis", "code_review"):
             assert full[key]["stage"]["state"] == go_stages[key]["state"], (key, full[key]["stage"], go_stages[key])
         assert full["code_review"]["finding_ids"] == [] and full["documents"]["model"]["state"] == "not_performed", full["code_review"]
