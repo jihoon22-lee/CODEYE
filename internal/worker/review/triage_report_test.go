@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -462,6 +463,87 @@ func TestTriageRepairsFormAndKeepsIntegrityFaults(t *testing.T) {
 			case "unusable":
 				if d.Triaged == 0 || d.Triaged+d.Interpreted >= d.Diagnostics || !slices.Contains(d.Limitations, record.LimTriageGroupsNotTriaged) {
 					t.Fatalf("triage %+v", d)
+				}
+			}
+		})
+	}
+}
+
+// The dry-run upstream (scripts/fake_model_upstream.py) answers the triage
+// and verify roles of the triage fixture. Its plain answers classify the
+// groups in turn as problem, harmless and unclear and every group is
+// triaged; with --shape-errors 1 every answer repeats a citation (resolved
+// after the repair) or names a classification that does not exist (left
+// out); with --integrity-errors 1 every problem or harmless group cites an
+// ID the request did not hold and an unknown group is added: those groups
+// are rejected and the report counts them as not triaged.
+func TestDryRunUpstreamTriage(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 is not installed")
+	}
+	for _, x := range []struct {
+		name             string
+		shape, integrity float64
+	}{{"plain", 0, 0}, {"form", 1, 0}, {"integrity", 0, 1}} {
+		t.Run(x.name, func(t *testing.T) {
+			script := triageReviewScript(t)
+			for _, role := range []string{record.StageTriage, record.StageVerify} {
+				whole := script[role]
+				script[role] = func(n int, q opencode.Request) opencode.Reply {
+					if role == record.StageVerify && !bytes.Contains(q.Input, []byte(`"triage_`)) {
+						return whole(n, q)
+					}
+					return dryRunUpstream(t, python, role, q, x.shape, x.integrity)
+				}
+			}
+			run := runTriageReport(t, script, 0, Budget{})
+			d := run.report.CodeReview.DiagnosticTriage
+			var rec record.Record
+			b, err := os.ReadFile(recordPath(run.j, "triage.t001"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(b, &rec); err != nil {
+				t.Fatal(err)
+			}
+			requireRegisteredCodes(t, rec)
+			res := run.results["review.triage.t001"]
+			omitted := map[string]int{}
+			classes := map[string]int{}
+			for _, g := range rec.TriageGroups {
+				omitted[g.Omitted]++
+				classes[g.Classification]++
+			}
+			if d == nil || res.Status != domain.TaskSucceeded {
+				t.Fatalf("triage %+v, task %+v", d, res)
+			}
+			wantCalls := 1
+			if x.shape > 0 || x.integrity > 0 {
+				wantCalls = 2
+			}
+			if n := run.caller.calls(record.StageTriage); n != wantCalls {
+				t.Fatalf("%d triage calls", n)
+			}
+			switch x.name {
+			case "plain":
+				if d.Triaged+d.Interpreted != d.Diagnostics || classes[record.TriageProblem] == 0 || classes[record.TriageHarmless] == 0 || classes[record.TriageUnclear] == 0 {
+					t.Fatalf("triage %+v, classes %v", d, classes)
+				}
+				if res := run.results["review.verify.t001"]; res.Status != domain.TaskSucceeded {
+					t.Fatalf("verify %+v", res)
+				}
+			case "form":
+				if omitted[record.TriageItemOmitted] != classes[""] || classes[""] == 0 || classes[record.TriageProblem]+classes[record.TriageHarmless] == 0 ||
+					!slices.Contains(rec.Limitations, record.LimTriageGroupsNotTriaged) || !slices.Contains(rec.Calls[0].OutputErrors, errTriageClassInvalid) ||
+					!slices.Contains(rec.Calls[0].OutputErrors, "evidence_id_duplicate") || d.Triaged == 0 || d.Triaged+d.Interpreted >= d.Diagnostics {
+					t.Fatalf("triage %+v, record groups %+v, calls %+v", d, rec.TriageGroups, rec.Calls)
+				}
+			case "integrity":
+				if omitted[record.TriageItemRejected] == 0 || classes[record.TriageProblem]+classes[record.TriageHarmless] != 0 || classes[record.TriageUnclear] == 0 ||
+					!slices.Contains(rec.Calls[1].OutputErrors, "evidence_id_unknown") || !slices.Contains(rec.Calls[1].OutputErrors, errTriageGroupUnknown) ||
+					d.Triaged == 0 || d.Triaged+d.Interpreted >= d.Diagnostics {
+					t.Fatalf("triage %+v, record groups %+v, calls %+v", d, rec.TriageGroups, rec.Calls)
 				}
 			}
 		})
