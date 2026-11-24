@@ -808,6 +808,36 @@ func (s *roleStage) additionalWitnesses(out []record.Excerpt, candidates []contr
 	return out, nil
 }
 
+const (
+	// messageOmitted replaces a tool message no model input may carry.
+	messageOmitted = "(omitted by the platform)"
+	// limMessageOmitted: a message was not UTF-8, matched a sensitive-value
+	// pattern or was longer than maxShownMessage.
+	limMessageOmitted = "observation_message_omitted"
+	maxShownMessage   = 600
+)
+
+// shownMessage is the tool message of o as every model input carries it
+// (interpretation and diagnostic triage alike), with the limitation to record
+// when it is replaced by messageOmitted. A message about a file the secrets
+// screen withholds, at the primary or any related location, may quote the
+// value (e.g. a hardcoded-password rule): only its rule and place reach the
+// model.
+func (s *roleStage) shownMessage(o toolObservation) (string, string) {
+	m := o.RawMessage
+	if !utf8.ValidString(m) || record.Sensitive([]byte(m)) || len(m) > maxShownMessage {
+		return messageOmitted, limMessageOmitted
+	}
+	withheld := o.Location != nil && s.secretFiles()[o.Location.Path]
+	withheld = withheld || slices.ContainsFunc(o.Related, func(r obsdoc.Related) bool {
+		return s.secretFiles()[r.Location.Path]
+	})
+	if withheld {
+		return messageOmitted, limSecretWithheld
+	}
+	return m, ""
+}
+
 // observation input of the interpret role
 type obsInput struct {
 	ID            string            `json:"id"`
@@ -897,22 +927,11 @@ func (s *roleStage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput,
 	var refs []record.ObservationRef
 	var windows []record.Excerpt
 	for _, o := range all {
-		in := obsInput{ID: o.ID, TaskKey: keyOf[o.ID], RuleID: o.RuleID, Message: o.RawMessage, LocationState: o.LocationState, EvidenceIDs: []string{}}
+		in := obsInput{ID: o.ID, TaskKey: keyOf[o.ID], RuleID: o.RuleID, LocationState: o.LocationState, EvidenceIDs: []string{}}
 		ref := record.ObservationRef{ID: o.ID, TaskKey: keyOf[o.ID], Tool: o.Tool, RuleID: o.RuleID}
-		if !utf8.ValidString(in.Message) || record.Sensitive([]byte(in.Message)) || len(in.Message) > 600 {
-			in.Message = "(omitted by the platform)"
-			lims = append(lims, "observation_message_omitted")
-		}
-		// A tool message about a file the secrets screen withholds may quote
-		// the value (e.g. a hardcoded-password rule): only its rule and place
-		// reach the model.
-		withheld := o.Location != nil && s.secretFiles()[o.Location.Path]
-		withheld = withheld || slices.ContainsFunc(o.Related, func(r obsdoc.Related) bool {
-			return s.secretFiles()[r.Location.Path]
-		})
-		if withheld && in.Message != "(omitted by the platform)" {
-			in.Message = "(omitted by the platform)"
-			lims = append(lims, limSecretWithheld)
+		var lim string
+		if in.Message, lim = s.shownMessage(o); lim != "" {
+			lims = append(lims, lim)
 		}
 		if o.Location != nil {
 			l := o.Location

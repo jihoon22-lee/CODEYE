@@ -509,8 +509,13 @@ func (s *roleStage) triageRequest(bin []*triageGroup) ([]triageSent, []record.Ex
 		for j, d := range g.diags {
 			in.Lines = append(in.Lines, d.obs.Location.StartLine)
 			if j < triageShownDiagnostics {
+				// The interpretation's rule for tool messages (shownMessage).
+				msg, lim := s.shownMessage(d.obs)
+				if lim != "" {
+					s.rec.Limitations = addLim(s.rec.Limitations, lim)
+				}
 				in.Examples = append(in.Examples, triageDiagInput{ObservationID: d.obs.ID, Tool: d.obs.Tool, RuleID: d.obs.RuleID, RawSeverity: d.obs.Severity,
-					Message: triageMessage(d.obs.RawMessage), StartLine: d.obs.Location.StartLine, EndLine: max(d.obs.Location.EndLine, d.obs.Location.StartLine)})
+					Message: msg, StartLine: d.obs.Location.StartLine, EndLine: max(d.obs.Location.EndLine, d.obs.Location.StartLine)})
 			}
 		}
 		t.input = in

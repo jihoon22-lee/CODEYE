@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/builtin"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
@@ -32,7 +31,6 @@ const (
 	triageShownDiagnostics = 8
 	// triageGroupObservations splits a larger group into chunks.
 	triageGroupObservations = 64
-	triageMessageOmitted    = "(omitted by the platform)"
 
 	limDiagnosticsInterpreted = "diagnostics_interpreted"
 	limDiagnosticsNoLocation  = "diagnostics_without_location"
@@ -286,7 +284,7 @@ func (s *roleStage) packTriage(groups []*triageGroup, slots int, lims *[]string)
 	maxGroups, inputCap := triageGroupLimit(s.h.Budget), triageInputBytes(l)
 	var bins []*bin
 	for _, g := range groups {
-		in := triageGroupInputBytes(g)
+		in := s.triageGroupInputBytes(g)
 		placed := false
 		for _, b := range bins {
 			extra := 0
@@ -333,20 +331,13 @@ func triageGroupLimit(b Budget) int {
 func triageInputBytes(l limits) int { return max(8000, l.request/16) }
 
 // triageGroupInputBytes estimates one group's description in a request.
-func triageGroupInputBytes(g *triageGroup) int {
+func (s *roleStage) triageGroupInputBytes(g *triageGroup) int {
 	n := 256 + 8*len(g.diags)
 	for i, d := range g.diags {
 		if i < triageShownDiagnostics {
-			n += 160 + len(triageMessage(d.obs.RawMessage))
+			m, _ := s.shownMessage(d.obs)
+			n += 160 + len(m)
 		}
 	}
 	return n
-}
-
-// triageMessage is a diagnostic's message as a request carries it.
-func triageMessage(m string) string {
-	if !utf8.ValidString(m) || record.Sensitive([]byte(m)) || len(m) > 600 {
-		return triageMessageOmitted
-	}
-	return m
 }
