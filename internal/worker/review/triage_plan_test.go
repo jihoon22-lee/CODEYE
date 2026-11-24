@@ -10,9 +10,9 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
-// triageTree has three Go files: app/a.go and app/b.go are ordinary source,
+// triageSecretTree has three Go files: app/a.go and app/b.go are ordinary source,
 // app/keys.go is the file the secrets screen withholds in these tests.
-func triageTree() map[string]string {
+func triageSecretTree() map[string]string {
 	return map[string]string{
 		"app/a.go":    "package app\n\nfunc A(p *int) int {\n\tx := *p\n\treturn x\n}\n\nfunc B() {}\n",
 		"app/b.go":    "package app\n\nfunc C(err error) {\n\t_ = err\n}\n",
@@ -54,7 +54,7 @@ func TestToolMessagesFollowOneRuleInInterpretationAndTriage(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			j := treeJob(t, triageTree())
+			j := treeJob(t, triageSecretTree())
 			o := triageObs("o1", "staticcheck", "SA5011", c.msg, "app/a.go", 4, c.related...)
 			docs := []toolDoc{triageDocOf("staticcheck", "staticcheck", o)}
 			want := c.msg
@@ -75,7 +75,7 @@ func TestToolMessagesFollowOneRuleInInterpretationAndTriage(t *testing.T) {
 				t.Fatalf("interpret limitations %v, want %q", lims, c.lim)
 			}
 
-			tri := roleStage{ctx: t.Context(), j: j, task: "review.triage.t000", role: record.StageTriage, triage: "t000"}
+			tri := roleStage{ctx: t.Context(), j: j, task: "review.triage.t001", role: record.StageTriage, triage: "t001"}
 			tri.screen.withheld = map[string]bool{"app/keys.go": true}
 			plan := tri.planTriage(docs, nil, 2)
 			if len(plan.bins) != 1 {
@@ -102,10 +102,10 @@ func TestToolMessagesFollowOneRuleInInterpretationAndTriage(t *testing.T) {
 // pattern, is not triaged; neither file's enclosing declaration, header nor
 // message reaches the request, and the plan records why.
 func TestTriageSendsNoUnitOfAWithheldFile(t *testing.T) {
-	tree := triageTree()
+	tree := triageSecretTree()
 	tree["app/env.go"] = "package app\n\nfunc Env() string {\n\treturn \"s" + "k-" + strings.Repeat("z9y8", 6) + "\"\n}\n"
 	j := treeJob(t, tree)
-	s := roleStage{ctx: t.Context(), j: j, task: "review.triage.t000", role: record.StageTriage, triage: "t000"}
+	s := roleStage{ctx: t.Context(), j: j, task: "review.triage.t001", role: record.StageTriage, triage: "t001"}
 	s.screen.withheld = map[string]bool{"app/keys.go": true}
 	docs := []toolDoc{triageDocOf("staticcheck", "staticcheck",
 		triageObs("o1", "staticcheck", "SA4006", "value never used", "app/keys.go", 4),

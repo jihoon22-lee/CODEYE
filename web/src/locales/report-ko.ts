@@ -562,6 +562,8 @@ export const reportKo = {
       'code_review.primary_files_sent_to_model': '그중 모델에 보낸 파일',
       'code_review.secondary_files': '부차 경로 파일',
       'code_review.secondary_files_not_reached': '그중 예산 안에서 보내지 못한 파일',
+      'code_review.diagnostics': '분류 대상 도구 진단',
+      'code_review.diagnostics_triaged': '그중 모델이 분류한 진단',
       'gaps.gaps': '공백',
     } as Record<string, string>,
     countOrder: {
@@ -570,7 +572,7 @@ export const reportKo = {
       static_analysis: ['tools', 'succeeded', 'not_succeeded', 'observations', 'findings', 'actionable', 'pending'],
       metrics: ['tools', 'observations', 'metrics'],
       secrets: ['tools', 'detections', 'files'],
-      code_review: ['calls', 'files_sent_to_model', 'files_not_sent_to_model', 'primary_modules', 'primary_files', 'primary_files_sent_to_model', 'secondary_files', 'secondary_files_not_reached', 'findings', 'actionable', 'pending', 'refuted'],
+      code_review: ['calls', 'files_sent_to_model', 'files_not_sent_to_model', 'primary_modules', 'primary_files', 'primary_files_sent_to_model', 'secondary_files', 'secondary_files_not_reached', 'diagnostics', 'diagnostics_triaged', 'findings', 'actionable', 'pending', 'refuted'],
       gaps: ['gaps'],
     } as Record<string, string[]>,
     discovery: {

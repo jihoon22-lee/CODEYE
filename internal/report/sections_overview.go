@@ -333,6 +333,11 @@ func overviewOf(r Report) Overview {
 				primaryNotSent = t.PrimaryFiles - t.PrimarySent
 			}
 		}
+		if d := cr.DiagnosticTriage; d != nil {
+			// How many tool diagnostics the triage slots classified, out of
+			// how many (builder 22).
+			n["diagnostics"], n["diagnostics_triaged"] = d.Diagnostics, d.Triaged
+		}
 		line(SectionCodeReview, &cr.Stage, n)
 		need("0", SectionCodeReview, "actionable_findings", fs.ActionableFindings)
 		if r.Coverage.AIReview.Status != AIReviewPerformed {

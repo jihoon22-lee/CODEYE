@@ -572,6 +572,8 @@ var koSectionLabels = map[string]string{
 	"count.code_review.primary_files_sent_to_model": "그중 모델에 보낸 파일",
 	"count.code_review.secondary_files":             "부차 경로 파일",
 	"count.code_review.secondary_files_not_reached": "그중 예산 안에서 보내지 못한 파일",
+	"count.code_review.diagnostics":                 "분류 대상 도구 진단",
+	"count.code_review.diagnostics_triaged":         "그중 모델이 분류한 진단",
 	"count.gaps.gaps":                               "공백",
 
 	"discovery.accepted":        "탐색 산출물을 검증해 사용했다.",
