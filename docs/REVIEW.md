@@ -444,6 +444,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
   - verify의 근거·반대 근거: 같은 후보가 인용한 범위가 그 발췌 안에 있으면 그 범위(`citation_range_from_candidate`), 없으면 보낸 발췌 전체(`citation_range_unspecified`)다.
   - 강점, 문서 계약 대조, 계약 후속 검토: 보낸 발췌 전체(`citation_range_unspecified`)다. 정리한 대조는 대조 규칙으로 다시 검사한다.
   - 조사 후보, 해석 가설: 그 항목을 뺀다(`review_candidate_omitted`, `interpretation_items_omitted`). 후보의 근거는 결함이 있는 줄을 가리켜야 하는데 파일 전체는 그 위치를 말하지 않기 때문이다.
+  - 문서·manifest 근거에 붙인 범위: 범위를 지우고 그 근거 ID로 받는다(`citation_range_unspecified`). 문서·환경 역할도 이를 요청에 없던 ID가 아니라 이 형식 오류로 본다.
 - **반복·초과 인용과 목록**(`evidence_id_duplicate`, `evidence_list_too_long`, `observation_id_duplicate`, `requirement_id_duplicate`, 문서 항목의 `*_evidence_ids_invalid`, `list_too_long`). 반복을 빼고 앞에서부터 한도까지 남긴다(`citation_list_trimmed`, verify 목록은 `verification_list_trimmed`).
 - **항목 규칙**(서술, 실패 과정, 근거 누락, 요구 누락, 같은 문서 충돌). 그 항목을 뺀다. 한계는 조사 후보 `review_candidate_omitted`, 해석 `interpretation_items_omitted`, 문서 `document_items_omitted`, 환경 `environment_notes_omitted`다. verify의 조건·가정·다음 확인 항목은 그 항목만 뺀다(`verification_list_trimmed`).
 - 정리한 응답의 호출은 `accepted`이고 `output_errors`에 원래 코드를 유지한다. 기록에는 `review_output_degraded`와 정리 한계가 남고, verify는 판정마다 정리 한계를 남긴다. 복구를 보낼 수 없었으면(호출 상한, 요청 크기, 입력) `output_repair_not_sent`도 남는다. 항목을 빼서 역할 규칙(environment·interpret는 항목 하나 이상)을 어기면 응답은 거부된다.
@@ -459,7 +460,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 | `too_many_items` | 형식 | 한도를 넘는 항목을 빼고 한계(각 역할의 `*_omitted`) |
 | `citation_range_outside` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패(verify는 후보 격리, 대조는 그 대조만 뺌) |
 | `citation_range_missing` | 형식 | 후보·가설은 그 항목을 뺀다(`review_candidate_omitted`·`interpretation_items_omitted`). verify 근거는 같은 후보가 인용한 범위가 그 발췌 안에 있으면 그 범위(`citation_range_from_candidate`), 없으면 보낸 발췌 전체(`citation_range_unspecified`) |
-| `citation_range_invalid` | 형식 | `citation_range_missing`과 같다. 강점은 복구 없이 바로 발췌 전체로, 계약 후속 검토는 보낸 창으로 받는다 |
+| `citation_range_invalid` | 형식 | `citation_range_missing`과 같다. 강점은 복구 없이 바로 발췌 전체로, 계약 후속 검토는 보낸 창으로 받는다. 문서·manifest 근거에 붙인 범위는 범위를 지우고 그 근거 ID로 받는다(`citation_range_unspecified`, 문서·환경 역할 포함) |
 | `evidence_id_unknown` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패(verify는 후보 격리. 요청의 관찰 ID만이면 빼고 받는다) |
 | `evidence_kind_invalid` | 무결성 | 응답 거부. 복구 뒤에도 남으면 역할 실패 |
 | `evidence_id_duplicate` | 형식 | 반복 ID를 빼고 받는다(`citation_list_trimmed`) |
@@ -721,5 +722,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - 미완료가 사라진다는 보장은 없다. 끝내 검증되지 않은 후보는 `unreviewed`로 격리하고 task는 실패한다.
 - 범위 없는 긴 발췌를 반대 근거로 인용한 verify 판정은 복구 뒤 그 후보가 인용한 범위로 정리된다(`citation_range_from_candidate`). 그 범위가 반박하는 줄을 담는다는 보장은 없다. 판정과 인용은 그대로 보이고 한계 코드가 정리했다는 사실을 밝힌다. 그 범위가 없으면 발췌 전체(`citation_range_unspecified`)라 위치가 덜 정확하다.
 - 분류는 코드 단위다. 한 코드가 여러 원인을 묶으면(예: `text_invalid`는 서술 한도와 민감값 패턴) 같은 처리를 받는다. 형식 정리의 실제 모델 응답 빈도와 정리한 항목의 품질은 측정하지 않았다.
+- 형식 오류로 항목을 모두 빼면 environment·interpret는 항목이 하나 이상이어야 하므로 응답을 거부하고 그 역할이 실패한다. 두 역할은 필수가 아니어서 AI 검토 상태는 바뀌지 않지만, 해석 가설은 검증으로 이어지지 않는다.
+- 역할 계약 문자열의 인용 예시(`ev_5f0c2a9e1b7d4c3a8e6f2b10:120-134`)는 요청에 없는 ID다. 모델이 예시를 그대로 옮기면 무결성 오류(`evidence_id_unknown`)다.
 - `roleRules`는 "근거·관찰 ID"를 인용하라고 하고 verify 계약은 "근거 ID"만 말한다. 이 어긋남은 구조(관찰 ID 처리 규칙)로 막았고, 문구 정리는 다음 지침 개정에서 독립 작성자가 판단한다.
 - 모델의 자신감과 서술은 측정된 정확도가 아니다. 품질은 [평가](EVALUATION.md)의 판정과 지표로만 말한다.

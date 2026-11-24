@@ -289,14 +289,14 @@ func (s *roleStage) environment() analysis.TaskResult {
 				kept = append(kept, n)
 				f.item(nil, nil, nil)
 			case s.lastChance && formOnly(codes):
-				// Repeated requirement and evidence IDs go; any other fault
-				// of form leaves the note out.
+				// Repeated requirement and evidence IDs and a range on a
+				// manifest ID go; any other fault of form leaves the note out.
 				tidy := n
-				tidy.RequirementIDs, tidy.EvidenceIDs = tidyIDs(n.RequirementIDs, len(n.RequirementIDs)), tidyIDs(n.EvidenceIDs, 4)
+				tidy.RequirementIDs, tidy.EvidenceIDs = tidyIDs(n.RequirementIDs, len(n.RequirementIDs)), tidyIDs(stripKnownRanges(n.EvidenceIDs, catalog), 4)
 				if len(noteProblems(tidy, seen[n.Module])) == 0 && len(kept) < len(gaps) {
 					seen[n.Module] = true
 					kept = append(kept, tidy)
-					f.item(codes, found, []string{limCitationListTrimmed})
+					f.item(codes, found, resolvedLims(codes))
 				} else {
 					f.item(codes, found, []string{limEnvironmentNotesOmit})
 				}
@@ -543,6 +543,11 @@ func (s *roleStage) documents() analysis.TaskResult {
 		for i, id := range ids {
 			if canonical, ok := byHandle[id]; ok {
 				ids[i] = canonical
+			} else if handle, rng, ranged := strings.Cut(id, ":"); ranged {
+				// A range on a handle is a range on its document.
+				if canonical, ok := byHandle[strings.TrimSpace(handle)]; ok {
+					ids[i] = canonical + ":" + rng
+				}
 			}
 		}
 		errs := idErrors(ids, catalog, max, "document")
@@ -604,7 +609,8 @@ func (s *roleStage) documents() analysis.TaskResult {
 		}
 		// settle decides one item from its faults as given (problems) and,
 		// once the repair is spent, after its evidence lists are tidied
-		// (retry: repeated IDs removed, each list cut to its limit).
+		// (retry: ranges on document IDs and repeated IDs removed, each
+		// list cut to its limit).
 		settle := func(list string, index int, problems []record.FieldProblem, retry func() []record.FieldProblem) bool {
 			var codes []string
 			var found []itemIssue
@@ -616,7 +622,7 @@ func (s *roleStage) documents() analysis.TaskResult {
 			case len(codes) == 0:
 				return true
 			case s.lastChance && formOnly(codes) && retry != nil && len(retry()) == 0:
-				f.item(codes, found, []string{limCitationListTrimmed})
+				f.item(codes, found, resolvedLims(codes))
 				return true
 			case s.lastChance && formOnly(codes):
 				f.item(codes, found, []string{limDocumentItemsOmitted})
@@ -653,7 +659,10 @@ func (s *roleStage) documents() analysis.TaskResult {
 			check := func() []record.FieldProblem {
 				return append(prose("statement", c.Statement), evidence("contracts_evidence_ids", c.EvidenceIDs, 4)...)
 			}
-			if settle("contracts", i+1, check(), func() []record.FieldProblem { c.EvidenceIDs = tidyIDs(c.EvidenceIDs, 4); return check() }) &&
+			if settle("contracts", i+1, check(), func() []record.FieldProblem {
+				c.EvidenceIDs = tidyIDs(stripKnownRanges(c.EvidenceIDs, catalog), 4)
+				return check()
+			}) &&
 				checkScope("contracts", i, &c.AppliesTo, c.EvidenceIDs, c.Statement, true) {
 				kept.Contracts = append(kept.Contracts, c)
 				acceptedIndices[i+1] = len(kept.Contracts)
@@ -676,7 +685,7 @@ func (s *roleStage) documents() analysis.TaskResult {
 				return problems
 			}
 			tidy := func() []record.FieldProblem {
-				c.FirstEvidence, c.SecondEvidence = tidyIDs(c.FirstEvidence, 3), tidyIDs(c.SecondEvidence, 3)
+				c.FirstEvidence, c.SecondEvidence = tidyIDs(stripKnownRanges(c.FirstEvidence, catalog), 3), tidyIDs(stripKnownRanges(c.SecondEvidence, catalog), 3)
 				return check()
 			}
 			if settle("conflicts", i+1, check(), tidy) && checkScope("conflicts", i, &c.Scope, slices.Concat(c.FirstEvidence, c.SecondEvidence), "", false) {
@@ -690,7 +699,10 @@ func (s *roleStage) documents() analysis.TaskResult {
 			check := func() []record.FieldProblem {
 				return append(prose("question", q.Question), evidence("questions_evidence_ids", q.EvidenceIDs, 4)...)
 			}
-			if settle("questions", i+1, check(), func() []record.FieldProblem { q.EvidenceIDs = tidyIDs(q.EvidenceIDs, 4); return check() }) &&
+			if settle("questions", i+1, check(), func() []record.FieldProblem {
+				q.EvidenceIDs = tidyIDs(stripKnownRanges(q.EvidenceIDs, catalog), 4)
+				return check()
+			}) &&
 				checkScope("questions", i, &q.AppliesTo, q.EvidenceIDs, q.Question, true) {
 				kept.Questions = append(kept.Questions, q)
 			}
@@ -702,7 +714,10 @@ func (s *roleStage) documents() analysis.TaskResult {
 			check := func() []record.FieldProblem {
 				return append(prose("note", n.Note), evidence("instruction_notes_evidence_ids", n.EvidenceIDs, 3)...)
 			}
-			if settle("instruction_notes", i+1, check(), func() []record.FieldProblem { n.EvidenceIDs = tidyIDs(n.EvidenceIDs, 3); return check() }) {
+			if settle("instruction_notes", i+1, check(), func() []record.FieldProblem {
+				n.EvidenceIDs = tidyIDs(stripKnownRanges(n.EvidenceIDs, catalog), 3)
+				return check()
+			}) {
 				kept.InstructionNotes = append(kept.InstructionNotes, n)
 			}
 		}
@@ -719,7 +734,10 @@ func (s *roleStage) documents() analysis.TaskResult {
 				}
 				return problems
 			}
-			if settle("document_quality", i+1, check(), func() []record.FieldProblem { q.EvidenceIDs = tidyIDs(q.EvidenceIDs, 4); return check() }) {
+			if settle("document_quality", i+1, check(), func() []record.FieldProblem {
+				q.EvidenceIDs = tidyIDs(stripKnownRanges(q.EvidenceIDs, catalog), 4)
+				return check()
+			}) {
 				kept.DocumentQuality = append(kept.DocumentQuality, q)
 			}
 		}

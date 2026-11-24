@@ -32,7 +32,8 @@ func TestCiterDegrade(t *testing.T) {
 	short := record.Excerpt{ID: "ev_" + strings.Repeat("b", 24), Path: "b.go", SHA256: strings.Repeat("2", 64), Start: 1, End: 20, Kind: "code"}
 	inside := record.Narrow(unit, "snap", 30, 40)
 	other := record.Narrow(short, "snap", 3, 4)
-	c := newCiter("snap", []record.Excerpt{unit, short, inside, other})
+	doc := record.Excerpt{ID: "ev_" + strings.Repeat("d", 24), Path: "README.md", SHA256: strings.Repeat("3", 64), Start: 1, End: 40, Kind: "document"}
+	c := newCiter("snap", []record.Excerpt{unit, short, inside, other, doc})
 	for _, x := range []struct {
 		name     string
 		list     []string
@@ -49,6 +50,7 @@ func TestCiterDegrade(t *testing.T) {
 		{"malformed range", []string{unit.ID + ":x-y"}, nil, 8, []string{unit.ID}, []string{limCitationUnspecified}, nil, true},
 		{"repeated and surplus", []string{short.ID, short.ID, unit.ID + ":5-9", other.ID}, nil, 2, []string{short.ID, record.Narrow(unit, "snap", 5, 9).ID},
 			[]string{limCitationListTrimmed}, nil, true},
+		{"range on a document", []string{doc.ID + ":3-9"}, nil, 8, []string{doc.ID}, []string{limCitationUnspecified}, nil, true},
 		{"outside the excerpt", []string{short.ID + ":10-30"}, nil, 8, []string{short.ID}, nil, []string{errCitationOutside}, false},
 		{"malformed unknown ID", []string{"ev_" + strings.Repeat("c", 24) + ":x"}, nil, 8, nil, nil, []string{errCitationInvalid}, false},
 	} {
@@ -630,9 +632,13 @@ func TestDocumentFormFaultsResolvedAfterTheRepair(t *testing.T) {
 			ids = append(ids, d.EvidenceID)
 		}
 		return asJSON(docsOutput{
-			Contracts:        []record.Contract{{Statement: "값을 저장한다.", AppliesTo: ".", EvidenceIDs: ids[:5]}},
-			Conflicts:        []record.Conflict{},
-			Questions:        []record.Question{{Question: "", AppliesTo: ".", EvidenceIDs: ids[:1]}},
+			// The second contract puts a line range on a document handle.
+			Contracts: []record.Contract{{Statement: "값을 저장한다.", AppliesTo: ".", EvidenceIDs: ids[:5]},
+				{Statement: "참고 문서를 둔다.", AppliesTo: ".", EvidenceIDs: []string{ids[1] + ":1-1"}}},
+			Conflicts: []record.Conflict{{Scope: ".", Summary: "두 안내가 저장 위치를 다르게 말한다.", Impact: "어느 쪽을 따를지 알 수 없다.",
+				FirstEvidence: ids[:1], SecondEvidence: ids[:1]}},
+			Questions: []record.Question{{Question: "", AppliesTo: ".", EvidenceIDs: ids[:1]},
+				{Question: "값은 어디에 저장되는가?", AppliesTo: ".", EvidenceIDs: ids[:5]}},
 			InstructionNotes: []record.InstructionNote{},
 			DocumentQuality:  []record.DocumentQuality{{Aspect: "clarity", Assessment: "strength", Statement: "첫 문장에 저장 동작을 안내한다.", EvidenceIDs: append(ids[:2:2], ids[:2]...)}},
 		})
@@ -642,13 +648,16 @@ func TestDocumentFormFaultsResolvedAfterTheRepair(t *testing.T) {
 		t.Fatalf("documents %+v", results["review.documents"])
 	}
 	r := readRecord(t, j, record.StageDocuments)
-	requireResolvedCalls(t, r, []string{"contracts_evidence_ids_invalid", "text_invalid", "evidence_id_duplicate"},
-		[]string{limCitationListTrimmed, limDocumentItemsOmitted})
+	requireResolvedCalls(t, r, []string{"contracts_evidence_ids_invalid", "text_invalid", "evidence_id_duplicate", errCitationInvalid,
+		"conflict_same_document", "questions_evidence_ids_invalid"},
+		[]string{limCitationListTrimmed, limDocumentItemsOmitted, limCitationUnspecified})
 	if len(repairs) != 2 || repairs[1] == nil || !hasIssue(repairs[1].Items, itemIssue{List: "questions", Index: 1, Field: "question", Error: "text_invalid"}) ||
 		!hasIssue(repairs[1].Items, itemIssue{List: "contracts", Index: 1, Field: "contracts_evidence_ids", Error: "contracts_evidence_ids_invalid"}) {
 		t.Fatalf("repair %+v", repairs)
 	}
-	if len(r.Contracts) != 1 || len(r.Contracts[0].EvidenceIDs) != 4 || len(r.Questions) != 0 ||
+	if len(r.Contracts) != 2 || len(r.Contracts[0].EvidenceIDs) != 4 || len(r.Contracts[1].EvidenceIDs) != 1 ||
+		!slices.ContainsFunc(r.Evidence, func(e record.Excerpt) bool { return e.ID == r.Contracts[1].EvidenceIDs[0] && e.Kind == "document" }) ||
+		len(r.Conflicts) != 0 || len(r.Questions) != 1 || len(r.Questions[0].EvidenceIDs) != 4 ||
 		len(r.DocumentQuality) != 1 || len(r.DocumentQuality[0].EvidenceIDs) != 2 {
 		t.Fatalf("record contracts %+v questions %+v quality %+v", r.Contracts, r.Questions, r.DocumentQuality)
 	}
@@ -669,10 +678,13 @@ func TestCandidateFormFaultsResolvedAfterTheRepair(t *testing.T) {
 		gw := excerptID(in.Scope.Excerpts, "gateway.go")
 		kept := billingCandidate("Forward가 결제 호출을 반복할 수 있음", gw, gw)
 		empty := billingCandidate("", gw)
+		noMechanism := billingCandidate("재시도 간격이 없음", gw)
+		noMechanism.Mechanism = ""
+		noEvidence := billingCandidate("응답을 확인하지 않음")
 		// A strength (optional, never repaired) with a malformed range
 		// stands for the whole excerpt at once.
 		strength := record.Strength{Title: "재시도 횟수에 상한을 둔다", Benefit: "실패한 호출이 끝없이 반복되지 않는다.", Scope: ".", EvidenceIDs: []string{gw + ":x"}}
-		return asJSON(map[string]any{"candidates": []record.CandidateText{kept, empty}, "strengths": []record.Strength{strength}})
+		return asJSON(map[string]any{"candidates": []record.CandidateText{kept, empty, noMechanism, noEvidence}, "strengths": []record.Strength{strength}})
 	}
 	script["interpret"] = func(_ int, q opencode.Request) opencode.Reply {
 		in := decodeAs[interpretInput](t, q)
@@ -695,7 +707,8 @@ func TestCandidateFormFaultsResolvedAfterTheRepair(t *testing.T) {
 		}
 	}
 	inv, interp := readRecord(t, j, record.StageInvestigate), readRecord(t, j, record.StageInterpret)
-	requireResolvedCalls(t, inv, []string{"evidence_id_duplicate", "text_invalid"}, []string{limCitationListTrimmed, limCandidateOmitted})
+	requireResolvedCalls(t, inv, []string{"evidence_id_duplicate", "text_invalid", "mechanism_missing", "evidence_missing", "code_evidence_missing"},
+		[]string{limCitationListTrimmed, limCandidateOmitted})
 	requireResolvedCalls(t, interp, []string{"evidence_id_duplicate", "text_invalid", "observation_id_duplicate"},
 		[]string{limCitationListTrimmed, limInterpretItemsOmitted})
 	if len(invRepairs) != 2 || invRepairs[1] == nil || !hasIssue(invRepairs[1].Items, itemIssue{List: "candidates", Index: 2, Field: "title", Error: "text_invalid"}) {

@@ -736,6 +736,10 @@ func idErrors(ids []string, given map[string]record.Excerpt, max int, kinds ...s
 	for _, id := range ids {
 		e, ok := given[id]
 		switch {
+		case !ok && rangedKnownID(id, given) != "":
+			// A line range on a sent excerpt that is cited by its ID alone
+			// (a document or manifest excerpt): a fault of form.
+			errs = addLim(errs, errCitationInvalid)
 		case !ok:
 			errs = addLim(errs, "evidence_id_unknown")
 		case seen[id]:
@@ -746,6 +750,43 @@ func idErrors(ids []string, given map[string]record.Excerpt, max int, kinds ...s
 		seen[id] = true
 	}
 	return errs
+}
+
+// rangedKnownID is the sent excerpt ID of a citation "<id>:<anything>" of
+// given, or "".
+func rangedKnownID(id string, given map[string]record.Excerpt) string {
+	prefix, _, ranged := strings.Cut(id, ":")
+	if _, ok := given[strings.TrimSpace(prefix)]; ranged && ok {
+		return strings.TrimSpace(prefix)
+	}
+	return ""
+}
+
+// stripKnownRanges replaces each ranged citation of a sent excerpt with its
+// ID (the whole excerpt, citation_range_unspecified).
+func stripKnownRanges(ids []string, given map[string]record.Excerpt) []string {
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		out[i] = id
+		if base := rangedKnownID(id, given); base != "" {
+			out[i] = base
+		}
+	}
+	return out
+}
+
+// resolvedLims names what tidying a list whose codes are all of form did:
+// a stripped range (citation_range_unspecified) and repeated or surplus IDs
+// (citation_list_trimmed).
+func resolvedLims(codes []string) []string {
+	var lims []string
+	if slices.Contains(codes, errCitationInvalid) {
+		lims = append(lims, limCitationUnspecified)
+	}
+	if slices.ContainsFunc(codes, func(c string) bool { return c != errCitationInvalid }) {
+		lims = append(lims, limCitationListTrimmed)
+	}
+	return lims
 }
 
 func catalogOf(list []record.Excerpt) map[string]record.Excerpt {
