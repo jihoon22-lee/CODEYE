@@ -27,6 +27,12 @@ VERDICTS = ("valid_actionable", "valid_informational", "false_positive", "duplic
 VALID = ("valid_actionable", "valid_informational")
 ACTIONABLE = ("supported", "reproduced")
 PENDING = ("unreviewed", "inconclusive")
+# The summary leaves out two kinds of listed findings (internal/report ComputeSummary; scripts/bundle_checks/report.py
+# keeps the same rule): a hypothesis held back as hypothesis_not_shipped (builder 25 and later) and an unreviewed
+# candidate set aside as candidate_not_shipped (builder 24 and later). In an older revision the string is model text.
+HYPOTHESIS_NOT_SHIPPED = ("hypothesis_not_shipped", 25)
+CANDIDATE_NOT_SHIPPED = ("candidate_not_shipped", 24)
+HIDDEN_DISPOSITIONS = ("false_positive", "suppressed", "accepted_risk", "fixed_by_user")
 JUDGMENT_SCHEMA = "codeye-quality-judgments"
 Z95 = 1.959963984540054
 
@@ -56,7 +62,26 @@ def short_symbol(symbol):
     return re.split(r"[.:]+", symbol or "")[-1]
 
 
-def finding_view(f):
+def marker_in_effect(report, marker):
+    """Whether this report's builder gives the limitation code its meaning. A version that is not an integer
+    keeps the markers, as the Go validation does."""
+    code, since = marker
+    text = str((report.get("builder") or {}).get("version", ""))
+    if not re.fullmatch(r"[+-]?[0-9]+", text):
+        return True
+    return re.fullmatch(r"0|[1-9][0-9]*", text) is not None and int(text) >= since
+
+
+def held_back(report, f):
+    """A finding the report lists but counts as neither an action item nor a pending candidate."""
+    limits = f.get("limitations", [])
+    if HYPOTHESIS_NOT_SHIPPED[0] in limits and marker_in_effect(report, HYPOTHESIS_NOT_SHIPPED):
+        return True
+    return (f["validation"] == "unreviewed" and CANDIDATE_NOT_SHIPPED[0] in limits
+            and marker_in_effect(report, CANDIDATE_NOT_SHIPPED))
+
+
+def finding_view(f, report=None):
     basis = f.get("fingerprint_basis") or {}
     producer = basis.get("producer") or ("tool" if f.get("observation_ids") else "model")
     locs = [(l["path"], l["start_line"], l["end_line"], l.get("symbol") or "") for l in f.get("locations", [])]
@@ -67,7 +92,8 @@ def finding_view(f):
     return {"finding_id": f["id"], "title": f.get("title", ""), "validation": f["validation"],
             "severity": f.get("severity"), "category": f.get("category"), "producer": producer,
             "disposition": f.get("disposition"), "fingerprint": f.get("fingerprint"),
-            "actionable": f["validation"] in ACTIONABLE and f.get("disposition") in ("open", "acknowledged"),
+            "actionable": (f["validation"] in ACTIONABLE and f.get("disposition") in ("open", "acknowledged")
+                           and not (report is not None and held_back(report, f))),
             "locations": [list(x) for x in dict.fromkeys(locs)],
             "primary_locations": [[l["path"], l["start_line"], l["end_line"]] for l in f.get("locations", [])]}
 
@@ -190,7 +216,7 @@ def judgment_template(batch, corpus, slack=2):
         tg = targets(corpus, case, row["variant"], row.get("documented", False))
         findings = []
         for f in reports[row["key"]]["findings"]:
-            v = finding_view(f)
+            v = finding_view(f, reports[row["key"]])
             findings.append({**{k: v[k] for k in ("finding_id", "title", "validation", "severity", "producer",
                                                   "actionable", "locations")},
                              "auto_match": auto_match(v, tg, slack), "verdict": None, "matches_label": None,
@@ -268,13 +294,15 @@ def report_structure(report: dict, records: list) -> dict:
     """What one report and its kept review records show without any judgment:
     whether the summary counts equal the findings, how many stage outputs were
     rejected, the output errors per call by class, and the limitation markers."""
-    validations = Counter(f["validation"] for f in report["findings"])
+    counted = [f for f in report["findings"] if not held_back(report, f)]
+    validations = Counter(f["validation"] for f in counted)
+    actionable = sum(f["validation"] in ACTIONABLE and f.get("disposition") not in HIDDEN_DISPOSITIONS for f in counted)
     summary = report["summary"]
     stats_ok = (
         summary["total_findings"] == len(report["findings"])
-        and summary["actionable_findings"] == validations["supported"] + validations["reproduced"]
+        and summary["actionable_findings"] == actionable
         and summary["pending_candidates"] == validations["unreviewed"] + validations["inconclusive"]
-        and summary["refuted_findings"] == validations["refuted"]
+        and summary["refuted_findings"] == sum(f["validation"] == "refuted" for f in report["findings"])
     )
     errors = Counter(
         ERROR_CLASS.get(e, "other") for r in records for c in r.get("calls", []) for e in c.get("output_errors") or [])
@@ -301,7 +329,7 @@ def batch_metrics(manifest, rows, reports, judgments, corpus, slack=2, batch_dir
     for row in valid:
         case = corpus.by_id[row["case"]]
         tg = targets(corpus, case, row["variant"], row.get("documented", False))
-        views = [finding_view(f) for f in reports[row["key"]]["findings"]]
+        views = [finding_view(f, reports[row["key"]]) for f in reports[row["key"]]["findings"]]
         for v in views:
             v["auto"] = auto_match(v, tg, slack)
         judged = {fid: j for (b, key, fid), j in judgments.items() if b == name and key == row["key"]}

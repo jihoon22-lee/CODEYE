@@ -106,6 +106,61 @@ def check_document_excerpt_contracts(validators: dict, base: dict) -> int:
     return 3
 
 
+HYPOTHESIS_NOT_SHIPPED = "hypothesis_not_shipped"
+CANDIDATE_NOT_SHIPPED = "candidate_not_shipped"
+# First builders that give the two limitation codes a meaning (internal/report/types.go: ShippedFocusSince,
+# HypothesisNotShippedSince). In an older revision the same string is model text and counts for nothing.
+CANDIDATE_NOT_SHIPPED_SINCE = 24
+HYPOTHESIS_NOT_SHIPPED_SINCE = 25
+HIDDEN_DISPOSITIONS = ("false_positive", "suppressed", "accepted_risk", "fixed_by_user")
+SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+TRIAGE_FINDING_ID = re.compile(r"^review_t[0-9]{3}_")
+
+
+def marker_in_effect(version: object, since: int) -> bool:
+    """Mirror of Report.withoutLaterMarkers: a builder before `since` drops the code from the findings.
+    A version that is not an integer is left untouched there, so its markers count."""
+    text = str(version if version is not None else "")
+    if not re.fullmatch(r"[+-]?[0-9]+", text):
+        return True
+    return re.fullmatch(r"0|[1-9][0-9]*", text) is not None and int(text) >= since
+
+
+def summary_counts(report: dict) -> tuple[int, int, int, list[tuple[tuple[int, int], str]]]:
+    """The summary counts internal/report ComputeSummary stores: action items, pending candidates, refuted
+    findings and the ranked candidates as ((class, severity), ID); the first five are the priorities.
+
+    A hypothesis about diagnostics outside shipped code (hypothesis_not_shipped, builder 25) is neither an
+    action item nor a pending candidate whatever its verification said. A candidate not sent to verification
+    (unreviewed with candidate_not_shipped, builder 24) is not pending either. Both are listed, not counted."""
+    version = (report.get("builder") or {}).get("version")
+    hypothesis_marks = marker_in_effect(version, HYPOTHESIS_NOT_SHIPPED_SINCE)
+    candidate_marks = marker_in_effect(version, CANDIDATE_NOT_SHIPPED_SINCE)
+    actionable = pending = refuted = 0
+    candidates = []
+    for f in report["findings"]:
+        limits = f.get("limitations", [])
+        hypothesis = hypothesis_marks and HYPOTHESIS_NOT_SHIPPED in limits
+        hidden = f["disposition"] in HIDDEN_DISPOSITIONS
+        if f["validation"] in ("supported", "reproduced"):
+            if hypothesis:
+                continue
+            if not hidden:
+                actionable += 1
+                candidates.append((1, f))
+        elif f["validation"] in ("unreviewed", "inconclusive"):
+            if hypothesis or (f["validation"] == "unreviewed" and candidate_marks and CANDIDATE_NOT_SHIPPED in limits):
+                continue
+            pending += 1
+            if not hidden:
+                candidates.append((2 if TRIAGE_FINDING_ID.match(f["id"]) else 3, f))
+        elif f["validation"] == "refuted":
+            refuted += 1
+    # Class, then severity; the builder breaks the remaining ties with a key the report does not carry.
+    ranked = sorted(((c, SEVERITY_RANK.get(f["severity"], 0)), f["id"]) for c, f in candidates)
+    return actionable, pending, refuted, ranked
+
+
 def check_report(report: dict, source_root: Path = ROOT) -> None:
     findings = report["findings"]
     model_findings = set((report.get("code_review") or {}).get("finding_ids", []))
@@ -113,13 +168,15 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
     ensure(len(ids) == len(set(ids)), "Duplicate finding ID")
     summary = report["summary"]
     ensure(summary["total_findings"] == len(findings), "Finding total mismatch")
-    actionable = sum(f["validation"] in ("supported", "reproduced") and f["disposition"] in ("open", "acknowledged") for f in findings)
-    pending = sum(f["validation"] in ("unreviewed", "inconclusive") for f in findings)
-    refuted = sum(f["validation"] == "refuted" for f in findings)
+    actionable, pending, refuted, ranked = summary_counts(report)
     ensure(summary["actionable_findings"] == actionable, "Actionable count mismatch")
     ensure(summary["pending_candidates"] == pending, "Candidate count mismatch")
     ensure(summary["refuted_findings"] == refuted, "Refuted count mismatch")
     ensure(set(summary["priorities"]).issubset(ids), "Unknown summary priority")
+    keys = dict((i, key) for key, i in ranked)
+    ensure(len(summary["priorities"]) == min(5, len(ranked)) and set(summary["priorities"]) <= set(keys) and
+           sorted(keys[i] for i in summary["priorities"]) == [key for key, _ in ranked[:5]],
+           "Summary priorities are not the best-ranked candidates")
     task_ids = [task["id"] for task in report["tasks"]]
     ensure(len(task_ids) == len(set(task_ids)), "Duplicate report task")
     missing_required = any(task["required_for_verdict"] and task["status"] != "succeeded" for task in report["tasks"])
@@ -227,6 +284,57 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
                 check_excerpt(item, path, item["location"], include_code, finding["id"] in model_findings,
                               int(report.get("builder", {}).get("version", "0")) >= 18)
     check_sections(report, source_root)
+
+
+def check_held_back_summary_contract() -> int:
+    """Findings that are listed but not counted (docs/REPORT.md, decisions A63 and A65): a hypothesis held back
+    as hypothesis_not_shipped and a candidate set aside as candidate_not_shipped are neither action items nor
+    pending candidates nor priorities, and only for the builders that give the codes a meaning. Returns the
+    negative cases run."""
+    def row(fid, validation, severity="medium", limits=()):
+        return {"id": fid, "validation": validation, "severity": severity, "disposition": "open", "limitations": list(limits),
+                "evidence": [], "claims": [], "conditions": [], "counterevidence_ids": [], "locations": []}
+
+    def build(version, findings, actionable, pending, priorities):
+        return {"status": "partial", "quality_verdict": "inconclusive", "builder": {"version": version}, "findings": findings,
+                "tasks": [], "limitations": [], "coverage": {},
+                "summary": {"total_findings": len(findings), "actionable_findings": actionable, "pending_candidates": pending,
+                            "refuted_findings": 1, "priorities": priorities}}
+
+    findings = [
+        row("review_investigate_1", "supported", "high"),
+        row("review_interpret_1", "supported", "high", [HYPOTHESIS_NOT_SHIPPED]),
+        row("review_interpret_2", "inconclusive", "high", [HYPOTHESIS_NOT_SHIPPED]),
+        row("review_investigate_2", "unreviewed", "high", [CANDIDATE_NOT_SHIPPED]),
+        row("review_investigate_3", "inconclusive", "medium"),
+        row("review_investigate_4", "refuted", "high", [HYPOTHESIS_NOT_SHIPPED]),
+    ]
+    check = lambda report: check_report(report, ROOT)
+    # Builder 25: the held-back supported hypothesis, the held-back inconclusive one and the set-aside
+    # candidate are listed, not counted; a refuted finding is still counted as refuted.
+    check(build("25", findings, 1, 1, ["review_investigate_1", "review_investigate_3"]))
+    # Builder 24 has only the candidate marker: the hypothesis strings are model text there and count.
+    check(build("24", findings, 2, 2, ["review_investigate_1", "review_interpret_1", "review_interpret_2", "review_investigate_3"]))
+    # Builder 23 has neither: every inconclusive and unreviewed finding is pending.
+    check(build("23", findings, 2, 3, ["review_investigate_1", "review_interpret_1", "review_interpret_2", "review_investigate_2", "review_investigate_3"]))
+    # The candidate marker holds only for an unreviewed finding; on an inconclusive one it is model text.
+    marked = [row("review_investigate_1", "inconclusive", "low", [CANDIDATE_NOT_SHIPPED])]
+    check(build("25", marked, 0, 1, ["review_investigate_1"]) | {"findings": marked, "summary": {
+        "total_findings": 1, "actionable_findings": 0, "pending_candidates": 1, "refuted_findings": 0, "priorities": ["review_investigate_1"]}})
+
+    negatives = {
+        "pending count includes the held-back findings": build("25", findings, 1, 4, ["review_investigate_1", "review_investigate_3"]),
+        "pending count includes only the held-back hypothesis": build("25", findings, 1, 2, ["review_investigate_1", "review_investigate_3"]),
+        "actionable count includes the held-back supported hypothesis": build("25", findings, 2, 1, ["review_investigate_1", "review_investigate_3"]),
+        "priority names a held-back hypothesis": build("25", findings, 1, 1, ["review_investigate_1", "review_interpret_1"]),
+        "priority names a set-aside candidate": build("25", findings, 1, 1, ["review_investigate_2", "review_investigate_3"]),
+        "priorities leave out a candidate": build("25", findings, 1, 1, ["review_investigate_1"]),
+        "builder 24 counts only what its markers hold back": build("24", findings, 1, 1, ["review_investigate_1", "review_investigate_3"]),
+        "builder 23 reads the candidate marker as model text": build("23", findings, 2, 2, ["review_investigate_1", "review_interpret_1", "review_interpret_2", "review_investigate_3"]),
+    }
+    for name, report in negatives.items():
+        expect_invalid(name, check, report)
+    return len(negatives)
 
 
 SECTION_BLOCKS = ("overview", "environment", "documents", "static_analysis", "metrics", "secrets", "code_review")
