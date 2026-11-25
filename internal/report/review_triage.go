@@ -104,7 +104,7 @@ func composeTriage(r *Report, states map[string]*taskState, obs map[string]Obser
 		for _, e := range from.Evidence {
 			evidence[e.ID] = e
 		}
-		addFindings(r, key+"_", from.Candidates, verdicts, evidence, obs)
+		addFindings(r, key+"_", from.Candidates, verdicts, evidence, obs, false)
 	}
 }
 

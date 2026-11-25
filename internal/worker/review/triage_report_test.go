@@ -562,7 +562,7 @@ func TestDryRunUpstreamTriage(t *testing.T) {
 				if !slices.Contains(rec.Calls[0].OutputErrors, errTriageDiagnostics) || !slices.Contains(rec.Calls[0].OutputErrors, errTriageUnclearPresent) {
 					t.Fatalf("calls %+v", rec.Calls)
 				}
-				if omitted[record.TriageItemOmitted] != classes[""] || classes[""] == 0 || classes[record.TriageProblem]+classes[record.TriageHarmless] == 0 ||
+				if omitted[record.TriageItemOmitted]+omitted[record.TriageAnswerMissing] != classes[""] || classes[""] == 0 || classes[record.TriageProblem]+classes[record.TriageHarmless] == 0 ||
 					!slices.Contains(rec.Limitations, record.LimTriageGroupsNotTriaged) || !slices.Contains(rec.Calls[0].OutputErrors, errTriageClassInvalid) ||
 					!slices.Contains(rec.Calls[0].OutputErrors, "evidence_id_duplicate") || d.Triaged == 0 || d.Triaged+d.Interpreted >= d.Diagnostics {
 					t.Fatalf("triage %+v, record groups %+v, calls %+v", d, rec.TriageGroups, rec.Calls)

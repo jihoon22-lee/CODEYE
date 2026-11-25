@@ -51,6 +51,9 @@ func validateSections(r Report) error {
 	if cr := r.CodeReview; cr != nil && (cr.CandidatesNotShipped < 0 || (cr.CandidatesNotShipped > 0 && !builderAtLeast(r.Builder.Version, ShippedFocusSince))) {
 		return invalidf("candidates_not_shipped in a revision of builder %s", r.Builder.Version)
 	}
+	if err := validateNotShipped(r); err != nil {
+		return err
+	}
 	if cr := r.CodeReview; cr != nil && builderAtLeast(r.Builder.Version, ShippedFocusSince) {
 		n := 0
 		for _, f := range r.Findings {
@@ -633,4 +636,57 @@ func hasAcceptedWorkflowReading(r Report) bool {
 		slices.ContainsFunc(r.Artifacts, func(a Artifact) bool {
 			return deref(a.TaskKey) == taskKey && slices.Contains(decoders, deref(a.Decoder))
 		})
+}
+
+var investigateFindingID = regexp.MustCompile(`^review_(s[0-9]{3}_)?investigate_[0-9]+$`)
+
+// validateNotShipped checks the marker of a candidate that was not sent to
+// verification against the finding's own evidence: an investigation candidate
+// of an instruction pack that sets candidates aside carries
+// candidate_not_shipped exactly when every code or test place it cites is on
+// a path that is certainly not shipped code (record.PathClass). A forged
+// marker would hide a finding of shipped code from the action items; a
+// missing one would list a test-only candidate as an ordinary finding.
+func validateNotShipped(r Report) error {
+	if !builderAtLeast(r.Builder.Version, ShippedFocusSince) {
+		return nil
+	}
+	pack := map[string]string{}
+	for _, c := range r.Coverage.ReviewCalls {
+		if _, ok := pack[c.TaskKey]; !ok {
+			pack[c.TaskKey] = c.PackVersion
+		}
+	}
+	for _, f := range r.Findings {
+		marked := FindingNotShipped(f)
+		if !investigateFindingID.MatchString(f.ID) {
+			if marked {
+				return invalidf("finding %s is marked as not sent to verification but is not an investigation candidate", f.ID)
+			}
+			continue
+		}
+		task := "review.investigate"
+		if strings.HasPrefix(f.ID, "review_s") {
+			task += "." + f.ID[len("review_"):len("review_")+4]
+		}
+		version, known := pack[task]
+		if known && !record.PackSetsAside(version) {
+			if marked {
+				return invalidf("finding %s is marked as not sent to verification by an instruction pack that verifies every candidate", f.ID)
+			}
+			continue
+		}
+		cited, shipped := false, false
+		for _, e := range f.Evidence {
+			if e.Kind != "code" || e.Location == nil {
+				continue
+			}
+			cited = true
+			shipped = shipped || record.PathClass(e.Location.Path) == ""
+		}
+		if want := cited && !shipped; want != marked && (known || marked) {
+			return invalidf("finding %s: the candidate_not_shipped marker does not match the places it cites", f.ID)
+		}
+	}
+	return nil
 }

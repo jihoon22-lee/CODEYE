@@ -3,6 +3,7 @@ package review
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/report"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
@@ -161,35 +163,6 @@ func TestNothingToVerifyWhenAllCandidatesAreAboutNonShippedPaths(t *testing.T) {
 	}
 }
 
-// A scope with no shipped source (examples and tests only) has nothing else
-// to review: its candidates are not set aside.
-func TestShippedSourceInTheScope(t *testing.T) {
-	cases := []struct {
-		name  string
-		tree  map[string]string
-		scope domain.Scope
-		// changed makes the job a pull request of these files.
-		changed []string
-		want    bool
-	}{
-		{"shipped and tests", map[string]string{"go.mod": "module x\n", "a.go": "package x\n", "a_test.go": "package x\n"}, domain.Scope{Kind: "full"}, nil, true},
-		{"tests and examples only", map[string]string{"go.mod": "module x\n", "a_test.go": "package x\n", "examples/main.go": "package main\n"}, domain.Scope{Kind: "full"}, nil, false},
-		{"scope inside the examples", map[string]string{"go.mod": "module x\n", "a.go": "package x\n", "examples/main.go": "package main\n"}, domain.Scope{Kind: "paths", Paths: []string{"examples"}}, nil, false},
-		{"pull request that changes tests only", map[string]string{"go.mod": "module x\n", "a.go": "package x\n", "a_test.go": "package x\n"}, domain.Scope{Kind: "full"}, []string{"a_test.go"}, false},
-		{"pull request that changes shipped code", map[string]string{"go.mod": "module x\n", "a.go": "package x\n", "a_test.go": "package x\n"}, domain.Scope{Kind: "full"}, []string{"a.go", "a_test.go"}, true},
-	}
-	for _, c := range cases {
-		j := treeJob(t, c.tree)
-		j.Scope = c.scope
-		if c.changed != nil {
-			j.PullRequest = &domain.PullRequestJob{Number: 7, Changed: c.changed}
-		}
-		if got := (&roleStage{j: j}).hasShippedSource(); got != c.want {
-			t.Fatalf("%s: %v", c.name, got)
-		}
-	}
-}
-
 // The dry-run upstream (scripts/fake_model_upstream.py) raises a candidate
 // about the first excerpt on a path that is not shipped code beside its
 // candidate about shipped code: the product leaves the first out of the
@@ -259,4 +232,158 @@ func requireListedNotVerified(t *testing.T, r report.Report, match string) int {
 		}
 	}
 	return n
+}
+
+// The decision never depends on how the verification ended: when every verify
+// call fails, the report still derives it from the candidates' evidence, lists
+// the test-only candidates as not verified (never as ordinary findings) and
+// counts them; the failed verify record keeps the marker.
+func TestCandidatesAboutNonShippedPathsAreSetAsideWhenVerifyFails(t *testing.T) {
+	j := coverageJob(t)
+	script := coverageScript(t)
+	script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[investigateInput](t, q)
+		shipped := shippedExcerpt(in.Scope.Excerpts)
+		cand := func(title, id string) map[string]any {
+			return map[string]any{"title": title, "condition": "주소가 비어 있는 경우", "mechanism": "빈 주소가 검사 없이 연결에 쓰인다.", "impact": "서비스가 잘못된 주소로 시작한다.",
+				"improvement": "주소를 검사한다.", "counterpoint": "기본값이 항상 채워질 수 있다.", "evidence_ids": []string{id}}
+		}
+		list := []map[string]any{cand("설정 주소 검증 누락", shipped.ID)}
+		for _, e := range in.Scope.Excerpts {
+			if record.PathClass(e.Path) != "" {
+				list = append(list, cand("시험 코드의 단언 누락", e.ID))
+				break
+			}
+		}
+		return asJSON(map[string]any{"candidates": list})
+	}
+	script["verify"] = func(int, opencode.Request) opencode.Reply { return opencode.Reply{Reason: "model_unavailable"} }
+	r, results := reportAt(t, &j, sliceExampleStatic(t), &scriptedCaller{script: script}, smallBudget, &exampleIDs{n: 0xc40})
+	failed := 0
+	for key, res := range results {
+		if strings.HasPrefix(key, "review.verify.s") && res.Status == domain.TaskFailed {
+			failed++
+		}
+	}
+	if failed == 0 {
+		t.Fatal("no slice verify failed")
+	}
+	if n := requireListedNotVerified(t, r, "시험 코드의 단언 누락"); n == 0 || r.CodeReview.CandidatesNotShipped != n {
+		t.Fatalf("%d listed, section counts %d", n, r.CodeReview.CandidatesNotShipped)
+	}
+	for _, f := range r.Findings {
+		if strings.Contains(f.Title, "설정 주소 검증 누락") && report.FindingNotShipped(f) {
+			t.Fatalf("a candidate that cites shipped code is set aside: %s", f.ID)
+		}
+	}
+	for key, res := range results {
+		stage, ok := strings.CutPrefix(key, "review.")
+		if !ok || !strings.HasPrefix(stage, "verify.s") || res.Status != domain.TaskFailed {
+			continue
+		}
+		rec := readSliceRecord(t, j, stage)
+		for _, v := range rec.Verifications {
+			c := rec.Candidates[slices.IndexFunc(rec.Candidates, func(c record.Candidate) bool { return c.ID == v.CandidateID })]
+			if got, want := slices.Equal(v.Limitations, []string{record.LimCandidateNotShipped}), c.OnlyNotShipped(catalogOf(rec.Evidence)); got != want {
+				t.Fatalf("%s %s: marker %v, decision %v", key, v.CandidateID, got, want)
+			}
+		}
+	}
+}
+
+func readSliceRecord(t *testing.T, j analysis.Job, name string) record.Record {
+	t.Helper()
+	b, err := os.ReadFile(recordPath(j, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := record.Decode(b, expectRecord(j, name))
+	if err != nil {
+		t.Fatal(name, err)
+	}
+	return r
+}
+
+// The marker is tied to the evidence: a record that marks a candidate of
+// shipped code, or leaves an unmarked candidate whose evidence is all on other
+// paths, is not a valid record, and the report rejects findings marked or
+// unmarked against their places.
+func TestForgedNotShippedMarkerIsRejected(t *testing.T) {
+	j := coverageJob(t)
+	script := coverageScript(t)
+	script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[investigateInput](t, q)
+		shipped := shippedExcerpt(in.Scope.Excerpts)
+		cand := func(title, id string) map[string]any {
+			return map[string]any{"title": title, "condition": "주소가 비어 있는 경우", "mechanism": "빈 주소가 검사 없이 연결에 쓰인다.", "impact": "서비스가 잘못된 주소로 시작한다.",
+				"improvement": "주소를 검사한다.", "counterpoint": "기본값이 항상 채워질 수 있다.", "evidence_ids": []string{id}}
+		}
+		list := []map[string]any{cand("설정 주소 검증 누락", shipped.ID)}
+		for _, e := range in.Scope.Excerpts {
+			if record.PathClass(e.Path) != "" {
+				list = append(list, cand("시험 코드의 단언 누락", e.ID))
+				break
+			}
+		}
+		return asJSON(map[string]any{"candidates": list})
+	}
+	r, results := reportAt(t, &j, sliceExampleStatic(t), &scriptedCaller{script: script}, smallBudget, &exampleIDs{n: 0xc50})
+	forged := false
+	for key, res := range results {
+		stage, ok := strings.CutPrefix(key, "review.")
+		if !ok || !strings.HasPrefix(stage, "verify.s") || res.Status != domain.TaskSucceeded {
+			continue
+		}
+		rec := readSliceRecord(t, j, stage)
+		marked := record.NotShippedSet(rec.Verifications)
+		if len(marked) == 0 || len(marked) == len(rec.Candidates) {
+			continue
+		}
+		forged = true
+		for i, v := range rec.Verifications {
+			bad := rec
+			bad.Verifications = slices.Clone(rec.Verifications)
+			if marked[v.CandidateID] {
+				// The marker of a test-only candidate is dropped (and the verdict
+				// made up): the evidence decides, not the record.
+				bad.Verifications[i] = inconclusiveVerification(v.CandidateID, rec.Candidates[i].Evidence[0])
+			} else {
+				bad.Verifications[i] = unreviewed(v.CandidateID, record.LimCandidateNotShipped)
+			}
+			if _, err := record.Marshal(bad, expectRecord(j, stage)); err == nil {
+				t.Fatalf("%s: a forged marker on %s was accepted", key, v.CandidateID)
+			}
+		}
+		break
+	}
+	if !forged {
+		t.Fatal("no slice verify record with both kinds of candidate")
+	}
+	// The report: a shipped-code finding marked as not sent, and a marked one unmarked.
+	for i, f := range r.Findings {
+		if !investigateFindingIDForTest(f.ID) {
+			continue
+		}
+		bad := r
+		bad.Findings = slices.Clone(r.Findings)
+		if report.FindingNotShipped(f) {
+			bad.Findings[i].Limitations = nil
+		} else {
+			bad.Findings[i].Validation = report.ValidationUnreviewed
+			bad.Findings[i].Limitations = []string{record.LimCandidateNotShipped}
+		}
+		if err := report.ValidateReport(bad); err == nil {
+			t.Fatalf("a forged marker on finding %s was accepted", f.ID)
+		}
+	}
+}
+
+func investigateFindingIDForTest(id string) bool {
+	return strings.Contains(id, "_investigate_")
+}
+
+func inconclusiveVerification(id, evidence string) record.Verification {
+	return record.Verification{CandidateID: id, Verdict: record.VerdictInconclusive, Category: "error_handling", Severity: "low", SeverityReason: "근거가 부족하다.", Impact: "영향을 확인하지 못했다.",
+		ValidConditions: []string{}, InvalidConditions: []string{}, SupportingEvidence: []string{evidence}, Counterevidence: []string{}, UnresolvedAssumptions: []string{"호출자를 확인하지 못했다."},
+		NextVerification: []string{"호출자를 읽는다."}, Limitations: []string{}}
 }

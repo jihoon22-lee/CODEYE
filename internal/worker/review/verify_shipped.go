@@ -1,8 +1,6 @@
 package review
 
 import (
-	"slices"
-
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
@@ -19,25 +17,10 @@ import (
 // candidate_not_shipped, is not sent, and the report counts it instead of
 // listing it. A candidate that also cites shipped code is untouched, so a
 // test that shows an expected behaviour or a "the tests do not cover X"
-// observation (which cites X) keeps working. When the scope holds no
-// shipped source at all (an examples-only repository, a tests-only change)
-// there is nothing else to review and no candidate is set aside.
-
-// hasShippedSource reports a source file under review that is shipped code:
-// in the review scope and, for a pull request, among its changed files (the
-// review reads nothing else of a pull request).
-func (s *roleStage) hasShippedSource() bool {
-	scope := normalizedScope(s.j.Scope)
-	for p := range s.entries() {
-		if s.j.PullRequest != nil && !slices.Contains(s.j.PullRequest.Changed, p) {
-			continue
-		}
-		if record.SourceKind(p) == "code" && record.PathClass(p) == "" && inScope(p, scope) {
-			return true
-		}
-	}
-	return false
-}
+// observation (which cites X) keeps working. The decision reads the
+// recorded evidence alone (the report recomputes it the same way), so a
+// repository whose code is all under examples/ has its candidates listed as
+// not verified, visibly, and nothing is hidden.
 
 // notShippedCandidates are the investigation candidates the verify stage
 // does not send.
@@ -45,16 +28,12 @@ func (s *roleStage) notShippedCandidates(candidates []record.Candidate, evidence
 	var out map[string]bool
 	catalog := catalogOf(evidence)
 	for _, c := range candidates {
-		if !c.OnlyNotShipped(catalog) {
-			continue
-		}
-		if out == nil {
-			if !s.hasShippedSource() {
-				return nil
+		if c.OnlyNotShipped(catalog) {
+			if out == nil {
+				out = map[string]bool{}
 			}
-			out = map[string]bool{}
+			out[c.ID] = true
 		}
-		out[c.ID] = true
 	}
 	return out
 }

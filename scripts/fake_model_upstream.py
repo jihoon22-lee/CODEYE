@@ -50,8 +50,9 @@ An unclear answer names what is missing (`missing`); a harmless group of two or
 more diagnostics is answered part by part (the first diagnostic harmless, the
 others unclear). `--shape-errors` also makes a share of the unclear answers name
 a function the request holds as the missing definition
-(`triage_unclear_input_present`, the group is left out) and of the part answers
-list a diagnostic twice (`triage_diagnostics_invalid`, the group is left out). The choice of an item depends
+(`triage_unclear_input_present`, the answer stands with a limitation) and of the
+part answers list a diagnostic twice (`triage_diagnostics_invalid`, the valid part
+stands and the rest is not triaged). The choice of an item depends
 on its role, the snapshot digest and the item (candidate ID or position), not
 on the repair block, so the repair of an item gets the same fault.
 
@@ -351,9 +352,9 @@ def result_for(role: str, review_input, echo: str | None = None, shape: float = 
                 rest = list(range(2, count + 1))
                 if _pick(shape, role, review_input, g["id"]):
                     rest = [1] + rest  # triage_diagnostics_invalid
-                answer["diagnostics"] = [1]
+                answer["positions"] = [1]
                 out.append(answer)
-                answer = {"group_id": g["id"], "classification": "unclear", "reason": TEXT, "diagnostics": rest,
+                answer = {"group_id": g["id"], "classification": "unclear", "reason": TEXT, "positions": rest,
                           "missing": [{"kind": "other", "name": ""}]}
             out.append(answer)
         if unknown:

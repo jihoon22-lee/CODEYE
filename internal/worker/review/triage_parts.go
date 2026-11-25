@@ -1,6 +1,8 @@
 package review
 
 import (
+	"bytes"
+	"encoding/json"
 	"slices"
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
@@ -12,23 +14,29 @@ import (
 // usually agree, but one real defect and one harmless diagnostic of the same
 // rule can share a unit, and one classification for both would publish the
 // harmless one as part of the problem. An entry of the answer may therefore
-// list the 1-based positions of the diagnostics it classifies (the position
-// in the group's lines, which the request numbers in its examples), and the
-// group is answered by one entry per part.
+// list in positions the 1-based positions of the diagnostics it classifies
+// (the position in the group's lines, which the request numbers in its
+// examples as index), and the group is answered by one entry per part.
 //
-// The platform validates the parts (positions in range, none listed twice,
-// at most triageStoredPerGroup stored groups for one sent group) and stores
-// each part as a group of its own in the review record: its own observations,
-// the same context, one candidate per problem. The record keeps its shape,
-// every observation stays in exactly one group and the report counts each
-// diagnostic by its own classification. A position no part lists becomes a
-// stored group without classification (triage_answer_missing).
+// The platform stores each part as a group of its own in the review record:
+// its own observations, the same context, one candidate per problem. The
+// record keeps its shape, every observation stays in exactly one group and
+// the report counts each diagnostic by its own classification. A model may
+// give at most triagePartsLimit parts for a group; the positions no part
+// lists are not triaged (a stored group without classification,
+// triage_answer_missing). The stored groups of a sent group (its parts and
+// that remainder) never exceed what a record holds.
+//
+// The optional fields of an entry (positions, missing) are read leniently: an
+// entry whose field has the wrong type is a fault of form of that entry
+// (triage_diagnostics_invalid, triage_missing_invalid), never a schema failure
+// of the whole output.
 
-// triageStoredPerGroup bounds the stored groups of one sent group (its parts
-// and the positions no part lists): a request holds at most triageGroupLimit
-// groups and a record at most record.MaxTriageGroups.
-func triageStoredPerGroup(b Budget) int {
-	return min(3, record.MaxTriageGroups/triageGroupLimit(b))
+// triagePartsLimit is the parts a model may give for one group of a request
+// of groups sent groups: with the remainder of the positions no part lists,
+// the stored groups of all sent groups stay within record.MaxTriageGroups.
+func triagePartsLimit(groups int) int {
+	return max(1, min(4, record.MaxTriageGroups/max(1, groups)-1))
 }
 
 // triagePart is the outcome of one part of a group.
@@ -43,16 +51,38 @@ type triageEntry struct {
 	index int
 }
 
+// emptyJSON reports an absent, null or empty-list optional field.
+func emptyJSON(raw json.RawMessage) bool {
+	t := bytes.TrimSpace(raw)
+	return len(t) == 0 || bytes.Equal(t, []byte("null")) || bytes.Equal(t, []byte("[]"))
+}
+
+// positions reads the positions of an entry: ok is false for a field of the
+// wrong type (or a position that is not an integer).
+func (a triageAnswer) positions() (list []int, ok bool) {
+	if emptyJSON(a.Positions) {
+		return nil, true
+	}
+	if json.Unmarshal(a.Positions, &list) != nil {
+		return nil, false
+	}
+	return list, true
+}
+
+// hasPositions reports an entry that names part of a group (a field of the
+// wrong type counts: it is a part answer with a fault).
+func (a triageAnswer) hasPositions() bool { return !emptyJSON(a.Positions) }
+
 // readEntries picks the entries of one group the platform reads and the
 // entries that repeat or overlap them. A whole-group entry is read alone
-// when it comes first; otherwise the entries that list diagnostics are the
+// when it comes first; otherwise the entries that give positions are the
 // parts and a whole-group entry among them is a repeat.
 func readEntries(es []triageEntry) (read, repeated []triageEntry, parts bool) {
-	if len(es[0].a.Diagnostics) == 0 {
+	if !es[0].a.hasPositions() {
 		return es[:1], es[1:], false
 	}
 	for _, e := range es {
-		if len(e.a.Diagnostics) == 0 {
+		if !e.a.hasPositions() {
 			repeated = append(repeated, e)
 		} else {
 			read = append(read, e)
@@ -61,43 +91,50 @@ func readEntries(es []triageEntry) (read, repeated []triageEntry, parts bool) {
 	return read, repeated, true
 }
 
-// partPositions validates the parts of a group of count diagnostics: every
-// position in 1..count and listed once. It returns each part's 0-based
-// positions in ascending order and the positions no part lists. ok is false
-// for a position out of range or repeated, or when the stored groups would
-// exceed limit.
-func partPositions(parts []triageEntry, count, limit int) (positions [][]int, uncovered []int, ok bool) {
+// validParts picks the parts that stand: at most limit, each with positions
+// that are in 1..count and listed by no earlier part. ok is false when any
+// part had to be dropped. kept holds the 0-based positions of each kept part
+// and uncovered the positions no kept part lists.
+func validParts(parts []triageEntry, count, limit int) (kept []triageEntry, positions [][]int, uncovered []int, ok bool) {
+	ok = true
 	listed := make([]bool, count)
 	for _, e := range parts {
+		list, typed := e.a.positions()
+		valid := typed && len(list) > 0 && len(kept) < limit
 		var own []int
-		for _, p := range e.a.Diagnostics {
-			if p < 1 || p > count || listed[p-1] {
-				return nil, nil, false
+		seen := map[int]bool{}
+		for _, p := range list {
+			if p < 1 || p > count || listed[p-1] || seen[p] {
+				valid = false
+				break
 			}
-			listed[p-1] = true
+			seen[p] = true
 			own = append(own, p-1)
 		}
+		if !valid {
+			ok = false
+			continue
+		}
+		for _, p := range own {
+			listed[p] = true
+		}
 		slices.Sort(own)
-		positions = append(positions, own)
+		kept, positions = append(kept, e), append(positions, own)
 	}
 	for i, l := range listed {
 		if !l {
 			uncovered = append(uncovered, i)
 		}
 	}
-	stored := len(parts)
-	if len(uncovered) > 0 {
-		stored++
-	}
-	return positions, uncovered, stored <= limit
+	return kept, positions, uncovered, ok
 }
 
 // checkTriageEntry checks one entry (a whole group or one part) of an answer
-// for group g. defs and extra serve the unclear answers (triage_unclear.go):
-// extra holds the excerpts a repair added to a group's context.
-func (s *roleStage) checkTriageEntry(a triageAnswer, g triageSent, index int, reply *citer, final bool, defs *definitionIndex, extra map[string][]string) (triageOutcome, []string, []itemIssue) {
+// for group g. defs and pointed serve the unclear answers (triage_unclear.go):
+// pointed holds the excerpts a repair added to a group's context.
+func (s *roleStage) checkTriageEntry(a triageAnswer, g triageSent, index int, reply *citer, final bool, defs *definitionIndex, pointed map[string][]string) (triageOutcome, []string, []itemIssue) {
 	gg := g
-	gg.context = append(slices.Clone(g.context), extra[g.id]...)
+	gg.context = append(slices.Clone(g.context), pointed[g.id]...)
 	o, codes, issues := s.checkTriageAnswer(a, gg, index, reply, final)
 	if a.Classification != record.TriageUnclear {
 		return o, codes, issues
@@ -110,10 +147,12 @@ func (s *roleStage) checkTriageEntry(a triageAnswer, g triageSent, index int, re
 	if id := defs.presentDefinition(g, valid); id != "" {
 		codes = addLim(codes, errTriageUnclearPresent)
 		issues = append(issues, itemIssue{List: "triage", Index: index, Field: "missing", ID: id, Error: errTriageUnclearPresent})
-		extra[g.id] = addLim(extra[g.id], id)
+		pointed[g.id] = addLim(pointed[g.id], id)
 		if final && o.omitted == "" {
-			// The answer contradicts the request: no resolution inside the item.
-			o.omitted = record.TriageItemOmitted
+			// The answer stands as the model's: the guard is exact only for
+			// the declarations it can see, and a form fault never fails a
+			// stage. The record says the platform found the definition.
+			o.lims = addLim(o.lims, limTriageUnclearDefinitionPresent)
 		}
 	}
 	if final && o.omitted == "" && fault && len(valid) == 0 {
@@ -125,22 +164,26 @@ func (s *roleStage) checkTriageEntry(a triageAnswer, g triageSent, index int, re
 
 // checkParts checks the parts of a group answered part by part. Faults of the
 // parts are the group's faults (the repair asks for the whole group again);
-// once the repair is spent each part is resolved or left out on its own.
-func (s *roleStage) checkParts(read []triageEntry, g triageSent, reply *citer, final bool, defs *definitionIndex, extra map[string][]string, issues []itemIssue) (triageOutcome, []string, []itemIssue) {
-	positions, uncovered, ok := partPositions(read, g.input.Count, triageStoredPerGroup(s.h.Budget))
+// once the repair is spent the parts that are valid stand, each resolved or
+// left out on its own, and the positions of no kept part are not triaged.
+func (s *roleStage) checkParts(read []triageEntry, g triageSent, reply *citer, final bool, defs *definitionIndex, pointed map[string][]string, issues []itemIssue, partsLimit int) (triageOutcome, []string, []itemIssue) {
+	kept, positions, uncovered, ok := validParts(read, g.input.Count, partsLimit)
+	var codes []string
 	if !ok {
-		var o triageOutcome
-		if final {
-			o.omitted = record.TriageItemOmitted
+		codes = []string{errTriageDiagnostics}
+		issues = append(issues, itemIssue{List: "triage", Index: read[0].index, Field: "positions", Error: errTriageDiagnostics})
+		if !final {
+			return triageOutcome{}, codes, issues
 		}
-		return o, []string{errTriageDiagnostics}, append(issues, itemIssue{List: "triage", Index: read[0].index, Field: "diagnostics", Error: errTriageDiagnostics})
+		if len(kept) == 0 {
+			return triageOutcome{omitted: record.TriageItemOmitted}, codes, issues
+		}
 	}
 	var out triageOutcome
-	var codes []string
 	omitted := ""
 	allOmitted := true
-	for i, e := range read {
-		po, pc, pi := s.checkTriageEntry(e.a, g, e.index, reply, final, defs, extra)
+	for i, e := range kept {
+		po, pc, pi := s.checkTriageEntry(e.a, g, e.index, reply, final, defs, pointed)
 		codes = addLim(codes, pc...)
 		issues = append(issues, pi...)
 		out.parts = append(out.parts, triagePart{out: po, diags: positions[i]})

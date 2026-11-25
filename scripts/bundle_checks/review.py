@@ -749,3 +749,100 @@ def check_triage_examples(raw: dict, validators: dict) -> int:
     for name, d in negative:
         expect_invalid(name, check, d)
     return len(negative)
+
+
+# The class of a path that is certainly not shipped code (record.PathClass), read
+# by the checks of the candidate_not_shipped marker; the table the Go test also
+# reads (internal/worker/review/record/testdata/path_class.json) keeps the two equal.
+NOT_SHIPPED = "candidate_not_shipped"
+SOURCE_TREE = {"src", "lib", "main", "internal", "pkg", "app", "cmd", "include", "source", "sources"}
+SOURCE_SUFFIX = {".go": "go", ".py": "python", ".pyi": "python", ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
+                 ".ts": "javascript", ".tsx": "javascript", ".mts": "javascript", ".cts": "javascript", ".java": "java", ".rs": "rust",
+                 ".c": "cpp", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp", ".c++": "cpp", ".h": "cpp", ".hh": "cpp", ".hpp": "cpp", ".hxx": "cpp", ".h++": "cpp"}
+
+
+def test_file_name(path: str) -> bool:
+    lower = path.lower()
+    eco = SOURCE_SUFFIX.get(PurePosixPath(lower).suffix)
+    base = lower.rsplit("/", 1)[-1]
+    stem = base[: -len(PurePosixPath(base).suffix)] if PurePosixPath(base).suffix else base
+    if eco == "go":
+        return base.endswith("_test.go")
+    if eco == "python":
+        return base.startswith("test_") or stem.endswith("_test") or base == "conftest.py"
+    if eco == "javascript":
+        return base in ("test.js", "test.ts") or base.endswith(".test-d.ts") or stem.endswith(".test") or stem.endswith(".spec")
+    if eco == "java":
+        name = path.rsplit("/", 1)[-1]
+        return name.endswith("Test.java") or name.endswith("Tests.java")
+    if eco == "rust":
+        return base == "tests.rs"
+    if eco is None:
+        return False
+    return stem.startswith("test_") or stem.endswith(("_test", "_tests", "_unittest", "-test"))
+
+
+def path_class(path: str) -> str:
+    dirs = path.lower().split("/")[:-1]
+    for d in dirs:
+        if d in ("vendor", "third_party", "node_modules"):
+            return "vendored"
+        if d in ("testdata", "test-data", "__tests__", "__snapshots__"):
+            return "test"
+    if test_file_name(path):
+        return "test"
+    for i, d in enumerate(dirs):
+        in_tree = any(x in SOURCE_TREE for x in dirs[:i])
+        if d == "src" and i + 1 < len(dirs) and dirs[i + 1] == "test" and PurePosixPath(path.lower()).suffix == ".java":
+            return "test"
+        if in_tree:
+            continue
+        if (i == 0 and d == "test") or d == "tests":
+            return "test"
+        if d in ("examples", "example"):
+            return "example"
+        if d in ("benchmarks", "benches"):
+            return "benchmark"
+    return ""
+
+
+def check_path_class_table() -> int:
+    table = json.loads((ROOT / "internal/worker/review/record/testdata/path_class.json").read_text(encoding="utf-8"))
+    for row in table:
+        ensure(path_class(row["path"]) == row["class"], "path class of " + row["path"])
+    return len(table)
+
+
+def check_not_shipped_marker(doc: dict) -> None:
+    """A verify record marks a candidate candidate_not_shipped exactly when it is
+    an investigation candidate whose code and test evidence all lies on paths that
+    are certainly not shipped code (packs 2.10 and later)."""
+    catalog = {e["id"]: e for e in doc["evidence"]}
+    marked = {v["candidate_id"] for v in doc["verifications"] if v["verdict"] == "unreviewed" and v["limitations"] == [NOT_SHIPPED]}
+    for c in doc["candidates"]:
+        classes = [path_class(catalog[i]["path"]) for i in c["evidence_ids"] if catalog[i]["kind"] in ("code", "test")]
+        decided = c["origin"] == "investigate" and bool(classes) and all(classes)
+        ensure(decided == (c["id"] in marked), "candidate_not_shipped marker does not match the evidence of " + c["id"])
+
+
+def check_not_shipped_examples(docs: dict) -> int:
+    """The verify example carries no marker for shipped code; forged markers and a
+    decision without its marker are invalid. Returns the negative cases run."""
+    verify = docs["verify"]
+    check_not_shipped_marker(verify)
+
+    def forged(d):
+        v = d["verifications"][0]
+        d["verifications"][0] = {**v, "verdict": "unreviewed", "limitations": [NOT_SHIPPED], "category": "", "severity": "", "severity_reason": "", "impact": ""}
+
+    def unmarked(d):
+        first = d["candidates"][0]
+        for i in first["evidence_ids"]:
+            next(e for e in d["evidence"] if e["id"] == i)["path"] = "tests/forged_test.go"
+
+    negatives = [("marker on a candidate of shipped code", forged), ("test-only candidate without its marker", unmarked)]
+    for name, edit in negatives:
+        doc = copy.deepcopy(verify)
+        edit(doc)
+        expect_invalid(name, check_not_shipped_marker, doc)
+    return len(negatives)

@@ -2,13 +2,16 @@ package review
 
 import (
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
 func groupOfPath(in triageCall, path string) (triageGroupInput, bool) {
@@ -95,26 +98,27 @@ func TestUnclearNamingAPresentDefinitionIsRepairedWithAPointer(t *testing.T) {
 }
 
 // B: when the answer after the repair still says a definition the request
-// holds is missing, the group is left out like any form fault the repair did
-// not resolve, and the slot keeps the classified groups.
-func TestUnclearThatContradictsTheRequestIsLeftOutAfterTheRepair(t *testing.T) {
+// holds is missing, it stands as the model's answer: the group is recorded
+// unclear with the limitation that says the platform found the definition,
+// nothing is omitted and the slot does not fail for it.
+func TestUnclearThatContradictsTheRequestStandsAfterTheRepair(t *testing.T) {
 	script := unclearScript(t, []map[string]any{{"kind": "definition", "name": "A0"}}, nil)
 	run := runTriageReport(t, script, 0, Budget{})
 	rec := triageRecord(t, run)
 	if res := run.results["review.triage.t001"]; res.Status != domain.TaskSucceeded {
 		t.Fatalf("%+v", res)
 	}
-	omitted := 0
+	unclear := 0
 	for _, g := range rec.TriageGroups {
-		if g.Omitted == record.TriageItemOmitted {
-			omitted++
-			if g.Classification != "" {
-				t.Fatalf("%+v", g)
-			}
+		if g.Omitted != "" {
+			t.Fatalf("a group is left out: %+v", g)
+		}
+		if g.Classification == record.TriageUnclear && len(g.ObservationIDs) == 3 && g.Reason == "정의가 입력에 없어 판단할 수 없다." {
+			unclear++
 		}
 	}
-	if omitted != 1 || !slices.Contains(rec.Limitations, record.LimTriageGroupsNotTriaged) || len(rec.Calls) != 2 || !slices.Contains(rec.Calls[0].OutputErrors, errTriageUnclearPresent) {
-		t.Fatalf("omitted %d, calls %+v, limitations %v", omitted, rec.Calls, rec.Limitations)
+	if unclear != 1 || !slices.Contains(rec.Limitations, limTriageUnclearDefinitionPresent) || len(rec.Calls) != 2 || !slices.Contains(rec.Calls[0].OutputErrors, errTriageUnclearPresent) {
+		t.Fatalf("unclear %d, calls %+v, limitations %v", unclear, rec.Calls, rec.Limitations)
 	}
 }
 
@@ -167,7 +171,7 @@ func partScript(t *testing.T, parts [][]int) map[string]func(int, opencode.Reque
 				continue
 			}
 			for i, positions := range parts {
-				a := map[string]any{"group_id": b.ID, "diagnostics": positions, "evidence_ids": []string{b.Context[0]}}
+				a := map[string]any{"group_id": b.ID, "positions": positions, "evidence_ids": []string{b.Context[0]}}
 				if i == 0 {
 					a["classification"], a["reason"] = record.TriageHarmless, "앞선 검사가 이 경로를 막아 값은 쓰이지 않는다."
 				} else {
@@ -217,37 +221,125 @@ func TestAGroupAnsweredPartByPartIsStoredAsOneGroupPerPart(t *testing.T) {
 	}
 }
 
-// D: the positions are validated: a position listed twice leaves the whole
-// group out after the repair; positions no part lists are stored as a group
-// without a classification.
+// D: the positions are validated. A part that lists a position twice (or
+// outside the group) is a fault of form: after the repair the parts that are
+// valid stand and the positions of no valid part are not triaged. Positions no
+// part lists are not triaged either, whatever the parts' number.
 func TestPartPositionsAreValidated(t *testing.T) {
 	run := runTriageReport(t, partScript(t, [][]int{{1, 2}, {2, 3}}), 0, Budget{})
 	rec := triageRecord(t, run)
 	if len(rec.Calls) != 2 || !slices.Contains(rec.Calls[0].OutputErrors, errTriageDiagnostics) {
 		t.Fatalf("calls %+v", rec.Calls)
 	}
-	left := 0
+	kept, notTriaged := 0, 0
 	for _, g := range rec.TriageGroups {
-		if g.Omitted == record.TriageItemOmitted && len(g.ObservationIDs) == 3 {
-			left++
+		switch {
+		case g.Classification == record.TriageHarmless && len(g.ObservationIDs) == 2:
+			kept++
+		case g.Omitted == record.TriageAnswerMissing && len(g.ObservationIDs) == 1:
+			notTriaged++
 		}
 	}
-	if left != 1 {
+	if kept != 1 || notTriaged != 1 || !slices.Contains(rec.Limitations, record.LimTriageGroupsNotTriaged) {
 		t.Fatalf("groups %+v", rec.TriageGroups)
 	}
+	// Every part valid and the parts leave a position out: nothing is lost
+	// and the one position is not triaged, without a repair.
 	run = runTriageReport(t, partScript(t, [][]int{{1}, {2}}), 0, Budget{})
 	rec = triageRecord(t, run)
 	if len(rec.Calls) != 1 {
 		t.Fatalf("calls %+v", rec.Calls)
 	}
-	missing := 0
+	missing, classified := 0, 0
 	for _, g := range rec.TriageGroups {
 		if g.Omitted == record.TriageAnswerMissing && len(g.ObservationIDs) == 1 {
 			missing++
 		}
+		if len(g.ObservationIDs) == 1 && (g.Classification == record.TriageHarmless || g.Classification == record.TriageProblem) {
+			classified++
+		}
 	}
-	if missing != 1 || !slices.Contains(rec.Limitations, record.LimTriageGroupsNotTriaged) {
+	if missing != 1 || classified != 2 || !slices.Contains(rec.Limitations, record.LimTriageGroupsNotTriaged) {
 		t.Fatalf("groups %+v", rec.TriageGroups)
+	}
+}
+
+// D: validParts keeps the first parts up to the limit, drops the ones that
+// overlap or leave the group, and reports what no kept part lists.
+func TestValidPartsKeepWhatIsValid(t *testing.T) {
+	entry := func(positions string) triageEntry {
+		return triageEntry{a: triageAnswer{Positions: json.RawMessage(positions)}}
+	}
+	kept, positions, uncovered, ok := validParts([]triageEntry{entry("[1]"), entry("[2]"), entry("[3]")}, 6, 2)
+	if ok || len(kept) != 2 || len(positions) != 2 || !slices.Equal(uncovered, []int{2, 3, 4, 5}) {
+		t.Fatalf("over the limit: %v %v %v %v", len(kept), positions, uncovered, ok)
+	}
+	kept, _, uncovered, ok = validParts([]triageEntry{entry("[1,2]"), entry("[2]"), entry("[7]"), entry("[3]")}, 3, 4)
+	if ok || len(kept) != 2 || len(uncovered) != 0 {
+		t.Fatalf("overlap and range: %v %v %v", len(kept), uncovered, ok)
+	}
+	if _, _, _, ok = validParts([]triageEntry{entry(`"all"`)}, 3, 4); ok {
+		t.Fatal("a position field of the wrong type was accepted")
+	}
+}
+
+// The contract states the number of parts the check enforces.
+func TestContractStatesThePartsLimit(t *testing.T) {
+	var instructions string
+	var groups int
+	script := triageReviewScript(t)
+	whole := script["triage"]
+	script["triage"] = func(n int, q opencode.Request) opencode.Reply {
+		var in triageCall
+		if err := json.Unmarshal(q.Input, &in); err != nil {
+			t.Fatal(err)
+		}
+		if in.Repair == nil && instructions == "" {
+			instructions, groups = q.Instructions, len(in.Groups)
+		}
+		return whole(n, q)
+	}
+	runTriageReport(t, script, 0, Budget{})
+	want := fmt.Sprintf("a group has at most %d parts", triagePartsLimit(groups))
+	if !strings.Contains(instructions, want) || (triagePartsLimit(groups)+1)*groups > record.MaxTriageGroups {
+		t.Fatalf("the contract does not say %q (%d groups)", want, groups)
+	}
+}
+
+// Optional fields of the wrong type, and a request field echoed in an answer,
+// are faults of the entry, never a schema failure of the whole output (which
+// would cost every group of the slot).
+func TestOptionalAnswerFieldsOfTheWrongTypeAreFaultsOfTheEntry(t *testing.T) {
+	script := triageReviewScript(t)
+	whole := script["triage"]
+	script["triage"] = func(n int, q opencode.Request) opencode.Reply {
+		var in triageCall
+		if err := json.Unmarshal(q.Input, &in); err != nil {
+			t.Fatal(err)
+		}
+		answers, order := triageAnswers(t, n, q)
+		if in.Repair == nil {
+			for _, g := range in.Groups {
+				switch g.Path {
+				case "b.go":
+					answers[g.ID]["positions"] = 3
+					answers[g.ID]["diagnostics"] = 3
+				case "d.go":
+					answers[g.ID] = map[string]any{"group_id": g.ID, "classification": record.TriageUnclear, "reason": "정의가 입력에 없어 판단할 수 없다.", "missing": "", "evidence_ids": []string{}}
+				}
+			}
+			return reply(answers, order)
+		}
+		return whole(n, q)
+	}
+	run := runTriageReport(t, script, 0, Budget{})
+	rec := triageRecord(t, run)
+	if res := run.results["review.triage.t001"]; res.Status != domain.TaskSucceeded {
+		t.Fatalf("%+v", res)
+	}
+	first := rec.Calls[0].OutputErrors
+	if slices.Contains(first, "output_schema_invalid") || !slices.Contains(first, errTriageDiagnostics) || !slices.Contains(first, errTriageMissingInvalid) {
+		t.Fatalf("first call output errors %v", first)
 	}
 }
 
@@ -326,5 +418,70 @@ func TestUnusedValueFamilyAnswersAreAccepted(t *testing.T) {
 	rec := triageRecord(t, run)
 	if len(rec.Calls) != 1 || len(rec.Calls[0].OutputErrors) != 0 {
 		t.Fatalf("calls %+v", rec.Calls)
+	}
+}
+
+// Two problem parts of one group (one rule, one file) are two findings with
+// distinct, stable fingerprints: a run comparison tells them apart and a
+// disposition carries to the part it was given for.
+func TestProblemPartsOfOneGroupHaveDistinctFingerprints(t *testing.T) {
+	script := partScript(t, [][]int{{1}, {2, 3}})
+	whole := script["triage"]
+	script["triage"] = func(n int, q opencode.Request) opencode.Reply {
+		var out struct {
+			Triage []map[string]any `json:"triage"`
+		}
+		if err := json.Unmarshal(whole(n, q).Output, &out); err != nil {
+			t.Fatal(err)
+		}
+		for _, a := range out.Triage {
+			if a["positions"] != nil && a["classification"] == record.TriageHarmless {
+				a["classification"], a["reason"] = record.TriageProblem, "호출자가 항상 유효한 값을 넘기면 무해하다."
+				a["title"], a["condition"], a["impact"], a["improvement"] = "SA4006 진단 위치에서 값이 잘못 쓰인다", "진단이 가리키는 분기에 들어오는 경우", "호출자가 잘못된 결과를 받는다.", "값을 검사한다."
+			}
+		}
+		return asJSON(out)
+	}
+	run := runTriageReport(t, script, 0, Budget{})
+	seen := map[string]string{}
+	parts := 0
+	for _, f := range run.report.Findings {
+		if !strings.HasPrefix(f.ID, "review_t001_triage_") || len(f.ObservationIDs) == 3 {
+			continue
+		}
+		if len(f.ObservationIDs) == 1 || len(f.ObservationIDs) == 2 {
+			parts++
+		}
+		if other, dup := seen[f.Fingerprint]; dup {
+			t.Fatalf("findings %s and %s share the fingerprint %s", other, f.ID, f.Fingerprint)
+		}
+		seen[f.Fingerprint] = f.ID
+	}
+	if parts < 2 {
+		t.Fatalf("%d problem parts among the findings", parts)
+	}
+}
+
+// The definition guard claims a definition only when the whole declaration is
+// in a unit of the request and the file is built everywhere: a large
+// declaration split over units, a build-constrained file and a file of
+// another package do not count.
+func TestDefinitionIndexIsExact(t *testing.T) {
+	unit := func(path, src string, start, end int) triageSent {
+		lines := strings.Split(strings.TrimSuffix(src, "\n"), "\n")
+		return triageSent{id: "g1", context: []string{"ev_" + strings.Repeat("a", 24)},
+			group: &triageGroup{unit: triageUnit{entry: source.Entry{Path: path}, span: lineSpan{start, end}, text: lines}}}
+	}
+	use := unit("p/use.go", "package p\n\nfunc Use() {}\n", 1, 3)
+	whole := unit("p/whole.go", "package p\n\nfunc Whole() int {\n\treturn 1\n}\n", 1, 5)
+	split := unit("p/split.go", "package p\n\nfunc Split() int {\n\tx := 1\n\treturn x\n}\n", 1, 4)
+	tagged := unit("p/tagged.go", "//go:build linux\n\npackage p\n\nfunc Tagged() {}\n", 1, 5)
+	suffixed := unit("p/f_windows.go", "package p\n\nfunc Suffixed() {}\n", 1, 3)
+	other := unit("q/other.go", "package q\n\nfunc Elsewhere() {}\n", 1, 3)
+	idx := newDefinitionIndex([]triageSent{use, whole, split, tagged, suffixed, other})
+	for name, want := range map[string]bool{"Whole": true, "Split": false, "Tagged": false, "Suffixed": false, "Elsewhere": false, "Missing": false} {
+		if got := idx.holder("p/use.go", name) != ""; got != want {
+			t.Errorf("%s: found %v, want %v", name, got, want)
+		}
 	}
 }

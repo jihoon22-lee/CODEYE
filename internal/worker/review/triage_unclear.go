@@ -1,6 +1,8 @@
 package review
 
 import (
+	"bytes"
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -26,8 +28,10 @@ import (
 //     declaration of a Go file in the same package whose unit is in the same
 //     request, and it is declared exactly once there. The repair points at the
 //     excerpt that holds it and lets the group cite it. After the repair the
-//     answer is left out like any other fault of form that the repair did not
-//     resolve (triage_item_omitted): the group is not triaged.
+//     answer stands as the model's (recorded unclear with the limitation
+//     triage_unclear_definition_in_request): the guard sees only the
+//     declarations of the request and may be wrong (a method named like a
+//     function), and a fault of form never fails a stage.
 //
 // The check is exact and only for Go: Go's own parser gives the top-level
 // declarations and the package of each file. For the other languages a unit
@@ -39,6 +43,9 @@ const (
 	errTriageMissingInvalid  = "triage_missing_invalid"
 	errTriageUnclearPresent  = "triage_unclear_input_present"
 	limTriageMissingUnstated = "triage_missing_unstated"
+	// limTriageUnclearDefinitionPresent marks an unclear answer that stands
+	// although the platform found the definition it names in the request.
+	limTriageUnclearDefinitionPresent = "triage_unclear_definition_in_request"
 )
 
 // triageMissing is one thing an unclear answer says the request lacks.
@@ -54,19 +61,30 @@ var declaredName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
 var qualifiedName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]{0,127}$`)
 
 // checkMissing reads an unclear answer's missing list: the entries that
-// stand and whether it has a fault of form (malformed entry or no entry).
-func (s *roleStage) checkMissing(list []triageMissing) (valid []triageMissing, fault bool) {
-	for _, m := range list {
+// stand and whether it has a fault of form (a field of the wrong type, a
+// malformed entry, or no entry).
+func (s *roleStage) checkMissing(raw json.RawMessage) (valid []triageMissing, fault bool) {
+	if emptyJSON(raw) {
+		return nil, true
+	}
+	var items []json.RawMessage
+	if json.Unmarshal(raw, &items) != nil {
+		return nil, true
+	}
+	for _, it := range items {
+		var m triageMissing
+		dec := json.NewDecoder(bytes.NewReader(it))
+		dec.DisallowUnknownFields()
 		// The name is an identifier, optionally qualified; only a definition
 		// must have one.
-		ok := slices.Contains(missingKinds, m.Kind) && (m.Name == "" && m.Kind != "definition" || qualifiedName.MatchString(m.Name))
+		ok := dec.Decode(&m) == nil && slices.Contains(missingKinds, m.Kind) && (m.Name == "" && m.Kind != "definition" || qualifiedName.MatchString(m.Name))
 		if !ok {
 			fault = true
 			continue
 		}
 		valid = append(valid, m)
 	}
-	return valid, fault || len(list) == 0
+	return valid, fault || len(valid) == 0
 }
 
 // declaredAt is one top-level declaration of a Go file of the request.
@@ -100,16 +118,16 @@ func newDefinitionIndex(sent []triageSent) *definitionIndex {
 		}
 		f, ok := parsed[p]
 		if !ok {
-			f, _ = parser.ParseFile(fset, p, strings.Join(g.group.unit.text, "\n"), parser.SkipObjectResolution)
+			f, _ = parser.ParseFile(fset, p, strings.Join(g.group.unit.text, "\n"), parser.SkipObjectResolution|parser.ParseComments)
 			parsed[p] = f
 		}
-		if f == nil || f.Name == nil {
+		if f == nil || f.Name == nil || buildConstrained(p, f) {
 			continue
 		}
 		idx.pkg[p] = path.Dir(p) + "\x00" + f.Name.Name
 	}
 	for p, f := range parsed {
-		if f == nil || f.Name == nil {
+		if _, indexed := idx.pkg[p]; !indexed {
 			continue
 		}
 		for _, name := range topLevelNames(fset, f) {
@@ -117,7 +135,9 @@ func newDefinitionIndex(sent []triageSent) *definitionIndex {
 			for _, g := range sent {
 				u := g.group.unit
 				// Several groups of one unit share its excerpt.
-				if u.entry.Path == p && u.span.start <= name.line && name.line <= u.span.end && !slices.Contains(ids, g.context[0]) {
+				// The whole declaration travels: a large one split over units is
+				// not claimed as present.
+				if u.entry.Path == p && u.span.start <= name.line && name.last <= u.span.end && !slices.Contains(ids, g.context[0]) {
 					ids = append(ids, g.context[0])
 				}
 			}
@@ -132,33 +152,34 @@ func newDefinitionIndex(sent []triageSent) *definitionIndex {
 }
 
 type namedLine struct {
-	name string
-	line int
+	name       string
+	line, last int // the name's line and the last line of the declaration
 }
 
 // topLevelNames are the package-level names a Go file declares, with the
-// line of the name. Methods are not package-level names.
+// line of the name and the declaration's last line. Methods are not
+// package-level names.
 func topLevelNames(fset *token.FileSet, f *ast.File) []namedLine {
 	var out []namedLine
-	add := func(id *ast.Ident) {
+	add := func(id *ast.Ident, end token.Pos) {
 		if id != nil && id.Name != "_" && id.Name != "init" {
-			out = append(out, namedLine{id.Name, fset.Position(id.Pos()).Line})
+			out = append(out, namedLine{id.Name, fset.Position(id.Pos()).Line, fset.Position(end).Line})
 		}
 	}
 	for _, d := range f.Decls {
 		switch d := d.(type) {
 		case *ast.FuncDecl:
 			if d.Recv == nil {
-				add(d.Name)
+				add(d.Name, d.End())
 			}
 		case *ast.GenDecl:
 			for _, sp := range d.Specs {
 				switch sp := sp.(type) {
 				case *ast.TypeSpec:
-					add(sp.Name)
+					add(sp.Name, sp.End())
 				case *ast.ValueSpec:
 					for _, n := range sp.Names {
-						add(n)
+						add(n, sp.End())
 					}
 				}
 			}
@@ -166,6 +187,33 @@ func topLevelNames(fset *token.FileSet, f *ast.File) []namedLine {
 	}
 	return out
 }
+
+// buildConstrained reports a Go file that is not built everywhere: a build
+// constraint before the package clause, or a GOOS or GOARCH file-name suffix.
+// Its declarations may not be the ones the package has, so it is not indexed.
+func buildConstrained(p string, f *ast.File) bool {
+	for _, g := range f.Comments {
+		if g.Pos() >= f.Package {
+			break
+		}
+		for _, c := range g.List {
+			if strings.HasPrefix(c.Text, "//go:build") || strings.HasPrefix(c.Text, "// +build") {
+				return true
+			}
+		}
+	}
+	stem := strings.TrimSuffix(strings.TrimSuffix(path.Base(p), ".go"), "_test")
+	parts := strings.Split(stem, "_")
+	for _, tail := range parts[max(1, len(parts)-2):] {
+		if slices.Contains(knownGOOS, tail) || slices.Contains(knownGOARCH, tail) {
+			return true
+		}
+	}
+	return false
+}
+
+var knownGOOS = []string{"aix", "android", "darwin", "dragonfly", "freebsd", "hurd", "illumos", "ios", "js", "linux", "nacl", "netbsd", "openbsd", "plan9", "solaris", "wasip1", "windows", "zos"}
+var knownGOARCH = []string{"386", "amd64", "amd64p32", "arm", "arm64", "arm64be", "armbe", "loong64", "mips", "mips64", "mips64le", "mipsle", "ppc", "ppc64", "ppc64le", "riscv", "riscv64", "s390", "s390x", "sparc", "sparc64", "wasm"}
 
 // holder returns the excerpt that holds the definition of name for a group
 // on file p: the one unit of the request whose file is in the same package

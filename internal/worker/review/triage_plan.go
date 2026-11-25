@@ -367,11 +367,12 @@ func triageInputBytes(l limits) int { return max(8000, l.request/16) }
 
 // triageGroupInputBytes estimates one group's description in a request.
 func (s *roleStage) triageGroupInputBytes(g *triageGroup) int {
-	n := 256 + 8*len(g.diags)
+	// The fixed fields of a group, with its path_class and rule_families.
+	n := 256 + 96 + 8*len(g.diags)
 	for i, d := range g.diags {
 		if i < triageShownDiagnostics {
 			m, _ := s.shownMessage(d.obs)
-			n += 160 + len(m) + 112*min(len(d.obs.Related), triageRelatedShown)
+			n += 160 + 16 + len(m) + 112*min(len(d.obs.Related), triageRelatedShown)
 		}
 	}
 	return n

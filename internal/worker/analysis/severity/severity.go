@@ -42,7 +42,7 @@ type Family struct {
 // a report tool row records (Table.RecordedID): change it with any change
 // of a family's Lowered severity or of what counts as such a path, so that a
 // comparison tells a rule difference from a change of a finding.
-const PathRule = "paths.1"
+const PathRule = "paths.2"
 
 // The families, most severe first. The rationale of each is in
 // docs/ANALYZERS.md#기본-심각도.

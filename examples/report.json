@@ -14,7 +14,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000583",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "72337e5a3d57f0797f2b5ef17adc99c89473116088740bc09d586e4fd700aca2",
+      "sha256": "21004fdac487e0b1067598f88b09e0b88dba91e6e1fc8cd4488b9f06563eff6c",
       "size_bytes": 26016,
       "task_key": null
     },
@@ -770,7 +770,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000057e",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "d77b0e3b856564326d529445ed316b2a05066ade6e00324607109c239e9c66ac",
+      "sha256": "79c60c702a20d8937da37fa296f45303c10012857f69afcb1d4e340181b2b26b",
       "size_bytes": 2692,
       "task_key": "review.triage.t001"
     },
@@ -779,7 +779,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000580",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "50a72c706eee26568b7a38ca2dc81a2697b95c953b3fb92ebbfad4c31c8d6f3b",
+      "sha256": "80a563ad3072ddbc6168a9bbc3db0a49d052613c6e300c6843d682282cc99207",
       "size_bytes": 1248,
       "task_key": "review.verify.t001"
     }
@@ -794,7 +794,7 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "45fcb03ae783236d5642a539f376d251399a854d4b0a98ab63a07a4d023e6618",
+    "input_digest": "4c048658ad124e67cec9be25bc574806ed993870ebb5eb8f090b35c2ff36b052",
     "result_manifest_artifact_id": null,
     "version": "24"
   },
@@ -967,7 +967,7 @@
           "slices": []
         }
       ],
-      "request_bytes_sent": 96731,
+      "request_bytes_sent": 96812,
       "scope": {
         "key": "review.scope",
         "result": "accepted",
@@ -977,7 +977,7 @@
     },
     "pack_id": "review",
     "pack_version": "2.10.0",
-    "request_bytes": 96731,
+    "request_bytes": 96812,
     "roles": [
       {
         "key": "review.investigate",
@@ -1244,9 +1244,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "2f7ea0691be686908eca79f781bf1ee2313c0c7ca48e67f8eb77278538078aaf",
+        "pack_sha256": "3da49d865f52937c6b94bf22169af4bc8b861851f7ccf71affbdda86ee996b46",
         "pack_version": "2.10.0",
-        "request_sha256": "2ff0c8bfbfe13701d85c0389a089ed61ab353823378cd06b3e553c7bd8061c82",
+        "request_sha256": "2e077d8ed1ce99f8def14832b2c3a69f9a53a3149dc78f7d8e442809c012b17e",
         "role": "triage",
         "task_key": "review.triage.t001"
       }
@@ -1323,7 +1323,7 @@
           "selection": [],
           "source_suppressions": "none"
         },
-        "severity_table": "codeye-go-vet-default/1+paths.1",
+        "severity_table": "codeye-go-vet-default/1+paths.2",
         "stderr_failures": 0,
         "task_key": "go-vet",
         "tool_version": "go1.27.4",
@@ -1354,7 +1354,7 @@
           "selection": [],
           "source_suppressions": "none"
         },
-        "severity_table": "codeye-go-vet-default/1+paths.1",
+        "severity_table": "codeye-go-vet-default/1+paths.2",
         "stderr_failures": 0,
         "task_key": "go-vet.m01",
         "tool_version": "go1.27.4",
@@ -1381,7 +1381,7 @@
           "selection": [],
           "source_suppressions": "none"
         },
-        "severity_table": "codeye-go-vet-default/1+paths.1",
+        "severity_table": "codeye-go-vet-default/1+paths.2",
         "stderr_failures": 0,
         "task_key": "go-vet.m02",
         "tool_version": "go1.27.4",
@@ -1478,7 +1478,7 @@
           ],
           "source_suppressions": "reported"
         },
-        "severity_table": "codeye-go-staticcheck/1+paths.1",
+        "severity_table": "codeye-go-staticcheck/1+paths.2",
         "stderr_failures": 0,
         "task_key": "staticcheck",
         "tool_version": "2026.2.2",
@@ -1514,7 +1514,7 @@
           ],
           "source_suppressions": "reported"
         },
-        "severity_table": "codeye-go-staticcheck/1+paths.1",
+        "severity_table": "codeye-go-staticcheck/1+paths.2",
         "stderr_failures": 0,
         "task_key": "staticcheck.m01",
         "tool_version": "2026.2.2",
@@ -1543,7 +1543,7 @@
           ],
           "source_suppressions": "reported"
         },
-        "severity_table": "codeye-go-staticcheck/1+paths.1",
+        "severity_table": "codeye-go-staticcheck/1+paths.2",
         "stderr_failures": 0,
         "task_key": "staticcheck.m02",
         "tool_version": "2026.2.2",

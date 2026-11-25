@@ -338,9 +338,11 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 	var candidates []record.Candidate
 	verdicts := map[string]record.Verification{}
 	evidence := map[string]record.Excerpt{}
+	aside := false
 	if v := states["review.verify"]; verdictsUsable("review.verify", v) {
 		rec := v.reviewResult.Record
 		candidates = rec.Candidates
+		aside = record.PackSetsAside(rec.Pack.Version)
 		for _, x := range rec.Verifications {
 			verdicts[x.CandidateID] = x
 		}
@@ -351,13 +353,14 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 		for _, stage := range []string{record.StageInvestigate, record.StageInterpret} {
 			if st := states["review."+stage]; reviewAccepted(st) {
 				candidates = append(candidates, st.reviewResult.Record.Candidates...)
+				aside = aside || stage == record.StageInvestigate && record.PackSetsAside(st.reviewResult.Record.Pack.Version)
 				for _, e := range st.reviewResult.Record.Evidence {
 					evidence[e.ID] = e
 				}
 			}
 		}
 	}
-	addFindings(r, "", candidates, verdicts, evidence, obs)
+	addFindings(r, "", candidates, verdicts, evidence, obs, aside)
 	// Each slice's candidates, verified by its own verify; their finding IDs
 	// carry the slice key (review_sNNN_<candidate>).
 	for _, key := range sliceKeys(states) {
@@ -378,26 +381,68 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 		for _, e := range from.Evidence {
 			evidence[e.ID] = e
 		}
-		addFindings(r, key+"_", from.Candidates, verdicts, evidence, obs)
+		addFindings(r, key+"_", from.Candidates, verdicts, evidence, obs, record.PackSetsAside(from.Pack.Version))
 	}
 	composeTriage(r, states, obs)
 }
 
 // addFindings turns accepted candidates into findings; prefix is the slice
 // key part of a slice candidate's finding ID.
-func addFindings(r *Report, prefix string, candidates []record.Candidate, verdicts map[string]record.Verification, evidence map[string]record.Excerpt, obs map[string]Observation) {
+func addFindings(r *Report, prefix string, candidates []record.Candidate, verdicts map[string]record.Verification, evidence map[string]record.Excerpt, obs map[string]Observation, aside bool) {
+	// Parts of one triage group (one rule in one file) read alike to the
+	// fingerprint, which names no line: where several candidates would share
+	// it, the lines of their diagnostics tell them apart.
+	siblings := map[string]int{}
 	for _, c := range candidates {
-		// A candidate the platform did not send to verification (its evidence
-		// is on paths that are not shipped code) is a finding like any other
-		// unreviewed one: it carries the limitation candidate_not_shipped, the
-		// summary does not count it as pending and the report lists it with the
-		// items of secondary paths (FindingNotShipped).
-		f := reviewFinding(r.Inputs.SnapshotID, c.CandidateText, verdicts[c.ID], evidence)
+		siblings[triageSiblingKey(c, obs)]++
+	}
+	for _, c := range candidates {
+		v := verdicts[c.ID]
+		// A candidate whose recorded evidence is all on paths that are not
+		// shipped code was not sent to verification (record.OnlyNotShipped).
+		// The report derives that from the evidence in every case, whatever
+		// became of the verification, and lists the candidate as an
+		// unreviewed finding with the limitation candidate_not_shipped: it is
+		// no action item and no pending candidate (FindingNotShipped).
+		if aside && c.OnlyNotShipped(evidence) {
+			v = record.Verification{CandidateID: c.ID, Verdict: record.VerdictUnreviewed, Limitations: []string{record.LimCandidateNotShipped}}
+		}
+		f := reviewFinding(r.Inputs.SnapshotID, c.CandidateText, v, evidence)
 		f.ID = "review_" + prefix + c.ID
 		f.ObservationIDs = append([]string{}, c.ObservationIDs...)
-		setModelFingerprint(&f, c.CandidateText, evidence, linkedObservations(obs, c.ObservationIDs))
+		linked := linkedObservations(obs, c.ObservationIDs)
+		distinct := ""
+		if key := triageSiblingKey(c, obs); key != "" && siblings[key] > 1 {
+			distinct = linesOf(linked)
+		}
+		setModelFingerprint(&f, c.CandidateText, evidence, linked, distinct)
 		r.Findings = append(r.Findings, f)
 	}
+}
+
+// triageSiblingKey names the rule and file of a triage candidate's first
+// diagnostic ("" for any other candidate).
+func triageSiblingKey(c record.Candidate, obs map[string]Observation) string {
+	if c.Origin != record.StageTriage || len(c.ObservationIDs) == 0 {
+		return ""
+	}
+	o := obs[c.ObservationIDs[0]]
+	if o.Location == nil {
+		return ""
+	}
+	return o.Tool + "\x00" + o.RuleID + "\x00" + o.Location.Path
+}
+
+// linesOf lists the first lines of the located observations.
+func linesOf(list []Observation) string {
+	var lines []string
+	for _, o := range list {
+		if o.Location != nil {
+			lines = append(lines, strconv.Itoa(o.Location.StartLine))
+		}
+	}
+	slices.Sort(lines)
+	return strings.Join(lines, ",")
 }
 
 // reviewFinding turns one accepted review candidate and its verdict into a

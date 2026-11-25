@@ -186,7 +186,7 @@ func TestGoSelectionDigestsPinned(t *testing.T) {
 		"documents":   "bfd65e2c623fb7950d8a1d740445fdb3e863f729fce0f58c41c700902c595462",
 		"investigate": "5d1d9671dad9cb9e3c65ee9bb3f90ec2a1cc25fadccc976004dc6ac0dfd2d5ed",
 		"interpret":   "0f085b48a9c0e7a37c2c27c6096494e25c84e2c3dd061f244e42eaa1c4e0fb88",
-		"triage":      "2f7ea0691be686908eca79f781bf1ee2313c0c7ca48e67f8eb77278538078aaf",
+		"triage":      "3da49d865f52937c6b94bf22169af4bc8b861851f7ccf71affbdda86ee996b46",
 		"verify":      "f34909e035ecf7bca46aafd021ff978510e11bb64e8b666cb4d213edabb67dfa",
 		"contract":    "78a1f4df25ad2788b37fba370bc55f0cf3d2332e4453a8d0f7ff5ad8ea83cbee",
 	}

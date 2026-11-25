@@ -2,6 +2,7 @@ package record
 
 import (
 	"bytes"
+	"slices"
 	"strings"
 )
 
@@ -158,15 +159,12 @@ var pathClassOfSegment = map[string]string{
 // ranking benchmark code as source.
 var benchmarkDirs = []string{"benchmark", "benchmarks", "benches"}
 
-// PathClass is the class of a snapshot-relative file path that is not
-// shipped code: a test file or a test-support directory (IsTestPath and the
-// secondary segments of DefaultSecondary), an example, benchmark, generated
-// or vendored directory. It is "" for shipped code. Only the path is read,
-// so the worker and the report builder agree: the first ten lines of a file
-// (GeneratedHeader) are not seen by the builder. The default tool severity
-// of a diagnostic and the order of the diagnostic triage follow this class
-// (docs/ANALYZERS.md#기본-심각도).
-func PathClass(p string) string {
+// LegacyPathClass is the class rule of report builder 23: test directories,
+// the default secondary segments and benchmark directories at any depth.
+// It guesses (a directory named test, demo, gen or build inside a source tree
+// is often shipped code), so only the validation of builder 23 reports reads
+// it. The review uses PathClass.
+func LegacyPathClass(p string) string {
 	if IsTestPath(p) {
 		return PathTest
 	}
@@ -176,6 +174,54 @@ func PathClass(p string) string {
 	dirs := strings.Split(strings.ToLower(p), "/")
 	for _, d := range dirs[:len(dirs)-1] {
 		if contains(benchmarkDirs, d) {
+			return PathBenchmark
+		}
+	}
+	return ""
+}
+
+// sourceTreeMarkers are directories that make a test, example or benchmark
+// directory below them a part of the source tree rather than a root of the
+// project (a package named test inside src, lib or an application).
+var sourceTreeMarkers = []string{"src", "lib", "main", "internal", "pkg", "app", "cmd", "include", "source", "sources"}
+
+// PathClass is the class of a snapshot-relative file path that is certainly
+// not shipped code: a test file by the naming convention of its language
+// (the names IsTestPath knows), a file below a well-known root (src/test of
+// a Java or Kotlin module, testdata, __tests__, and examples, benchmarks or
+// a tests directory that is not inside a source tree), or a vendored
+// directory. It is "" for shipped code and for every path that only might not
+// be shipped: a directory named test, demo, gen or build somewhere inside a
+// source tree is often code that ships. Only the path is read, so the worker
+// and the report builder agree; this one rule marks the excerpts of a request,
+// decides which candidates the verification does not take and lowers the
+// default severity of a tool diagnostic (docs/ANALYZERS.md#기본-심각도).
+func PathClass(p string) string {
+	lower := strings.ToLower(p)
+	segs := strings.Split(lower, "/")
+	dirs := segs[:len(segs)-1]
+	for _, d := range dirs {
+		switch d {
+		case "vendor", "third_party", "node_modules":
+			return PathVendored
+		case "testdata", "test-data", "__tests__", "__snapshots__":
+			return PathTest
+		}
+	}
+	if testFileName(p) {
+		return PathTest
+	}
+	for i, d := range dirs {
+		inTree := slices.ContainsFunc(dirs[:i], func(x string) bool { return contains(sourceTreeMarkers, x) })
+		switch {
+		case d == "src" && i+1 < len(dirs) && dirs[i+1] == "test" && SourceEcosystem(lower) == "java":
+			return PathTest
+		case inTree:
+		case i == 0 && d == "test", d == "tests":
+			return PathTest
+		case d == "examples" || d == "example":
+			return PathExample
+		case d == "benchmarks" || d == "benches":
 			return PathBenchmark
 		}
 	}

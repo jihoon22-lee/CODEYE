@@ -820,6 +820,9 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 				reviewed++
 			}
 		}
+		if PackSetsAside(r.Pack.Version) && !NotShippedMatches(r.Candidates, r.Verifications, catalog) {
+			return invalid("candidate_not_shipped does not match the evidence of the candidates")
+		}
 		// Candidates the platform did not send (LimCandidateNotShipped) are
 		// not a verification the stage did or failed to complete.
 		notSent := len(NotShippedSet(r.Verifications))

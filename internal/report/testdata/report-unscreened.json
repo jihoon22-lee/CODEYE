@@ -2699,7 +2699,7 @@
           "selection": [],
           "source_suppressions": "none"
         },
-        "severity_table": "codeye-go-vet-default/1+paths.1",
+        "severity_table": "codeye-go-vet-default/1+paths.2",
         "stderr_failures": 0,
         "task_key": "go-vet.m01",
         "tool_version": "go1.27.4",
@@ -2759,7 +2759,7 @@
           "selection": [],
           "source_suppressions": "none"
         },
-        "severity_table": "codeye-go-vet-default/1+paths.1",
+        "severity_table": "codeye-go-vet-default/1+paths.2",
         "stderr_failures": 0,
         "task_key": "go-vet.m02",
         "tool_version": "go1.27.4",

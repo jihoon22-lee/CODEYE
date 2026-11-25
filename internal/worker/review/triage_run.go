@@ -23,7 +23,7 @@ import (
 // (or why the slot had nothing to send) is written next to the call
 // counter and the slot's verify follows it.
 
-const triageContract = `For this role use exactly {"triage":[{"group_id":"<id of input.groups>","classification":"problem|harmless|unclear","diagnostics":[],"title":"what goes wrong (problem)","condition":"the code condition under which it bites (problem)","mechanism":"how the cited lines produce the failure (optional)","impact":"what breaks (problem)","improvement":"fix direction (problem)","reason":"problem: what would make it harmless; harmless: the guard, caller, type or test-only path that makes it harmless here; unclear: what the input lacks","missing":[{"kind":"definition|caller|external_behavior|dependency_or_type|build_condition|other","name":"identifier of a missing definition, else empty"}],"evidence_ids":["ev_...:12-30"]}]}, ignoring any wider output examples. Return one entry per input group, at most %d. An entry with an empty diagnostics classifies its whole group. Only when the diagnostics of one group need different classifications, answer that group with one entry per part instead: diagnostics lists the 1-based positions in the group's lines of the diagnostics of that part, the parts do not overlap, a group has at most %d parts, and a position no part lists is not triaged. Cite only lines inside the entry's own group's context_evidence_ids: a problem cites at least one code or test line there; a harmless group cites the lines that make it harmless; an unclear group may cite. At most 6 evidence IDs per entry; fields a classification does not use stay empty. Keep each tool, rule, line, raw grade, count and default severity as given: do not restate the tool's run status, counts or severity, assign no severity, and never describe absent diagnostics as clean code.` + contractUnclear
+const triageContract = `For this role use exactly {"triage":[{"group_id":"<id of input.groups>","classification":"problem|harmless|unclear","positions":[],"title":"what goes wrong (problem)","condition":"the code condition under which it bites (problem)","mechanism":"how the cited lines produce the failure (optional)","impact":"what breaks (problem)","improvement":"fix direction (problem)","reason":"problem: what would make it harmless; harmless: the guard, caller, type or test-only path that makes it harmless here; unclear: what the input lacks","missing":[{"kind":"definition|caller|external_behavior|dependency_or_type|build_condition|other","name":"identifier of a missing definition, else empty"}],"evidence_ids":["ev_...:12-30"]}]}, ignoring any wider output examples. Return one entry per input group, at most %d. An entry with empty positions classifies its whole group. Only when the diagnostics of one group need different classifications, answer that group with one entry per part instead: positions lists the 1-based positions in the group's lines (input.groups[].lines) of the diagnostics of that part, the parts do not overlap, a group has at most %d parts, and a position no part lists is not triaged. Cite only lines inside the entry's own group's context_evidence_ids: a problem cites at least one code or test line there; a harmless group cites the lines that make it harmless; an unclear group may cite. At most 6 evidence IDs per entry; fields a classification does not use stay empty. Keep each tool, rule, line, raw grade, count and default severity as given: do not restate the tool's run status, counts or severity, assign no severity, and never describe absent diagnostics as clean code.` + contractUnclear
 
 const triageRepairRules = " Answer again only the groups listed in input.repair.groups. An item of input.repair.items whose id names an excerpt points at the code that holds a definition you said was missing: decide from it and, for that group, you may cite it."
 
@@ -124,8 +124,14 @@ type triageAnswer struct {
 	Evidence       []string `json:"evidence_ids"`
 	// Diagnostics are the 1-based positions in the group's lines of the
 	// diagnostics a part of a mixed group classifies; empty: the whole group.
-	Diagnostics []int           `json:"diagnostics"`
-	Missing     []triageMissing `json:"missing"`
+	// Positions and Missing are the optional fields of a part answer and an
+	// unclear answer, read leniently by their own accessors: a field of the
+	// wrong type is a fault of form of the entry, not of the whole output.
+	Positions json.RawMessage `json:"positions"`
+	Missing   json.RawMessage `json:"missing"`
+	// Diagnostics is the name of a request field (the count of the group's
+	// diagnostics); an answer that echoes it is not a schema failure.
+	Diagnostics json.RawMessage `json:"diagnostics"`
 }
 
 // Output codes of the triage role (output_codes.go).
@@ -319,7 +325,10 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 	s.noteUpstream(upstream[len(upstream)-1])
 	s.rec.Limitations = addLim(s.rec.Limitations, plan.lims...)
 	sent, excerpts := s.triageRequest(bin)
-	instructions := s.instructions(fmt.Sprintf(triageContract, triageGroupLimit(s.h.Budget), triageStoredPerGroup(s.h.Budget)))
+	// The parts a model may give for a group: the same number in the contract
+	// and in the check.
+	partsLimit := triagePartsLimit(len(sent))
+	instructions := s.instructions(fmt.Sprintf(triageContract, triageGroupLimit(s.h.Budget), partsLimit))
 	build := func(list []triageSent, r *triageRepair) ([]byte, error) {
 		var in triageInput
 		in.Scope.Snapshot, in.Scope.Limitations, in.Repair = s.j.Snapshot.Digest, s.rec.Limitations, r
@@ -335,7 +344,7 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 			// The excerpt a repair points at, which holds a definition the
 			// answer said was missing, travels with it.
 			for _, it := range r.Items {
-				if it.Field == "missing" && it.ID != "" {
+				if pointsAtExcerpt(it) {
 					used[it.ID] = true
 				}
 			}
@@ -461,7 +470,7 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 				o, itemCodes, itemIssues = s.checkTriageEntry(read[0].a, g, read[0].index, reply, final, defs, pointed)
 				issues = append(issues, itemIssues...)
 			} else {
-				o, itemCodes, issues = s.checkParts(read, g, reply, final, defs, pointed, issues)
+				o, itemCodes, issues = s.checkParts(read, g, reply, final, defs, pointed, issues, partsLimit)
 			}
 			codes = addLim(codes, itemCodes...)
 			switch {
@@ -470,7 +479,10 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 				delete(faults, g.id)
 				accepted++
 				for _, p := range append([]triagePart{{out: o}}, o.parts...) {
-					keepCited(reply, p.out.text.Evidence, p.out.ids)
+					// A part left out has no group that cites its lines.
+					if p.out.omitted == "" {
+						keepCited(reply, p.out.text.Evidence, p.out.ids)
+					}
 				}
 			default:
 				o.form = formOnly(itemCodes)
@@ -517,6 +529,16 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 		}
 		q := opencode.Request{Role: s.role, Scratch: s.j.Scratch, SnapshotDigest: s.j.Snapshot.Digest, Instructions: text, Input: body, ProtectedRoots: []string{s.j.Snapshot.SnapshotDir}}
 		size := len(opencode.Prompt(q))
+		if size > s.limit().request && repair != nil && slices.ContainsFunc(repair.Items, pointsAtExcerpt) {
+			// The excerpt a repair points at does not fit: the repair goes
+			// without it (the answer may then stand as it is) instead of
+			// failing the slot.
+			repair.Items = slices.DeleteFunc(slices.Clone(repair.Items), pointsAtExcerpt)
+			if body, err = build(list, repair); err == nil {
+				q.Input = body
+				size = len(opencode.Prompt(q))
+			}
+		}
 		if size > s.limit().request {
 			r := result(domain.TaskFailed, reasonInputTooLarge)
 			failed = &r
@@ -882,3 +904,7 @@ func (s *roleStage) checkTriageAnswer(a triageAnswer, g triageSent, index int, r
 	note("classification", errTriageClassInvalid, "")
 	return settle()
 }
+
+// pointsAtExcerpt is a repair item that names the excerpt holding a definition
+// an unclear answer said was missing.
+func pointsAtExcerpt(it itemIssue) bool { return it.Field == "missing" && it.ID != "" }
