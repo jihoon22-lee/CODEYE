@@ -121,6 +121,17 @@ def main() -> None:
     # (internal/worker/review/report_example_test.go); its evidence hashes bind to that tree.
     modules_root = ROOT / "fixtures/modules/input"
     check_report(report, modules_root)
+    # The class of a path that is not shipped code (builder 23): the schema takes its five values, the
+    # cross-field check takes it only with a location and from builder 23 on.
+    classed = copy.deepcopy(report)
+    classed["observations"][0]["path_class"] = "test"
+    validators["report.schema.json"].validate(classed)
+    check_report(classed, modules_root)
+    classed["builder"]["version"] = "22"
+    expect_invalid("path class in a builder 22 report", lambda r: check_report(r, modules_root), classed)
+    classed["builder"]["version"] = "23"
+    classed["observations"][0]["path_class"] = "tests"
+    expect_invalid("unknown path class", validators["report.schema.json"].validate, classed)
     observation_negatives = check_additional_observation_example(report, validators["report.schema.json"])
     # examples/report-slices.json is the builder's output for fixtures/modules/slices/input
     # under call ceiling 15 (internal/worker/review/report_slices_example_test.go): review slices and the ledger.

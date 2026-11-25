@@ -60,6 +60,9 @@ export type Observation = {
   // The tool's own severity, and whether an in-source suppression hid it.
   severity: string | null;
   suppressed: boolean;
+  // Why the observation's file is not shipped code (test, example, benchmark,
+  // generated, vendored; builder 23); null for shipped code and older reports.
+  pathClass?: string | null;
   related?: RelatedObservation[];
   // Structure or duplication measurement (never a finding).
   metric: { name: string; value: number; threshold: number; unit: string; counterpart?: ObservationPlace; excerpt?: Excerpt | null; counterpartExcerpt?: Excerpt | null } | null;
@@ -264,6 +267,7 @@ export function parseAnalysisReport(
   };
   const builderVersion = r.builder != null ? object(r.builder).version : undefined;
   const builder18 = typeof builderVersion === 'string' && /^(?:1[89]|[2-9][0-9]|[1-9][0-9]{2,})$/.test(builderVersion);
+  const pathClasses = typeof builderVersion === 'string' && /^(?:2[3-9]|[3-9][0-9]|[1-9][0-9]{2,})$/.test(builderVersion);
   const includesCode = r.export != null && object(r.export).include_code === true;
   const expandedDocuments = builder18 && includesCode;
   const findings = array(r.findings, v => finding(v, expandedDocuments));
@@ -284,6 +288,12 @@ export function parseAnalysisReport(
       location,
       severity: nullable(o.raw_severity),
       suppressed: o.suppressed === true,
+      pathClass: o.path_class === undefined ? null : (() => {
+        const c = str(o.path_class);
+        // Only builder 23 on, only for a located observation, one of the five classes.
+        if (!pathClasses || !location || !['test', 'example', 'benchmark', 'generated', 'vendored'].includes(c)) invalid();
+        return c;
+      })(),
       related: array(o.related_locations ?? [], item => {
         const note = object(item);
         const kind = str(note.kind);

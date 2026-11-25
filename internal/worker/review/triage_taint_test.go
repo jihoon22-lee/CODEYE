@@ -22,7 +22,7 @@ import (
 )
 
 // taintTree: a.go reads a file named by the request (source line 13, sink
-// line 14); b.go removes one after an allow-list check (source 14, sink 19).
+// line 14); examples/b.go, an example the path rule lowers, removes one after an allow-list check (source 14, sink 19).
 var taintTree = map[string]string{
 	"go.mod":    "module example.test/taint\n\ngo 1.23\n",
 	"README.md": "# Files\n\nThe service sends and removes files under /srv/files.\n",
@@ -47,7 +47,7 @@ func Download(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 `,
-	"b.go": "package taint\n\nimport (\n\t\"net/http\"\n\t\"os\"\n\t\"path/filepath\"\n\t\"regexp\"\n)\n\nvar validName = regexp.MustCompile(`^[a-z0-9]+\\.txt$`)\n\n" +
+	"examples/b.go": "package taint\n\nimport (\n\t\"net/http\"\n\t\"os\"\n\t\"path/filepath\"\n\t\"regexp\"\n)\n\nvar validName = regexp.MustCompile(`^[a-z0-9]+\\.txt$`)\n\n" +
 		`// Remove deletes a file named by the request after checking the name.
 func Remove(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
@@ -69,10 +69,10 @@ func taintStatic(t *testing.T) *pack.Composite {
 	const msg = "Request input reaches a file path without a containment check."
 	diags := []exampleDiag{
 		{path: "a.go", line: 14, rule: taintRule, category: "security", message: msg, flow: []int{13, 14}},
-		{path: "b.go", line: 19, rule: taintRule, category: "security", message: msg, flow: []int{14, 19}},
+		{path: "examples/b.go", line: 19, rule: taintRule, category: "security", message: msg, flow: []int{14, 19}},
 	}
 	c, err := pack.NewComposite(exampleMember{d: opengrep.Descriptor(), plan: opengrep.Plan, run: func(j analysis.Job, task pack.Task) analysis.TaskResult {
-		return exampleEnvelope(t, j, opengrep.Descriptor(), task, "2.0.0", rp, []string{"a.go", "b.go"}, []string{"intra_file_flows_only", "request_input_sources_only"}, diags)
+		return exampleEnvelope(t, j, opengrep.Descriptor(), task, "2.0.0", rp, []string{"a.go", "examples/b.go"}, []string{"intra_file_flows_only", "request_input_sources_only"}, diags)
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -80,10 +80,10 @@ func taintStatic(t *testing.T) *pack.Composite {
 	return c
 }
 
-// TC-302: an Opengrep diagnostic reaches the triage request with its taint
+// TC-305: an Opengrep diagnostic reaches the triage request with its taint
 // flow steps as related locations in its group's context and its default
 // severity from the pack's table; the a.go group the triage calls a problem
-// becomes a candidate the slot's verification supports, the b.go group it
+// becomes a candidate the slot's verification supports, the examples/b.go group it
 // calls harmless stays listed with its reason and keeps its tool finding,
 // whose impact is the fixed rule description, not model text.
 func TestOpengrepDiagnosticTriage(t *testing.T) {
@@ -145,7 +145,10 @@ func TestOpengrepDiagnosticTriage(t *testing.T) {
 		t.Fatalf("%d groups sent", len(sent))
 	}
 	for _, g := range sent {
-		want := map[string][]int{"a.go": {13, 14}, "b.go": {14, 19}}[g.Path]
+		want := map[string][]int{"a.go": {13, 14}, "examples/b.go": {14, 19}}[g.Path]
+		// The model is told the table's severity (the medium cap) for both;
+		// the path rule lowers only the report's finding of the example file
+		// and orders the shipped a.go first, as for any tool.
 		if g.DefaultSeverity != severity.Medium || !slices.Equal(g.Tools, []string{opengrep.AnalyzerID}) || len(g.Examples) != 1 {
 			t.Fatalf("group %+v", g)
 		}
@@ -174,7 +177,7 @@ func TestOpengrepDiagnosticTriage(t *testing.T) {
 	for _, row := range r.Coverage.Tools {
 		if row.Analyzer == opengrep.AnalyzerID {
 			rows++
-			if row.SeverityTable != opengrep.RulePackID+"/1" {
+			if row.SeverityTable != opengrep.RulePackID+"/1+"+severity.PathRule {
 				t.Fatalf("tool row severity table %q", row.SeverityTable)
 			}
 		}
@@ -201,9 +204,14 @@ func TestOpengrepDiagnosticTriage(t *testing.T) {
 	for _, g := range d.Groups {
 		tf := toolFinding[g.ObservationIDs[0]]
 		// The tool finding keeps the fixed Korean rule description and the
-		// table's medium cap, whatever the triage says.
-		if !strings.HasPrefix(tf.Impact, "요청 입력이") || tf.Severity != "medium" {
-			t.Fatalf("tool finding %s: %q %s", tf.ID, tf.Impact, tf.Severity)
+		// table's default (the medium cap; low in the example file by the
+		// path rule, which its reason names), whatever the triage says.
+		wantSeverity, wantReason := "medium", "측정이 없어"
+		if tf.Locations[0].Path == "examples/b.go" {
+			wantSeverity, wantReason = "low", severity.PathRule
+		}
+		if !strings.HasPrefix(tf.Impact, "요청 입력이") || tf.Severity != wantSeverity || !strings.Contains(tf.SeverityReason, wantReason) {
+			t.Fatalf("tool finding %s: %q %s %q", tf.ID, tf.Impact, tf.Severity, tf.SeverityReason)
 		}
 		switch g.Classification {
 		case record.TriageProblem:
@@ -217,7 +225,7 @@ func TestOpengrepDiagnosticTriage(t *testing.T) {
 				t.Fatalf("candidate finding %q %s", f.Impact, f.Severity)
 			}
 		case record.TriageHarmless:
-			if g.Reason == nil || g.FindingID != nil || g.Bucket != report.TriageHarmless || len(g.Locations) == 0 || g.Locations[0].Path != "b.go" {
+			if g.Reason == nil || g.FindingID != nil || g.Bucket != report.TriageHarmless || len(g.Locations) == 0 || g.Locations[0].Path != "examples/b.go" {
 				t.Fatalf("harmless group %+v", g)
 			}
 		default:
@@ -226,7 +234,7 @@ func TestOpengrepDiagnosticTriage(t *testing.T) {
 	}
 }
 
-// TC-302: the related locations of a triage example are the ones in the
+// TC-305: the related locations of a triage example are the ones in the
 // group's own context, each naming its excerpt: a step in the unit names the
 // unit, one in the file header sent with it names the header; a step in
 // another unit, another file or another blob of the file is left out; past
@@ -267,7 +275,7 @@ func TestTriageRelatedInGroupContext(t *testing.T) {
 	}
 }
 
-// TC-302: an Opengrep flow and another tool's report of the same construct
+// TC-305: an Opengrep flow and another tool's report of the same construct
 // on the same line are one triage group when both rules are of a mergeable
 // family (the duplication measured on the fixtures: bandit's shell and SQL
 // tests, SpotBugs' path traversal and servlet XSS, clang-tidy's command
@@ -277,7 +285,7 @@ func TestOpengrepMergesWithOtherToolsOnOneLine(t *testing.T) {
 	unit := triageUnit{entry: source.Entry{Path: "app.py"}, span: lineSpan{start: 1, end: 40}}
 	diag := func(tool, pack, version, rule string, line int) *triageGroup {
 		o := toolObservation{ID: tool + rule, Tool: tool, RuleID: rule, Location: &toolLocation{Path: "app.py", StartLine: line, EndLine: line}}
-		return &triageGroup{unit: unit, diags: []triageDiag{{obs: o, def: builtin.DefaultSeverity(tool, pack, version, rule, "")}}}
+		return &triageGroup{unit: unit, diags: []triageDiag{{obs: o, def: builtin.DefaultSeverity(tool, pack, version, rule, "", "")}}}
 	}
 	og := func(rule string, line int) *triageGroup {
 		return diag(opengrep.AnalyzerID, opengrep.RulePackID, opengrep.RulePackVersion, rule, line)

@@ -57,6 +57,7 @@ export const reportActionsKo = {
     harmless: '모델이 이 맥락에서는 해가 없다고 판단한 진단이며, 그 이유와 근거 코드 위치를 함께 적습니다. 도구 진단을 숨기지 않습니다.',
     not_triaged: '호출 상한·요청 크기·위치나 코드 단위 없음·비밀값 보류 등으로 모델이 분류하지 않은 진단입니다. 깨끗하다는 뜻이 아닙니다.',
   } as Record<string, string>,
+  diagnosticPaths: (notShipped: number, shipped: number) => `경로별: 시험·예제 등 배포 코드가 아닌 경로 ${notShipped}건, 배포 코드 ${shipped}건. 배포 코드가 아닌 경로의 진단은 기본 심각도를 낮춰 매깁니다.`,
   diagnosticInterpreted: (n: number) => `그중 ${n}건은 해석 역할의 후보가 다룬 진단입니다.`,
   defaultSeverity: (severity: string) => `기본 심각도 ${severity}`,
   triageClassification: {

@@ -215,6 +215,36 @@ describe('action-first overview', () => {
     expect(buckets[1].textContent).toContain(a.diagnosticBucketNote.not_triaged + ' ' + a.diagnosticInterpreted(1));
   });
 
+  it('says how many diagnostics of the fold and of each triage result are on paths that are not shipped code', () => {
+    const doc = example('report.json');
+    // The example's SA4006 diagnostic stands for one in a test file.
+    const marked = doc.observations.filter((o: Doc) => o.rule_id === 'SA4006');
+    expect(marked).toHaveLength(1);
+    marked[0].path_class = 'test';
+    const report = parseAnalysisReport(doc, doc.run_id);
+    expect(report.observations.find(o => o.rule === 'SA4006')!.pathClass).toBe('test');
+    const { overview } = overviewOf(report);
+    const diagnostics = within(overview).getByText(a.diagnosticsTriaged(2, 0, 1, 2, 1)).closest('details')!;
+    const rows = [...diagnostics.querySelectorAll<HTMLElement>('.report-diag-paths')].map(x => x.textContent);
+    // The fold as a whole, then the not triaged bucket that holds the diagnostic; the other bucket says nothing.
+    expect(rows).toEqual([a.diagnosticPaths(1, 1), a.diagnosticPaths(1, 0)]);
+    expect(diagnostics.querySelector('.report-diag-bucket[data-bucket="not_triaged"] .report-diag-paths')).not.toBeNull();
+    expect(diagnostics.querySelector('.report-diag-bucket[data-bucket="attention"] .report-diag-paths')).toBeNull();
+    // Without a class (the report as stored) the fold shows no such row.
+    cleanup();
+    const plain = within(overviewOf(parsed('report.json')).overview).getByText(a.diagnosticsTriaged(2, 0, 1, 2, 1)).closest('details')!;
+    expect(plain.querySelectorAll('.report-diag-paths')).toHaveLength(0);
+    // A class needs builder 23, a location and one of the five classes.
+    const broken = (edit: (d: Doc) => void) => {
+      const d = example('report.json');
+      edit(d);
+      return () => parseAnalysisReport(d, d.run_id);
+    };
+    expect(broken(d => { d.builder.version = '22'; d.observations[0].path_class = 'test'; })).toThrow();
+    expect(broken(d => { d.observations[0].path_class = 'unknown'; })).toThrow();
+    expect(broken(d => { d.observations[0].path_class = 'test'; d.observations[0].location = null; d.observations[0].location_state = 'unresolved'; })).toThrow();
+  });
+
   it('keeps a harmless group with its reason and cited code, and a refuted problem with a link to its finding', () => {
     const report = parsed('report.json');
     const triage = report.sections!.codeReview.triage!;

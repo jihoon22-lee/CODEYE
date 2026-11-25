@@ -14,6 +14,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/severity"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
 
@@ -209,6 +210,7 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 				out.Limitations = append(out.Limitations, LimColumnsNotBytes+":"+ctx.Task.Key)
 			}
 			obs.Location = &ObservationLocation{SnapshotID: ctx.Snapshot.ID, Path: l.Path, StartLine: l.StartLine, EndLine: l.EndLine, StartCol: startCol, EndCol: endCol, ColumnUnit: "byte", BlobSHA256: l.BlobSHA256}
+			obs.PathClass = record.PathClass(l.Path)
 			if sha, ok := ctx.Source.Lookup(l.Path); ok && sha == l.BlobSHA256 {
 				obs.EvidenceState = EvidenceVerified
 			} else {
@@ -251,7 +253,7 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 			if o.RawSeverity != nil {
 				grade = *o.RawSeverity
 			}
-			if x := builtin.DefaultSeverity(d.Analyzer.ID, d.RulePack.ID, d.RulePack.Version, o.RuleID, grade); i == 0 || severity.Rank(x.Severity) > severity.Rank(def.Severity) {
+			if x := builtin.DefaultSeverity(d.Analyzer.ID, d.RulePack.ID, d.RulePack.Version, o.RuleID, grade, o.PathClass); i == 0 || severity.Rank(x.Severity) > severity.Rank(def.Severity) {
 				def = x
 			}
 		}
@@ -261,7 +263,7 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 		IgnoredFiles: d.Coverage.FilesSkipped, UnlistedFiles: d.Coverage.FilesUnlisted, Packages: map[string]int{}, StderrFailures: len(d.ToolErrors), AnalyzerErrors: 0, Limitations: []string{},
 		RuleContext: ruleContextOf(d.RulePack)}
 	if t, ok := severity.TableFor(builtin.SeverityTables(), d.Analyzer.ID, d.RulePack.ID, d.RulePack.Version); ok {
-		tc.SeverityTable = t.ID()
+		tc.SeverityTable = t.RecordedID()
 	}
 	if d.Coverage.FilesInScope != nil {
 		tc.FilesInScope = *d.Coverage.FilesInScope

@@ -34,7 +34,9 @@ func SeverityTables() []severity.Table {
 }
 
 // DefaultSeverity is the default severity of one diagnostic under these
-// tables.
-func DefaultSeverity(analyzer, rulePack, rulePackVersion, rule, grade string) severity.Result {
-	return severity.Lookup(SeverityTables(), analyzer, rulePack, rulePackVersion, rule, grade)
+// tables. pathClass is record.PathClass of the diagnostic's file ("" for
+// shipped code or a diagnostic without a location): any other class lowers
+// the severity by the path rule (severity.PathRule).
+func DefaultSeverity(analyzer, rulePack, rulePackVersion, rule, grade, pathClass string) severity.Result {
+	return severity.Lookup(SeverityTables(), analyzer, rulePack, rulePackVersion, rule, grade, pathClass != "")
 }

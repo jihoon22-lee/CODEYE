@@ -138,6 +138,9 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
             ensure(row["role"] in ("stdout", "stderr") and row["sha256"] == raw["sha256"] and row["task_key"] == obs["task_key"], "Incorrect raw stream")
             ensure(0 <= raw["byte_start"] <= raw["byte_end"] <= row["size_bytes"], "Raw byte range invalid")
             ensure((obs["raw_message"] is not None) == report["export"]["include_code"], "Export leaked or omitted diagnostic text")
+            # The class of a path that is not shipped code (builder 23, record.PathClass): only for a located observation.
+            ensure("path_class" not in obs or (int(report["builder"]["version"]) >= 23 and obs["location"] is not None),
+                   "Path class before builder 23 or without a location")
             related_end = raw["byte_start"]
             for note in obs.get("related_locations", []):
                 ensure(obs["tool"] in ("cpp.cppcheck", "cpp.clang_tidy", "cpp.gcc_analyzer", "any.opengrep") and "metric" not in obs,

@@ -12,6 +12,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/severity"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
 
@@ -191,6 +192,13 @@ func ValidateReport(r Report) error {
 		}
 		if o.EvidenceState == EvidenceVerified && o.Location == nil {
 			return invalidf("verified observation without location")
+		}
+		wantClass := ""
+		if o.Location != nil && version >= PathSeveritySince {
+			wantClass = record.PathClass(o.Location.Path)
+		}
+		if o.PathClass != wantClass {
+			return invalidf("observation %s path class differs from its location", o.ID)
 		}
 		if len(o.Related) > 64 || len(o.Related) > 0 && (version < AnalysisEvidenceSince || o.Metric != nil || !carriesRelated(o.Tool)) {
 			return invalidf("invalid related diagnostic locations")

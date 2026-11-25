@@ -138,6 +138,14 @@ function Diagnostics({ report, sections, openFinding }: { report: AnalysisReport
     }
     return [...groups.values()];
   };
+  // pathSplit says how many diagnostics of the rule groups are on paths that
+  // are not shipped code (the observations' stored path class, builder 23);
+  // nothing when none is.
+  const pathSplit = (groups: RuleGroup[]) => {
+    const ids = groups.flatMap(g => g.observations);
+    const notShipped = ids.filter(id => byID.get(id)?.pathClass).length;
+    return notShipped === 0 ? null : <p className="report-diag-paths">{a.diagnosticPaths(notShipped, ids.length - notShipped)}</p>;
+  };
   const rows = merged();
   if (rows.length === 0) return null;
   const total = rows.reduce((sum, g) => sum + g.count, 0);
@@ -148,6 +156,7 @@ function Diagnostics({ report, sections, openFinding }: { report: AnalysisReport
     return <Fold id="report-tool-diagnostics" title={a.diagnostics(total, rows.length, tools.size)}>
       <p>{a.diagnosticsNote}</p>
       {unplaced && <p>{a.diagnosticsUnplaced}</p>}
+      {pathSplit(rows)}
       <DiagnosticRows rows={rows} triage={null} report={report} openFinding={openFinding} />
     </Fold>;
   }
@@ -157,6 +166,7 @@ function Diagnostics({ report, sections, openFinding }: { report: AnalysisReport
   return <Fold id="report-tool-diagnostics" title={a.diagnosticsTriaged(total, answered(false), answered(true), rows.length, tools.size)}>
     <p>{a.diagnosticsTriageNote}</p>
     {unplaced && <p>{a.diagnosticsUnplaced}</p>}
+    {pathSplit(rows)}
     {TRIAGE_BUCKETS.map(b => {
       const groups = merged(id => (bucket.get(id) ?? '') === b);
       if (groups.length === 0) return null;
@@ -165,6 +175,7 @@ function Diagnostics({ report, sections, openFinding }: { report: AnalysisReport
       return <section key={name} className="report-diag-bucket" data-bucket={name}>
         <h6>{a.diagnosticBucket[name](n)}</h6>
         <p><small>{a.diagnosticBucketNote[name]}{b === '' && triage.interpreted > 0 ? ' ' + a.diagnosticInterpreted(triage.interpreted) : ''}</small></p>
+        {pathSplit(groups)}
         <DiagnosticRows rows={groups} triage={triage} report={report} openFinding={openFinding} />
       </section>;
     })}

@@ -794,9 +794,9 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "b0b94e5e3aadad72b9b53a487a77da624d4850b0290ed21ca213b0c371c2cfa3",
+    "input_digest": "5fb177cb678d1f9688ea42d8e678ea1e16f8f5684f417e8c30adebb4a003a0c4",
     "result_manifest_artifact_id": null,
-    "version": "22"
+    "version": "23"
   },
   "code_review": {
     "accepted_calls": 6,
@@ -1323,7 +1323,7 @@
           "selection": [],
           "source_suppressions": "none"
         },
-        "severity_table": "codeye-go-vet-default/1",
+        "severity_table": "codeye-go-vet-default/1+paths.1",
         "stderr_failures": 0,
         "task_key": "go-vet",
         "tool_version": "go1.27.4",
@@ -1354,7 +1354,7 @@
           "selection": [],
           "source_suppressions": "none"
         },
-        "severity_table": "codeye-go-vet-default/1",
+        "severity_table": "codeye-go-vet-default/1+paths.1",
         "stderr_failures": 0,
         "task_key": "go-vet.m01",
         "tool_version": "go1.27.4",
@@ -1381,7 +1381,7 @@
           "selection": [],
           "source_suppressions": "none"
         },
-        "severity_table": "codeye-go-vet-default/1",
+        "severity_table": "codeye-go-vet-default/1+paths.1",
         "stderr_failures": 0,
         "task_key": "go-vet.m02",
         "tool_version": "go1.27.4",
@@ -1478,7 +1478,7 @@
           ],
           "source_suppressions": "reported"
         },
-        "severity_table": "codeye-go-staticcheck/1",
+        "severity_table": "codeye-go-staticcheck/1+paths.1",
         "stderr_failures": 0,
         "task_key": "staticcheck",
         "tool_version": "2026.2.2",
@@ -1514,7 +1514,7 @@
           ],
           "source_suppressions": "reported"
         },
-        "severity_table": "codeye-go-staticcheck/1",
+        "severity_table": "codeye-go-staticcheck/1+paths.1",
         "stderr_failures": 0,
         "task_key": "staticcheck.m01",
         "tool_version": "2026.2.2",
@@ -1543,7 +1543,7 @@
           ],
           "source_suppressions": "reported"
         },
-        "severity_table": "codeye-go-staticcheck/1",
+        "severity_table": "codeye-go-staticcheck/1+paths.1",
         "stderr_failures": 0,
         "task_key": "staticcheck.m02",
         "tool_version": "2026.2.2",

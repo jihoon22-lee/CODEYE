@@ -933,7 +933,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 | 항목 | 값 |
 |---|---|
 | report | `0195f3a0-0000-7000-8000-000000000504` rev `1` |
-| digest | `ad138aaca947` |
+| digest | `d36b224fdb46` |
 | status | `partial` |
 | quality\_verdict | `attention_required` |
 | run | `0195f3a0-0000-7000-8000-000000000501` |
@@ -943,4 +943,4 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 | created\_at | `2026-11-18T00:10:00Z` |
 | export | 코드 포함 내보내기\(권한 있는 사용자 전용\) |
 
-digest sha256: `ad138aaca947f0964bc1366a4722861118d3cd6419764ec58e6f9e1964945ed7`
+digest sha256: `d36b224fdb46a0cd2b3a81afa82d2f65441bdf57d15f410e717975a55ecc73aa`

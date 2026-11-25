@@ -21,7 +21,8 @@ import (
 // accepted analyzer envelopes, the whole-run interpretation, the snapshot,
 // the secrets screen and the node's request budget, all fixed within an
 // attempt) and takes the bin with its number: the groups of diagnostics
-// most severe by default severity first, then by count.
+// most severe first (the severity the report gives their findings), shipped
+// code before other paths of the same severity, then by count.
 
 const (
 	// triageFilesPerSlot: one slot per this many eligible source files.
@@ -53,7 +54,12 @@ func triageKey(i int) string { return fmt.Sprintf("t%03d", i+1) }
 type triageDiag struct {
 	obs  toolObservation
 	task string
-	def  severity.Result
+	// def is the table's default severity as the model is told it; effective
+	// is the severity the report gives the diagnostic's finding, lowered on
+	// a path that is not shipped code (docs/ANALYZERS.md#기본-심각도). The
+	// order of the groups follows effective.
+	def       severity.Result
+	effective string
 }
 
 // triageUnit is the code a group is triaged in: one review unit of a file
@@ -86,11 +92,17 @@ func (u triageUnit) headerEnd() int {
 
 // triageGroup is one group of diagnostics.
 type triageGroup struct {
-	diags     []triageDiag
-	unit      triageUnit
-	severity  string
-	crossTool bool
+	diags []triageDiag
+	unit  triageUnit
+	// severity is the highest table default severity of the diagnostics (sent
+	// to the model); effective is the highest severity of their findings.
+	severity, effective string
+	crossTool           bool
 }
+
+// shipped reports a group on shipped code: not a test, example, benchmark,
+// generated or vendored path (record.PathClass).
+func (g *triageGroup) shipped() bool { return record.PathClass(g.unit.entry.Path) == "" }
 
 func (g *triageGroup) analyzers() []string {
 	var out []string
@@ -138,7 +150,11 @@ func (s *roleStage) planTriage(docs []toolDoc, interpreted map[string]bool, slot
 			if o.Severity != nil {
 				grade = *o.Severity
 			}
-			def := builtin.DefaultSeverity(o.Tool, d.doc.RulePack, d.doc.RulePackVersion, o.RuleID, grade)
+			def := builtin.DefaultSeverity(o.Tool, d.doc.RulePack, d.doc.RulePackVersion, o.RuleID, grade, "")
+			effective := def.Severity
+			if o.Location != nil {
+				effective = builtin.DefaultSeverity(o.Tool, d.doc.RulePack, d.doc.RulePackVersion, o.RuleID, grade, record.PathClass(o.Location.Path)).Severity
+			}
 			switch {
 			case interpreted[o.ID]:
 				plan.lims = addLim(plan.lims, limDiagnosticsInterpreted)
@@ -180,7 +196,7 @@ func (s *roleStage) planTriage(docs []toolDoc, interpreted map[string]bool, slot
 				groups[key] = g
 				order = append(order, key)
 			}
-			g.diags = append(g.diags, triageDiag{obs: o, task: d.key, def: def})
+			g.diags = append(g.diags, triageDiag{obs: o, task: d.key, def: def, effective: effective})
 		}
 	}
 	list := make([]*triageGroup, 0, len(order))
@@ -202,17 +218,31 @@ func (s *roleStage) planTriage(docs []toolDoc, interpreted map[string]bool, slot
 				if severity.Rank(d.def.Severity) > severity.Rank(c.severity) {
 					c.severity = d.def.Severity
 				}
+				if severity.Rank(d.effective) > severity.Rank(c.effective) {
+					c.effective = d.effective
+				}
 			}
 			chunks = append(chunks, c)
 		}
 	}
 	slices.SortStableFunc(chunks, func(a, b *triageGroup) int {
-		return cmp.Or(cmp.Compare(severity.Rank(b.severity), severity.Rank(a.severity)), cmp.Compare(len(b.diags), len(a.diags)),
+		// Shipped code goes before a test, example, benchmark, generated or
+		// vendored path of the same severity: the triage share of the call
+		// ceiling is limited, and a diagnostic outside shipped code is rarely
+		// a defect of the project.
+		return cmp.Or(cmp.Compare(severity.Rank(b.effective), severity.Rank(a.effective)), cmp.Compare(boolRank(!a.shipped()), boolRank(!b.shipped())), cmp.Compare(len(b.diags), len(a.diags)),
 			cmp.Compare(a.unit.entry.Path, b.unit.entry.Path), cmp.Compare(a.diags[0].obs.Location.StartLine, b.diags[0].obs.Location.StartLine),
 			cmp.Compare(a.diags[0].obs.Tool, b.diags[0].obs.Tool), cmp.Compare(a.diags[0].obs.RuleID, b.diags[0].obs.RuleID))
 	})
 	plan.bins = s.packTriage(chunks, slots, &plan.lims)
 	return plan
+}
+
+func boolRank(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // mergeCrossTool joins groups of different analyzers in one unit when two of
