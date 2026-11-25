@@ -57,7 +57,7 @@
 | `review.documents` | `documents` | 계획 시 범위 안에 안내 문서가 있을 때만 | 문서 없음 `no_documents`(필수 아님), 선택된 문서 없음 `documents_not_selected`, `dependency_failed` | 선택 문서 발췌 | 적용 경로가 있는 계약·충돌·질문, 지침성 문구 메모, 근거가 있는 문서 품질 판단 |
 | `review.investigate` | `code_review` | 예 | — | 수락된 문서·환경 결과, 모듈별 코드·테스트의 [검토 단위](#검토-단위). 원시 도구 진단은 넣지 않는다(REQ-009) | 후보 `investigate_N`(0개부터 보낸 코드 양과 출력 한도가 정한 상한까지, 최대 12개), 구현 근거가 있는 강점, 전체 조사에서 문서 계약과 코드의 대조 |
 | `review.interpret` | `code_review` | 아니오 | 해석할 도구 관찰이 없으면 `no_tool_observations` | 관찰 ID·규칙·위치와 주변 줄 창 | 관찰에 연결한 가설 `interpret_N`(최대 2) 또는 해석 한계 |
-| `review.verify` | `code_review` | 예 | investigate·interpret가 모두 수락되지 않으면 `dependency_failed`. 후보가 없으면 호출 없이 성공(`no_candidates_to_verify`) | 수락된 두 역할의 후보, 문서 계약, 관찰, 발췌와 호출자·테스트 확장 | 후보별 판정 |
+| `review.verify` | `code_review` | 예 | investigate·interpret가 모두 수락되지 않으면 `dependency_failed`. 후보가 없으면 호출 없이 성공(`no_candidates_to_verify`). 조사 후보가 모두 배포 코드가 아닌 경로만 인용했으면 보낼 후보가 없어 호출 없이 성공([검토 대상은 배포 코드다](#검토-대상은-배포-코드다)) | 수락된 두 역할의 후보, 문서 계약, 관찰, 발췌와 호출자·테스트 확장 | 후보별 판정 |
 | `review.contract` | `code_review` | 아니오 | 유효한 선택과 새 구현 줄이 없으면 `no_review_scope`, 선행 기록이 없거나 맞지 않으면 `dependency_failed`, 호출 상한이면 `review_budget_exhausted` | 수락된 문서와 앞선 미확인 판정, 다시 읽은 범위 안의 발췌 | 같은 계약에 대한 대조 한 건 |
 
 역할 지침과 허용 입력은 다음과 같다.
@@ -101,6 +101,7 @@
 - 경로의 종류는 파일 경로만으로 정한다(`record.PathClass`: `test`·`example`·`benchmark`·`generated`·`vendored`, 배포 코드는 없음). 코드·시험 발췌를 보내는 요청은 배포 코드가 아닌 경로의 발췌에 `path_class`를 싣는다. 모델이 경로 이름으로 짐작하지 않게 하는 구조 필드이고, 요청에만 있으며 검토 기록의 근거에는 저장하지 않는다. 배포 코드의 발췌에는 필드가 없다.
 - 구조 확인(조사 후보에만, [A63](DECISIONS.md)). 인용한 코드·시험 근거가 모두 배포 코드가 아닌 경로에 있는 후보는 검증 요청에 보내지 않는다. 형식 복구를 부르지 않는다(호출 상한은 모듈 slice의 몫이다). 후보는 검증 기록에 그대로 있고(계보 검사가 같다), 그 판정은 `unreviewed`에 한계 `candidate_not_shipped` 하나뿐이다. 보낼 후보가 하나도 남지 않으면 모델을 부르지 않고 성공한다. 이 판정은 task 실패나 `inconclusive` 보고서 상태의 원인이 아니다. 보고서는 이 후보를 발견에 올리지 않고 개수만 센다(`code_review.candidates_not_shipped`와 개요의 같은 이름의 수, 생성기 24).
 - 후보가 배포 코드의 줄을 하나라도 인용했으면 그대로 검증한다. 스냅샷 범위에 배포 코드의 소스가 하나도 없으면(예제만 있는 저장소, 시험만 바뀐 PR) 검토할 다른 코드가 없으므로 후보를 가리지 않는다. 해석 가설과 분류 문제 후보는 도구 진단이 출발점이므로 이 확인을 받지 않는다([도구 진단 분류](#도구-진단-분류)). 검증 지침도 `path_class`가 있는 줄만으로 후보를 지지하지 않게 한다.
+- 스냅샷 범위에 배포 코드가 없어서 후보를 가리지 않는 경우에도 `investigate.md`는 모델이 배포 코드를 다루게 안내한다. 그 지침 때문에 후보가 줄 수 있고 플랫폼은 그 경우 후보를 그대로 검증한다. PR은 변경한 파일만 본다.
 - 한계: 경로 규칙은 배포 코드와 시험 코드를 완전히 가르지 않는다([A62](DECISIONS.md)). 배포 코드가 `gen`·`build`처럼 낮추는 이름의 디렉터리에 있으면 그 코드의 후보도 발견에서 빠지고 개수로만 남는다. 경로 규칙이 시험으로 보지 않는 시험 보조 코드의 후보는 배포 코드의 후보로 검증된다.
 
 ## 검토 입력 선택
@@ -338,7 +339,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - slot은 분류와 검증에 쓸 호출 두 번이 남아 있을 때 시작한다(모듈 slice 뒤이므로 남은 호출은 slice가 쓰고 남긴 것과 분류 몫이다). 분류 재시도는 검증에 쓸 호출 하나를 남긴다. 결정은 호출 계수 옆 파일에 쓰고 같은 slot의 검증이 따른다.
 - 출력은 묶음마다 `problem`(조건·영향·고칠 방향과 묶음 문맥 안의 줄 인용), `harmless`(무해하게 만드는 코드 근거와 그 줄 인용), `unclear`(무엇이 더 필요한지) 중 하나다. 의존성·타입·헤더를 찾지 못해 생긴 진단은 분석 공백으로 보고 `unclear`로 둔다. 모델은 도구 상태·진단 수·원시 등급·규칙·기본 심각도를 바꾸지 못하고 심각도를 정하지 않는다.
 - **판단 불가는 입력에 없는 것이 있을 때만이다.** `unclear` 답은 `missing`에 없는 것을 하나씩 적는다. 고정 종류(`definition`·`caller`·`external_behavior`·`dependency_or_type`·`build_condition`·`other`)와, 정의이면 그 식별자다. 요청에 묶음을 결정하는 코드가 있으면 `problem`이나 `harmless`로 답한다. `missing`은 검토 기록에 저장하지 않는다(이유 서술이 답의 기록이다). `missing`이 없거나 항목이 틀리면 형식 오류(`triage_missing_invalid`)이고, 복구 뒤에는 틀린 항목을 빼고 남은 항목이 없으면 이유만으로 받으며 한계 `triage_missing_unstated`를 남긴다.
-- **없다고 쓴 정의가 요청에 있는 경우.** 정확한 경우에만 확인한다. 묶음의 파일이 Go이고, 정의가 없다고 쓴 식별자가 같은 요청의 단위에 최상위 선언(함수·타입·변수·상수)으로 정확히 하나 있으며 그 파일이 같은 디렉터리·같은 package일 때 형식 오류(`triage_unclear_input_present`)다. 메서드·한정 이름·여러 선언·다른 package는 확인하지 않는다. 복구 요청은 정의를 담은 발췌 ID를 `items`로 가리키고 그 발췌를 함께 싣는다. 그 묶음은 복구 답에서 이 발췌도 인용할 수 있다(자기 묶음의 맥락만 인용하는 규칙의 예외다). 복구 뒤에도 그렇게 답하면 그 묶음만 분류하지 않음(`triage_item_omitted`, `diagnostic_groups_not_triaged`)이다. 묶음이 하나뿐인 slot에서 이 일이 일어나면 분류한 묶음이 없어 slot이 실패한다(`review_output_invalid`). 다른 언어는 선언 이름의 색인이 정확하지 않아(단위 경계가 휴리스틱이다) 이 확인을 하지 않고, 그 언어의 `unclear` 답은 `missing` 형식만 확인한다.
+- **없다고 쓴 정의가 요청에 있는 경우.** 정확한 경우에만 확인한다. 묶음의 파일이 Go이고, 정의가 없다고 쓴 식별자가 같은 요청의 단위에 최상위 선언(함수·타입·변수·상수)으로 정확히 하나 있으며 그 파일이 같은 디렉터리·같은 package일 때 형식 오류(`triage_unclear_input_present`)다. 메서드·한정 이름·여러 선언·다른 package는 확인하지 않는다(메서드 이름만 쓴 답이 같은 이름의 최상위 함수를 가리키는 것으로 보일 수 있는 경우는 구별하지 않는다). 복구 요청은 정의를 담은 발췌 ID를 `items`로 가리키고 그 발췌를 함께 싣는다. 그 묶음은 복구 답에서 이 발췌도 인용할 수 있다(자기 묶음의 맥락만 인용하는 규칙의 예외다). 복구 뒤에도 그렇게 답하면 그 묶음만 분류하지 않음(`triage_item_omitted`, `diagnostic_groups_not_triaged`)이다. 묶음이 하나뿐인 slot에서 이 일이 일어나면 분류한 묶음이 없어 slot이 실패한다(`review_output_invalid`). 다른 언어는 선언 이름의 색인이 정확하지 않아(단위 경계가 휴리스틱이다) 이 확인을 하지 않고, 그 언어의 `unclear` 답은 `missing` 형식만 확인한다.
 - **묶음의 일부만 분류.** 한 묶음의 진단이 서로 다르게 분류돼야 하면 부분마다 답 항목을 두고 각 항목의 `diagnostics`에 묶음 `lines`의 1부터 센 위치를 적는다. `diagnostics`가 비면 묶음 전체의 답이다(이전 답이 그대로 유효하다). 위치는 묶음 안이고 겹치지 않아야 하며, 한 묶음이 저장하는 묶음(부분과, 어떤 부분도 가리키지 않은 위치의 나머지)은 `min(3, 64 ÷ 요청 묶음 수 한도)`개 이하다. 어기면 형식 오류(`triage_diagnostics_invalid`)이고 복구 요청에 그 묶음을 다시 싣는다. 복구 뒤에도 남으면 그 묶음 전체를 분류하지 않는다(`triage_item_omitted`). 부분 답과 전체 답이 섞이거나 전체 답이 둘이면 `triage_group_duplicate`다. 검토 기록에는 부분마다 묶음이 하나씩 저장된다(그 부분의 관찰·`cross_tool`·문제 후보이고 기록 형식은 그대로다). 어느 부분도 가리키지 않은 위치는 분류하지 않은 묶음(`triage_answer_missing`)이 되어 `diagnostic_groups_not_triaged`를 남긴다. 모든 진단이 정확히 한 저장 묶음에 속하므로 보고서의 진단별 계산은 바뀌지 않는다. 묶음을 더 잘게 나누는 계획은 채택하지 않았다([A63](DECISIONS.md)).
 - 출력 오류는 [출력 오류 분류](#출력-오류-분류)를 따른다. 형식 오류가 있으면 남은 묶음과 그 발췌만 담은 복구를 한 번 보낸다. 복구 뒤에도 남은 형식 오류는 그 묶음만 분류하지 않고(`triage_item_omitted`; 첫 답에 형식 오류가 있었는데 복구 답이 그 묶음을 빠뜨린 경우도 같다), 무결성 오류는 그 답을 거부한다(`triage_item_rejected`). 답이 없는 묶음은 `triage_answer_missing`이다. 한 출력에 같은 묶음의 답이 둘이면 앞 답을 받아들였어도 `triage_group_duplicate`를 남긴다. `problem`·`harmless`·`unclear` 모두 자기 묶음의 발췌만 인용한다. 다른 묶음의 발췌를 인용하면 형식 오류(`triage_evidence_not_at_group`)이고, 복구 뒤에는 자기 묶음의 인용만 남겨 검사한다. 분류하지 않은 묶음이 있으면 `diagnostic_groups_not_triaged`를 남긴다. 분류한 묶음이 하나도 없으면 task가 실패한다.
 - **출력 한도.** 한 요청의 묶음 수는 묶음당 출력 1,024 토큰을 가정해 정한다. 실제 모델이 그보다 길게 써서 출력 토큰 한도에 답이 잘리면 출력은 JSON이 아니다(`output_not_json`). 이것은 형식 오류다. JSON이 아닌 답마다 재시도는 남은 묶음의 앞 절반(우선순위가 높은 쪽)만 묻고 나머지는 `triage_item_omitted`로 둔다(역할 호출 세 번 안에서, 7개면 7→4→2). 재시도 답에서 하나라도 받아들이면 slot은 성공하고 빠진 묶음은 `diagnostic_groups_not_triaged`로 보인다. 세 번 모두 JSON이 아니거나 묶음 하나만 남아도 JSON이 아니면 분류한 묶음이 없어 task가 실패한다(`review_output_invalid`). 그때도 호출과 묶음을 담은 실패 기록은 남는다.
@@ -556,7 +557,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 | `instruction_notes_evidence_ids_invalid` | 형식 | `contracts_evidence_ids_invalid`와 같다 |
 | `document_quality_evidence_ids_invalid` | 형식 | `contracts_evidence_ids_invalid`와 같다 |
 | `triage_group_unknown` | 무결성 | 요청에 없던 묶음의 답을 버린다. 그 답으로는 어떤 묶음도 분류하지 않는다 |
-| `triage_group_duplicate` | 형식 | 같은 묶음의 두 번째 답을 버린다 |
+| `triage_group_duplicate` | 형식 | 같은 묶음의 두 번째 전체 답을 버린다. 부분 답(`diagnostics`)과 전체 답이 섞이면 전체 답을 버린다. 서로 다른 부분 답은 중복이 아니다 |
 | `triage_classification_invalid` | 형식 | 복구 요청에 그 묶음을 다시 싣는다. 복구 뒤에도 남으면 그 묶음만 분류하지 않음(`triage_item_omitted`, `diagnostic_groups_not_triaged`) |
 | `triage_evidence_not_at_group` | 형식 | 복구 요청에 그 묶음을 다시 싣는다. 복구 뒤에는 묶음 안의 인용만 남겨 통과하면 받고, 아니면 그 묶음만 분류하지 않음 |
 | `triage_answer_missing` | 형식 | 복구 요청에 답하지 않은 묶음만 싣는다. 끝내 없으면 그 묶음만 분류하지 않음(`triage_answer_missing`) |
@@ -611,7 +612,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - 심각도는 `high`·`medium`·`low`·`info`만 받는다. `critical`은 실행 근거나 사람의 판단이 필요하므로 모델이 줄 수 없다(`severity_not_assignable`).
 - 범주는 `correctness`, `error_handling`, `concurrency`, `resource_lifecycle`, `data_integrity`, `api_contract`, `security`, `maintainability`, `performance`, `test_gap` 중 하나다.
 - 후보마다 정확히 한 판정이 있어야 한다. 누락·중복 항목, 모르는 후보 ID는 거부한다. 다음 확인 사항(1~3개)은 명령이 아니라 읽기·검토 단계다.
-- 끝내 검증되지 않은 후보는 플랫폼이 `unreviewed`로 표시한다(`verification_quarantined`, `verification_not_completed`, `verification_budget_exceeded`). 형식 오류만 있는 판정은 격리하지 않고 정리해 받으며, 판정의 `limitations`에 정리 내용(`citation_range_from_candidate`, `citation_range_unspecified`, `citation_list_trimmed`, `verification_list_trimmed`)을 남긴다.
+- 끝내 검증되지 않은 후보는 플랫폼이 `unreviewed`로 표시한다(`verification_quarantined`, `verification_not_completed`, `verification_budget_exceeded`). 배포 코드가 아닌 경로만 인용해 보내지 않은 조사 후보도 `unreviewed`이지만 한계는 `candidate_not_shipped` 하나이고 격리가 아니다(task 상태와 보고서 판정을 바꾸지 않는다). 형식 오류만 있는 판정은 격리하지 않고 정리해 받으며, 판정의 `limitations`에 정리 내용(`citation_range_from_candidate`, `citation_range_unspecified`, `citation_list_trimmed`, `verification_list_trimmed`)을 남긴다.
 - 파일·행·해시 검증은 인용의 출처를 확인할 뿐이다. 인용을 해석한 모델 문장의 의미적 정확성은 [평가](EVALUATION.md)의 판정으로만 잰다.
 
 ## 복구 경로
@@ -771,7 +772,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 ### schema 0.8(도구 진단 분류)
 
 - 분류 slot의 기록(stage `triage`)과 그 검증 기록(stage `verify`)이다. `slice`는 `{"key":"tNNN","modules":[]}`이다. 전체 역할의 선택 필드(문서 대조, probe, 강점, 경로 선택·읽기, 환경·문서 항목, 해석 한계)는 없다.
-- `triage_groups`는 보낸 묶음마다 `id`(`g1`~`g64`), `observation_ids`(최대 256), `context_evidence_ids`, 선택 `cross_tool`, 그리고 `classification`(`problem`은 `candidate_id`, `harmless`는 `reason`과 `evidence_ids`, `unclear`는 `reason`) 또는 `omitted`(`triage_item_rejected`·`triage_item_omitted`·`triage_answer_missing`)를 가진다. 관찰은 묶음 하나에만 들고 보낸 모든 관찰이 묶음에 든다.
+- `triage_groups`는 보낸 묶음마다 `id`(`g1`~`g64`), `observation_ids`(최대 256), `context_evidence_ids`, 선택 `cross_tool`, 그리고 `classification`(`problem`은 `candidate_id`, `harmless`는 `reason`과 `evidence_ids`, `unclear`는 `reason`) 또는 `omitted`(`triage_item_rejected`·`triage_item_omitted`·`triage_answer_missing`)를 가진다. 관찰은 묶음 하나에만 들고 보낸 모든 관찰이 묶음에 든다. 요청의 묶음 하나가 부분 답을 받았으면 부분마다 묶음 하나가 저장된다(부분의 관찰·`cross_tool`·문제 후보, `id`는 저장 순서대로 `g1`부터). 그래서 기록의 묶음은 요청의 묶음보다 많을 수 있고 `id`가 요청의 `id`와 같다고 가정하지 않는다.
 - 후보는 `triage_1`~`triage_64`이고 origin `triage`, 묶음과 같은 관찰 ID를 가진다. 관찰 참조는 최대 1,024개다. 분류 기록의 상류는 분석기 task와 `review.interpret`, 검증 기록의 상류는 `review.documents`와 `review.triage.tNNN`이다.
 - 보고서 생성기 22부터 읽는다(`TriageReviewDecoder`). [분류 예시](../examples/review/triage/triage.t001.json) · [검증 예시](../examples/review/triage/verify.t001.json)
 

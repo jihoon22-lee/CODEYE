@@ -2,6 +2,7 @@ package review
 
 import (
 	"encoding/json"
+	"os/exec"
 	"slices"
 	"strings"
 	"testing"
@@ -148,6 +149,15 @@ func TestNothingToVerifyWhenAllCandidatesAreAboutNonShippedPaths(t *testing.T) {
 	if r.CodeReview.CandidatesNotShipped != withCandidates {
 		t.Fatalf("counted %d of %d", r.CodeReview.CandidatesNotShipped, withCandidates)
 	}
+	// Setting candidates aside is not a failure or a doubt: the run's status
+	// and verdict are those of a run whose model raised no candidate at all.
+	none := coverageScript(t)
+	none["investigate"] = func(int, opencode.Request) opencode.Reply { return asJSON(map[string]any{"candidates": []any{}}) }
+	baselineJob := coverageJob(t)
+	baseline, _ := reportAt(t, &baselineJob, sliceExampleStatic(t), &scriptedCaller{script: none}, smallBudget, &exampleIDs{n: 0xbf8})
+	if r.Status != baseline.Status || r.QualityVerdict != baseline.QualityVerdict || r.CodeReview.CandidatesNotShipped == 0 || baseline.CodeReview.CandidatesNotShipped != 0 {
+		t.Fatalf("status %s/%s against %s/%s with no candidate", r.Status, r.QualityVerdict, baseline.Status, baseline.QualityVerdict)
+	}
 	for _, f := range r.Findings {
 		if strings.Contains(f.Title, "시험 코드의 단언 누락") {
 			t.Fatalf("listed: %s", f.ID)
@@ -162,17 +172,60 @@ func TestShippedSourceInTheScope(t *testing.T) {
 		name  string
 		tree  map[string]string
 		scope domain.Scope
-		want  bool
+		// changed makes the job a pull request of these files.
+		changed []string
+		want    bool
 	}{
-		{"shipped and tests", map[string]string{"go.mod": "module x\n", "a.go": "package x\n", "a_test.go": "package x\n"}, domain.Scope{Kind: "full"}, true},
-		{"tests and examples only", map[string]string{"go.mod": "module x\n", "a_test.go": "package x\n", "examples/main.go": "package main\n"}, domain.Scope{Kind: "full"}, false},
-		{"scope inside the examples", map[string]string{"go.mod": "module x\n", "a.go": "package x\n", "examples/main.go": "package main\n"}, domain.Scope{Kind: "paths", Paths: []string{"examples"}}, false},
+		{"shipped and tests", map[string]string{"go.mod": "module x\n", "a.go": "package x\n", "a_test.go": "package x\n"}, domain.Scope{Kind: "full"}, nil, true},
+		{"tests and examples only", map[string]string{"go.mod": "module x\n", "a_test.go": "package x\n", "examples/main.go": "package main\n"}, domain.Scope{Kind: "full"}, nil, false},
+		{"scope inside the examples", map[string]string{"go.mod": "module x\n", "a.go": "package x\n", "examples/main.go": "package main\n"}, domain.Scope{Kind: "paths", Paths: []string{"examples"}}, nil, false},
+		{"pull request that changes tests only", map[string]string{"go.mod": "module x\n", "a.go": "package x\n", "a_test.go": "package x\n"}, domain.Scope{Kind: "full"}, []string{"a_test.go"}, false},
+		{"pull request that changes shipped code", map[string]string{"go.mod": "module x\n", "a.go": "package x\n", "a_test.go": "package x\n"}, domain.Scope{Kind: "full"}, []string{"a.go", "a_test.go"}, true},
 	}
 	for _, c := range cases {
 		j := treeJob(t, c.tree)
 		j.Scope = c.scope
+		if c.changed != nil {
+			j.PullRequest = &domain.PullRequestJob{Number: 7, Changed: c.changed}
+		}
 		if got := (&roleStage{j: j}).hasShippedSource(); got != c.want {
 			t.Fatalf("%s: %v", c.name, got)
 		}
+	}
+}
+
+// The dry-run upstream (scripts/fake_model_upstream.py) raises a candidate
+// about the first excerpt on a path that is not shipped code beside its
+// candidate about shipped code: the product leaves the first out of the
+// verification and the findings and counts it, whatever the shape errors the
+// upstream injects.
+func TestDryRunUpstreamRaisesACandidateAboutATestPath(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 is not installed")
+	}
+	for _, x := range []struct {
+		name             string
+		shape, integrity float64
+	}{{"plain", 0, 0}, {"form", 1, 0}} {
+		t.Run(x.name, func(t *testing.T) {
+			j := coverageJob(t)
+			script := coverageScript(t)
+			for _, role := range []string{record.StageInvestigate, record.StageVerify} {
+				script[role] = func(_ int, q opencode.Request) opencode.Reply {
+					return dryRunUpstream(t, python, role, q, x.shape, x.integrity)
+				}
+			}
+			caller := &scriptedCaller{script: script}
+			r, _ := reportAt(t, &j, sliceExampleStatic(t), caller, smallBudget, &exampleIDs{n: 0xc10})
+			if r.CodeReview.CandidatesNotShipped == 0 {
+				t.Fatalf("no candidate about a test path was left out: %+v", r.CodeReview)
+			}
+			for _, f := range r.Findings {
+				if strings.Contains(f.Title, "about a test path") {
+					t.Fatalf("listed: %s", f.ID)
+				}
+			}
+		})
 	}
 }

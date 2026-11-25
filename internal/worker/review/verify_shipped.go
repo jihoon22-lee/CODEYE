@@ -1,6 +1,8 @@
 package review
 
 import (
+	"slices"
+
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
@@ -21,11 +23,15 @@ import (
 // shipped source at all (an examples-only repository, a tests-only change)
 // there is nothing else to review and no candidate is set aside.
 
-// hasShippedSource reports a source file in the review scope that is shipped
-// code.
+// hasShippedSource reports a source file under review that is shipped code:
+// in the review scope and, for a pull request, among its changed files (the
+// review reads nothing else of a pull request).
 func (s *roleStage) hasShippedSource() bool {
 	scope := normalizedScope(s.j.Scope)
 	for p := range s.entries() {
+		if s.j.PullRequest != nil && !slices.Contains(s.j.PullRequest.Changed, p) {
+			continue
+		}
 		if record.SourceKind(p) == "code" && record.PathClass(p) == "" && inScope(p, scope) {
 			return true
 		}

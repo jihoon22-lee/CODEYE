@@ -14,7 +14,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000583",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "91986cec06b703520aeb9a3b9150c0326af13821ebe0ec81b99ff5b07d165cdc",
+      "sha256": "a6c9dba35aef2069184151b47ed1edc2f841c4415f5ca18be1b2acd2f66b0bf9",
       "size_bytes": 26016,
       "task_key": null
     },
@@ -752,7 +752,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000056b",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "8b0151fb154d269373fb28b6d9073fc33cd385d67c4a1c03b2480bb1fd6cd5bd",
+      "sha256": "203324085b480854fa3cb1326e3421cca78ee484b2016e27df25b869257df6ba",
       "size_bytes": 4826,
       "task_key": "review.verify"
     },
@@ -794,7 +794,7 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "77b9575ece7ac4b077554aa851c972a976109427f64b713077dd3d04e19bb562",
+    "input_digest": "0422e02f9d5a2e18c4103df29257c58df81c726c4985bf035fdc382392b4893d",
     "result_manifest_artifact_id": null,
     "version": "24"
   },
@@ -967,7 +967,7 @@
           "slices": []
         }
       ],
-      "request_bytes_sent": 95263,
+      "request_bytes_sent": 95461,
       "scope": {
         "key": "review.scope",
         "result": "accepted",
@@ -977,7 +977,7 @@
     },
     "pack_id": "review",
     "pack_version": "2.10.0",
-    "request_bytes": 95263,
+    "request_bytes": 95461,
     "roles": [
       {
         "key": "review.investigate",
@@ -1233,9 +1233,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "48366f17d6de51aace5f6d9a4cf379c059dd71273a944164514f3ce419a13216",
+        "pack_sha256": "f34909e035ecf7bca46aafd021ff978510e11bb64e8b666cb4d213edabb67dfa",
         "pack_version": "2.10.0",
-        "request_sha256": "1a6d23ea85c15b9d120baa8ad6ce01d11020c53e2631383b8e783c67a38c021b",
+        "request_sha256": "5c07f341a58672b04c999558eebabfbce113e39aa1af90cac3e8ee185ecf5e00",
         "role": "verify",
         "task_key": "review.verify"
       },
