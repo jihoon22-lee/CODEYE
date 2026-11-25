@@ -12,7 +12,8 @@ import (
 )
 
 // triagePlanKeys are the triage slot tasks a plan of j holds, in order:
-// each slot's triage before its verification.
+// each slot's triage before its verification. They end the plan, after the
+// module slices and the contract follow-up.
 func triagePlanKeys(j analysis.Job) []string {
 	var out []string
 	for i := range (Handler{}).triageSlots(j) {

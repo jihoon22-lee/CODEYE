@@ -14,7 +14,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000583",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "6a0fd7c679775415142881967fef20289ae0bfabaaa2fe5f1067761618cd241d",
+      "sha256": "8395c74d4455ba8e3e9096e4d1e35ccaa1857fc6ca7fd7d28a01520014d54182",
       "size_bytes": 26016,
       "task_key": null
     },
@@ -757,8 +757,17 @@
       "task_key": "review.verify"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.8",
+      "decoder": "application/vnd.codeye.review-scope+json;schema_version=0.3",
       "id": "0195f3a0-0000-7000-8000-00000000056d",
+      "media_type": "application/vnd.codeye.review-scope+json",
+      "role": "other",
+      "sha256": "23ad33385a130cae8b4a1bcde735d72d43031623213f5d0dcd4929ee7857a486",
+      "size_bytes": 2470,
+      "task_key": "review.scope"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.8",
+      "id": "0195f3a0-0000-7000-8000-00000000057e",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
       "sha256": "b384b131a3894c92a1b38d56971649ec40024f214204b68e34fdd9904ea8022b",
@@ -767,21 +776,12 @@
     },
     {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.8",
-      "id": "0195f3a0-0000-7000-8000-00000000056f",
+      "id": "0195f3a0-0000-7000-8000-000000000580",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
       "sha256": "196243450f9267acfc47971bb51901da930771a470adff5d69017524500ce787",
       "size_bytes": 1247,
       "task_key": "review.verify.t001"
-    },
-    {
-      "decoder": "application/vnd.codeye.review-scope+json;schema_version=0.3",
-      "id": "0195f3a0-0000-7000-8000-000000000573",
-      "media_type": "application/vnd.codeye.review-scope+json",
-      "role": "other",
-      "sha256": "23ad33385a130cae8b4a1bcde735d72d43031623213f5d0dcd4929ee7857a486",
-      "size_bytes": 2470,
-      "task_key": "review.scope"
     }
   ],
   "attempt": {
@@ -794,7 +794,7 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "0e640680b322cd60570478dae7662004b4cae100f73bc19b252b1209d28b9fc8",
+    "input_digest": "23a65549be3544cc6b21fbb2b2cdfac06e8d3dc42cb64a7c6aa9fde5186a4747",
     "result_manifest_artifact_id": null,
     "version": "22"
   },
@@ -4145,7 +4145,7 @@
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000582",
+      "id": "0195f3a0-0000-7000-8000-00000000057c",
       "key": "review.contract",
       "reason": "no_review_scope",
       "required_for_verdict": false,
@@ -4180,70 +4180,70 @@
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000574",
+      "id": "0195f3a0-0000-7000-8000-00000000056e",
       "key": "review.investigate.s001",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000576",
+      "id": "0195f3a0-0000-7000-8000-000000000570",
       "key": "review.investigate.s002",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000578",
+      "id": "0195f3a0-0000-7000-8000-000000000572",
       "key": "review.investigate.s003",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000057a",
+      "id": "0195f3a0-0000-7000-8000-000000000574",
       "key": "review.investigate.s004",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000057c",
+      "id": "0195f3a0-0000-7000-8000-000000000576",
       "key": "review.investigate.s005",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000057e",
+      "id": "0195f3a0-0000-7000-8000-000000000578",
       "key": "review.investigate.s006",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000580",
+      "id": "0195f3a0-0000-7000-8000-00000000057a",
       "key": "review.investigate.s007",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000572",
+      "id": "0195f3a0-0000-7000-8000-00000000056c",
       "key": "review.scope",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000056c",
+      "id": "0195f3a0-0000-7000-8000-00000000057d",
       "key": "review.triage.t001",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000570",
+      "id": "0195f3a0-0000-7000-8000-000000000581",
       "key": "review.triage.t002",
       "reason": "no_review_scope",
       "required_for_verdict": false,
@@ -4257,63 +4257,63 @@
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000575",
+      "id": "0195f3a0-0000-7000-8000-00000000056f",
       "key": "review.verify.s001",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000577",
+      "id": "0195f3a0-0000-7000-8000-000000000571",
       "key": "review.verify.s002",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000579",
+      "id": "0195f3a0-0000-7000-8000-000000000573",
       "key": "review.verify.s003",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000057b",
+      "id": "0195f3a0-0000-7000-8000-000000000575",
       "key": "review.verify.s004",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000057d",
+      "id": "0195f3a0-0000-7000-8000-000000000577",
       "key": "review.verify.s005",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000057f",
+      "id": "0195f3a0-0000-7000-8000-000000000579",
       "key": "review.verify.s006",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000581",
+      "id": "0195f3a0-0000-7000-8000-00000000057b",
       "key": "review.verify.s007",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000056e",
+      "id": "0195f3a0-0000-7000-8000-00000000057f",
       "key": "review.verify.t001",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000571",
+      "id": "0195f3a0-0000-7000-8000-000000000582",
       "key": "review.verify.t002",
       "reason": "no_review_scope",
       "required_for_verdict": false,

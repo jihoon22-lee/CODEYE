@@ -259,7 +259,7 @@ func (s *roleStage) sliceTask(key string) analysis.TaskResult {
 		return result(domain.TaskFailed, reasonCallCountFailed)
 	}
 	decision := decisionAdmitted
-	if s.h.maxCalls(s.j.Scope)-used < s.sliceReserve {
+	if s.h.maxCalls(s.j.Scope)-used < s.sliceReserve+s.triageHold() {
 		decision = decisionExhausted
 	}
 	if err := os.WriteFile(admissionPath(s.j, key), []byte(decision), 0o600); err != nil {

@@ -308,8 +308,10 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 			// as in TestDiscoveryTasksThroughTheWorker.
 			want := []string{"env.discover=succeeded", "docs.discover=succeeded", "go-vet=succeeded", "go-vet.m01=succeeded", "go-vet.m02=failed:" + govet.ReasonToolchain,
 				"review.environment=succeeded", "review.documents=succeeded", "review.investigate=succeeded", tc.interpret, "review.verify=succeeded"}
-			// The two diagnostic triage slots have nothing to classify: no
-			// diagnostic, or the one the interpretation already carries.
+			want = append(want, "review.scope=succeeded", "review.contract=skipped_policy:no_review_scope")
+			// The two diagnostic triage slots, last in the plan, have
+			// nothing to classify: no diagnostic, or the one the
+			// interpretation already carries.
 			triage := "skipped_policy:" + domain.ReasonNoReviewScope
 			if strings.HasSuffix(tc.interpret, "no_tool_observations") {
 				triage = "skipped_policy:no_tool_observations"
@@ -317,7 +319,6 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 			for _, slot := range []string{"t001", "t002"} {
 				want = append(want, "review.triage."+slot+"="+triage, "review.verify."+slot+"="+triage)
 			}
-			want = append(want, "review.scope=succeeded", "review.contract=skipped_policy:no_review_scope")
 			if !slices.Equal(got, want) {
 				t.Fatalf("tasks\n got %v\nwant %v", got, want)
 			}

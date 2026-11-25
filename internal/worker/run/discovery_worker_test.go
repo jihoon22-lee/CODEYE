@@ -124,9 +124,9 @@ func TestDiscoveryTasksThroughTheWorker(t *testing.T) {
 		{"go-vet", "succeeded", ""}, {"go-vet.m01", "succeeded", ""}, {"go-vet.m02", "failed", govet.ReasonToolchain},
 		{"review.environment", "skipped_policy", "model_source_not_approved"}, {"review.documents", "skipped_policy", "model_source_not_approved"}, {"review.investigate", "skipped_policy", "model_source_not_approved"},
 		{"review.interpret", "skipped_policy", "model_source_not_approved"}, {"review.verify", "skipped_policy", "model_source_not_approved"},
+		{"review.scope", "skipped_policy", "model_source_not_approved"},
 		{"review.triage.t001", "skipped_policy", "model_source_not_approved"}, {"review.verify.t001", "skipped_policy", "model_source_not_approved"},
 		{"review.triage.t002", "skipped_policy", "model_source_not_approved"}, {"review.verify.t002", "skipped_policy", "model_source_not_approved"},
-		{"review.scope", "skipped_policy", "model_source_not_approved"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("tasks %v", got)

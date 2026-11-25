@@ -54,14 +54,14 @@ func TestReviewPlanOrderStagesAndRequired(t *testing.T) {
 	want := []spec{{"env.discover", domain.StageEnvironment, true}, {"docs.discover", domain.StageDocuments, true}, {"go-vet", domain.StageStaticAnalysis, true},
 		{"review.environment", domain.StageEnvironment, false}, {"review.documents", domain.StageDocuments, true}, {"review.investigate", domain.StageCodeReview, true},
 		{"review.interpret", domain.StageCodeReview, false}, {"review.verify", domain.StageCodeReview, true}}
-	for _, k := range triagePlanKeys(j) {
-		want = append(want, spec{k, domain.StageCodeReview, false})
-	}
 	want = append(want, spec{record.TaskScope, domain.StageCodeReview, false})
 	slots := coverageSlots(planSlices(j.Snapshot.Manifest, j.Scope, record.DefaultSecondary))
 	for i := range slots {
 		inv, ver := slotTaskKeys(sliceKey(i))
 		want = append(want, spec{inv, domain.StageCodeReview, false}, spec{ver, domain.StageCodeReview, false})
+	}
+	for _, k := range triagePlanKeys(j) {
+		want = append(want, spec{k, domain.StageCodeReview, false})
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("plan %v", got)
@@ -421,12 +421,13 @@ func TestDiscoveryCompositionPlans(t *testing.T) {
 		keys = append(keys, p.Key)
 	}
 	want := []string{"env.discover", "docs.discover", "go-vet", "review.environment", "review.documents", "review.investigate", "review.interpret", "review.verify"}
-	want = append(append(want, triagePlanKeys(j)...), record.TaskScope)
+	want = append(want, record.TaskScope)
 	slots := coverageSlots(planSlices(j.Snapshot.Manifest, j.Scope, record.DefaultSecondary))
 	for i := range slots {
 		inv, ver := slotTaskKeys(sliceKey(i))
 		want = append(want, inv, ver)
 	}
+	want = append(want, triagePlanKeys(j)...)
 	if !slices.Equal(keys, want) || w.Info() != h.Info() {
 		t.Fatalf("plan %v", keys)
 	}

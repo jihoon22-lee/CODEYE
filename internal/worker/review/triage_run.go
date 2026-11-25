@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -128,15 +129,7 @@ func (s *roleStage) triageTask(key string) analysis.TaskResult {
 	if reason != "" {
 		return s.triageSkip(key, domain.TaskSkippedPolicy, reason)
 	}
-	interp, uInt := s.prior(record.StageInterpret)
-	interpreted := map[string]bool{}
-	if uInt.State == record.UpstreamAccepted {
-		for _, c := range interp.Candidates {
-			for _, id := range c.ObservationIDs {
-				interpreted[id] = true
-			}
-		}
-	}
+	interpreted, uInt := s.interpretedObservations()
 	plan := s.planTriage(docs, interpreted, s.h.triageSlots(s.j))
 	if n > len(plan.bins) {
 		return s.triageSkip(key, domain.TaskSkippedPolicy, domain.ReasonNoReviewScope)
@@ -164,6 +157,80 @@ func (s *roleStage) triageTask(key string) analysis.TaskResult {
 	}
 	upstream = append(upstream, uInt)
 	return s.runTriage(plan.bins[n-1], plan, upstream)
+}
+
+// interpretedObservations are the observations an accepted interpret
+// record's candidates cover, which the triage does not send again.
+func (s *roleStage) interpretedObservations() (map[string]bool, record.Upstream) {
+	interp, up := s.prior(record.StageInterpret)
+	interpreted := map[string]bool{}
+	if up.State == record.UpstreamAccepted {
+		for _, c := range interp.Candidates {
+			for _, id := range c.ObservationIDs {
+				interpreted[id] = true
+			}
+		}
+	}
+	return interpreted, up
+}
+
+// triageShareCalls is the call count per held triage pair: the triage
+// share is one pair (record.SliceMinCalls) for every triageShareCalls calls
+// the whole-run roles left, at least one pair.
+const triageShareCalls = 16
+
+func triageHoldPath(j analysis.Job) string { return filepath.Join(j.Scratch, "review.triage.hold") }
+
+// triageHold is the part of the call ceiling the module slices and the
+// contract follow-up leave for the diagnostic triage slots, which run after
+// them (docs/REVIEW.md#호출-비용). The slices come first: when every slice
+// with lines left fits in the calls the whole-run roles left (its
+// admission reserve each), nothing is held and the triage gets the calls
+// the slices did not use. Only when they cannot all fit is a bounded share
+// held: one pair per triageShareCalls calls left, at least one (the first
+// slot holds the highest-severity groups), never more than the slots that
+// have groups. It is decided once per attempt, at the first slice or
+// contract admission, and kept next to the call counter; without an
+// accepted scope artifact, a model or diagnostics nothing is held.
+func (s *roleStage) triageHold() int {
+	if b, err := readBounded(triageHoldPath(s.j), 32); err == nil {
+		if n, err := strconv.Atoi(string(b)); err == nil && n >= 0 {
+			return n
+		}
+	}
+	n := s.decideTriageHold()
+	if err := os.WriteFile(triageHoldPath(s.j), []byte(strconv.Itoa(n)), 0o600); err != nil {
+		return 0
+	}
+	return n
+}
+
+func (s *roleStage) decideTriageHold() int {
+	slots := s.h.triageSlots(s.j)
+	if s.h.Caller == nil || slots == 0 {
+		return 0
+	}
+	doc, up := s.readScope()
+	if up.State != record.UpstreamAccepted {
+		return 0
+	}
+	left := s.h.maxCalls(s.j.Scope) - doc.Budget.CallsBeforeSlices
+	need := 0
+	for _, sl := range doc.Slices {
+		if slices.ContainsFunc(sl.Files, func(f record.ScopeFile) bool { return f.State == record.FilePlanned }) {
+			need += doc.Budget.SliceReserveCalls
+		}
+	}
+	if need <= left {
+		return 0
+	}
+	docs, _, reason := s.toolFacts()
+	if reason != "" {
+		return 0
+	}
+	interpreted, _ := s.interpretedObservations()
+	plan := s.planTriage(docs, interpreted, slots)
+	return min(record.SliceMinCalls*max(1, left/triageShareCalls), record.SliceMinCalls*len(plan.bins))
 }
 
 // triageSent is one group as a request carries it.

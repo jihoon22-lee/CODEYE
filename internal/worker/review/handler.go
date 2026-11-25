@@ -123,15 +123,6 @@ func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec,
 		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증", Stage: domain.StageCodeReview})
 	sp := planSlicesFor(j.Snapshot.Manifest, j.Scope, h.secondary(), changedPaths(j))
 	groups := codeGroupsFor(j.Snapshot.Manifest, j.Scope, h.secondary(), changedPaths(j), true)
-	// The diagnostic triage slots come before the module slices: tool
-	// diagnostics are triaged first under the shared call ceiling
-	// (docs/REVIEW.md#도구-진단-분류).
-	for i := range triageSlotCount(groups.eligible) {
-		tri, ver := "review."+record.StageTriage+"."+triageKey(i), "review."+record.StageVerify+"."+triageKey(i)
-		plan = append(plan,
-			analysis.TaskSpec{Key: tri, Required: false, Title: "도구 진단 분류 " + triageKey(i), Stage: domain.StageCodeReview},
-			analysis.TaskSpec{Key: ver, Required: false, Title: "분류 후보 검증 " + triageKey(i), Stage: domain.StageCodeReview})
-	}
 	if groups.eligible > 0 {
 		plan = append(plan, analysis.TaskSpec{Key: record.TaskScope, Required: false, Title: "모듈별 검토 범위", Stage: domain.StageCodeReview})
 		slots := coverageSlots(sp)
@@ -151,6 +142,15 @@ func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec,
 	isCode := func(f plannedFile) bool { return record.SourceKind(f.Path) == "code" }
 	if j.AllowModelReview && h.Caller != nil && docs && (slices.ContainsFunc(sp.Overview, isCode) || slices.ContainsFunc(sp.Rest, isCode)) {
 		plan = append(plan, analysis.TaskSpec{Key: record.TaskContract, Title: "문서 계약 후속 검토", Stage: domain.StageCodeReview})
+	}
+	// The diagnostic triage slots come last: the module slices and the
+	// contract follow-up are admitted first and leave the triage a bounded
+	// share of the call ceiling (triageHold, docs/REVIEW.md#호출-비용).
+	for i := range triageSlotCount(groups.eligible) {
+		tri, ver := "review."+record.StageTriage+"."+triageKey(i), "review."+record.StageVerify+"."+triageKey(i)
+		plan = append(plan,
+			analysis.TaskSpec{Key: tri, Required: false, Title: "도구 진단 분류 " + triageKey(i), Stage: domain.StageCodeReview},
+			analysis.TaskSpec{Key: ver, Required: false, Title: "분류 후보 검증 " + triageKey(i), Stage: domain.StageCodeReview})
 	}
 	return plan, nil
 }
@@ -517,6 +517,11 @@ func (s *roleStage) reserveCall() *analysis.TaskResult {
 		// A triage retry keeps the call its verification needs.
 		if s.triage != "" && s.role == record.StageTriage {
 			reserve = 1
+		}
+		// The module slices and the contract follow-up leave the triage
+		// slots their held share.
+		if s.slice != nil || s.role == record.StageContract {
+			reserve += s.triageHold()
 		}
 		if used >= s.h.maxCalls(s.j.Scope)-reserve {
 			r := result(domain.TaskBudgetExhausted, reasonBudgetExhausted)
