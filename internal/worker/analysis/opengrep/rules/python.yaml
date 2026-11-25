@@ -107,6 +107,7 @@ rules:
           - pattern-either:
               - pattern: open($PATH, ...)
               - pattern: io.open($PATH, ...)
+              - pattern: codecs.open($PATH, ...)
               - pattern: os.open($PATH, ...)
               - pattern: os.remove($PATH)
               - pattern: os.unlink($PATH)
@@ -128,6 +129,12 @@ rules:
                   ...
               - pattern-inside: |
                   $PATH = pathlib.Path(...) / $NAME
+                  ...
+              # A path joined onto a base directory held in a variable.
+              - pattern-inside: |
+                  $BASE = pathlib.Path(...)
+                  ...
+                  $PATH = $BASE / $NAME
                   ...
           - focus-metavariable: $PATH
 
@@ -364,6 +371,12 @@ rules:
       - pattern: flask.escape(...)
       - pattern: django.utils.html.escape(...)
       - pattern: markupsafe.Markup.escape(...)
+      # A project's own HTML escaper, often in another module, by its name.
+      - patterns:
+          - pattern: $ESCAPE(...)
+          - metavariable-regex:
+              metavariable: $ESCAPE
+              regex: ^(.*\.)?(\w*escape_html\w*|\w*html_escape\w*|escape_for_html|escape_html|escape)$
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -385,3 +398,26 @@ rules:
               - pattern: return f"..."
               - pattern: return "...".format(...)
               - pattern: return "..." % $X
+      # The string a Flask view builds in a variable and returns: the text
+      # assigned or appended to that variable.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(...):
+                ...
+          - pattern-either:
+              - pattern-inside: |
+                  $R += $TEXT
+                  ...
+                  return $R
+              - pattern-inside: |
+                  $R = $TEXT
+                  ...
+                  return $R
+          - pattern-either:
+              - pattern: f"..."
+              - pattern: '"..." + $X'
+              - pattern: $X + "..."
+              - pattern: '"...".format(...)'
+              - pattern: '"..." % $X'
+          - pattern: $TEXT

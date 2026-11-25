@@ -21,3 +21,11 @@ def note():
     text = request.form["note"]
     body = Markup("<div>%s</div>" % text)  # expect: codeye.python.html-injection
     return render_template_string("{{ body }}", body=body)
+
+
+@app.route("/search")
+def search():
+    term = request.args.get("q", "")
+    page = "<h2>Results</h2>"
+    page += f"<p>No match for {term}</p>"  # expect: codeye.python.html-injection
+    return page

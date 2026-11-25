@@ -19,3 +19,15 @@ def greet():
 @app.route("/api")
 def api():
     return jsonify(name=request.args.get("name", ""))
+
+
+def escape_html(text):
+    return str(escape(text))
+
+
+@app.route("/search")
+def search():
+    term = request.args.get("q", "")
+    page = "<h2>Results</h2>"
+    page += f"<p>No match for {escape_html(term)}</p>"
+    return page

@@ -1,3 +1,4 @@
+import codecs
 import os
 import pathlib
 
@@ -30,3 +31,17 @@ def report_view(request):
     path = request.GET["report"]
     os.remove(path)  # expect: codeye.python.path-traversal
     return None
+
+
+@app.route("/notes/<name>")
+def notes(name):
+    lang = request.args.get("lang", "en")
+    with codecs.open(f"{ROOT}/notes/{lang}.txt", "r", "utf-8") as f:  # expect: codeye.python.path-traversal
+        return f.read()
+
+
+@app.route("/archive")
+def archive():
+    base = pathlib.Path(ROOT)
+    target = base / request.args.get("file", "")
+    return target.read_bytes()  # expect: codeye.python.path-traversal
