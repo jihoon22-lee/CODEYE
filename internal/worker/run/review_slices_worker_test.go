@@ -170,6 +170,27 @@ func copyCoverageFixture(t *testing.T, dst string) {
 // manifest's task rows and the agent.
 func runSlices(t *testing.T, caller *sliceScripted, maxCalls int, cancelOnBlock bool) (*workerproto.Complete, []string, *fakeAgent, analysis.ResultManifest) {
 	t.Helper()
+	var during func(*fakeAgent)
+	if cancelOnBlock {
+		during = func(fa *fakeAgent) {
+			select {
+			case <-caller.blocked:
+			case <-time.After(60 * time.Second):
+				t.Fatalf("slice request not made; messages %v", fa.kinds())
+			}
+			if err := fa.conn.Send(&workerproto.Cancel{Reason: workerproto.CancelRunRequested}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	return runSlicesAt(t, caller, maxCalls, 0, during)
+}
+
+// runSlicesAt is runSlices with any caller, the hello's degree of
+// parallelism of the review pairs (0: none given) and during, run once the
+// job is sent.
+func runSlicesAt(t *testing.T, caller review.Caller, maxCalls, parallel int, during func(*fakeAgent)) (*workerproto.Complete, []string, *fakeAgent, analysis.ResultManifest) {
+	t.Helper()
 	e := newEnv(t)
 	if err := os.Remove(filepath.Join(e.src, "main.go")); err != nil {
 		t.Fatal(err)
@@ -192,21 +213,21 @@ func runSlices(t *testing.T, caller *sliceScripted, maxCalls int, cancelOnBlock 
 			t.Errorf("worker exit %d", code)
 		}
 	})
-	fa.hello(e)
+	if err := fa.conn.Send(&workerproto.Hello{Protocol: workerproto.Protocol, WorkerID: domain.NewID(), DataRoot: e.data, ScratchRoot: e.scratch, ReviewParallel: parallel}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-fa.ready:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no ready")
+	}
 	job := localJob(e)
 	job.AllowModelReview = true
 	if err := fa.conn.Send(job); err != nil {
 		t.Fatal(err)
 	}
-	if cancelOnBlock {
-		select {
-		case <-caller.blocked:
-		case <-time.After(60 * time.Second):
-			t.Fatalf("slice request not made; messages %v", fa.kinds())
-		}
-		if err := fa.conn.Send(&workerproto.Cancel{Reason: workerproto.CancelRunRequested}); err != nil {
-			t.Fatal(err)
-		}
+	if during != nil {
+		during(fa)
 	}
 	var c *workerproto.Complete
 	select {
