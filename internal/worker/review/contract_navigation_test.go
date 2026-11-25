@@ -19,6 +19,7 @@ import (
 )
 
 func TestInvestigateKeepsFindingsWhenProbeIsInvalid(t *testing.T) {
+	t.Parallel()
 	// The files are longer than the request holds, so the contract's
 	// implementation line stays unread and navigation can offer it.
 	longPrefix := strings.Repeat("// unrelated setup\n", 700)

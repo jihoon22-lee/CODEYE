@@ -422,6 +422,7 @@ func limitUnitTasks(n int) func(*Schedule) {
 // (review_call_cap_exceeded), no task is counted past its bound, and the
 // result is still the same at every degree of parallelism.
 func TestPairsTaskCallBoundIsEnforced(t *testing.T) {
+	t.Parallel()
 	f := newPairsFixture(t, 30, 40, 99)
 	f.caller.fault = repairFault
 	region := func(k string) bool {
@@ -496,6 +497,7 @@ func countedCallsBefore(t *testing.T, f *pairsFixture) []string {
 // slices leave and runs beside them; the result does not depend on the
 // degree of parallelism or the order answers arrive in.
 func TestPairsPlentyOfCalls(t *testing.T) {
+	t.Parallel()
 	f := newPairsFixture(t, 8, 40, 99)
 	ref, _ := checkPairs(t, f, nil)
 	if n := statusOf(ref)[domain.TaskBudgetExhausted]; n != 0 {
@@ -507,6 +509,7 @@ func TestPairsPlentyOfCalls(t *testing.T) {
 // rest refused, the triage holds its share; the same slots are admitted at
 // every degree of parallelism.
 func TestPairsCeilingReachedMidway(t *testing.T) {
+	t.Parallel()
 	f := newPairsFixture(t, 30, 40, 20)
 	ref, waited := checkPairs(t, f, nil)
 	if waited == 0 {
@@ -548,6 +551,7 @@ func repairFault(q opencode.Request) (opencode.Reply, bool) {
 // ceiling; the calls a pair is granted are those sequential execution
 // grants.
 func TestPairsRepairsCompeteNearTheCeiling(t *testing.T) {
+	t.Parallel()
 	f := newPairsFixture(t, 30, 40, 40)
 	f.caller.fault = repairFault
 	ref, waited := checkPairs(t, f, nil)
@@ -559,6 +563,7 @@ func TestPairsRepairsCompeteNearTheCeiling(t *testing.T) {
 // TC-307: one pair times out; the others do not stop and the result is the
 // same at every degree of parallelism.
 func TestPairsOnePairTimesOut(t *testing.T) {
+	t.Parallel()
 	f := newPairsFixture(t, 8, 40, 99)
 	// The investigate of the first filled slot (the request that carries
 	// the slot's last file) times out.
@@ -596,6 +601,7 @@ func scopeOf(t *testing.T, j analysis.Job) record.ScopeDoc {
 // TC-307: a count that cannot be written fails that call alone
 // (review_call_count_failed); the other pairs go on.
 func TestPairsCountWriteFailure(t *testing.T) {
+	t.Parallel()
 	f := newPairsFixture(t, 8, 40, 99)
 	slot := scopeOf(t, f.j).Slices[1].Key
 	task := "review.verify." + slot

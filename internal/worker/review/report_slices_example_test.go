@@ -224,6 +224,7 @@ func TestReportSlicesSecretScreenUnusable(t *testing.T) {
 // TC-169: beyond the 96 slots the files are counted per module as not
 // planned, shown as a gap, and the report validates.
 func TestReportSlicesNotPlanned(t *testing.T) {
+	t.Parallel()
 	tree := map[string]string{"go.mod": "module sample.test/big\n\ngo 1.23\n", "README.md": "# Big\n"}
 	for i := range 600 {
 		tree[fmt.Sprintf("p/f%03d.go", i)] = "package p\n\n" + strings.Repeat("// filler line for the slice bound\n", 80)
@@ -313,6 +314,7 @@ func TestReportLineCoverageAcrossModules(t *testing.T) {
 }
 
 func TestCoverageVisitsSixtySevenModulesWithoutInventingCandidateVerification(t *testing.T) {
+	t.Parallel()
 	const modules = 67
 	tree := map[string]string{}
 	for i := range modules {
@@ -406,6 +408,7 @@ func TestInvestigationKeepsCandidateWhenStrengthCitesOnlyImportAndComment(t *tes
 }
 
 func TestExtendedCoverageReadsPastOrdinarySlotLimitOnRetry(t *testing.T) {
+	t.Parallel()
 	const tail = "late.go"
 	const marker = "return catalogueSize + 1"
 	tree := map[string]string{"go.mod": "module sample.test/catalogue\n\ngo 1.23\n"}
