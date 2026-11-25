@@ -245,7 +245,10 @@ func (v secView) buildActions() actionBlock {
 	mismatches := v.mismatchCards(anchors)
 	pending, secondaryPending := v.pendingCandidates()
 	secondary := append(secondaryActions, secondaryPending...)
-	slices.SortStableFunc(secondary, func(a, b Finding) int { return cmp.Compare(sevRank(b.Severity), sevRank(a.Severity)) })
+	// Confirmed findings before unconfirmed ones, most severe first within.
+	slices.SortStableFunc(secondary, func(a, b Finding) int {
+		return cmp.Or(cmp.Compare(ValidationClass(a), ValidationClass(b)), cmp.Compare(sevRank(b.Severity), sevRank(a.Severity)))
+	})
 
 	switch {
 	case len(a.Cards) > 0:
@@ -523,7 +526,11 @@ func (v secView) diagnosticFold(findings map[string]Finding) diagFold {
 	if triage == nil {
 		fold.Groups = v.diagGroups(all, nil, nil, &unplaced)
 	} else {
-		fold.Label = tf(l, "actions.diagnostics_triaged", total, triage.Triaged, len(all), len(tools))
+		// The headline counts what was decided (problem or harmless) and
+		// what the model left unclear apart: an unclear group is answered,
+		// not judged.
+		decided, unclear := triageDecided(triage)
+		fold.Label = tf(l, "actions.diagnostics_triaged", total, decided, unclear, len(all), len(tools))
 		fold.Note = l.Label("actions.diagnostics_triage_note")
 		bucket := map[string]string{}
 		for _, g := range triage.Groups {

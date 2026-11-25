@@ -1,6 +1,6 @@
 import type { AnalysisReport, Finding } from './analysisReport';
 import type { Sections } from './parseReportSections';
-import { duplicateReadingFindings, secondaryReviewFinding, sevRank } from './reportGroups';
+import { duplicateReadingFindings, secondaryReviewFinding, sevRank, validationClass } from './reportGroups';
 
 // What a reader acts on first, chosen from the stored report only. The cards
 // are the findings with a supported or reproduced validation on primary paths;
@@ -38,7 +38,9 @@ export function actionPlan(report: AnalysisReport, sections: Sections, isDispose
   const pendingDuplicates = duplicateReadingFindings(pending, report.observations);
   const open = pending.filter(f => !pendingDuplicates.has(f.id));
   const candidates = open.filter(f => !secondaryReviewFinding(f)).sort(bySeverity);
-  const secondary = [...actionable.filter(secondaryReviewFinding), ...open.filter(secondaryReviewFinding)].sort(bySeverity);
+  // Confirmed findings before unconfirmed ones, most severe first within.
+  const secondary = [...actionable.filter(secondaryReviewFinding), ...open.filter(secondaryReviewFinding)]
+    .sort((a, b) => validationClass(a) - validationClass(b) || bySeverity(a, b));
   const mismatches = sections.documents.comparisons
     .map((comparison, index) => ({ index, comparison }))
     .filter(row => row.comparison.status === 'mismatch' || row.comparison.status === 'partial')
