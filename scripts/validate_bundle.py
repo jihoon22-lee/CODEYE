@@ -24,7 +24,7 @@ except ImportError as exc:
 
 # Other scripts import these names from validate_bundle.
 from bundle_checks.common import ROOT, ensure, expect_invalid, json_file, make_validators, within_root, yaml_file
-from bundle_checks.report import check_analyzer, check_analyzer_observations, check_document_comparisons, check_document_excerpt_contracts, check_go_test_failure_contracts, check_observations, check_plan, check_report
+from bundle_checks.report import check_analyzer, check_analyzer_observations, check_document_comparisons, check_document_excerpt_contracts, check_go_test_failure_contracts, check_held_back_summary_contract, check_observations, check_plan, check_report
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_opengrep_pack, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
 from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_path_class_table, check_not_shipped_examples, check_slice_examples, check_triage_examples, check_workflow_example, pack_selection, shared_excerpt, slice_examples, triage_examples
 from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_shared_service_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
@@ -249,6 +249,8 @@ def main() -> None:
     path_rows = check_path_class_table()
     not_shipped_negatives = check_not_shipped_examples(role_docs)
     print(f"PASS: candidate_not_shipped marker bound to the evidence ({path_rows} path classes shared with the Go rule; {not_shipped_negatives} negative cases)")
+    held_back_negatives = check_held_back_summary_contract()
+    print(f"PASS: held-back hypotheses and set-aside candidates left out of the summary counts and priorities, by builder; {held_back_negatives} negative cases")
     workflow_negatives = check_workflow_example(review_validator, pack_doc, role_files)
     print(f"PASS: workflow routes and submitted source attached to the accepted document contract; {workflow_negatives} negative cases")
     workflow_report = copy.deepcopy(unscreened)

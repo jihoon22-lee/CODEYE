@@ -104,6 +104,30 @@ class ReportStructureTests(unittest.TestCase):
         self.assertFalse(quality_score.report_structure(report, [])["stats_consistent"])
 
 
+    def test_held_back_findings_are_not_counted_by_the_summary(self):
+        def row(validation, *limits):
+            return {"id": "f", "validation": validation, "disposition": "open", "limitations": list(limits)}
+
+        findings = [row("supported"), row("supported", "hypothesis_not_shipped"), row("inconclusive", "hypothesis_not_shipped"),
+                    row("unreviewed", "candidate_not_shipped"), row("inconclusive"), row("refuted", "hypothesis_not_shipped")]
+
+        def structure(version, actionable, pending, refuted=1):
+            report = {"builder": {"version": version}, "findings": findings,
+                      "summary": {"total_findings": 6, "actionable_findings": actionable, "pending_candidates": pending,
+                                  "refuted_findings": refuted}}
+            return quality_score.report_structure(report, [])["stats_consistent"]
+
+        self.assertTrue(structure("25", 1, 1))
+        self.assertFalse(structure("25", 2, 1))  # the held-back supported hypothesis is not an action item
+        self.assertFalse(structure("25", 1, 4))  # nor are the held-back hypothesis and candidate pending
+        self.assertFalse(structure("25", 1, 1, refuted=0))  # a refuted finding is still counted
+        self.assertTrue(structure("24", 2, 2))  # builder 24 gives the hypothesis string no meaning
+        self.assertFalse(structure("24", 1, 1))
+        self.assertTrue(structure("23", 2, 3))  # builder 23 neither
+        views = [quality_score.finding_view(f, {"builder": {"version": version}}) for version in ("25", "24") for f in findings[:2]]
+        self.assertEqual([v["actionable"] for v in views], [True, False, True, True])
+
+
 class SelectionTests(unittest.TestCase):
     def test_stratified_sample_is_seeded_and_covers_strata(self):
         chosen, record = quality_eval.select(CORPUS, sample=20, seed=3)

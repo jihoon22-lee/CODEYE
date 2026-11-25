@@ -595,3 +595,242 @@ HOLD-GO-05·HOLD-PY-07 수정 전 변형을 지침마다 세 번 실행했다. �
 - 조정자가 요청 예산 실험과 앞선 진단 분류 측정의 집계 관찰을 일반화해 지침 작성자에게 전달했다. 그러므로 세 dev 사례는 조정에 쓴 사례이고 이 측정은 독립 평가가 아니다.
 - 평가 운영자는 dev 사례를 읽었고 합성 회귀 사례를 직접 판정했다.
 - 판정자는 모델이다. 사람의 판정은 받지 않았다.
+
+## 봉인 보류 분할의 짝 측정(품질 작업 전 빌드와 현재 main)
+
+프로젝트 규모 결함 집합의 봉인한 `holdout` 분할(여섯 언어군, 9사례)을 두 빌드로 사례마다 한 번씩 실행한 짝 측정의 기록이다. 비교 대상은 품질 작업 전 빌드(커밋 `e7821c0`, 이하 기준)와 현재 main(커밋 `28e03c7`, 검토 지침 2.10.0, 보고서 생성기 25, 이하 현재)이다. 기준 문서는 2026-11-25에 첫 유료 호출 전에 썼고, 유료 실행과 판정은 2026-11-26에 했다. 두 빌드의 runner·말뭉치·스크립트는 모두 `28e03c7` checkout의 것을 썼고, `--build-root`로 제품만 바꿨다. 모델은 예산 relay를 거친 `gpt-6.2-sol`, OpenCode는 1.19.6이다. 호출 상한은 20이고, 요청·출력 예산은 각 빌드의 제품 기본값이다. 분석기 플래그는 두 빌드에서 같다. 의존성 받기는 두 빌드 모두 켰다(서비스 기본값이다. 앞선 측정은 runner 기본인 끔으로 실행했다). 패턴·taint 분석기(Opengrep)는 두 빌드 모두 설치하지 않았다. 사례마다 변경 전 변형을 빌드별로 1회 실행했다. 보류 봉인을 전후 비교에 쓴 것은 이번이 처음이자 유일하며, 다시 실행한 것은 없다.
+
+평가 운영자는 모델 에이전트이고 사람도 조정자도 아니다. 평가 운영자는 보류 사례의 발견을 판정하지 않았고 라벨과 비교하지도 않았다. 판정은 두 독립 모델 판정자가 빌드 정체를 지운 묶음 하나에서 했다(아래 주 결과).
+
+### 실행 전에 적은 기준
+
+기준 문서는 첫 유료 호출 전에 쓰고 읽기 전용으로 잠갔다. 덧붙임 둘도 첫 유료 호출 전에 적었고, 둘째 덧붙임의 수정 세 가지는 비용 없는 계획 수치만 근거로 했다.
+
+| 시점 | sha256 |
+|---|---|
+| 처음 기록(2026-11-25) | `12e707a9acbadef9a39af2614af76a53081d9b05970fb3687b6d7a7d6a6f8978` |
+| 덧붙임: 현재 빌드를 `28e03c7`로 확정 | `3941844a25759f9bb6a92dd76b5a476c9f2a255e49edbae3eed28fa75f13f4c6` |
+| 덧붙임: 수정 세 가지와 실행 규칙(최종) | `4566718a322c9e4fdabaa4e218a3be466bde34f410228ac9e7b7b5caaf1f5b2b` |
+
+기준 문서 전문(최종본). 위 sha256은 원문의 값이다. 여기에 옮기면서 작업 디렉터리 줄을 지우고 사례 ID를 보류 사례 H1~H9, dev 사례 DA~DE로 바꿨으므로 아래 본문의 해시는 위 값과 다르다.
+
+```
+CODEYE holdout paired measurement: pre-registration
+Recorded 2026-11-25 by the evaluation operator, before any paid call of this measurement.
+
+DESIGN
+- Cases: the 9 holdout cases of fixtures/project-defects (--split holdout), before variants only, one run each per arm.
+- Arms: baseline = product built from commit e7821c0 (state before the quality work); current = main after PR #87 merges (SHA to be given by the coordinator).
+- Runner, corpus and scripts come from the current checkout for both arms; --build-root selects the product.
+- Same model (gpt-6.2-sol via the budget relay), --review-max-calls 20, each build's product default request and output budgets, the same analyzer flag set, and dependency fetch ON in both arms (--agent-flag dependency-fetch).
+- Opengrep is not installed and stays unconfigured in both arms.
+- If the baseline build does not accept the flag or behaves differently with it, this is reported from the free step and not silently dropped.
+- Order: paired by case. For each case, baseline then current, before moving on. Cases go in ascending expected total charge, so a budget stop leaves complete pairs.
+- Canary before the holdout: dev cases DA and DB, current arm only, dependency fetch on. Gates: AI review performed, overview investigate accepted, every reviewable line sent, verify verdicts published. If a gate fails, stop before any paid holdout call.
+- After the holdout, only if the ledger can admit them: dev cases DC and DD, current arm. The DE repeat is dropped.
+- A case whose run fails a pipeline gate in an arm (review not performed, required stage lost) counts as "labelled defect not found" for that arm. It is reported separately as a product failure and is not rerun.
+
+PRE-SET CRITERIA
+- Primary: for each holdout case and arm, whether a model-produced finding matches the labelled defect (same cause and same triggering condition).
+  - Two independent blind judges decide, on one shuffled packet with build identity removed.
+  - A match counts when both judges agree; disagreements are listed.
+  - Paired outcome over the 9 cases: wins (current found, baseline not), losses, ties.
+  - Clear improvement: wins - losses >= 4 and losses <= 1.
+  - Regression: losses > wins.
+  - Otherwise: not distinguishable.
+- Secondary (reported, not gated):
+  - among findings the product marks supported, the share both judges call actionable;
+  - false positives by either judge;
+  - out-of-scope findings;
+  - findings per case;
+  - structural overlap of model findings and of tool diagnostics with the labelled lines;
+  - calls, charge, wall time, and reviewable lines sent vs unsent, per case and arm.
+- Blocking observations (reported if seen): a published claim citing evidence that does not exist or does not say what is claimed; narrative asserting execution or reproduction; model prose in status or statistics.
+- This is the first and only use of the holdout seal for a before/after comparison. No rerun, and no change of criteria after results.
+
+MONEY
+- One new ledger ledger/ledger.jsonl with --budget-usd 25.00 (the relay's hard cap), never raised, no second ledger.
+- Expected: canary about 2, holdout pairs about 19-21, the two extra dev cases about 2 if they fit.
+- Stop when the ledger cannot admit the next request. A pair that cannot be completed is not started.
+- Relay reservations are by request size; check before each run.
+
+JUDGING MATERIAL
+- One packet of 18 units (2 arms x 9 cases): model-produced findings only, cited excerpts capped at 60 lines in both arms, fresh opaque IDs, shuffled across arms.
+- References and answer key are kept separately; source snapshots are without .git and without labels.
+- Per-case triage packets for the current arm, with no label content.
+
+ADDENDUM 2026-11-26 (before any paid call)
+- Current arm = main 28e03c7a280220fc02f0b91929710aec6912a7ef (PR #87 merged; report builder 25; instruction pack 2.10.0 unchanged).
+- Runner, corpus and scripts for both arms come from a checkout at 28e03c7. scripts/, fixtures/ and prompts/ are identical to 43fd4e6.
+
+ADDENDUM 2026-11-26, AMENDMENTS (before any paid call; made on cost grounds from the free plan figures only, no paid result exists)
+1. Canary reduced to one case: DA only (current arm, dependency fetch on), to keep ledger room for the holdout pairs. DB moves to the optional dev cases after the holdout.
+2. Start rule for a pair: a pair starts only if the remaining ledger is at least max(0.9 x the plan's expected pair charge, the plan's expected baseline charge + USD 2.90). If the rule fails for the next pair in order, no later pair is tried and the holdout stops there. The order is fixed; there is no skipping to cheaper cases.
+3. Budget cut is not a product failure: if a run is refused or cut by the ledger cap (relay refusal, reservation refused), that pair is void for both arms. It is excluded from the paired comparison and reported as such. This is distinct from a pipeline gate failure of the product, which still counts as "not found" for that arm, as pre-registered.
+Run rules added with the go:
+- Current-arm gates are informational: a failed gate does not stop the measurement. If the same gate fails in two consecutive current-arm runs, stop and report before spending more.
+- Optional dev cases after the holdout, by the same start logic: DB, then DC, then DD (current arm).
+- Nothing is rerun.
+Fixed plan figures used by the start rule (USD, expected; baseline + current = pair):
+H1 1.224+1.364=2.588 | H2 0.780+1.939=2.719 | H3 1.115+1.844=2.959 | H4 1.115+1.844=2.959 | H5 1.180+1.974=3.154 | H6 1.180+1.974=3.154 | H7 1.147+2.355=3.502 | H8 1.204+2.491=3.695 | H9 1.204+2.491=3.695
+Dev current arm: DA 0.883 | DB 1.236 | DC 0.883 | DD 1.236
+```
+
+**수정 세 가지와 이유.** 비용 없는 사전 확인에서 기대 차감이 기준 빌드 약 10.15달러, 현재 빌드 약 18.27달러로 나와 25달러 장부 하나에 사전 확인 두 사례, 보류 9짝, 추가 dev 두 사례가 다 들어가지 않았다. 유료 결과가 하나도 없는 상태에서 비용만 근거로 다음을 고쳤다.
+
+1. 사전 확인 사례를 둘에서 하나로 줄였다. 빠진 사례는 보류 뒤의 선택 dev 사례로 옮겼다.
+2. 짝 시작 규칙: 남은 장부가 max(0.9 × 짝의 기대 차감, 기준 빌드의 기대 차감 + 2.90달러) 이상일 때만 짝을 시작한다. 규칙이 맞지 않으면 그 뒤의 짝은 시도하지 않는다. 순서는 고정이고 싼 사례로 건너뛰지 않는다.
+3. 예산 차단은 제품 실패가 아니다. relay 거절이나 예약 거절로 끊긴 짝은 두 빌드 모두 무효로 하고 짝 비교에서 뺀다. 제품의 파이프라인 관문 실패는 기준대로 그 빌드의 "찾지 못함"이다.
+
+실행 규칙: 현재 빌드의 관문은 참고용이다. 같은 관문이 현재 빌드의 연속 두 실행에서 실패하면 멈추고 보고한다.
+
+### 비용 없는 사전 확인
+
+유료 호출 전에 가짜 upstream으로 두 빌드가 보류 9사례 모두에서 모델 검토를 수행하는지 확인했다. 기준 빌드는 현재의 답 형식을 거절하므로 기준 빌드용 가짜 upstream을 따로 썼다. 두 빌드 모두 9사례 전부에서 AI 검토를 수행했고, 현재 빌드는 형식 오류를 주입한 수집도 통과했다. 유료 사전 확인은 손대지 않은 dev 사례 하나로 했고, 보류 사례에 유료 호출을 하기 전에 네 관문(모델 검토 수행, 전체 조사 수락, 검토 대상 줄 전부 전송, 검증 판정 게시)을 통과했다.
+
+### 실행 결과
+
+보류 9짝은 모두 시작 규칙을 만족해 끝까지 실행됐다. 무효 짝은 없고, 관문 실패도 없다. 18 실행 모두 모델 검토를 수행했다. 부분 완료 세 실행은 판정에 필요한 분석기가 실패한 경우이고(기준 하나, 한 사례는 두 빌드 모두), 나머지 15 실행은 완료다. 이어서 손대지 않은 dev 사례 셋을 현재 빌드로 실행했다.
+
+| 집계(보류 9사례) | 기준 | 현재 |
+|---|---|---|
+| 모델 호출 / 장부 요청 | 170 / 171 | 63 / 63 |
+| 장부 차감 | 8.21달러 | 10.13달러(기준의 1.23배) |
+| 실행 시간 합 / 중앙값 | 2,270초 / 256초 | 2,177초 / 226초 |
+| 가장 긴 호출(사례별 최대의 범위) | 12~24초 | 34~76초 |
+| 가장 큰 요청(사례별 최대의 범위) | 약 26~36 KB | 약 99~241 KB |
+| 보내지 않은 검토 대상 줄 | 9사례 중 8사례, 합 16,449줄(보낸 줄 27,313) | 0줄(보낸 줄 43,762) |
+| 호출 상한으로 실행하지 못한 검토 작업(`budget_exhausted`) | 8사례, 122건 | 0건 |
+| 모델 발견(supported / inconclusive / refuted) | 91(50 / 41 / 0) | 86(63 / 18 / 5) |
+| 모델 발견의 출처(전체 조사 / 조각 조사 / 해석 / 진단 분류) | 9 / 70 / 12 / 0 | 52 / 1 / 12 / 21 |
+| 출력 거절 코드(건) | 5 | 10 |
+| 출력 축소 한계 기록(건) | 8 | 10 |
+| 진단 분류(묶음 분류된 진단 / 해석 역할로 간 진단) | 해당 없음(기능 없음) | 9사례 합 402 / 18 |
+| 배포 코드가 아닌 경로의 해석 가설(`hypotheses_not_shipped`) | 해당 없음(필드 없음) | 1 |
+| 검증에 보내지 않은 조사 후보(`candidates_not_shipped`) | 해당 없음(필드 없음) | 0 |
+
+기준 빌드는 요청을 작은 조각으로 나누고, 호출 상한 20에 닿은 조각을 실행하지 못해 줄을 남긴다. 현재 빌드는 큰 요청 몇 개에 검토 대상 줄을 모두 싣는다. 발견 수의 차이는 품질의 차이가 아니다.
+
+사례별 값이다. H1~H9는 짝을 실행한 순서(기준 문서의 계획 수치 순서)이고 사례의 언어나 내용을 뜻하지 않는다. 모델 발견은 모델이 낸 발견의 수, 호출은 제품의 모델 호출 수이다. 차감과 시간은 사례 하나의 실행 값이다. 라벨 결함 발견은 두 판정자가 모두 일치로 본 경우(✓)이다. 합은 위 집계 표와 같다(기준 한 사례는 장부 요청이 호출보다 하나 많아 장부 요청 합이 171이다).
+
+| 사례 | 기준: 모델 발견 · 호출 · 차감(달러) · 시간(초) · 보낸 / 보내지 않은 줄 | 현재: 모델 발견 · 호출 · 차감(달러) · 시간(초) · 보낸 / 보내지 않은 줄 | 라벨 결함 발견(기준 / 현재) |
+|---|---|---|---|
+| H1 | 8 · 20 · 0.845 · 231.3 · 3,449 / 1,959 | 3 · 3 · 0.645 · 98.6 · 5,408 / 0 | ✗ / ✓ |
+| H2 | 12 · 13 · 0.892 · 191.1 · 1,708 / 0 | 13 · 8 · 0.930 · 297.6 · 1,708 / 0 | ✓ / ✗ |
+| H3 | 4 · 19 · 0.855 · 198.0 · 4,144 / 1,371 | 8 · 8 · 1.164 · 226.2 · 5,515 / 0 | ✓ / ✓ |
+| H4 | 13 · 20 · 0.960 · 277.5 · 2,313 / 1,359 | 6 · 6 · 0.971 · 215.2 · 3,672 / 0 | ✗ / ✗ |
+| H5 | 13 · 19 · 0.810 · 256.4 · 2,421 / 2,433 | 18 · 9 · 1.618 · 366.0 · 4,854 / 0 | ✗ / ✓ |
+| H6 | 9 · 20 · 0.866 · 264.6 · 2,779 / 593 | 14 · 8 · 1.326 · 282.5 · 3,372 / 0 | ✓ / ✓ |
+| H7 | 13 · 19 · 0.909 · 279.8 · 3,348 / 3,525 | 12 · 7 · 1.286 · 293.2 · 6,873 / 0 | ✗ / ✓ |
+| H8 | 13 · 20 · 1.081 · 318.2 · 3,479 / 3,683 | 7 · 7 · 1.189 · 212.4 · 7,162 / 0 | ✗ / ✗ |
+| H9 | 6 · 20 · 0.992 · 253.5 · 3,672 / 1,526 | 5 · 7 · 1.005 · 185.3 · 5,198 / 0 | ✗ / ✗ |
+| 합 | 91 · 170 · 8.210 · 2270.4 · 27,313 / 16,449 | 86 · 63 · 10.134 · 2177.0 · 43,762 / 0 | 3 / 5 |
+
+**구조 지표(판정 아님).** 라벨 줄과 겹치는 모델 발견이 있는 사례는 기준 3/9, 현재 7/9다. 라벨 줄과 겹치는 도구 진단이 있는 사례는 두 빌드 모두 2/9다. 겹치는 모델 발견의 검증 상태는 기준 5개 중 supported 3·inconclusive 2(한 사례는 inconclusive만), 현재 9개 모두 supported다. 줄이 겹친다는 것은 같은 결함을 찾았다는 뜻이 아니다. 주 기준은 아래 판정으로만 정한다.
+
+**보고서 검사.** 현재 빌드의 한 사례에서 보고서 검사 스크립트가 "미확정 후보 수 불일치"로 실패했다. 제품은 배포 코드가 아닌 경로의 해석 가설을 요약의 미확정 후보에서 빼는데(결정 A65), 검사 스크립트는 inconclusive 발견을 모두 셌다. 제품의 계산과 문서는 서로 맞고, 검사 스크립트가 이 규칙을 따라가지 않았다. 스크립트는 제품 규칙(빌더 버전별 규칙 포함)을 따르도록 고쳤다. 검사는 첫 실패에서 멈추므로, 평가 운영자가 메모리 안의 사본에서 그 수만 바로잡아 나머지 검사를 돌렸고 모두 통과했다. 이 실행에 기록된 근거 유효성 지표는 측정된 그대로(실패 0/1) 둔다. 고친 스크립트로 다시 채점하면 이 실행의 근거 유효성은 1/1이다. 기록된 0/1은 옛 규칙에서 나온 값이다. 이 사례의 발견은 판정 묶음에 그대로 들어 있다.
+
+**차단 관찰.** 구조 지표의 "실행 없이 재현"은 두 빌드 모두 0이다. 판정 묶음에서 근거 발췌가 없는 발견과 빈 발췌는 없다. 실행·재현을 주장하는 서술은 몇 가지 표현의 정규식으로만 찾았고 찾지 못했다. 이 검사는 완전하지 않다. 상태·통계에 모델 문장이 들어갔는지는 따로 검사하지 않았다. 인용이 주장과 맞는지는 판정자가 본다.
+
+### 주 결과(맹검 판정)
+
+판정자는 모델 둘(Claude Opus 5.5, Claude Sonnet 5.5)이고 사람이 아니다. 두 빌드의 모델 발견 177개를 빌드 정체를 지우고 섞은 묶음 하나로 각자 판정했다. 발견 판정의 일치는 177개 중 159개(Cohen의 kappa 0.85)이다. 라벨 결함 일치 판정은 두 판정자가 같았으므로 불일치 목록은 비었다.
+
+| 두 판정자가 모두 라벨 결함의 발견으로 본 사례 | 기준 | 현재 |
+|---|---|---|
+| 9사례 중 | 3 | 5 |
+
+짝 결과는 이김 3, 짐 1, 둘 다 찾음 2, 둘 다 못 찾음 3이다. 이김 − 짐 = +2로 사전 기준(이김 − 짐 ≥ 4이고 짐 ≤ 1)에 못 미치고, 회귀(짐 > 이김)도 아니다. **사전 기준에 따른 결론은 구분 불가다.** 서로 다른 결과를 낸 4사례에 대한 양측 부호 검정은 p ≈ 0.63이다. 라벨 결함 발견이 개선됐다는 것은 이 측정에서 보이지 않았다.
+
+판정은 `blind-merge`로 판정 파일에 합쳐 판정자마다 `score`로 다시 채점했다. 사례별 결과와 조치 가능 수는 위 표와 같다. `score`의 "알려진 결함 recall(판정)" 행은 판정된 일치가 하나도 없는 라벨을 분모에서 빼므로 기준 3/4, 현재 5/5로 찍힌다. 사전 기준의 주 지표는 아홉 사례 전부를 세어 3/9 대 5/9다.
+
+현재 빌드에서 라벨 줄에 발견이 있던 7사례 중 둘은 판정에서 일치가 아니었다(원인 기제나 발생 조건이 달랐다). 진 사례 하나에서는 현재 빌드가 같은 함수의 다른 문제를 보고했다.
+
+### 보조 결과(맹검 판정, 게이트 아님)
+
+| 지표 | 기준 | 현재 |
+|---|---|---|
+| 두 판정자가 모두 `valid_actionable`로 본 발견 | 16/91 (18%) | 31/86 (36%) |
+| 제품이 `supported`로 표시한 발견 중 두 판정자가 모두 조치 가능으로 본 비율 | 8/50 (16%, Wilson 95% 8~29%) | 26/63 (41%, 30~54%) |
+| 두 판정자가 모두 범위 밖(시험·예제·벤치마크 코드)으로 본 발견 | 26/91 (29%) | 3/86 (3%) |
+| 어느 한 판정자가 오탐으로 본 발견 | 7/91 | 7/86 |
+| 두 판정자가 모두 오탐으로 본 발견 | 3 | 3 |
+| 판정자별 조치 가능 수(A / B) | 16 / 18 | 31 / 38 |
+
+조치 가능 비율의 차이는 Fisher 정확 검정으로 전체 p ≈ 0.007, `supported` 중 p ≈ 0.004다. 발견은 9개 프로젝트에 묶여 있어 서로 독립이 아니므로 p 값은 참고용이다. 두 빌드가 요청을 나누는 방식이 달라 발견의 수와 구성이 다른 채로 비교한 것이다.
+
+### 손대지 않은 dev 사례(현재 빌드만)
+
+dev 분할의 Python·Rust 사례 4개를 현재 빌드로 실행했다. 어떤 빌드도 이 사례를 실행한 적이 없고 그 결과는 검토 지침 작성자에게 전달된 적이 없다. 다만 앞선 개정 기간에 지침 작성자의 검색이 사례 디렉터리를 지나갔다([독립성 공개](#모듈-단위-검토-입력의-전후-비교와-회귀-기록)). 사전 확인 하나와 보류 뒤의 선택 사례 셋이다. 기준 빌드는 실행하지 않았고, 판정자는 모델 하나(Claude Sonnet 5.5)다. 선택 사례 셋은 모두 시작 규칙을 만족했고, 넷 모두 네 관문을 통과했다. 사전 확인을 포함한 차감은 3.77달러다.
+
+- 라벨 결함을 찾은 사례는 4/4다. 라벨 줄과 겹치는 도구 진단이 있는 사례는 0/4다.
+- 모델 발견은 22개다. 판정은 조치 가능 8, 참고 11, 오탐 1, 중복 1, 범위 밖 1(소스 파일 안의 시험 보조 함수)이다.
+- 기준 빌드와의 짝이 없고 사례가 넷이라 개선의 근거가 아니다. 현재 빌드가 처음 보는 사례에서 동작하는지를 보는 관찰이다. 판정 묶음은 보류 묶음과 따로 만들었다.
+
+### 진단 분류 판정
+
+현재 빌드의 도구 진단 분류 결정을 보류 9사례에서 모델 판정자 하나(Claude Sonnet 5.5)가 판정했다. 현재 빌드만 대상이다. 판정자는 `problem`과 `unclear` 묶음 전부, 배포 코드 경로의 `harmless` 묶음 전부, 배포 코드가 아닌 경로의 `harmless` 묶음 중 표본을 읽었다.
+
+범위: 이 역할이 모델로 분류한 묶음은 106개이고, 이 역할이 분류하지 않은 진단이 96개 더 있다(지표 관찰이거나 해석 역할이 다룬 것).
+
+| 분류 결과 | 묶음 / 진단 | 판정 |
+|---|---|---|
+| `problem` | 21 / 33 | 맞음 15 / 26, 일부 맞음 5 / 6(실제 문제이나 발생 조건이 억지스럽거나 영향이 작거나 시험 경로), 틀림 1 / 1(검증이 이미 반증한 묶음) |
+| `unclear` | 7 / 137 | 타당 4 / 131(해결되지 않은 외부 의존성이 만든 진단이 대부분이라 판단 불가가 맞는 답), 같은 파일에서 판단할 수 있었음 3 / 6(셋 모두 `harmless`여야 했다) |
+| `harmless`, 배포 코드 경로 | 52 / 150(52묶음 전부 판정) | 맞음 51 / 132, 틀림 1 / 18 |
+| `harmless`, 배포 코드가 아닌 경로 | 26묶음 | 표본 16 / 64 모두 맞음, 10묶음(진단 18건)은 열어 보지 않았다 |
+
+- 분석 공백(해결되지 않은 의존성, 도구 체인·린트 설정 불일치)에서 나온 진단은 `problem`으로 분류되지 않았다.
+- 틀린 `harmless` 묶음 하나는 모델이 다른 묶음에서 문제로 보고한 위치의 진단을 담았고, 그 이유 문장이 그 위치에는 거짓이었다. 이유 문장은 거짓 1, 부정확 2다.
+- 분류되지 않은 진단 중 배포 코드 경로에서 판정자가 보기에 실제일 수 있는 것이 5개(이미 다른 곳에서 분류된 문제의 반복 3, 반환형 불일치 1, 문서로 허용된 unsafe 사용 1), 도구 오탐으로 보이는 것이 4개다.
+- 읽기: 처음 보는 사례에서 분류 결정은 정확한 편이었다(`problem` 묶음은 15/21이 완전히 맞고 20/21이 적어도 일부 맞음, 배포 코드 경로 `harmless` 묶음은 51/52). `unclear`는 주로 의존성이 해결되지 않은 곳에서 쓰였다. 틀린 하나는 실제 문제와 무해한 진단이 한 묶음에 섞일 수 있고 묶음 전체가 한 번에 분류될 수 있음을 보인다.
+- 한계: 모델 판정자 하나, 배포 코드가 아닌 경로의 `harmless` 묶음은 표본, 1회 실행이다.
+
+### 결론
+
+- 처음 보는 사례에서 제품이 보고하는 발견은 조치 가능한 비율이 더 높고(전체 18% → 36%, `supported` 중 16% → 41%) 시험·예제 코드를 다룬 발견이 훨씬 적다(29% → 3%). 호출은 적고(170 → 63) 검토 대상 줄을 모두 보내며(보내지 못한 줄 16,449 → 0) 장부 차감은 1.23배다.
+- 라벨 결함 발견은 9사례 중 3에서 5로 늘었다. 이 표본으로는 우연과 구분되지 않는다(사전 기준 결론은 구분 불가). 라벨 결함의 발견이 나아졌다는 것은 보이지 못했다.
+- 오탐은 줄지 않았다(어느 한 판정자 기준 7 → 7, 둘 모두 기준 3 → 3).
+- 도구 진단이 라벨 결함의 줄을 가리킨 사례는 두 빌드 모두 9사례 중 2다. 이 지표로 정적 분석 쪽은 나아지지 않았다.
+- 라벨 결함 아홉 중 넷을 현재 빌드가 찾지 못했다.
+
+### 판정 묶음과 빌드 노출
+
+묶음은 18단위(2빌드 × 9사례)이고 모델 발견만 담았다(모두 177개). 단위 순서와 발견 순서를 섞고 새 불투명 ID를 붙였다. 인용 발췌는 60줄에서 자른다. 다음 필드는 빌드를 드러낼 수 있다.
+
+- 인용 발췌의 수와 길이: 기준은 발견당 약 1.6개, 중앙값 약 42줄. 현재는 발견당 약 5.6개, 중앙값 약 13줄.
+- 주장의 수: 기준 발견당 약 2.3개, 현재 약 3.8개.
+- 심각도와 검증 상태의 분포: 기준은 low·inconclusive가 많고, 현재는 medium·supported가 많다. refuted는 현재에만 있다.
+- 분류: 시험 공백과 성능 분류는 기준에만 있다.
+- 조건 목록의 "후보가 성립하지 않는 조건" 항목: 현재는 모든 발견에, 기준은 대부분에 있다.
+- 위치의 수: 기준 발견당 약 1.6개, 현재 약 5.8개.
+- 출처: 진단 분류에서 나온 발견은 현재에만 있다(내용으로 짐작될 수 있다).
+- 단위당 발견 수와 서술 문체.
+
+진단 분류 묶음은 현재 빌드에만 있고 판정 묶음과 같은 참조 ID를 쓰므로, 두 묶음을 함께 보는 판정자는 빌드를 알 수 있다. 진단 분류 묶음은 맹검 판정이 끝난 뒤에 따로 판정했다. 이 맹검은 약하다.
+
+### 한계
+
+- 판정자가 모델이고 사람의 판정과 판정자의 오류율을 배제하지 못했다. 맹검이 약하다(위 목록).
+- 사례마다 빌드마다 한 번씩만 실행했다. 실행 사이의 변동은 측정하지 않았다.
+- 보류 사례가 9개라 사전 기준으로 분명한 개선을 가리려면 큰 차이가 필요하고, 9짝으로는 작은 개선과 우연을 가를 수 없다.
+- 발견이 9개 프로젝트에 묶여 있어 조치 가능 비율의 p 값은 참고용이다.
+- 진단 분류의 판정은 모델 판정자 하나와 표본 확인이다.
+- 측정 설정 한계: runner에 npm과 Python 패키지 관리자(`--tool npm=…`, `--tool python=…`)를 주지 않았다. 두 빌드와 손대지 않은 dev 실행 모두 같다. 그래서 JS와 Python의 `deps.*` 작업은 모두 `unsupported`(`package_manager_not_configured`)로 끝났고, 한 JS 실행에서는 tsc와 타입 인식 ESLint가 `dependency_unavailable`로 실패했으며, mypy와 pyright는 외부 패키지 없이 실행됐다. 서비스의 도구 찾기([도구 찾기](ANALYZERS.md#도구-찾기))는 node에 딸린 npm과 pip가 있는 `python3`을 찾았을 것이다. 따라서 이 언어들의 도구 쪽 수치(라벨 줄을 가리킨 도구 진단 포함)는 서비스 기본 설정이 분석할 수준보다 낮게 나왔고, 이는 두 빌드에 같게 적용된다.
+- 이 봉인은 쓰였다. 이후의 독립 주장에는 새 사례와 새 봉인이 필요하다.
+
+### 비용
+
+| 장부(상한) | 내용 | 차감 | 요청 |
+|---|---|---|---|
+| 일곱째(25.00달러) | 사전 확인 1사례 1.16달러, 보류 9짝 18.34달러(기준 8.21달러, 현재 10.13달러), 추가 dev 3사례 2.61달러 | 22.11달러 | 261 |
+
+남은 장부는 2.89달러이고 거절·차단 요청은 없다. 이 평가 전체의 누적 차감은 55.54달러이고 예산은 60달러다(앞 기록의 33.43달러에 이번 22.11달러를 더했다). 최악 요율로 차감한 장부이고 공급자 청구서는 대조하지 않았다. upstream HTTP 500 응답 둘은 제품 아래 층에서 다시 보내졌고 두 번의 요청이 모두 차감됐다(합 약 1.12달러). 제품의 호출 기록에는 해당 호출이 첫 시도에 수락된 것으로 남았다. 예산 차단도 제품 관문 실패도 아니어서 짝을 무효로 하지 않았다.
+
+### 독립성 공개
+
+- 평가 운영자는 보류 사례의 비용 없는 사전 확인 결과(호출 계획, 요청 크기, 줄 수)를 보았다. 사례 내용과 라벨은 판정 묶음에 넣지 않았고, 평가 운영자는 발견을 판정하지 않았다.
+- `score`는 두 빌드의 비교를 독립 비교가 아니라고 표시한다(`independent comparison: False`). 보류 등록부가 같은 지침 묶음 digest로 보류 사례를 이미 실행한 배치를 `holdout_seen_by_prior_revision`으로 표시하기 때문이다. 이번 측정은 사례마다 배치를 따로 만들었으므로 빌드별 첫 배치 뒤의 배치가 모두 표시됐다. 앞선 비용 없는 단계에서도 같은 사례를 가짜 upstream으로 실행했다. 프로젝트 규모 보류 분할에 유료 모델 호출을 한 것은 이번이 처음이다.
+- 이 측정의 정성적 관찰 셋(현재 빌드가 찾지 못하는 결함이 남아 있음, 오탐이 줄지 않음, 섞인 진단 분류 묶음이 통째로 무해로 분류될 수 있음)을 로드맵으로 옮겼다. 수치와 사례 내용은 옮기지 않았다.
+- `fixtures/project-defects/`는 holdout 분할을 담고 있다. 앞선 개정 기간에 지침 작성자의 저장소 검색이 이 디렉터리를 지나갔고, 출력은 걸러졌으며 작성자는 내용을 읽지 않았다고 보고했다([앞선 공개](#모듈-단위-검토-입력의-전후-비교와-회귀-기록)). 이 사실은 이번 비교의 독립성을 낮추는 요인으로 남는다.
+- 판정자는 모델 둘(Claude Opus 5.5, Claude Sonnet 5.5)이다. 진단 분류와 손대지 않은 dev 사례의 판정은 Claude Sonnet 5.5 하나가 했다. 사람의 판정은 받지 않았다.
