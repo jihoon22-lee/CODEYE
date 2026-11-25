@@ -382,10 +382,7 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 	instructions := s.instructions(contract)
 	var repair *outputRepair
 	repaired, retried, proofRetried := false, false, false
-	maxCalls := record.RoleMaxCalls
-	if s.role == record.StageContract {
-		maxCalls = record.ContractMaxCalls
-	}
+	maxCalls := record.TaskMaxCalls(s.task)
 	// fallback is the latest rejected output whose faults are all of form
 	// (s.repairable after its parse) and fallbackCall its call: once no
 	// further repair can arrive, it is accepted with those faults resolved
@@ -409,7 +406,7 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 	}
 	// end fails the stage unless the form-only fallback can stand.
 	end := func(res analysis.TaskResult, lim string) *analysis.TaskResult {
-		if res.Status != domain.TaskCancelled && s.ctx.Err() == nil && degrade(lim) {
+		if res.Status != domain.TaskCancelled && res.Reason != reasonCallCapExceeded && s.ctx.Err() == nil && degrade(lim) {
 			return nil
 		}
 		return s.fail(res)
@@ -528,6 +525,9 @@ func (s *roleStage) reserveCall() *analysis.TaskResult {
 	switch {
 	case errors.Is(err, errCallsCancelled):
 		r := result(domain.TaskCancelled, "cancelled")
+		return &r
+	case errors.Is(err, errCallCapExceeded):
+		r := result(domain.TaskFailed, reasonCallCapExceeded)
 		return &r
 	case err != nil:
 		r := result(domain.TaskFailed, reasonCallCountFailed)

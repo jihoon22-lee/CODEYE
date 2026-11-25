@@ -643,6 +643,7 @@ export const ko = {
       no_review_scope: '이 단계에서 검토할 대상이 선택되지 않았습니다.',
       review_budget_exhausted: '노드의 모델 호출 상한에 닿아 이 모듈 묶음을 검토하지 않음 (미검토, 0건 통과 아님)',
       review_call_count_failed: '모델 호출 수를 기록하지 못해 요청을 보내지 않음 (실패)',
+      review_call_cap_exceeded: '작업 하나의 모델 호출 수 상한을 넘는 요청이라 보내지 않음 (실패)',
       // 의존성 받기 (deps.go)
       no_dependencies: '받을 외부 의존성이 없음 (할 일 없음, 실패 아님)',
       vendored_dependencies: '저장소가 의존성을 vendor 디렉터리에 담고 있어 따로 받지 않음 (할 일 없음, 실패 아님)',

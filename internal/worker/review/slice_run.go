@@ -32,6 +32,9 @@ import (
 const (
 	reasonBudgetExhausted = "review_budget_exhausted"
 	reasonCallCountFailed = "review_call_count_failed"
+	// reasonCallCapExceeded: a task asked for a call past its own bound
+	// (record.TaskMaxCalls); the call was not made.
+	reasonCallCapExceeded = "review_call_cap_exceeded"
 
 	decisionAdmitted  = "admitted"
 	decisionExhausted = "budget_exhausted"

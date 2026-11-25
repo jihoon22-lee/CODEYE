@@ -5,6 +5,17 @@ import (
 	"strings"
 )
 
+// TaskMaxCalls bounds the model calls of one review task: the first request,
+// repairs and retries together. The roles loop to it and the attempt's call
+// ledger refuses a call past it, so the bound the concurrent schedule
+// assumes for an unfinished task holds.
+func TaskMaxCalls(task string) int {
+	if task == TaskContract {
+		return ContractMaxCalls
+	}
+	return RoleMaxCalls
+}
+
 const (
 	// TaskContract follows the existing whole-run roles and any review slices.
 	TaskContract            = "review.contract"

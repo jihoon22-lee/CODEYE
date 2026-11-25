@@ -118,6 +118,9 @@ type pairsFixture struct {
 	start   int
 	end     int
 	ceiling int
+	// capOf is each task's call bound the runs must keep (nil:
+	// record.TaskMaxCalls).
+	capOf func(task string) int
 }
 
 // newPairsFixture is the admission tree (files of fns functions with
@@ -352,11 +355,17 @@ func checkPairs(t *testing.T, f *pairsFixture, setup func(*Schedule)) (ref pairs
 		// The fault seam needs a schedule; compare to one at parallelism 1.
 		ref = f.run(t, t.Context(), 1, 0, 0, setup)
 	}
+	if v := capViolations(ref.counts, f.capOf); len(v) != 0 {
+		t.Fatalf("reference: tasks over their call bound %v", v)
+	}
 	peak := 0
 	for _, p := range pairsParallel {
 		for seed := range uint64(pairsSeeds) {
 			got := f.run(t, t.Context(), p, seed+1, 2*time.Millisecond, setup)
 			samePairsRun(t, fmt.Sprintf("parallel %d seed %d", p, seed+1), ref, got)
+			if v := capViolations(got.counts, f.capOf); len(v) != 0 {
+				t.Fatalf("parallel %d seed %d: tasks over their call bound %v", p, seed+1, v)
+			}
 			if p == 1 && got.peak != 1 {
 				t.Fatalf("parallel 1 had %d requests in flight", got.peak)
 			}
@@ -368,6 +377,113 @@ func checkPairs(t *testing.T, f *pairsFixture, setup func(*Schedule)) (ref pairs
 	}
 	t.Logf("region calls %d, statuses %v, most requests in flight %d, decisions that waited %d", len(ref.counts)-len(countedCallsBefore(t, f)), statusOf(ref), peak, waited)
 	return ref, waited
+}
+
+// capViolations are the tasks of counts (one counted call per line) that
+// made more calls than their bound: the schedule's assumption for an
+// unfinished unit. capOf nil is record.TaskMaxCalls.
+func capViolations(counts []string, capOf func(string) int) []string {
+	if capOf == nil {
+		capOf = record.TaskMaxCalls
+	}
+	per := map[string]int{}
+	for _, k := range counts {
+		per[k]++
+	}
+	var out []string
+	for k, n := range per {
+		if n > capOf(k) {
+			out = append(out, fmt.Sprintf("%s:%d>%d", k, n, capOf(k)))
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// limitUnitTasks lowers the call bound of every task of the schedule's units
+// to n, as if the roles made more calls than the bound the schedule
+// assumes.
+func limitUnitTasks(n int) func(*Schedule) {
+	return func(s *Schedule) {
+		l := s.ledger
+		for k := range l.taskCap {
+			l.taskCap[k] = n
+		}
+		for u, unit := range s.units {
+			s.units[u].cap = n * len(unit.tasks)
+			l.caps[u] = n * len(unit.tasks)
+		}
+	}
+}
+
+// TC-307: the bound the schedule assumes for an unfinished pair is enforced,
+// not assumed. With the bound lowered to one call per task, every role that
+// would repair or retry asks for a call past it: that call is refused
+// (review_call_cap_exceeded), no task is counted past its bound, and the
+// result is still the same at every degree of parallelism.
+func TestPairsTaskCallBoundIsEnforced(t *testing.T) {
+	f := newPairsFixture(t, 30, 40, 99)
+	f.caller.fault = repairFault
+	region := func(k string) bool {
+		_, _, slice := record.SliceTask(k)
+		_, _, triage := record.TriageTask(k)
+		return slice || triage || k == record.TaskContract
+	}
+	f.capOf = func(k string) int {
+		if region(k) {
+			return 1
+		}
+		return record.TaskMaxCalls(k)
+	}
+	ref, _ := checkPairs(t, f, limitUnitTasks(1))
+	refused := 0
+	for k, r := range ref.results {
+		if r.Reason == reasonCallCapExceeded {
+			refused++
+			if r.Status != domain.TaskFailed || !region(k) {
+				t.Fatalf("%s %+v", k, r)
+			}
+		}
+	}
+	if refused == 0 {
+		t.Fatal("no call past the lowered bound was asked for")
+	}
+	// The check the harness runs catches a task over its bound.
+	over := []string{"review.investigate.s001", "review.investigate.s001", "review.investigate.s001", "review.investigate.s001", record.TaskContract, record.TaskContract}
+	if v := capViolations(over, nil); !slices.Equal(v, []string{"review.investigate.s001:4>3"}) {
+		t.Fatalf("violations %v", v)
+	}
+}
+
+// TC-307: a task's call past its own bound (record.TaskMaxCalls) is refused
+// with errCallCapExceeded and not counted, with and without a schedule.
+func TestTaskCallBoundRefusesTheNextCall(t *testing.T) {
+	keys := []string{"review.investigate.s001", "review.verify.s001", record.TaskContract}
+	for _, scheduled := range []bool{false, true} {
+		j := analysis.Job{Scratch: t.TempDir()}
+		ctx := t.Context()
+		if scheduled {
+			ctx = WithSchedule(ctx, NewSchedule(keys))
+		}
+		for _, task := range []string{"review.investigate.s001", record.TaskContract} {
+			s := &roleStage{ctx: ctx, j: j, task: task}
+			for i := range record.TaskMaxCalls(task) {
+				if ok, err := s.callsBelow(100, true); !ok || err != nil {
+					t.Fatalf("scheduled %v %s call %d: %v %v", scheduled, task, i+1, ok, err)
+				}
+			}
+			if ok, err := s.callsBelow(100, true); ok || !errors.Is(err, errCallCapExceeded) {
+				t.Fatalf("scheduled %v %s past its bound: %v %v", scheduled, task, ok, err)
+			}
+			// A check that records no call is not a call.
+			if ok, err := s.callsBelow(100, false); !ok || err != nil {
+				t.Fatalf("scheduled %v %s check: %v %v", scheduled, task, ok, err)
+			}
+		}
+		if v := capViolations(countedCalls(t, j), nil); len(v) != 0 {
+			t.Fatalf("scheduled %v: counted past the bound %v", scheduled, v)
+		}
+	}
 }
 
 // countedCallsBefore are the calls the tasks before the region made.

@@ -248,6 +248,7 @@ var Korean = Locale{
 		"review_budget_exhausted":                      "attempt의 모델 호출 상한에 닿아 실행하지 않았다(호출 없음).",
 		"no_review_scope":                              "이 단계에서 검토할 대상이 선택되지 않았습니다.",
 		"review_call_count_failed":                     "모델 호출 수를 기록하지 못해 호출하지 않았다.",
+		"review_call_cap_exceeded":                     "작업 하나의 모델 호출 수 상한을 넘는 호출이라 보내지 않았다.",
 		"review_slice_limit":                           "slice 수 상한 밖의 파일은 모듈 단위 검토를 계획하지 않았다.",
 		// Discovery limitations and task reasons the sections show
 		// (docs/REPORT.md#분석-종류별-절).

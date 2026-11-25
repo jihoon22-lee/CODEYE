@@ -1,6 +1,7 @@
 package review
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io/fs"
@@ -48,6 +49,11 @@ func ValidParallel(n int) bool { return record.ValidParallel(n) }
 // decision of the call ceiling.
 var errCallsCancelled = errors.New("review_calls_cancelled")
 
+// errCallCapExceeded: the task asked for more calls than its own bound
+// (record.TaskMaxCalls). The schedule bounds an unfinished unit by these
+// bounds, so a call past one is refused whatever the other units do.
+var errCallCapExceeded = errors.New("review_call_cap_exceeded")
+
 // callUnit is one independent unit of the plan: consecutive task indices.
 type callUnit struct {
 	tasks []int
@@ -73,17 +79,17 @@ func NewSchedule(keys []string) *Schedule {
 	s := &Schedule{start: len(keys), end: len(keys)}
 	unitKey := func(k string) (string, int, bool) {
 		if k == record.TaskContract {
-			return k, record.ContractMaxCalls, true
+			return k, record.TaskMaxCalls(k), true
 		}
 		if _, slot, ok := record.SliceTask(k); ok {
-			return "s:" + slot, record.RoleMaxCalls, true
+			return "s:" + slot, record.TaskMaxCalls(k), true
 		}
 		if _, slot, ok := record.TriageTask(k); ok {
-			return "t:" + slot, record.RoleMaxCalls, true
+			return "t:" + slot, record.TaskMaxCalls(k), true
 		}
 		return "", 0, false
 	}
-	l := &callLedger{unitOf: map[string]int{}, changed: make(chan struct{})}
+	l := &callLedger{unitOf: map[string]int{}, taskCap: map[string]int{}, changed: make(chan struct{})}
 	last := ""
 	for i, k := range keys {
 		id, calls, ok := unitKey(k)
@@ -106,6 +112,7 @@ func NewSchedule(keys []string) *Schedule {
 		s.units[u].cap += calls
 		l.caps[u] += calls
 		l.unitOf[k] = u
+		l.taskCap[k] = calls
 		s.end, last = i+1, id
 	}
 	s.ledger = l
@@ -185,8 +192,11 @@ func (s *Schedule) runUnit(ctx context.Context, u int, run func(int) bool) {
 // count file (one line per call, the task key, written before the call) is
 // the record of the calls made; the ledger adds which units have ended.
 type callLedger struct {
-	mu      sync.Mutex
-	unitOf  map[string]int
+	mu     sync.Mutex
+	unitOf map[string]int
+	// taskCap is each unit task's own call bound; caps[u] is the sum over
+	// the unit's tasks.
+	taskCap map[string]int
 	caps    []int
 	settled []bool
 	// changed is closed and replaced whenever a unit ends.
@@ -247,7 +257,11 @@ func (l *callLedger) below(ctx context.Context, j analysis.Job, task string, lim
 		if err != nil {
 			return false, err
 		}
-		low, high := l.span(b, task)
+		per := countsByTask(b)
+		if count && per[task] >= l.capOf(task) {
+			return false, errCallCapExceeded
+		}
+		low, high := l.span(per, task)
 		switch {
 		case high < limit:
 			if count {
@@ -273,13 +287,7 @@ func (l *callLedger) below(ctx context.Context, j analysis.Job, task string, lim
 // span is the least and the most the sequential count can be for task: the
 // calls outside every unit (the whole-run roles), the task's unit's own, and
 // each earlier unit's calls, at most its cap while it has not ended.
-func (l *callLedger) span(counts []byte, task string) (low, high int) {
-	per := map[string]int{}
-	for line := range strings.SplitSeq(string(counts), "\n") {
-		if line != "" {
-			per[line]++
-		}
-	}
+func (l *callLedger) span(per map[string]int, task string) (low, high int) {
 	unit, inUnit := l.unitOf[task]
 	byUnit := make([]int, len(l.caps))
 	for k, n := range per {
@@ -308,6 +316,25 @@ func (l *callLedger) span(counts []byte, task string) (low, high int) {
 		}
 	}
 	return low, high
+}
+
+// capOf is task's own call bound.
+func (l *callLedger) capOf(task string) int {
+	if n, ok := l.taskCap[task]; ok {
+		return n
+	}
+	return record.TaskMaxCalls(task)
+}
+
+// countsByTask is the number of counted calls per task key.
+func countsByTask(counts []byte) map[string]int {
+	per := map[string]int{}
+	for line := range strings.SplitSeq(string(counts), "\n") {
+		if line != "" {
+			per[line]++
+		}
+	}
+	return per
 }
 
 func (l *callLedger) append(j analysis.Job, task string) error {
@@ -339,9 +366,18 @@ func (s *roleStage) callsBelow(limit int, count bool) (bool, error) {
 	if l := ledgerOf(s.ctx); l != nil {
 		return l.below(s.ctx, s.j, s.task, limit, count)
 	}
-	used, err := callsUsed(s.j)
-	if err != nil || used >= limit {
+	b, err := readBounded(callsPath(s.j), 64<<10)
+	if errors.Is(err, fs.ErrNotExist) {
+		b, err = nil, nil
+	}
+	if err != nil {
 		return false, err
+	}
+	if count && countsByTask(b)[s.task] >= record.TaskMaxCalls(s.task) {
+		return false, errCallCapExceeded
+	}
+	if bytes.Count(b, []byte("\n")) >= limit {
+		return false, nil
 	}
 	if count {
 		return true, appendCount(s.j, s.task)
