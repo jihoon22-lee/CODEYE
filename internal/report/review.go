@@ -412,6 +412,10 @@ func addFindings(r *Report, prefix string, candidates []record.Candidate, verdic
 		// keeps the verdict of its verification but is no action item: the
 		// report derives that from the recorded observations and evidence in
 		// every case, as for a candidate not sent to verification.
+		// The marker is the platform's alone: a sentence of the model's
+		// that is its code (a verification's assumption is a limitation
+		// too) is not it.
+		f.Limitations = slices.DeleteFunc(f.Limitations, func(s string) bool { return s == record.LimHypothesisNotShipped })
 		if !r.scopeNonShipped && c.HypothesisNotShipped(func(id string) (string, bool) {
 			o, ok := obs[id]
 			if !ok || o.Location == nil {
