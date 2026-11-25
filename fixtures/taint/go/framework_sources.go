@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/mux"
+	"github.com/labstack/echo/v4"
 )
 
 type exportRequest struct {
@@ -41,4 +42,17 @@ func Archive(c *gin.Context) {
 		return
 	}
 	os.Remove(filepath.Join(root, "archive", in.Name)) // expect: codeye.go.path-traversal
+}
+
+func Restore(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParamFromCtx(r.Context(), "name")
+	os.Remove(filepath.Join(root, "restore", name)) // expect: codeye.go.path-traversal
+}
+
+func Import(c echo.Context) error {
+	var in exportRequest
+	if err := c.Bind(&in); err != nil {
+		return err
+	}
+	return os.Remove(filepath.Join(root, "import", in.Name)) // expect: codeye.go.path-traversal
 }

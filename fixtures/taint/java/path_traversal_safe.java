@@ -27,6 +27,11 @@ public class PathTraversalSafe {
         return java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("/srv/avatars/" + name));
     }
 
+    public void upload(HttpServletRequest req) throws IOException {
+        String name = org.apache.commons.io.FilenameUtils.getName(req.getHeader("X-File-Name"));
+        new java.io.FileOutputStream("/srv/uploads/" + name, false).close();
+    }
+
     public byte[] index() throws IOException {
         return Files.readAllBytes(ROOT.resolve("index.txt"));
     }

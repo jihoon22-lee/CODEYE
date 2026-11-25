@@ -23,3 +23,15 @@ void save_upload(int sock) {
     std::ofstream out;
     out.open(name); // expect: codeye.c.path-traversal
 }
+
+void save_datagram(int sock) {
+    char name[256] = "/srv/uploads/";
+    size_t used = std::strlen(name);
+    ssize_t n = recvfrom(sock, name + used, sizeof(name) - used - 1, 0, nullptr, nullptr);
+    if (n <= 0) {
+        return;
+    }
+    name[used + n] = '\0';
+    std::fstream out;
+    out.open(name, std::ios::out); // expect: codeye.c.path-traversal
+}

@@ -1465,12 +1465,12 @@ gitleaks 탐지는 미검토 낮음 보안 finding이다. 비밀값 엔진은 gi
 
 - **출처.** 모든 규칙은 CODEYE가 각 언어·프레임워크의 공개 API를 보고 새로 썼다. Semgrep 레지스트리 규칙(Semgrep Rules License v1.0, [원문](https://github.com/semgrep/semgrep-rules/blob/develop/LICENSE))이나 라이선스를 확인하지 않은 규칙 집합을 복사하거나 고쳐 쓰지 않았다. 규칙 파일은 저장소의 다른 소스와 같은 조건이다.
 - **내장과 식별.** 규칙 파일 `rules/<언어>.yaml`은 바이너리에 내장(`go:embed`)되고 실행마다 task scratch의 `rules/`에 써서 `--config`로 넘긴다. `rule_pack.selection`은 엔진 스위치와 **이번 실행이 불러온** 규칙 파일마다 SHA-256 앞 12자(`rules/python.yaml@…`)다. 범위에 없는 언어의 규칙 파일은 적지 않는다. 언어가 다른 두 실행은 규칙 문맥이 다르다. 규칙을 바꾸면 선택이 바뀌어 규칙 문맥이 달라진다. 팩 버전은 `codeye-taint` v2다. v2는 아래 [측정](#opengrep-규칙-측정)의 개발 부분에서 찾은 출발점·위험 호출·정리 함수를 더했다.
-- **정밀도 우선.** 규칙마다 양성 fixture(`fixtures/taint/<언어>/<규칙>.*`, 위험 줄에 `expect: <규칙 ID>`)와 음성 fixture(`*_safe.*`: 인자 목록 실행, 매개변수 바인딩, 상수 호스트 접두사, escape, 숫자 변환, 포함 검사)가 있다. 새 출발점·위험 호출·정리 함수마다 양성과 음성 줄이 있다(프레임워크 출발점은 `framework_sources.*`). 실제 Opengrep 실행에서 양성 108줄을 모두 찾고 음성에서 결과가 없어야 시험을 통과한다. 음성에서 정확하게 만들 수 없는 위험 호출은 규칙에 넣지 않았다(예: Go의 `$X.Get(a, b)` 형태 SQL 호출은 캐시 클라이언트와 구별할 수 없어 뺐다).
+- **정밀도 우선.** 규칙마다 양성 fixture(`fixtures/taint/<언어>/<규칙>.*`, 위험 줄에 `expect: <규칙 ID>`)와 음성 fixture(`*_safe.*`: 인자 목록 실행, 매개변수 바인딩, 상수 호스트 접두사, escape, 숫자 변환, 포함 검사)가 있다. 새 출발점·위험 호출·정리 함수마다 양성과 음성 줄이 있다(프레임워크 출발점은 `framework_sources.*`). 실제 Opengrep 실행에서 양성 118줄을 모두 찾고 음성에서 결과가 없어야 시험을 통과한다. 음성에서 정확하게 만들 수 없는 위험 호출은 규칙에 넣지 않았다(예: Go의 `$X.Get(a, b)` 형태 SQL 호출은 캐시 클라이언트와 구별할 수 없어 뺐다).
 - **YAML.** Opengrep은 YAML anchor를 받지 않으므로 규칙 파일은 출발점·정리 블록을 규칙마다 펼쳐 쓴다.
 
 ### 실행
 
-- 버전 probe(`opengrep --version`, 한 줄 `X.Y.Z`) 뒤 scan 한 번(파일 목록이 argv 한도를 넘으면 나눠 최대 64번)이다. 경로 인자의 한도는 Windows 24 KiB, 그 밖 96 KiB다. Windows 명령줄은 UTF-16 32767 단위까지이고 UTF-8 경로의 바이트 수는 UTF-16 단위 수보다 작지 않으며 나머지 argv는 2 KiB 아래다. Linux의 전체 인자 한도(`ARG_MAX`, 보통 2 MiB)보다는 충분히 작다. Windows 한도는 계산값이고 Windows에서 실행해 보지 않았다. 64번을 넘으면 실행하지 않고 `unsupported`/`too_many_files`다.
+- 버전 probe(`opengrep --version`, 한 줄 `X.Y.Z`) 뒤 scan 한 번(파일 목록이 argv 한도를 넘으면 나눠 최대 64번)이다. 경로 인자의 한도는 Windows 24 KiB, 그 밖 96 KiB다. 경로마다 바이트 수에 `./`, 구분 공백, 공백이 든 이름을 감싸는 Windows 따옴표 두 개(5바이트)를 더해 센다. Windows 명령줄은 UTF-16 32767 단위까지이고 UTF-8 경로의 바이트 수는 UTF-16 단위 수보다 작지 않으며 나머지 argv는 2 KiB 아래다. Linux의 전체 인자 한도(`ARG_MAX`, 보통 2 MiB)보다는 충분히 작다. Windows 한도는 계산값이고 Windows에서 실행해 보지 않았다. 64번을 넘으면 실행하지 않고 `unsupported`/`too_many_files`다.
 - argv: `scan --config <scratch>/…/rules/<언어>.yaml … --no-rewrite-rule-ids --sarif --dataflow-traces --taint-intrafile --json-output <scratch>/…/opengrep.scan.json --project-root . --quiet --jobs 4 --timeout 30 --timeout-threshold 3 --max-target-bytes 1000000 -- ./<파일>…`. cwd는 작업 사본, 환경은 공통값(`PATH`, `LANG`, `SystemRoot`)과 executor의 실행별 `HOME`·임시 디렉터리뿐이다. 범위에 있는 언어의 규칙 파일만 넘긴다.
 - **한 번의 실행, 두 출력.** stdout의 SARIF가 원시 stream이고 관찰의 근거다. `--json-output`이 scratch에 쓰는 JSON 사본은 SARIF에 없는 두 가지, 검사한 파일 목록(`paths.scanned`)과 파일별 구조화 오류를 준다. 두 출력은 대조한다. 오류 수와 SARIF 알림 수가 같아야 하고, 억제되지 않은 결과의 (규칙, 경로, 줄) 다중집합이 같아야 한다(JSON 사본은 억제된 결과를 빼고 쓴다). 다르면 `output_unparsed`다.
 - **네트워크를 쓰지 않는다.** 규칙은 로컬 파일로만 넘기고 레지스트리(`p/…`, `r/…`, `auto`), URL, `git+` 설정, `SEMGREP_RULES` 환경변수를 쓰지 않는다. Opengrep 2.0.0에는 지표 전송 옵션이 없다. 버전 확인도 하지 않는다. 시험 `TestRealOpengrepNoNetwork`(TC-291)가 팩이 만든 argv·환경 그대로 strace(`trace=network,process`)로 실행해 `socket`·`connect`·`sendto`·`bind`가 없고 `execve`가 하나뿐임을 확인했다. 재생 시험은 기록된 argv와 환경에 레지스트리·URL·파일 사이 스위치가 없음을 CI에서 검사한다.
@@ -1534,12 +1534,20 @@ gitleaks 탐지는 미검토 낮음 보안 finding이다. 비밀값 엔진은 gi
 
 **분할과 오염.** 결과를 보기 전에 개발 부분과 보고 전용 부분을 정했다.
 
-- 벤치마크는 시험 번호의 짝수가 개발, 홀수가 보고 전용이다. Juliet은 흐름 변형 번호(`_NN`)로 나눴다.
+- 벤치마크는 시험 번호의 짝수가 개발, 홀수가 보고 전용이다. Juliet C/C++은 흐름 변형 번호(`_NN`)로 나눴다.
 - 애플리케이션은 언어마다 개발용과 보고 전용을 라이선스·프레임워크로 골라 이름을 먼저 적었다.
-- 규칙은 개발 부분의 놓친 사례와 오탐만 보고 고쳤다. 보고 전용 부분은 고치기 전과 뒤에 한 번씩 집계했다.
-- 지키지 못한 것이 두 가지 있다. Python 정리 함수를 설계하면서 BenchmarkPython의 보고 전용 사례 하나(홀수 번호)를 열어 보았다. C/C++ 규칙을 고치면서 Juliet의 `_01`(홀수) 변형 파일을 보았다. 그래서 **BenchmarkPython과 Juliet의 보고 전용 숫자는 개발 숫자로 센다.**
-- 대신 규칙을 마지막으로 고친 뒤 처음 보는 애플리케이션 열 개를 따로 정해 최종 보고 전용 자료로 썼다(아래 표의 "새 보고 전용"). Python·C에 쓸, 보지 않은 레이블 벤치마크는 찾지 못했다.
-- BenchmarkJava의 보고 전용 부분과 처음 정한 보고 전용 애플리케이션은 실행하고 진단을 읽었지만 규칙 변경에 쓰지 않았다.
+- 규칙은 개발 부분의 놓친 사례와 오탐을 보고 고쳤다.
+
+그러나 분할을 끝까지 지키지 못했다.
+
+- 규칙을 고치는 동안 매번 채점 출력에 두 OWASP 벤치마크의 보고 전용 집계 행이 함께 보였다.
+- 처음 정한 보고 전용 애플리케이션도 매번 함께 실행하고 진단을 읽었다.
+- Python 정리 함수를 설계하면서 BenchmarkPython의 보고 전용 사례 하나를 열어 보았다.
+- C/C++ 규칙을 고치면서 Juliet의 `_01`(홀수) 변형 파일을 보았다.
+
+보고 전용 자료로 규칙을 고치지는 않았지만, 그렇지 않았다고 보일 방법이 없다. 그래서 **아래 OWASP 두 벤치마크와 Juliet C/C++의 홀수 부분, 처음 정한 보고 전용 애플리케이션은 모두 개발 숫자로 센다.**
+
+규칙을 마지막으로 고친 뒤 처음 보는 자료를 따로 정해 최종 보고 전용으로 썼다. 레이블 집합인 Juliet Java 1.3과 애플리케이션 열 개(아래 표의 "새 보고 전용")다. 이 자료를 본 뒤에는 Java 규칙을 고치지 않는다. Python·C/C++용으로 보지 않은 레이블 집합은 따로 찾지 않았다. Juliet C/C++의 다른 출발점(환경변수, 파일, 콘솔)은 규칙의 요청 입력 출발점이 아니다.
 
 **레이블 벤치마크.** 사례는 그 범주의 규칙이 시험 파일 안에서 결과를 냈으면 검출이다. 범주는 규칙이 다루는 것만 셌다.
 
@@ -1548,17 +1556,38 @@ gitleaks 탐지는 미검토 낮음 보안 finding이다. 비밀값 엔진은 gi
 | OWASP BenchmarkJava `10dfcc54` | GPL-2.0 |
 | OWASP BenchmarkPython `f1291485` | GPL-3.0 |
 | NIST Juliet C/C++ 1.3(CWE-78, CWE-23·36의 POSIX `char` socket 변형 1968파일) | 미국 정부 저작물 |
+| NIST Juliet Java 1.3(CWE-78·89·80·81·83·23·36의 서블릿 출발점 `getParameter`·`getQueryString`·`getCookies` 변형 2175파일, zip SHA-256 `d985f417…`) | 미국 정부 저작물 |
 
-BenchmarkJava, TP/FN/FP/TN(v1 → v2):
+**새 보고 전용: Juliet Java 1.3, v2 규칙.** 메서드 단위로 셌다(`bad` 메서드의 결과는 TP, `good` 메서드의 결과는 FP). 결과 651건은 모두 `bad` 메서드에 있었다. 여러 파일에 걸친 변형(`_51a`… 등)은 한 사례다.
 
-| 범주(CWE) | 개발 v1 | 개발 v2 | 보고 전용 v1 | 보고 전용 v2 | 보고 전용 v2 재현율·오탐률 |
+| CWE | 한 파일 변형 TP/FN/FP/TN | 여러 파일 변형 TP/FN/FP/TN | 한 파일 변형 재현율 |
+|---|---|---|---|
+| 명령(78) | 63/3/0/66 | 0/45/0/45 | 0.95 |
+| SQL(89) | 315/15/0/330 | 0/225/0/225 | 0.95 |
+| HTML(80) | 126/6/0/132 | 0/90/0/90 | 0.95 |
+| HTML 오류 메시지(81) | 0/66/0/66 | 0/45/0/45 | 0 |
+| HTML 속성(83) | 63/3/0/66 | 0/45/0/45 | 0.95 |
+| 상대 경로(23) | 42/24/0/66 | 0/45/0/45 | 0.64 |
+| 절대 경로(36) | 42/24/0/66 | 0/45/0/45 | 0.64 |
+
+한 파일 변형에서 놓친 141건의 원인:
+
+- `response.sendError(…)` 위험 호출을 모델링하지 않음: 66 (CWE-81 전부).
+- `getQueryString`을 잘라 읽는 `token.startsWith("id=")`를 경로 규칙이 포함 검사 정리로 봄: 44 (CWE-23·36).
+- 클래스 필드를 거친 값(변형 45): 31.
+
+여러 파일 변형 540건은 파일 사이 흐름이라 모두 놓쳤다. `good` 메서드에서는 결과가 없어 오탐은 0건이다.
+
+BenchmarkJava, TP/FN/FP/TN(v1 → v2). 짝수·홀수 모두 개발 숫자다(위 오염).
+
+| 범주(CWE) | 짝수 v1 | 짝수 v2 | 홀수 v1 | 홀수 v2 | 홀수 v2 재현율·오탐률 |
 |---|---|---|---|---|---|
 | 명령(78) | 15/49/1/63 | 18/46/1/63 | 7/55/7/54 | 10/52/7/54 | 0.16 · 0.11 |
 | 경로(22) | 0/60/0/72 | 31/29/18/54 | 0/73/0/63 | 34/39/13/50 | 0.47 · 0.21 |
 | SQL(89) | 54/84/12/104 | 89/49/19/97 | 48/86/15/101 | 77/57/23/93 | 0.57 · 0.20 |
 | HTML(79) | 49/71/18/84 | 110/10/17/85 | 46/80/17/90 | 110/16/13/94 | 0.87 · 0.12 |
 
-보고 전용 BenchmarkJava의 놓친 사례와 오탐의 원인(v2):
+BenchmarkJava 홀수 부분의 놓친 사례와 오탐의 원인(v2):
 
 | 범주 | 놓친 사례 | 오탐 |
 |---|---|---|
@@ -1593,6 +1622,7 @@ Juliet은 함수 단위로 셌다(`bad` 함수의 결과는 TP, `good` 함수의
 
 - Juliet은 `fopen`·`system` 등을 매크로로 감싸 호출한다. Opengrep은 매크로 뒤의 호출을 보지 못해 그 위험 호출은 하나도 찾지 못했다. 실제 코드의 같은 호출은 fixture에서 찾는다.
 - `fstream`의 놓친 사례는 여러 파일에 걸친 변형(짝수 88, 홀수 72)과 포인터·참조·union·함수 포인터·전역을 거친 한 파일 변형(짝수 24, 홀수 16)이다.
+- 측정 뒤 새 출발점마다 양성·음성 줄을 맞추다가, `recvfrom`으로 버퍼 오프셋에 받은 뒤 종료 문자를 넣으면(`buf[n] = '\0'`) 흐름이 끊기는 것을 fixture에서 찾아 고쳤다(`recv`에는 있던 형태). 고친 뒤 Juliet C/C++, civetweb, lighttpd, h2o를 다시 실행했고 숫자는 같았다.
 
 **레이블 집합이 없는 언어.** JS/TS·Go·Rust에서 라이선스가 분명한 웹 taint 레이블 벤치마크를 찾지 못했다. SecBench.js는 라이선스가 없어 쓰지 않았다. 이 언어들은 애플리케이션 진단만 쟀다.
 
@@ -1613,13 +1643,13 @@ Juliet은 함수 단위로 셌다(`bad` 함수의 결과는 TP, `good` 함수의
 | 개발 | Rust | orhun/rustypaste (`507fcbd4`, MIT) | 13 | 6 → 0 | v1의 6건은 다른 파일의 `safe_path_join`으로 결합한 경로라 오탐이었다. v2에서 이름으로 정리로 본다 |
 | 개발 | Rust | atuinsh/atuin (`2fdcb592`, MIT) | 632 (21) | 0 → 0 | |
 | 개발 | C | civetweb/civetweb (`588860e3`, MIT) | 37 (1) | 실패 → 0 | v1 어댑터는 알림 메시지의 제어 문자로 `output_unparsed`였다. 본체 `civetweb.c`는 엔진이 해석하지 못해 처리 파일이 아니다 |
-| 처음 정한 보고 전용 | Python | getredash/redash (`f561a53d`, BSD-2-Clause) | 970 | 0 → 0 | |
-| 처음 정한 보고 전용 | JS/TS | hoppscotch/hoppscotch (`6177eae1`, MIT) | 1287 (4) | 4 → 4 | 오탐 4. 앱이 보내려고 만드는 클라이언트 쪽 `request` 객체를 요청 입력으로 보았다(SQL 3건은 이름이 같은 `execute`, SSRF 1건) |
-| 처음 정한 보고 전용 | Java | macrozheng/mall (`dcaa93b3`, Apache-2.0) | 524 | 1 → 1 | 오탐 1. 숫자 `@PathVariable Long`이 고정 호스트 URL에 붙는다 |
-| 처음 정한 보고 전용 | Go | miniflux/v2 (`5117f365`, Apache-2.0) | 453 | 0 → 0 | |
-| 처음 정한 보고 전용 | Rust | svix/svix-webhooks (`c5e2ded5`, MIT) | 2067 (8) | 0 → 0 | |
-| 처음 정한 보고 전용 | C | lighttpd/lighttpd1.4 (`2ddc5138`, BSD-3-Clause) | 174 (23) | 0 → 0 | |
-| 새 보고 전용 | Python | netbox-community/netbox (`4cfaa8f7`, Apache-2.0) | 1354 (1) | 2 | HTML 2, 모두 오탐. 이름은 `escape()`로 정리했고, 남은 값 `get_absolute_url()`은 정수 기본 키로 만든 URL이다 |
+| 처음 정한 보고 전용(개발로 셈) | Python | getredash/redash (`f561a53d`, BSD-2-Clause) | 970 | 0 → 0 | |
+| 처음 정한 보고 전용(개발로 셈) | JS/TS | hoppscotch/hoppscotch (`6177eae1`, MIT) | 1287 (4) | 4 → 4 | 오탐 4. 앱이 보내려고 만드는 클라이언트 쪽 `request` 객체를 요청 입력으로 보았다(SQL 3건은 이름이 같은 `execute`, SSRF 1건) |
+| 처음 정한 보고 전용(개발로 셈) | Java | macrozheng/mall (`dcaa93b3`, Apache-2.0) | 524 | 1 → 1 | 오탐 1. 숫자 `@PathVariable Long`이 고정 호스트 URL에 붙는다 |
+| 처음 정한 보고 전용(개발로 셈) | Go | miniflux/v2 (`5117f365`, Apache-2.0) | 453 | 0 → 0 | |
+| 처음 정한 보고 전용(개발로 셈) | Rust | svix/svix-webhooks (`c5e2ded5`, MIT) | 2067 (8) | 0 → 0 | |
+| 처음 정한 보고 전용(개발로 셈) | C | lighttpd/lighttpd1.4 (`2ddc5138`, BSD-3-Clause) | 174 (23) | 0 → 0 | |
+| 새 보고 전용 | Python | netbox-community/netbox (`4cfaa8f7`, Apache-2.0) | 1354 (1) | 2 | HTML 2, 모두 오탐. `dcim/views.py`: 장치 이름은 `escape()`로 정리했고 남은 값 `device.get_absolute_url()`은 정수 기본 키로 만든 URL이다. `generic/object_views.py`: 같은 구성으로 객체 이름은 `escape()`, URL은 기본 키에서 만든다 |
 | 새 보고 전용 | Python | saleor/saleor (`e1ccf4d5`, BSD-3-Clause) | 4373 (2) | 0 | |
 | 새 보고 전용 | Java | elunez/eladmin (`646c58c3`, Apache-2.0) | 274 | 0 | |
 | 새 보고 전용 | Java | yangzongzhuan/RuoYi (`d6708994`, MIT) | 376 (1) | 0 | |
@@ -1630,7 +1660,7 @@ Juliet은 함수 단위로 셌다(`bad` 함수의 결과는 TP, `good` 함수의
 | 새 보고 전용 | Rust | qdrant/qdrant (`23065a0b`, Apache-2.0) | 2344 (35) | 0 | |
 | 새 보고 전용 | C | h2o/h2o (`d3e43fcf`, MIT) | 761 (26) | 0 | |
 
-- v2 진단은 모두 15건이고 실제 흐름은 없다. 개발 3건은 무해 1, 오탐 2다. 처음 정한 보고 전용 5건과 새 보고 전용 2건은 모두 오탐이다.
+- v2 진단은 모두 10건이고 실제 흐름은 없다. 개발 3건은 무해 1, 오탐 2다. 처음 정한 보고 전용(개발로 셈) 5건과 새 보고 전용 2건은 모두 오탐이다.
 - 애플리케이션 27개에서 실제 결함을 하나도 찾지 못했다. 그래서 애플리케이션 측정은 오탐을 보여 줄 뿐이고 재현율의 근거가 아니다. 진단이 없는 애플리케이션에 흐름이 없다는 뜻도 아니다.
 - 언어·규칙별 v2 진단:
   - Python 경로 3, Python HTML 2.
@@ -1642,12 +1672,12 @@ Juliet은 함수 단위로 셌다(`bad` 함수의 결과는 TP, `good` 함수의
 **측정의 한계.** 아래는 v2 규칙이 다루지 않는다. 이 구성에서 결과가 없는 것은 결함이 없다는 뜻이 아니다.
 
 - 파일 사이 흐름: 다른 파일의 출발점·래퍼·헬퍼(JdbcTemplate), 프레임워크가 주입하는 값.
-- 매크로로 감싼 위험 호출(Juliet `fopen`·`system`), 포인터·참조·union·함수 포인터·전역을 거친 값, 상수 조건, 목록·맵 원소의 구분, Python 문자열 slice.
+- 매크로로 감싼 위험 호출(Juliet `fopen`·`system`), 포인터·참조·union·함수 포인터·전역·Java 클래스 필드를 거친 값, 상수 조건, 목록·맵 원소의 구분, Python 문자열 slice.
 - 디코드한 본문은 통째로 오염된다. DRF serializer의 `validated_data`, 요청 본문으로 만든 모델 객체, Go에서 구조체로 디코드한 변수의 모든 필드가 출발점으로 이어진다(확인함). 숫자형 필드나 serializer 검증은 정리로 보지 않으므로 과하게 보고할 수 있다.
 - NestJS 매개변수 데코레이터(`@Query()`, `@Body()`, `@Param()`): Opengrep 2.0.0이 javascript 언어에서 이 패턴을 해석하지 못해 출발점에 없다.
 - socket.io는 `socket.on` 처리 함수의 인자만 본다. 다른 이름의 소켓 객체나 미들웨어는 보지 않는다.
-- 위험 호출 밖의 동작: 새 프로세스의 환경변수(`exec(cmd, env)`), 실행 시점에 고른 셸, 존재·메타데이터 검사만 하는 경로 사용.
-- 정리: 허용 목록·정규식·리터럴 비교 같은 검증 분기는 정리로 보지 않는다. Go의 `strings.HasPrefix` 검사는 부작용 정리로 보아 검사 뒤에는 어느 분기에서도 값을 안전하다고 본다. 거부 분기(`if !HasPrefix { 사용; return }`) 안의 사용도 보고하지 않는다(확인함). Python escape·Rust 경로 결합 정리는 함수 이름(`escape_html`, `safe_path_join` 등)으로 인정하므로 이름만 같은 다른 함수도 정리로 본다.
+- 위험 호출 밖의 동작: 새 프로세스의 환경변수(`exec(cmd, env)`), 실행 시점에 고른 셸, 존재·메타데이터 검사만 하는 경로 사용. Java `response.sendError(…)`의 HTML 메시지도 위험 호출로 보지 않는다.
+- 정리: 허용 목록·정규식·리터럴 비교 같은 검증 분기는 정리로 보지 않는다. 경로 규칙의 포함 검사(`startsWith`·`HasPrefix` 등)는 검사한 문자열이 경로인지 보지 않는다. 질의 문자열 토큰의 `token.startsWith("id=")` 뒤의 값도 안전하다고 본다(Juliet Java 44건). Go의 `strings.HasPrefix` 검사는 부작용 정리로 보아 검사 뒤에는 어느 분기에서도 값을 안전하다고 본다. 거부 분기(`if !HasPrefix { 사용; return }`) 안의 사용도 보고하지 않는다(확인함). Python escape·Rust 경로 결합 정리는 함수 이름(`escape_html`, `safe_path_join` 등)으로 인정하므로 이름만 같은 다른 함수도 정리로 본다.
 - 파일 내용: Python에서 파일에서 읽은 값(`open(…).read()`)은 경로 규칙 밖에서는 정리된 값으로 본다. 업로드 파일을 읽어 곧바로 쓰는 흐름은 놓친다.
 
 ### Opengrep 설치

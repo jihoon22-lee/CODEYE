@@ -23,3 +23,16 @@ void save_log(int sock) {
     out.open("/var/log/service.log");
     out << line;
 }
+
+void save_datagram(int sock) {
+    char line[256] = "entry: ";
+    size_t used = std::strlen(line);
+    ssize_t n = recvfrom(sock, line + used, sizeof(line) - used - 1, 0, nullptr, nullptr);
+    if (n <= 0) {
+        return;
+    }
+    line[used + n] = '\0';
+    std::fstream out;
+    out.open("/var/log/datagram.log", std::ios::app);
+    out << line;
+}

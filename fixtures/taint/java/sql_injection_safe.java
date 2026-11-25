@@ -23,6 +23,18 @@ public class SqlInjectionSafe {
         return ps.executeQuery();
     }
 
+    public ResultSet byNumber(HttpServletRequest req) throws SQLException {
+        java.sql.Statement st = conn.createStatement();
+        return st.executeQuery("SELECT * FROM users WHERE id = " + Integer.parseInt(req.getParameter("id")));
+    }
+
+    public boolean audit(HttpServletRequest req) throws SQLException {
+        java.util.Enumeration<String> names = req.getHeaderNames();
+        PreparedStatement ps = conn.prepareStatement("INSERT INTO audit (header) VALUES (?)");
+        ps.setString(1, names.hasMoreElements() ? names.nextElement() : "");
+        return ps.execute();
+    }
+
     @GetMapping("/users")
     public List<Map<String, Object>> page(@RequestParam("limit") String limit) {
         return jdbc.queryForList("SELECT * FROM users LIMIT " + Integer.parseInt(limit));

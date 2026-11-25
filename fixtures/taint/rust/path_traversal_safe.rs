@@ -37,3 +37,12 @@ pub async fn remove(path: web::Path<String>) -> HttpResponse {
         None => HttpResponse::NotFound().finish(),
     }
 }
+
+pub async fn upload(path: web::Path<String>) -> HttpResponse {
+    // A filename cleaner named after what it does, from a crate.
+    let name = sanitize_filename::sanitize_filename(&path.into_inner());
+    match fs::write(PathBuf::from("/srv/uploads").join(name), b"") {
+        Ok(_) => HttpResponse::Ok().finish(),
+        Err(_) => HttpResponse::NotFound().finish(),
+    }
+}

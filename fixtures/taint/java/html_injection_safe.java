@@ -27,6 +27,15 @@ public class HtmlInjectionSafe {
         resp.getWriter().write("<span>" + tag + "</span>");
     }
 
+    public void list(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        java.util.Enumeration<String> names = req.getParameterNames();
+        while (names.hasMoreElements()) {
+            resp.getWriter().println("<li>" + org.owasp.encoder.Encode.forHtml(names.nextElement()) + "</li>");
+        }
+        String css = org.owasp.esapi.ESAPI.encoder().encodeForHTMLAttribute(req.getHeader("X-Class"));
+        resp.getWriter().format("<div class=\"%s\"></div>", css);
+    }
+
     private static String quote(String s) {
         return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }

@@ -45,3 +45,9 @@ def archive():
     base = pathlib.Path(ROOT)
     target = base / request.args.get("file", "")
     return target.read_bytes()  # expect: codeye.python.path-traversal
+
+
+@app.route("/preview")
+def preview():
+    # Reading a file is a sanitiser of the other rules, not of this one.
+    return open(os.path.join(ROOT, request.args["n"])).read()  # expect: codeye.python.path-traversal

@@ -22,3 +22,13 @@ def rename(request):
 async def preview(request: Request):
     body = await request.json()
     return render_template_string("<h1>" + body["title"] + "</h1>")  # expect: codeye.python.html-injection
+
+
+def tag(request):
+    # Django: a request header.
+    subprocess.run("tag " + request.headers["X-Tag"], shell=True)  # expect: codeye.python.command-injection
+
+
+async def print_job(request: Request):
+    form = await request.form()
+    os.system("lp " + form["file"])  # expect: codeye.python.command-injection

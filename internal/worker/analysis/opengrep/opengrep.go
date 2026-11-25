@@ -201,6 +201,12 @@ func Selection(langs []Language) []string {
 	return out
 }
 
+// argOverhead is what one path argument adds to the command line beyond its
+// bytes: the "./" prefix, the separator, and on Windows the two quotes
+// around a name with a space (snapshot names hold no backslash or quote,
+// so nothing else is escaped).
+const argOverhead = 5
+
 // batches splits the files into scans of at most MaxArgBytes of path
 // arguments, in path order.
 func batches(files []source.Entry) [][]string {
@@ -208,7 +214,7 @@ func batches(files []source.Entry) [][]string {
 	var cur []string
 	size := 0
 	for _, f := range files {
-		n := len(f.Path) + 3
+		n := len(f.Path) + argOverhead
 		if len(cur) > 0 && size+n > MaxArgBytes {
 			out = append(out, cur)
 			cur, size = nil, 0

@@ -1,4 +1,6 @@
+import codecs
 import os
+import pathlib
 
 from flask import Flask, abort, request, send_file
 from werkzeug.utils import secure_filename
@@ -33,3 +35,17 @@ def download():
 def fixed():
     with open(os.path.join(ROOT, "index.txt")) as fh:
         return fh.read()
+
+
+@app.route("/notes")
+def notes():
+    lang = secure_filename(request.args.get("lang", "en"))
+    with codecs.open(f"{ROOT}/notes/{lang}.txt", "r", "utf-8") as f:
+        return f.read()
+
+
+@app.route("/archive")
+def archive():
+    base = pathlib.Path(ROOT)
+    target = base / secure_filename(request.args.get("file", ""))
+    return target.read_bytes()

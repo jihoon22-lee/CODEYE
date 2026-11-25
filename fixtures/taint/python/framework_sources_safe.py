@@ -1,4 +1,6 @@
 import os
+import pathlib
+import subprocess
 from urllib.parse import urlencode
 
 from flask import Flask, render_template_string, request, send_file
@@ -25,3 +27,23 @@ def plugin_config(plugin):
 @app.route("/next")
 def next_link():
     return Markup('<a href="?' + urlencode(request.args) + '">next</a>')
+
+
+def rename(req):
+    # Django REST framework body and header, passed as argument lists.
+    subprocess.run(["mv", "a", req.data["target"]])
+    subprocess.run(["tag", req.headers["X-Tag"]])
+
+
+async def preview(req):
+    body = await req.json()
+    form = await req.form()
+    return render_template_string("<h1>{{ t }}</h1><p>{{ f }}</p>", t=body["title"], f=form["note"])
+
+
+@app.route("/icons")
+def icon():
+    # The final component of a path object.
+    name = pathlib.Path(request.args["icon"]).name
+    with open(os.path.join(ROOT, "icons", name)) as f:
+        return f.read()

@@ -21,4 +21,14 @@ function sockets(io) {
   });
 }
 
-module.exports = { lang, koaDownload, sockets };
+function attachment(req, res) {
+  res.send(fs.readFileSync(path.join(ROOT, req.header("X-File")))); // expect: codeye.javascript.path-traversal
+}
+
+async function koaConvert(ctx) {
+  exec("convert " + ctx.request.body.name, () => {}); // expect: codeye.javascript.command-injection
+  ctx.body = fs.readFileSync(path.join(ROOT, ctx.params.name)); // expect: codeye.javascript.path-traversal
+  ctx.body = fs.readFileSync(path.join(ROOT, "themes", ctx.cookies.get("theme"))); // expect: codeye.javascript.path-traversal
+}
+
+module.exports = { lang, koaDownload, sockets, attachment, koaConvert };

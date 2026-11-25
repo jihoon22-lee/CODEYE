@@ -54,6 +54,12 @@ rules:
               - pattern-inside: |
                   $N = recv($S, $BUF + $OFF, ...);
                   ...
+              - pattern-inside: |
+                  $N = recvfrom($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, $BUF + $OFF, ...);
+                  ...
           - pattern: $BUF[$I] = $V;
           - focus-metavariable: $BUF
       - patterns:
@@ -162,6 +168,12 @@ rules:
                   ...
               - pattern-inside: |
                   $N = recv($S, $BUF + $OFF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, $BUF + $OFF, ...);
                   ...
           - pattern: $BUF[$I] = $V;
           - focus-metavariable: $BUF
@@ -287,6 +299,12 @@ rules:
               - pattern-inside: |
                   $N = recv($S, $BUF + $OFF, ...);
                   ...
+              - pattern-inside: |
+                  $N = recvfrom($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, $BUF + $OFF, ...);
+                  ...
           - pattern: $BUF[$I] = $V;
           - focus-metavariable: $BUF
       - patterns:
@@ -393,6 +411,12 @@ rules:
                   ...
               - pattern-inside: |
                   $N = recv($S, $BUF + $OFF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, $BUF + $OFF, ...);
                   ...
           - pattern: $BUF[$I] = $V;
           - focus-metavariable: $BUF

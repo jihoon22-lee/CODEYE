@@ -15,6 +15,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack/packtest"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
 // Replay tests run in CI without Opengrep: the scan returns the streams and
@@ -292,6 +293,29 @@ func TestMaxArgBytes(t *testing.T) {
 	}
 	if 32767-maxArgBytes("windows") < 4096 {
 		t.Fatal("no room for the rest of the argv on Windows")
+	}
+	// Many short names with spaces: each batch's path arguments, written
+	// as a Windows command line ("./a b.py" quoted, one space apart), stay
+	// within the Windows bound.
+	saved := MaxArgBytes
+	MaxArgBytes = maxArgBytes("windows")
+	defer func() { MaxArgBytes = saved }()
+	var files []source.Entry
+	for i := range 20000 {
+		files = append(files, source.Entry{Path: "d/a " + strconv.Itoa(i) + ".py"})
+	}
+	got := batches(files)
+	if len(got) < 2 {
+		t.Fatalf("%d batches", len(got))
+	}
+	for _, b := range got {
+		n := 0
+		for _, p := range b {
+			n += len(`"./`+p+`"`) + 1
+		}
+		if n > MaxArgBytes {
+			t.Fatalf("batch of %d paths takes %d bytes", len(b), n)
+		}
 	}
 }
 
