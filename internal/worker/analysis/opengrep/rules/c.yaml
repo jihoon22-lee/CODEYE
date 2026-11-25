@@ -1,0 +1,474 @@
+# CODEYE rule pack codeye-taint (C and C++). Written for CODEYE from the
+# POSIX, C standard library, libcurl, SQLite, MySQL and libpq APIs; not
+# derived from any third-party rule set. Every rule is an intra-file taint
+# rule: the source and the sink must be in the same file (calls between
+# functions of that file are followed). Sources are request input that a
+# network service or CGI program receives: bytes read by recv or recvfrom
+# into a buffer, and the CGI request variables (QUERY_STRING, PATH_INFO,
+# REQUEST_URI, HTTP_* headers and so on) read with getenv. Other getenv
+# values, standard input and files are not sources. C has no rule for
+# unsafe deserialization, code evaluation or HTML output.
+rules:
+  - id: codeye.c.command-injection
+    mode: taint
+    languages: [c, cpp]
+    severity: ERROR
+    message: Network or CGI request input reaches a command run by a shell
+    metadata: {cwe: ["CWE-78"], codeye_family: command-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern: recv($S, $BUF, ...)
+              - pattern: recvfrom($S, $BUF, ...)
+              # Received bytes appended at an offset of the buffer.
+              - pattern: recv($S, $BUF + $OFF, ...)
+              - pattern: recv($S, ($T)($BUF + $OFF), ...)
+              - pattern: recvfrom($S, $BUF + $OFF, ...)
+              - pattern: recvfrom($S, ($T)($BUF + $OFF), ...)
+          - focus-metavariable: $BUF
+      # Terminating the received bytes (buf[n] = '\0') leaves them in the
+      # buffer.
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  recv($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $T $N = recv($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $T $N = recvfrom($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, $BUF + $OFF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, $BUF + $OFF, ...);
+                  ...
+          - pattern: $BUF[$I] = $V;
+          - focus-metavariable: $BUF
+      - patterns:
+          - pattern-either:
+              - pattern: getenv("$NAME")
+              - pattern: secure_getenv("$NAME")
+              - pattern: std::getenv("$NAME")
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: ^(QUERY_STRING|PATH_INFO|PATH_TRANSLATED|REQUEST_URI|SCRIPT_NAME|CONTENT_TYPE|HTTP_[A-Z0-9_]+)$
+    pattern-propagators:
+      - pattern: strcpy($TO, $FROM)
+        from: $FROM
+        to: $TO
+      - pattern: strncpy($TO, $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: strcat($TO, $FROM)
+        from: $FROM
+        to: $TO
+      - pattern: strncat($TO, $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: memcpy($TO, $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: realpath($FROM, $TO)
+        from: $FROM
+        to: $TO
+      - pattern: snprintf($TO, $N, $FMT, ..., $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: sprintf($TO, $FMT, ..., $FROM, ...)
+        from: $FROM
+        to: $TO
+    pattern-sanitizers:
+      - pattern: atoi(...)
+      - pattern: std::atoi(...)
+      - pattern: atol(...)
+      - pattern: std::atol(...)
+      - pattern: strtol(...)
+      - pattern: std::strtol(...)
+      - pattern: strtoul(...)
+      - pattern: std::strtoul(...)
+      - pattern: strtoll(...)
+      - pattern: std::strtoll(...)
+      - pattern: strtoull(...)
+      - pattern: std::strtoull(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: system($CMD)
+              - pattern: popen($CMD, ...)
+              - pattern: std::system($CMD)
+          - focus-metavariable: $CMD
+      - patterns:
+          - pattern-either:
+              - pattern: execl("$SH", $ARG0, "-c", $CMD, ...)
+              - pattern: execlp("$SH", $ARG0, "-c", $CMD, ...)
+          - metavariable-regex:
+              metavariable: $SH
+              regex: ^(/bin/|/usr/bin/)?(sh|bash|dash)$
+          - focus-metavariable: $CMD
+
+  - id: codeye.c.path-traversal
+    mode: taint
+    languages: [c, cpp]
+    severity: WARNING
+    message: Network or CGI request input selects the file path of a file system operation
+    metadata: {cwe: ["CWE-22"], codeye_family: path-traversal}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern: recv($S, $BUF, ...)
+              - pattern: recvfrom($S, $BUF, ...)
+              # Received bytes appended at an offset of the buffer.
+              - pattern: recv($S, $BUF + $OFF, ...)
+              - pattern: recv($S, ($T)($BUF + $OFF), ...)
+              - pattern: recvfrom($S, $BUF + $OFF, ...)
+              - pattern: recvfrom($S, ($T)($BUF + $OFF), ...)
+          - focus-metavariable: $BUF
+      # Terminating the received bytes (buf[n] = '\0') leaves them in the
+      # buffer.
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  recv($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $T $N = recv($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $T $N = recvfrom($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, $BUF + $OFF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, $BUF + $OFF, ...);
+                  ...
+          - pattern: $BUF[$I] = $V;
+          - focus-metavariable: $BUF
+      - patterns:
+          - pattern-either:
+              - pattern: getenv("$NAME")
+              - pattern: secure_getenv("$NAME")
+              - pattern: std::getenv("$NAME")
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: ^(QUERY_STRING|PATH_INFO|PATH_TRANSLATED|REQUEST_URI|SCRIPT_NAME|CONTENT_TYPE|HTTP_[A-Z0-9_]+)$
+    pattern-propagators:
+      - pattern: strcpy($TO, $FROM)
+        from: $FROM
+        to: $TO
+      - pattern: strncpy($TO, $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: strcat($TO, $FROM)
+        from: $FROM
+        to: $TO
+      - pattern: strncat($TO, $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: memcpy($TO, $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: realpath($FROM, $TO)
+        from: $FROM
+        to: $TO
+      - pattern: snprintf($TO, $N, $FMT, ..., $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: sprintf($TO, $FMT, ..., $FROM, ...)
+        from: $FROM
+        to: $TO
+    pattern-sanitizers:
+      - pattern: atoi(...)
+      - pattern: std::atoi(...)
+      - pattern: strtol(...)
+      - pattern: std::strtol(...)
+      - pattern: basename(...)
+      # A containment check of the resolved path (strncmp(p, root, n) != 0
+      # rejects it) makes the checked value trusted afterwards.
+      - by-side-effect: true
+        patterns:
+          - pattern: strncmp($P, ...)
+          - focus-metavariable: $P
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fopen($PATH, ...)
+              - pattern: freopen($PATH, ...)
+              - pattern: open($PATH, ...)
+              - pattern: openat($DIR, $PATH, ...)
+              - pattern: creat($PATH, ...)
+              - pattern: unlink($PATH)
+              - pattern: remove($PATH)
+              - pattern: rmdir($PATH)
+              - pattern: opendir($PATH)
+              - pattern: std::ifstream $F($PATH, ...);
+              - pattern: std::ofstream $F($PATH, ...);
+              - pattern: std::fstream $F($PATH, ...);
+              # A stream declared first and opened later.
+              - patterns:
+                  - pattern-either:
+                      - pattern-inside: |
+                          std::ifstream $F;
+                          ...
+                      - pattern-inside: |
+                          std::ofstream $F;
+                          ...
+                      - pattern-inside: |
+                          std::fstream $F;
+                          ...
+                  - pattern: $F.open($PATH, ...)
+              - pattern: std::filesystem::remove($PATH, ...)
+              - pattern: std::filesystem::remove_all($PATH, ...)
+          - focus-metavariable: $PATH
+
+  - id: codeye.c.sql-injection
+    mode: taint
+    languages: [c, cpp]
+    severity: ERROR
+    message: Network or CGI request input is built into the text of an SQL statement
+    metadata: {cwe: ["CWE-89"], codeye_family: sql-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern: recv($S, $BUF, ...)
+              - pattern: recvfrom($S, $BUF, ...)
+              # Received bytes appended at an offset of the buffer.
+              - pattern: recv($S, $BUF + $OFF, ...)
+              - pattern: recv($S, ($T)($BUF + $OFF), ...)
+              - pattern: recvfrom($S, $BUF + $OFF, ...)
+              - pattern: recvfrom($S, ($T)($BUF + $OFF), ...)
+          - focus-metavariable: $BUF
+      # Terminating the received bytes (buf[n] = '\0') leaves them in the
+      # buffer.
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  recv($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $T $N = recv($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $T $N = recvfrom($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, $BUF + $OFF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, $BUF + $OFF, ...);
+                  ...
+          - pattern: $BUF[$I] = $V;
+          - focus-metavariable: $BUF
+      - patterns:
+          - pattern-either:
+              - pattern: getenv("$NAME")
+              - pattern: secure_getenv("$NAME")
+              - pattern: std::getenv("$NAME")
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: ^(QUERY_STRING|PATH_INFO|PATH_TRANSLATED|REQUEST_URI|SCRIPT_NAME|CONTENT_TYPE|HTTP_[A-Z0-9_]+)$
+    pattern-propagators:
+      - pattern: strcpy($TO, $FROM)
+        from: $FROM
+        to: $TO
+      - pattern: strncpy($TO, $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: strcat($TO, $FROM)
+        from: $FROM
+        to: $TO
+      - pattern: strncat($TO, $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: memcpy($TO, $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: realpath($FROM, $TO)
+        from: $FROM
+        to: $TO
+      - pattern: snprintf($TO, $N, $FMT, ..., $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: sprintf($TO, $FMT, ..., $FROM, ...)
+        from: $FROM
+        to: $TO
+    pattern-sanitizers:
+      - pattern: atoi(...)
+      - pattern: std::atoi(...)
+      - pattern: atol(...)
+      - pattern: std::atol(...)
+      - pattern: strtol(...)
+      - pattern: std::strtol(...)
+      - pattern: strtoul(...)
+      - pattern: std::strtoul(...)
+      - pattern: strtoll(...)
+      - pattern: std::strtoll(...)
+      - pattern: strtoull(...)
+      - pattern: std::strtoull(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: sqlite3_exec($DB, $SQL, ...)
+              - pattern: sqlite3_prepare($DB, $SQL, ...)
+              - pattern: sqlite3_prepare_v2($DB, $SQL, ...)
+              - pattern: sqlite3_prepare_v3($DB, $SQL, ...)
+              - pattern: mysql_query($CONN, $SQL)
+              - pattern: mysql_real_query($CONN, $SQL, ...)
+              - pattern: PQexec($CONN, $SQL)
+              - pattern: PQexecParams($CONN, $SQL, ...)
+              - pattern: PQprepare($CONN, $NAME, $SQL, ...)
+          - focus-metavariable: $SQL
+
+  - id: codeye.c.ssrf
+    mode: taint
+    languages: [c, cpp]
+    severity: WARNING
+    message: Network or CGI request input decides the address of an outgoing request
+    metadata: {cwe: ["CWE-918"], codeye_family: ssrf}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern: recv($S, $BUF, ...)
+              - pattern: recvfrom($S, $BUF, ...)
+              # Received bytes appended at an offset of the buffer.
+              - pattern: recv($S, $BUF + $OFF, ...)
+              - pattern: recv($S, ($T)($BUF + $OFF), ...)
+              - pattern: recvfrom($S, $BUF + $OFF, ...)
+              - pattern: recvfrom($S, ($T)($BUF + $OFF), ...)
+          - focus-metavariable: $BUF
+      # Terminating the received bytes (buf[n] = '\0') leaves them in the
+      # buffer.
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  recv($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $T $N = recv($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $T $N = recvfrom($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, $BUF + $OFF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recvfrom($S, $BUF + $OFF, ...);
+                  ...
+          - pattern: $BUF[$I] = $V;
+          - focus-metavariable: $BUF
+      - patterns:
+          - pattern-either:
+              - pattern: getenv("$NAME")
+              - pattern: secure_getenv("$NAME")
+              - pattern: std::getenv("$NAME")
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: ^(QUERY_STRING|PATH_INFO|PATH_TRANSLATED|REQUEST_URI|SCRIPT_NAME|CONTENT_TYPE|HTTP_[A-Z0-9_]+)$
+    pattern-propagators:
+      - pattern: strcpy($TO, $FROM)
+        from: $FROM
+        to: $TO
+      - pattern: strncpy($TO, $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: strcat($TO, $FROM)
+        from: $FROM
+        to: $TO
+      - pattern: strncat($TO, $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: memcpy($TO, $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: realpath($FROM, $TO)
+        from: $FROM
+        to: $TO
+      - pattern: snprintf($TO, $N, $FMT, ..., $FROM, ...)
+        from: $FROM
+        to: $TO
+      - pattern: sprintf($TO, $FMT, ..., $FROM, ...)
+        from: $FROM
+        to: $TO
+    pattern-sanitizers:
+      - pattern: atoi(...)
+      - pattern: std::atoi(...)
+      - pattern: strtol(...)
+      - pattern: std::strtol(...)
+      - pattern: curl_easy_escape(...)
+      # A constant scheme, host and path prefix leaves only the path or query
+      # to the input.
+      - by-side-effect: true
+        patterns:
+          - pattern: snprintf($TO, $N, "$PREFIX", ...)
+          - metavariable-regex:
+              metavariable: $PREFIX
+              regex: ^https?://[^/%]+/
+          - focus-metavariable: $TO
+    pattern-sinks:
+      - patterns:
+          - pattern: curl_easy_setopt($H, CURLOPT_URL, $URL)
+          - focus-metavariable: $URL

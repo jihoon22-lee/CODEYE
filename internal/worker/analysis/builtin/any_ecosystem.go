@@ -7,12 +7,14 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/jscpd"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/lizard"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/opengrep"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
 // Analyzers of ecosystem "any" (docs/ANALYZERS.md): lizard complexity, jscpd
-// duplication (node script) and gitleaks secrets, all extra depth.
+// duplication (node script), gitleaks secrets and Opengrep intra-file taint
+// rules, all extra depth.
 
 func buildLizard(ctx context.Context, cfg Config, runner executor.Runner, _ *govet.Handler, _ map[string]pack.Toolchain) built {
 	exe := cfg.Tools[lizard.Tool]
@@ -39,4 +41,13 @@ func buildGitleaks(ctx context.Context, cfg Config, runner executor.Runner, _ *g
 	}
 	a, err := gitleaks.New(gitleaks.Settings{Executable: exe})
 	return probeBuilt(ctx, cfg, runner, gitleaks.Name, a, err)
+}
+
+func buildOpengrep(ctx context.Context, cfg Config, runner executor.Runner, _ *govet.Handler, _ map[string]pack.Toolchain) built {
+	exe := cfg.Tools[opengrep.Tool]
+	if exe == "" {
+		return unavailable(opengrep.Name, "not_configured", "", pack.ReasonToolNotConfigured)
+	}
+	a, err := opengrep.New(opengrep.Settings{Executable: exe})
+	return probeBuilt(ctx, cfg, runner, opengrep.Name, a, err)
 }

@@ -641,6 +641,7 @@ schema는 [doctor schema](../schemas/doctor.schema.json)의 `offline`, 예시는
 `codeye tools --checklist [--config PATH]`는 Markdown 점검표를 낸다. 도구마다 찾았는지, 버전과 CODEYE가 시험한 계열(`tested 2026.2` 등), 없으면 폐쇄망에서 옮기는 방법(예: `uv tool install mypy --index-url <internal index>`, `npm install --prefix ~/.local/share/codeye-tools/node --registry <internal registry> typescript`, Rust standalone installer)을 적는다. 도구를 옮긴 뒤 다시 실행해 빈 칸을 지운다. `--json`과 함께 쓸 수 없다. `gh`는 선택이며 온라인에서만 쓴다(오프라인 모드는 GitHub을 쓰지 않으므로 옮기지 않아도 된다).
 
 - Python 도구의 venv를 다른 경로로 복사하면 옛 interpreter 경로를 가리켜 거부된다. 사내 index로 그 머신에서 `uv tool install`한다.
+- Opengrep은 릴리스 실행 파일 하나다(LGPL-2.1). 연결된 머신에서 같은 플랫폼 파일(Linux x86-64는 `opengrep_linux_x86`)을 받아 `~/.local/share/codeye-tools/bin/opengrep`으로 옮기고 실행 권한을 준다. 분석은 규칙을 CODEYE가 쓴 로컬 파일로만 넘기므로 폐쇄망에서도 레지스트리가 필요 없다. [Opengrep 설치](ANALYZERS.md#opengrep-설치)
 - 시험한 계열과 다른 버전도 쓰지만 보고서와 점검표가 "시험하지 않은 버전"으로 표시한다.
 
 ### 확인한 것과 확인하지 않은 것

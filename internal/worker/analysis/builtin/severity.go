@@ -8,6 +8,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/gofmtcheck"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/javapack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/opengrep"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/python"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/rustpack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/severity"
@@ -28,6 +29,7 @@ func SeverityTables() []severity.Table {
 		eslint.Severity, tsc.Severity, architecture.DependencyCruiserSeverity, eslint.TypedSeverity, eslint.ManagedJSSeverity,
 		rustpack.CheckSeverity, rustpack.ClippySeverity, rustpack.DocSeverity,
 		javapack.PMDSeverity, javapack.SpotBugsSeverity,
+		opengrep.Severity,
 	}
 }
 

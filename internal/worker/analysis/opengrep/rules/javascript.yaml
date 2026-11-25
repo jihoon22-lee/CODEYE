@@ -1,0 +1,472 @@
+# CODEYE rule pack codeye-taint (JavaScript and TypeScript). Written for
+# CODEYE from the Node.js (child_process, fs, http, https, vm), Express,
+# axios, got, mysql/pg-style query and DOM APIs; not derived from any
+# third-party rule set. Every rule is an intra-file taint rule: the source
+# and the sink must be in the same file (calls between functions of that
+# file are followed). Sources are HTTP request input of an Express-style
+# handler (req.query, req.body, req.params, req.headers, req.cookies,
+# req.get(), req.header()), a Koa context (ctx.query, ctx.params,
+# ctx.request.body, ctx.headers, ctx.cookies.get()), the arguments of a
+# socket.io message handler (socket.on) and, for HTML output in the browser,
+# the page URL (location, document.URL). NestJS parameter decorators are not
+# sources: a pattern with them does not parse as JavaScript.
+rules:
+  - id: codeye.javascript.command-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: HTTP request input reaches a command run by a shell
+    metadata: {cwe: ["CWE-78"], codeye_family: command-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|body|params|headers|cookies|originalUrl|url|path)$
+      # Express header accessors.
+      - patterns:
+          - pattern-either:
+              - pattern: req.get(...)
+              - pattern: req.header(...)
+              - pattern: request.get(...)
+              - pattern: request.header(...)
+      # Koa context.
+      - patterns:
+          - pattern-either:
+              - pattern: ctx.$ATTR
+              - pattern: ctx.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|querystring|params|body|headers|header|url|path|originalUrl)$
+      - pattern: ctx.cookies.get(...)
+      # A socket.io message from a connected client.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  socket.on($EVENT, (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, function (..., $PARAM, ...) { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async function (..., $PARAM, ...) { ... })
+          - pattern: $PARAM
+    pattern-sanitizers:
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+      - pattern: Number(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: child_process.exec($CMD, ...)
+              - pattern: child_process.execSync($CMD, ...)
+          - focus-metavariable: $CMD
+      - patterns:
+          - pattern-either:
+              - pattern: child_process.$FN($SH, ["-c", $CMD, ...], ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(spawn|spawnSync|execFile|execFileSync)$
+          - metavariable-regex:
+              metavariable: $SH
+              regex: ^["'`](/bin/|/usr/bin/)?(sh|bash|zsh|dash)["'`]$
+          - focus-metavariable: $CMD
+
+  - id: codeye.javascript.path-traversal
+    mode: taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: HTTP request input selects the file path of a file system operation
+    metadata: {cwe: ["CWE-22"], codeye_family: path-traversal}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|body|params|headers|cookies|originalUrl|url|path)$
+      # Express header accessors.
+      - patterns:
+          - pattern-either:
+              - pattern: req.get(...)
+              - pattern: req.header(...)
+              - pattern: request.get(...)
+              - pattern: request.header(...)
+      # Koa context.
+      - patterns:
+          - pattern-either:
+              - pattern: ctx.$ATTR
+              - pattern: ctx.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|querystring|params|body|headers|header|url|path|originalUrl)$
+      - pattern: ctx.cookies.get(...)
+      # A socket.io message from a connected client.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  socket.on($EVENT, (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, function (..., $PARAM, ...) { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async function (..., $PARAM, ...) { ... })
+          - pattern: $PARAM
+    pattern-sanitizers:
+      - pattern: parseInt(...)
+      - pattern: Number(...)
+      - pattern: path.basename(...)
+      # A containment check (if (!p.startsWith(root)) return) makes the
+      # checked value trusted afterwards.
+      - by-side-effect: true
+        patterns:
+          - pattern: $P.startsWith(...)
+          - focus-metavariable: $P
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fs.$FN($PATH, ...)
+              - pattern: fs.promises.$FN($PATH, ...)
+          - metavariable-regex:
+              metavariable: $FN
+              regex: ^(readFile|readFileSync|createReadStream|writeFile|writeFileSync|createWriteStream|appendFile|appendFileSync|unlink|unlinkSync|rm|rmSync|readdir|readdirSync|open|openSync)$
+          - focus-metavariable: $PATH
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.sendFile($PATH)
+              - pattern: $RES.download($PATH, ...)
+          - metavariable-regex:
+              metavariable: $RES
+              regex: ^(res|response)$
+          - focus-metavariable: $PATH
+
+  - id: codeye.javascript.sql-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: HTTP request input is built into the text of an SQL statement
+    metadata: {cwe: ["CWE-89"], codeye_family: sql-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|body|params|headers|cookies|originalUrl|url|path)$
+      # Express header accessors.
+      - patterns:
+          - pattern-either:
+              - pattern: req.get(...)
+              - pattern: req.header(...)
+              - pattern: request.get(...)
+              - pattern: request.header(...)
+      # Koa context.
+      - patterns:
+          - pattern-either:
+              - pattern: ctx.$ATTR
+              - pattern: ctx.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|querystring|params|body|headers|header|url|path|originalUrl)$
+      - pattern: ctx.cookies.get(...)
+      # A socket.io message from a connected client.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  socket.on($EVENT, (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, function (..., $PARAM, ...) { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async function (..., $PARAM, ...) { ... })
+          - pattern: $PARAM
+    pattern-sanitizers:
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+      - pattern: Number(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $DB.query($SQL, ...)
+              - pattern: $DB.execute($SQL, ...)
+              - pattern: $DB.raw($SQL, ...)
+              - pattern: $DB.$queryRawUnsafe($SQL, ...)
+              - pattern: $DB.$executeRawUnsafe($SQL, ...)
+          - pattern-not: $DB.query({...}, ...)
+          - focus-metavariable: $SQL
+
+  - id: codeye.javascript.ssrf
+    mode: taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: HTTP request input decides the address of an outgoing HTTP request
+    metadata: {cwe: ["CWE-918"], codeye_family: ssrf}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|body|params|headers|cookies|originalUrl|url|path)$
+      # Express header accessors.
+      - patterns:
+          - pattern-either:
+              - pattern: req.get(...)
+              - pattern: req.header(...)
+              - pattern: request.get(...)
+              - pattern: request.header(...)
+      # Koa context.
+      - patterns:
+          - pattern-either:
+              - pattern: ctx.$ATTR
+              - pattern: ctx.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|querystring|params|body|headers|header|url|path|originalUrl)$
+      - pattern: ctx.cookies.get(...)
+      # A socket.io message from a connected client.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  socket.on($EVENT, (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, function (..., $PARAM, ...) { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async function (..., $PARAM, ...) { ... })
+          - pattern: $PARAM
+    pattern-sanitizers:
+      - pattern: parseInt(...)
+      - pattern: Number(...)
+      - pattern: encodeURIComponent(...)
+      # A constant scheme, host and path prefix leaves only the path or query
+      # to the input.
+      - patterns:
+          - pattern-either:
+              - pattern: '"$PREFIX" + $X'
+              - pattern: '`$PREFIX${...}...`'
+          - metavariable-regex:
+              metavariable: $PREFIX
+              regex: ^https?://[^/{}%$]+/
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fetch($URL, ...)
+              - pattern: axios($URL, ...)
+              - pattern: axios.$METHOD($URL, ...)
+              - pattern: got($URL, ...)
+              - pattern: got.$METHOD($URL, ...)
+              - pattern: http.get($URL, ...)
+              - pattern: http.request($URL, ...)
+              - pattern: https.get($URL, ...)
+              - pattern: https.request($URL, ...)
+          - focus-metavariable: $URL
+
+  - id: codeye.javascript.code-evaluation
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: HTTP request input is evaluated as JavaScript code
+    metadata: {cwe: ["CWE-95"], codeye_family: code-evaluation}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|body|params|headers|cookies|originalUrl|url|path)$
+      # Express header accessors.
+      - patterns:
+          - pattern-either:
+              - pattern: req.get(...)
+              - pattern: req.header(...)
+              - pattern: request.get(...)
+              - pattern: request.header(...)
+      # Koa context.
+      - patterns:
+          - pattern-either:
+              - pattern: ctx.$ATTR
+              - pattern: ctx.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|querystring|params|body|headers|header|url|path|originalUrl)$
+      - pattern: ctx.cookies.get(...)
+      # A socket.io message from a connected client.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  socket.on($EVENT, (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, function (..., $PARAM, ...) { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async function (..., $PARAM, ...) { ... })
+          - pattern: $PARAM
+    pattern-sanitizers:
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+      - pattern: Number(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: eval($CODE)
+              - pattern: new Function(..., $CODE)
+              - pattern: Function(..., $CODE)
+              - pattern: vm.runInNewContext($CODE, ...)
+              - pattern: vm.runInThisContext($CODE, ...)
+              - pattern: vm.runInContext($CODE, ...)
+              - pattern: new vm.Script($CODE, ...)
+          - focus-metavariable: $CODE
+
+  - id: codeye.javascript.unsafe-deserialization
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: HTTP request input is deserialized by a format that can run code
+    metadata: {cwe: ["CWE-502"], codeye_family: unsafe-deserialization}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|body|params|headers|cookies|originalUrl|url|path)$
+      # Express header accessors.
+      - patterns:
+          - pattern-either:
+              - pattern: req.get(...)
+              - pattern: req.header(...)
+              - pattern: request.get(...)
+              - pattern: request.header(...)
+      # Koa context.
+      - patterns:
+          - pattern-either:
+              - pattern: ctx.$ATTR
+              - pattern: ctx.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|querystring|params|body|headers|header|url|path|originalUrl)$
+      - pattern: ctx.cookies.get(...)
+      # A socket.io message from a connected client.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  socket.on($EVENT, (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, function (..., $PARAM, ...) { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async function (..., $PARAM, ...) { ... })
+          - pattern: $PARAM
+    pattern-sinks:
+      - patterns:
+          - pattern-inside: |
+              $SER = require("node-serialize");
+              ...
+          - pattern: $SER.unserialize($DATA, ...)
+          - focus-metavariable: $DATA
+
+  - id: codeye.javascript.html-injection
+    mode: taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Request or page URL input reaches HTML output without escaping
+    metadata: {cwe: ["CWE-79"], codeye_family: html-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(req|request)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|body|params|headers|cookies|originalUrl|url|path)$
+      # Express header accessors.
+      - patterns:
+          - pattern-either:
+              - pattern: req.get(...)
+              - pattern: req.header(...)
+              - pattern: request.get(...)
+              - pattern: request.header(...)
+      # Koa context.
+      - patterns:
+          - pattern-either:
+              - pattern: ctx.$ATTR
+              - pattern: ctx.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|querystring|params|body|headers|header|url|path|originalUrl)$
+      - pattern: ctx.cookies.get(...)
+      # A socket.io message from a connected client.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  socket.on($EVENT, (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, function (..., $PARAM, ...) { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async function (..., $PARAM, ...) { ... })
+          - pattern: $PARAM
+      - pattern: location.$ATTR
+      - pattern: window.location.$ATTR
+      - pattern: document.location.$ATTR
+      - pattern: document.URL
+      - pattern: document.documentURI
+    pattern-sanitizers:
+      - pattern: parseInt(...)
+      - pattern: Number(...)
+      - pattern: encodeURIComponent(...)
+      - pattern: DOMPurify.sanitize(...)
+      - pattern: escapeHtml(...)
+      - pattern: he.encode(...)
+      - pattern: he.escape(...)
+      - pattern: validator.escape(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.send("..." + ...)
+              - pattern: $RES.send(... + "...")
+              - pattern: $RES.send(`...${...}...`)
+              - pattern: $RES.write("..." + ...)
+              - pattern: $RES.write(`...${...}...`)
+          - metavariable-regex:
+              metavariable: $RES
+              regex: ^(res|response)$
+      - patterns:
+          - pattern-either:
+              - pattern: $EL.innerHTML = $HTML
+              - pattern: $EL.outerHTML = $HTML
+              - pattern: document.write($HTML)
+              - pattern: document.writeln($HTML)
+              - pattern: $EL.insertAdjacentHTML($WHERE, $HTML)
+          - focus-metavariable: $HTML
+      - patterns:
+          - pattern: '<$TAG dangerouslySetInnerHTML={{__html: $HTML}} />'
+          - focus-metavariable: $HTML

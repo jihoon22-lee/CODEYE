@@ -60,7 +60,7 @@ func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 			t.Fatalf("%s must be optional", p.Key)
 		}
 	}
-	want := []string{"env.discover=environment", "docs.discover=documents", "go-vet=static_analysis", "staticcheck=static_analysis", "gofmt=static_analysis", "errcheck=static_analysis", "lizard=static_analysis", "jscpd=static_analysis", "gitleaks=static_analysis", "review.environment=environment", "review.documents=documents", "review.investigate=code_review", "review.interpret=code_review", "review.verify=code_review", "review.scope=code_review", "review.triage.t001=code_review", "review.verify.t001=code_review", "review.triage.t002=code_review", "review.verify.t002=code_review"}
+	want := []string{"env.discover=environment", "docs.discover=documents", "go-vet=static_analysis", "staticcheck=static_analysis", "gofmt=static_analysis", "errcheck=static_analysis", "lizard=static_analysis", "jscpd=static_analysis", "gitleaks=static_analysis", "opengrep=static_analysis", "review.environment=environment", "review.documents=documents", "review.investigate=code_review", "review.interpret=code_review", "review.verify=code_review", "review.scope=code_review", "review.triage.t001=code_review", "review.verify.t001=code_review", "review.triage.t002=code_review", "review.verify.t002=code_review"}
 	if len(keys) != len(want) {
 		t.Fatalf("plan %v", keys)
 	}

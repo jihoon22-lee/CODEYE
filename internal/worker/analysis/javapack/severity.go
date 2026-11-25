@@ -20,8 +20,15 @@ var (
 			{Pattern: "UnsynchronizedStaticFormatter", Family: "concurrency"},
 		},
 	}
+	// SpotBugsSeverity: the path traversal (PT_) and servlet XSS (XSS_)
+	// detectors report the request-to-sink flows of the taint pack on the same
+	// line (docs/ANALYZERS.md#엔진-중복-1), so they are injection like SQL_ and
+	// triage groups those reports. Their default severity stays low, as when
+	// they were not in this table: no measurement of what they report on
+	// real code supports injection's high, and one fired on a negative taint
+	// fixture.
 	SpotBugsSeverity = severity.Table{
-		Analyzer: "java." + SpotBugs, RulePack: "codeye-java-" + SpotBugs, RulePackVersions: []string{"1"}, Version: "1",
+		Analyzer: "java." + SpotBugs, RulePack: "codeye-java-" + SpotBugs, RulePackVersions: []string{"1"}, Version: "2",
 		Rules: []severity.Rule{
 			{Pattern: "NP_*", Family: "null_dereference"}, {Pattern: "RCN_*", Family: "null_dereference"},
 			{Pattern: "OBL_*", Family: "resource_leak"}, {Pattern: "OS_OPEN_STREAM*", Family: "resource_leak"},
@@ -30,7 +37,7 @@ var (
 			{Pattern: "LI_*", Family: "concurrency"}, {Pattern: "UL_*", Family: "concurrency"}, {Pattern: "SWL_*", Family: "concurrency"},
 			{Pattern: "JLM_*", Family: "concurrency"}, {Pattern: "ML_*", Family: "concurrency"}, {Pattern: "STCAL_*", Family: "concurrency"},
 			{Pattern: "SQL_*", Family: "injection"}, {Pattern: "COMMAND_INJECTION", Family: "injection"},
-			{Pattern: "PATH_TRAVERSAL*", Family: "injection"},
+			{Pattern: "PATH_TRAVERSAL*", Family: "injection"}, {Pattern: "PT_*", Family: "injection", Cap: severity.Low}, {Pattern: "XSS_*", Family: "injection", Cap: severity.Low},
 			{Pattern: "DMI_HARDCODED_ABSOLUTE_FILENAME", Family: "maintainability"}, {Pattern: "DMI_CONSTANT_DB_PASSWORD", Family: "security_weakness"},
 			{Pattern: "RV_RETURN_VALUE_IGNORED*", Family: "unchecked_error"}, {Pattern: "RV_*", Family: "logic_error"},
 			{Pattern: "DE_MIGHT_IGNORE", Family: "exception_handling"}, {Pattern: "REC_*", Family: "exception_handling"},

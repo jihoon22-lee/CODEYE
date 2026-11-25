@@ -1,0 +1,596 @@
+# CODEYE rule pack codeye-taint (Python). Written for CODEYE from the Python,
+# Flask, Django, Starlette and standard library APIs; not derived from any
+# third-party rule set. Every rule is an intra-file taint rule: the source and
+# the sink must be in the same file (calls between functions of that file are
+# followed). Sources are HTTP request input only: Flask's request and the
+# parameters of a Flask view (its URL variables), a Django, Django REST
+# framework, Starlette or aiohttp request named request or req (including the
+# decoded body of request.json(), form() and body()), and the request of a
+# BaseHTTPRequestHandler. The content of a file is not request input.
+rules:
+  - id: codeye.python.command-injection
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: HTTP request input reaches a command run by a shell
+    metadata: {cwe: ["CWE-78"], codeye_family: command-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: flask.request.$ATTR
+              - pattern: flask.request.$ATTR(...)
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|path|full_path|url|query_string|stream|get_data|get_json)$
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(GET|POST|body|COOKIES|FILES|META|data|headers|cookies|query_params|path_params|match_info)$
+      # Starlette and FastAPI: the decoded body of the request.
+      - patterns:
+          - pattern: $REQ.$READ(...)
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $READ
+              regex: ^(json|form|body)$
+      # A Flask view's parameters are the variables of its URL rule.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(..., $PARAM, ...):
+                ...
+          - pattern: $PARAM
+      - patterns:
+          - pattern-inside: |
+              class $HANDLER(..., BaseHTTPRequestHandler, ...):
+                ...
+          - pattern-either:
+              - pattern: self.path
+              - pattern: self.headers
+              - pattern: self.rfile.read(...)
+    pattern-sanitizers:
+      # The content of a file is not request input, even when its name is.
+      - pattern: open(...).read(...)
+      - patterns:
+          - pattern-inside: |
+              with open(...) as $F:
+                ...
+          - pattern: $F.read(...)
+      - pattern: int(...)
+      - pattern: float(...)
+      - pattern: shlex.quote(...)
+      - pattern: pipes.quote(...)
+    pattern-sinks:
+      - pattern: os.system(...)
+      - pattern: os.popen(...)
+      - patterns:
+          - pattern: subprocess.$FUNC($CMD, ..., shell=True, ...)
+          - focus-metavariable: $CMD
+      - patterns:
+          - pattern-either:
+              - pattern: subprocess.$FUNC([$SH, "-c", $CMD, ...], ...)
+              - pattern: os.execl($SH, $SH, "-c", $CMD, ...)
+          - metavariable-regex:
+              metavariable: $SH
+              regex: ^["'](/bin/|/usr/bin/)?(sh|bash|zsh|dash)["']$
+          - focus-metavariable: $CMD
+
+  - id: codeye.python.path-traversal
+    mode: taint
+    languages: [python]
+    severity: WARNING
+    message: HTTP request input selects the file path of a file system operation
+    metadata: {cwe: ["CWE-22"], codeye_family: path-traversal}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: flask.request.$ATTR
+              - pattern: flask.request.$ATTR(...)
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|path|full_path|url|query_string|stream|get_data|get_json)$
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(GET|POST|body|COOKIES|FILES|META|data|headers|cookies|query_params|path_params|match_info)$
+      # Starlette and FastAPI: the decoded body of the request.
+      - patterns:
+          - pattern: $REQ.$READ(...)
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $READ
+              regex: ^(json|form|body)$
+      # A Flask view's parameters are the variables of its URL rule.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(..., $PARAM, ...):
+                ...
+          - pattern: $PARAM
+      - patterns:
+          - pattern-inside: |
+              class $HANDLER(..., BaseHTTPRequestHandler, ...):
+                ...
+          - pattern-either:
+              - pattern: self.path
+              - pattern: self.headers
+              - pattern: self.rfile.read(...)
+    pattern-sanitizers:
+      - pattern: int(...)
+      - pattern: os.path.basename(...)
+      - pattern: werkzeug.utils.secure_filename(...)
+      - pattern: werkzeug.security.safe_join(...)
+      - pattern: werkzeug.utils.safe_join(...)
+      - pattern: werkzeug.utils.secure_filename(...)
+      - pattern: flask.safe_join(...)
+      # The final component of a path object (pathlib.Path(name).name).
+      - pattern: pathlib.Path(...).name
+      - pattern: pathlib.PurePath(...).name
+      - patterns:
+          - pattern-inside: |
+              $P = pathlib.Path(...)
+              ...
+          - pattern: $P.name
+      # A containment check on the path (if not p.startswith(root): abort)
+      # makes the checked value trusted afterwards.
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern: $P.startswith(...)
+              - pattern: $P.is_relative_to(...)
+              - pattern: os.path.commonpath([..., $P, ...])
+          - focus-metavariable: $P
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: open($PATH, ...)
+              - pattern: io.open($PATH, ...)
+              - pattern: codecs.open($PATH, ...)
+              - pattern: os.open($PATH, ...)
+              - pattern: os.remove($PATH)
+              - pattern: os.unlink($PATH)
+              - pattern: os.rmdir($PATH)
+              - pattern: shutil.rmtree($PATH, ...)
+              - pattern: flask.send_file($PATH, ...)
+              - pattern: pathlib.Path($PATH, ...).$OP(...)
+          - focus-metavariable: $PATH
+      - patterns:
+          - pattern-either:
+              - pattern: $PATH.read_text(...)
+              - pattern: $PATH.read_bytes(...)
+              - pattern: $PATH.write_text(...)
+              - pattern: $PATH.write_bytes(...)
+              - pattern: $PATH.unlink(...)
+          - pattern-either:
+              - pattern-inside: |
+                  $PATH = pathlib.Path(...)
+                  ...
+              - pattern-inside: |
+                  $PATH = pathlib.Path(...) / $NAME
+                  ...
+              # A path joined onto a base directory held in a variable.
+              - pattern-inside: |
+                  $BASE = pathlib.Path(...)
+                  ...
+                  $PATH = $BASE / $NAME
+                  ...
+          - focus-metavariable: $PATH
+
+  - id: codeye.python.sql-injection
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: HTTP request input is built into the text of an SQL statement
+    metadata: {cwe: ["CWE-89"], codeye_family: sql-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: flask.request.$ATTR
+              - pattern: flask.request.$ATTR(...)
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|path|full_path|url|query_string|stream|get_data|get_json)$
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(GET|POST|body|COOKIES|FILES|META|data|headers|cookies|query_params|path_params|match_info)$
+      # Starlette and FastAPI: the decoded body of the request.
+      - patterns:
+          - pattern: $REQ.$READ(...)
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $READ
+              regex: ^(json|form|body)$
+      # A Flask view's parameters are the variables of its URL rule.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(..., $PARAM, ...):
+                ...
+          - pattern: $PARAM
+      - patterns:
+          - pattern-inside: |
+              class $HANDLER(..., BaseHTTPRequestHandler, ...):
+                ...
+          - pattern-either:
+              - pattern: self.path
+              - pattern: self.headers
+              - pattern: self.rfile.read(...)
+    pattern-sanitizers:
+      # The content of a file is not request input, even when its name is.
+      - pattern: open(...).read(...)
+      - patterns:
+          - pattern-inside: |
+              with open(...) as $F:
+                ...
+          - pattern: $F.read(...)
+      - pattern: int(...)
+      - pattern: float(...)
+      - pattern: bool(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $CUR.execute($SQL, ...)
+              - pattern: $CUR.executemany($SQL, ...)
+              - pattern: $CUR.executescript($SQL)
+              - pattern: $MODEL.objects.raw($SQL, ...)
+              - pattern: sqlalchemy.text($SQL)
+          - focus-metavariable: $SQL
+
+  - id: codeye.python.ssrf
+    mode: taint
+    languages: [python]
+    severity: WARNING
+    message: HTTP request input decides the address of an outgoing HTTP request
+    metadata: {cwe: ["CWE-918"], codeye_family: ssrf}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: flask.request.$ATTR
+              - pattern: flask.request.$ATTR(...)
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|path|full_path|url|query_string|stream|get_data|get_json)$
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(GET|POST|body|COOKIES|FILES|META|data|headers|cookies|query_params|path_params|match_info)$
+      # Starlette and FastAPI: the decoded body of the request.
+      - patterns:
+          - pattern: $REQ.$READ(...)
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $READ
+              regex: ^(json|form|body)$
+      # A Flask view's parameters are the variables of its URL rule.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(..., $PARAM, ...):
+                ...
+          - pattern: $PARAM
+      - patterns:
+          - pattern-inside: |
+              class $HANDLER(..., BaseHTTPRequestHandler, ...):
+                ...
+          - pattern-either:
+              - pattern: self.path
+              - pattern: self.headers
+              - pattern: self.rfile.read(...)
+    pattern-sanitizers:
+      # The content of a file is not request input, even when its name is.
+      - pattern: open(...).read(...)
+      - patterns:
+          - pattern-inside: |
+              with open(...) as $F:
+                ...
+          - pattern: $F.read(...)
+      - pattern: int(...)
+      # A constant scheme, host and path prefix leaves only the path or query
+      # to the input.
+      - patterns:
+          - pattern-either:
+              - pattern: '"$PREFIX" + $X'
+              - pattern: f"$PREFIX{...}..."
+              - pattern: '"$PREFIX".format(...)'
+              - pattern: '"$PREFIX" % $X'
+          - metavariable-regex:
+              metavariable: $PREFIX
+              regex: ^https?://[^/{}%]+/
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: requests.$METHOD($URL, ...)
+              - pattern: httpx.$METHOD($URL, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(get|post|put|patch|delete|head|options|stream)$
+          - focus-metavariable: $URL
+      - patterns:
+          - pattern-either:
+              - pattern: requests.request($M, $URL, ...)
+              - pattern: httpx.request($M, $URL, ...)
+              - pattern: urllib.request.urlopen($URL, ...)
+              - pattern: urllib.request.Request($URL, ...)
+          - focus-metavariable: $URL
+
+  - id: codeye.python.unsafe-deserialization
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: HTTP request input is deserialized by a format that can construct arbitrary objects
+    metadata: {cwe: ["CWE-502"], codeye_family: unsafe-deserialization}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: flask.request.$ATTR
+              - pattern: flask.request.$ATTR(...)
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|path|full_path|url|query_string|stream|get_data|get_json)$
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(GET|POST|body|COOKIES|FILES|META|data|headers|cookies|query_params|path_params|match_info)$
+      # Starlette and FastAPI: the decoded body of the request.
+      - patterns:
+          - pattern: $REQ.$READ(...)
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $READ
+              regex: ^(json|form|body)$
+      # A Flask view's parameters are the variables of its URL rule.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(..., $PARAM, ...):
+                ...
+          - pattern: $PARAM
+      - patterns:
+          - pattern-inside: |
+              class $HANDLER(..., BaseHTTPRequestHandler, ...):
+                ...
+          - pattern-either:
+              - pattern: self.path
+              - pattern: self.headers
+              - pattern: self.rfile.read(...)
+    pattern-sanitizers:
+      # The content of a file is not request input, even when its name is.
+      - pattern: open(...).read(...)
+      - patterns:
+          - pattern-inside: |
+              with open(...) as $F:
+                ...
+          - pattern: $F.read(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: pickle.loads($DATA, ...)
+              - pattern: pickle.load($DATA, ...)
+              - pattern: marshal.loads($DATA, ...)
+              - pattern: dill.loads($DATA, ...)
+              - pattern: jsonpickle.decode($DATA, ...)
+              - pattern: yaml.unsafe_load($DATA, ...)
+              - pattern: yaml.load($DATA)
+              - pattern: yaml.load($DATA, Loader=yaml.Loader)
+              - pattern: yaml.load($DATA, Loader=yaml.UnsafeLoader)
+              - pattern: yaml.load($DATA, Loader=yaml.FullLoader)
+          - focus-metavariable: $DATA
+
+  - id: codeye.python.code-evaluation
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: HTTP request input is evaluated as Python code
+    metadata: {cwe: ["CWE-95"], codeye_family: code-evaluation}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: flask.request.$ATTR
+              - pattern: flask.request.$ATTR(...)
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|path|full_path|url|query_string|stream|get_data|get_json)$
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(GET|POST|body|COOKIES|FILES|META|data|headers|cookies|query_params|path_params|match_info)$
+      # Starlette and FastAPI: the decoded body of the request.
+      - patterns:
+          - pattern: $REQ.$READ(...)
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $READ
+              regex: ^(json|form|body)$
+      # A Flask view's parameters are the variables of its URL rule.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(..., $PARAM, ...):
+                ...
+          - pattern: $PARAM
+      - patterns:
+          - pattern-inside: |
+              class $HANDLER(..., BaseHTTPRequestHandler, ...):
+                ...
+          - pattern-either:
+              - pattern: self.path
+              - pattern: self.headers
+              - pattern: self.rfile.read(...)
+    pattern-sanitizers:
+      # The content of a file is not request input, even when its name is.
+      - pattern: open(...).read(...)
+      - patterns:
+          - pattern-inside: |
+              with open(...) as $F:
+                ...
+          - pattern: $F.read(...)
+      - pattern: int(...)
+      - pattern: float(...)
+      - pattern: bool(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: eval($CODE, ...)
+              - pattern: exec($CODE, ...)
+              - pattern: compile($CODE, ...)
+          - focus-metavariable: $CODE
+
+  - id: codeye.python.html-injection
+    mode: taint
+    languages: [python]
+    severity: WARNING
+    message: HTTP request input reaches HTML or template source without escaping
+    metadata: {cwe: ["CWE-79"], codeye_family: html-injection}
+    options: {taint_intrafile: true}
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: flask.request.$ATTR
+              - pattern: flask.request.$ATTR(...)
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(args|form|values|json|data|cookies|headers|files|view_args|path|full_path|url|query_string|stream|get_data|get_json)$
+      - patterns:
+          - pattern: $REQ.$ATTR
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(GET|POST|body|COOKIES|FILES|META|data|headers|cookies|query_params|path_params|match_info)$
+      # Starlette and FastAPI: the decoded body of the request.
+      - patterns:
+          - pattern: $REQ.$READ(...)
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $READ
+              regex: ^(json|form|body)$
+      # A Flask view's parameters are the variables of its URL rule.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(..., $PARAM, ...):
+                ...
+          - pattern: $PARAM
+      - patterns:
+          - pattern-inside: |
+              class $HANDLER(..., BaseHTTPRequestHandler, ...):
+                ...
+          - pattern-either:
+              - pattern: self.path
+              - pattern: self.headers
+              - pattern: self.rfile.read(...)
+    pattern-sanitizers:
+      # The content of a file is not request input, even when its name is.
+      - pattern: open(...).read(...)
+      - patterns:
+          - pattern-inside: |
+              with open(...) as $F:
+                ...
+          - pattern: $F.read(...)
+      - pattern: int(...)
+      - pattern: html.escape(...)
+      - pattern: markupsafe.escape(...)
+      - pattern: flask.escape(...)
+      - pattern: django.utils.html.escape(...)
+      - pattern: markupsafe.Markup.escape(...)
+      # URL encoding leaves no HTML markup.
+      - pattern: urllib.parse.urlencode(...)
+      - pattern: urllib.parse.quote(...)
+      - pattern: urllib.parse.quote_plus(...)
+      - pattern: $QUERY.urlencode(...)
+      # A project's own HTML escaper, often in another module, by its name.
+      - patterns:
+          - pattern: $ESCAPE(...)
+          - metavariable-regex:
+              metavariable: $ESCAPE
+              regex: ^(.*\.)?(\w*escape_html\w*|\w*html_escape\w*|escape_for_html|escape_html|escape)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: flask.render_template_string($HTML, ...)
+              - pattern: jinja2.Template($HTML, ...)
+              - pattern: markupsafe.Markup($HTML)
+              - pattern: flask.Markup($HTML)
+              - pattern: django.utils.safestring.mark_safe($HTML)
+          - focus-metavariable: $HTML
+      # A Flask view that returns a string answers with text/html.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(...):
+                ...
+          - pattern-either:
+              - pattern: return "..." + $X
+              - pattern: return $X + "..."
+              - pattern: return f"..."
+              - pattern: return "...".format(...)
+              - pattern: return "..." % $X
+      # The string a Flask view builds in a variable and returns: the text
+      # assigned or appended to that variable.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(...):
+                ...
+          - pattern-either:
+              - pattern-inside: |
+                  $R += $TEXT
+                  ...
+                  return $R
+              - pattern-inside: |
+                  $R = $TEXT
+                  ...
+                  return $R
+          - pattern-either:
+              - pattern: f"..."
+              - pattern: '"..." + $X'
+              - pattern: $X + "..."
+              - pattern: '"...".format(...)'
+              - pattern: '"..." % $X'
+          - pattern: $TEXT

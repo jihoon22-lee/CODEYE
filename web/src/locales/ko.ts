@@ -623,6 +623,11 @@ export const ko = {
       lizard_not_run: 'lizard 실행이 수행되지 않아 결과를 만들지 못함',
       jscpd_not_run: 'jscpd 실행이 수행되지 않아 결과를 만들지 못함',
       gitleaks_not_run: 'gitleaks 실행이 수행되지 않아 결과를 만들지 못함',
+      // 패턴 taint 팩 (opengrep; docs/ANALYZERS.md#opengrep-패턴taint-팩)
+      opengrep_failed: 'opengrep이 설명되지 않는 실패로 끝남',
+      opengrep_not_run: 'opengrep 실행이 수행되지 않아 결과를 만들지 못함',
+      rule_pack_load_failed: 'CODEYE 규칙 파일을 도구가 읽지 못했거나 읽은 규칙이 다름 (실패, 0건 통과 아님)',
+      too_many_files: '검사할 파일이 실행 한도보다 많아 실행하지 않음 (미지원, 0건 통과 아님)',
       snapshot_integrity_failed: '스냅샷 파일이 manifest와 맞지 않아 도구를 실행하지 않음 (실패)',
       workspace_drift: '도구 실행 중 검사 사본이 바뀌어 결과를 신뢰하지 않음 (실패)',
       output_truncated: '도구 출력이 수집 한도에서 잘려 결과를 신뢰하지 않음 (실패)',

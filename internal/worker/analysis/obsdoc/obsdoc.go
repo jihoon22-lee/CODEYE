@@ -122,6 +122,11 @@ type Document struct {
 	Parse          Parse         `json:"parse"`
 	WorkspaceDrift []string      `json:"workspace_drift"`
 	Limitations    []string      `json:"limitations"`
+	// Rules is the tool's description of its rules (SARIF reporting
+	// descriptors): id, short description and CWE identifiers. Absent for
+	// adapters whose tool does not describe its rules; when present, every
+	// observation names one of them.
+	Rules []Rule `json:"rules,omitempty"`
 }
 
 // Analyzer identifies the analyzer (pack descriptor) that owns the task.
@@ -277,15 +282,29 @@ const (
 	RelatedNote       = "tool_note"
 	RelatedAssumption = "condition_assumption"
 	RelatedBranch     = "assumed_branch"
+	// RelatedFlowStep is one step of a data flow the tool itself reported
+	// (a SARIF code flow): the steps keep the tool's order, source first and
+	// sink last. It marks the flow as produced by the tool, not inferred by
+	// CODEYE.
+	RelatedFlowStep = "tool_flow_step"
 )
 
 func ValidRelatedKind(kind string) bool {
 	switch kind {
-	case RelatedPosition, RelatedNote, RelatedAssumption, RelatedBranch:
+	case RelatedPosition, RelatedNote, RelatedAssumption, RelatedBranch, RelatedFlowStep:
 		return true
 	}
 	return false
 }
+
+// Rule describes one rule of the tool's rule pack.
+type Rule struct {
+	ID               string   `json:"id"`
+	ShortDescription string   `json:"short_description"`
+	CWE              []string `json:"cwe"`
+}
+
+var cweID = regexp.MustCompile(`^CWE-[1-9][0-9]{0,5}$`)
 
 // Related is a secondary location the tool attached to a diagnostic.
 type Related struct {
@@ -611,6 +630,9 @@ func Validate(d Document, want Expect) error {
 	if err := checkObservations(d, execs, want.Lookup); err != nil {
 		return err
 	}
+	if err := checkRules(d); err != nil {
+		return err
+	}
 	for _, e := range d.ToolErrors {
 		if _, ok := execs[e.Execution]; !ok || !code.MatchString(e.Kind) || !SafeText(e.Message, 8192) || !SafeText(e.Unit, 512) || e.Line < 0 || e.Column < 0 ||
 			(e.Path != nil && domain.ValidateEvidencePath(*e.Path) != nil) {
@@ -853,6 +875,37 @@ func checkObservations(d Document, execs map[string]Execution, lookup func(strin
 	}
 	if unresolved != d.Parse.UnresolvedObservations {
 		return invalid("unresolved observation count")
+	}
+	return nil
+}
+
+// checkRules: rules sorted by unique id with a bounded one-line description
+// and sorted unique CWE identifiers; when listed, they describe every
+// observation's rule.
+func checkRules(d Document) error {
+	if d.Rules == nil {
+		return nil
+	}
+	if len(d.Rules) == 0 || len(d.Rules) > 4096 {
+		return invalid("rules")
+	}
+	ids := map[string]bool{}
+	for i, r := range d.Rules {
+		if r.ID == "" || !SafeText(r.ID, 128) || strings.ContainsAny(r.ID, " \n\t") || (i > 0 && d.Rules[i-1].ID >= r.ID) ||
+			!SafeText(r.ShortDescription, 1024) || strings.Contains(r.ShortDescription, "\n") || r.CWE == nil || len(r.CWE) > 16 {
+			return invalid("rule %q", r.ID)
+		}
+		for j, c := range r.CWE {
+			if !cweID.MatchString(c) || (j > 0 && r.CWE[j-1] >= c) {
+				return invalid("rule %q cwe", r.ID)
+			}
+		}
+		ids[r.ID] = true
+	}
+	for _, o := range d.Observations {
+		if !ids[o.RuleID] {
+			return invalid("observation %s names a rule the rules list does not describe", o.ID)
+		}
 	}
 	return nil
 }

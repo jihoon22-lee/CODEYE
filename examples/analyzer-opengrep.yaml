@@ -1,0 +1,33 @@
+# 패턴 taint 팩 Opengrep 어댑터 서술. 구현: internal/worker/analysis/opengrep(규칙 rules/*.yaml 내장), SARIF 입력: internal/worker/analysis/sarif, 근거: docs/ANALYZERS.md#opengrep-패턴taint-팩.
+# Opengrep 2.0.0(LGPL-2.1)에 CODEYE가 처음부터 쓴 규칙 팩 codeye-taint만 --config 파일로 넘긴다. 레지스트리·URL·git 규칙, --enable-interfile은 쓰지 않는다.
+# 한 번의 scan이 stdout에 SARIF(원시 stream)를, --json-output으로 scratch에 JSON 사본(검사 파일 목록·파일별 오류)을 쓴다. 둘의 결과가 맞아야 성공이다.
+# 결과가 있어도 exit 0이다. 규칙 패턴 오류 4, YAML 오류 5, 설정 없음 7, 언어 오류 8, 그 밖의 치명 오류 2다(측정). 규칙을 읽지 못하면 0건이 아니라 rule_pack_load_failed다.
+# 파일을 명시해 넘기므로 저장소 .semgrepignore·.gitignore는 적용되지 않는다(overridden). 인라인 nosemgrep·nosem은 도구가 적용하고 억제된 관찰로 남긴다(reported).
+schema_version: '0.1'
+id: any.opengrep
+languages: [python, javascript, typescript, go, java, c, cpp, rust]
+planned_platforms: [linux]
+availability: verified  # Linux Opengrep 2.0.0 실행으로 fixture와 strace 추적을 검증. 다른 플랫폼은 미검증.
+version_contract: opengrep-2.0-fixture-tested
+analysis_scope: [syntax, intraprocedural, interprocedural]
+executes_repository_code: false
+requires_build: false
+network_policy: none
+version_probe:
+  executable: '${opengrep}'
+  argv: ['--version']
+execute:
+  executable: '${opengrep}'
+  argv: [scan, --config, '${scratch}/analyzers/opengrep/rules/${language}.yaml', --no-rewrite-rule-ids, --sarif, --dataflow-traces, --taint-intrafile, --json-output, '${scratch}/analyzers/opengrep/opengrep.scan.json', --project-root, ., --quiet, --jobs, '4', --timeout, '30', --timeout-threshold, '3', --max-target-bytes, '1000000', --, '${files}']
+  cwd: '${workspace}'
+  timeout_seconds: 900
+  stdout_max_bytes: 33554432
+  env_allowlist: [PATH, LANG, SystemRoot, HOME, USERPROFILE, TMPDIR, TMP, TEMP]
+exit_codes:
+  clean: [0]
+  findings: []
+  error: [2, 4, 5, 7, 8]
+parser:
+  id: opengrep-sarif
+  format: sarif
+  input: stdout-artifact

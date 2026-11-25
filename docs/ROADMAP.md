@@ -34,7 +34,7 @@
 | 검토 초점: 시험·예제 코드 후보 억제, 모델의 읽기 전용 소스 탐색 | 없음 |
 | 도구 진단 분류의 지침 보강과 더 많은 사례의 측정 | 소유자가 정한 모델 예산(유료 회귀 실행) |
 | 남은 출력 오류의 항목별 처리, 보고서 검사 보강, 최소 요청 예산의 서술 한도 | 없음 |
-| Java 전이 classpath, Meson·autotools compile DB, SARIF 입력 어댑터, 파일 내 taint 패턴 엔진 | 없음 |
+| Java 전이 classpath, Meson·autotools compile DB | 없음 |
 | PR 인라인 댓글과 diff의 모델 입력, 모델 호출 병렬화 | 없음 |
 
 ### holdout과 건너뛴 dev 사례의 전후 측정
@@ -75,7 +75,7 @@ dev 분할은 일부 사례만 전후를 비교했고 지침 작성자의 검색
 
 ### 빌드 문맥과 추가 분석 입력
 
-Java의 전이 의존성을 포함한 classpath 해석, Meson·autotools `configure`·`bear`로 감싼 make의 compile DB, 외부 도구 결과를 SARIF로 받는 어댑터, 파일 안의 입력→위험한 사용처 패턴 엔진을 더한다. CMake 프로젝트의 compile DB 생성, 허가받은 Rust build script의 시스템 C 도구 경로, dependency-cruiser 외부 대상 해석은 [compile DB 생성](ANALYZERS.md#compile-db-생성)·[Rust 환경](ANALYZERS.md#rust-환경)에 반영했다.
+Java의 전이 의존성을 포함한 classpath 해석, Meson·autotools `configure`·`bear`로 감싼 make의 compile DB를 더한다. CMake 프로젝트의 compile DB 생성, 허가받은 Rust build script의 시스템 C 도구 경로, dependency-cruiser 외부 대상 해석은 [compile DB 생성](ANALYZERS.md#compile-db-생성)·[Rust 환경](ANALYZERS.md#rust-환경)에, SARIF 입력 어댑터(팩 안의 도구 출력만)와 파일 안 taint 규칙은 [Opengrep 패턴·taint 팩](ANALYZERS.md#opengrep-패턴taint-팩)에 반영했다. taint 규칙의 측정과 남은 공백(파일 사이 흐름, 매크로 뒤의 호출, 검증 분기, 애플리케이션에서 찾은 실제 결함 0건)은 [측정](ANALYZERS.md#opengrep-규칙-측정)에 있다.
 
 완료 조건:
 - 해당 언어 사례의 tools 조건 위치 지표와 분석기 공백 task 변화를 기록한다.

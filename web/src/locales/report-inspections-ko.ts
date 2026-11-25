@@ -34,6 +34,7 @@ export const inspectionsKo = {
     tool_note: '도구 메모',
     condition_assumption: '분석기가 가정한 조건',
     assumed_branch: '분석기가 선택한 분기',
+    tool_flow_step: '도구가 보고한 데이터 흐름 단계',
   } as Record<string, string>,
   noStaticTasks: '이 실행에 계획된 정적 진단 작업 없음',
   allAnalyzerCounts: '전체 분석기 작업 집계 (구조·중복 및 비밀 탐지 포함)',

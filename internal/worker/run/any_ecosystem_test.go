@@ -9,7 +9,7 @@ import (
 
 // anyEcosystemTools are the any-ecosystem analyzer tools (docs/ANALYZERS.md):
 // planned for every snapshot with language source, not_probed without their flags.
-var anyEcosystemTools = []string{"gitleaks", "jscpd", "lizard"}
+var anyEcosystemTools = []string{"gitleaks", "jscpd", "lizard", "opengrep"}
 
 // withoutAnyEcosystemTools drops the any-ecosystem rows of env.discover's
 // analyzer tools after checking they are not_probed (these tests configure
@@ -30,10 +30,10 @@ func withoutAnyEcosystemTools(t *testing.T, in []envdoc.AnalyzerTool) []envdoc.A
 }
 
 // anyEcosystemTasks are the any-ecosystem task keys in catalog order.
-func anyEcosystemTasks() []string { return []string{"lizard", "jscpd", "gitleaks"} }
+func anyEcosystemTasks() []string { return []string{"lizard", "jscpd", "gitleaks", "opengrep"} }
 
 // anyEcosystemNotRunRows are the report tool rows of the not-configured
 // any-ecosystem tasks.
 func anyEcosystemNotRunRows() []string {
-	return []string{"any.gitleaks=not_run", "any.jscpd=not_run", "any.lizard=not_run"}
+	return []string{"any.gitleaks=not_run", "any.jscpd=not_run", "any.lizard=not_run", "any.opengrep=not_run"}
 }

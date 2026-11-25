@@ -43,6 +43,7 @@
 | `any.lizard` | `lizard` | 아니오 | `--lizard` | 아니오 | `codeye-structure-lizard` v2 | `overridden` / `honored` |
 | `any.jscpd` | `jscpd` | 아니오 | `--jscpd` + `--node` | 아니오 | `codeye-duplication-jscpd` v2 | `overridden` / `honored` |
 | `any.gitleaks` | `gitleaks` | 아니오 | `--gitleaks` | 아니오 | `codeye-secrets-gitleaks` v1 | `honored` / `disabled` |
+| `any.opengrep` | `opengrep` | 아니오 | `--opengrep` | 아니오 | `codeye-taint` v2 | `overridden` / `reported` |
 
 go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder와 비교가 합성한다([규칙 문맥과 소스 안 억제](#규칙-문맥과-소스-안-억제)). 모듈 단위 분석기는 루트 모듈의 key에 이름만 쓰고 나머지 모듈은 경로 정렬 순서로 `.m01`부터 붙인다. 모듈이 64개를 넘으면 계획 오류다. 무엇이 모듈인지는 팩별 절이 정한다. C/C++과 `any` 분석기는 작업 하나다.
 
@@ -74,6 +75,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | `--lizard /abs/lizard` | 설치된 실행 파일 | lizard |
 | `--jscpd /abs/node_modules/jscpd/run-jscpd.js` | JS 진입 스크립트(`node_modules/.bin` shim 거부) | jscpd |
 | `--gitleaks /abs/gitleaks` | 실행 파일 | gitleaks |
+| `--opengrep /abs/opengrep` | Opengrep 릴리스의 단일 실행 파일([설치](#opengrep-설치)) | 패턴 taint 규칙 |
 | `--npm /abs/node_modules/npm/bin/npm-cli.js`, `--pnpm /abs/node_modules/pnpm/bin/pnpm.cjs`, `--yarn /abs/node_modules/yarn/bin/yarn.js` | JS 진입 스크립트. `--node`가 있어야 함. 분석기가 아니라 받는 도구다 | `deps.javascript` |
 | `--toolchain-path PATH` | 절대 디렉터리 목록, 기본 `/usr/bin:/bin`. 분석기는 보조 프로그램 조회에만 쓴다(Rust 링커 `cc`) | cargo check, clippy |
 | `--repo-code-source-root ID` (반복) | 저장소 코드 실행 허가. 같은 agent의 `--source-root ID=...`가 있어야 함 | 저장소 코드를 실행하는 작업 |
@@ -99,7 +101,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 
 로컬 워커가 사용할 Python, JDK, Go, Cargo, Node.js는 관리 화면에서 지정할 수 있다. 실행 파일이나 설치 디렉터리를 저장하면 다음 분석에서 그 도구를 사용한다. 분석기 자체의 실행 파일은 기존 설정 키로 지정한다. [언어 도구 경로](GUIDE.md#언어-도구-경로)
 
-**찾는 대상.** go, git, node, java, OpenCode와 이 빌드의 분석기 도구 전부다(staticcheck, gitleaks, ruff, mypy, pyright, bandit, lizard, cppcheck, clang-tidy, gcc, eslint, tsc, jscpd, cargo, clippy, pmd, spotbugs, import-linter, dependency-cruiser), 그리고 의존성을 받는 패키지 관리자 npm, pnpm, yarn, uv, python이다. 결과의 `name`은 에이전트 플래그 이름이며 `agent.tools.<name>`과 같다. go는 `agent.go`, git은 `agent.git`, OpenCode는 `agent.model.opencode`다.
+**찾는 대상.** go, git, node, java, OpenCode와 이 빌드의 분석기 도구 전부다(staticcheck, gitleaks, ruff, mypy, pyright, bandit, lizard, cppcheck, clang-tidy, gcc, eslint, tsc, jscpd, opengrep, cargo, clippy, pmd, spotbugs, import-linter, dependency-cruiser), 그리고 의존성을 받는 패키지 관리자 npm, pnpm, yarn, uv, python이다. 결과의 `name`은 에이전트 플래그 이름이며 `agent.tools.<name>`과 같다. go는 `agent.go`, git은 `agent.git`, OpenCode는 `agent.model.opencode`다.
 
 **찾는 위치.** 순서대로 사용자의 `PATH`, `~/.local/bin`, `~/go/bin`, `/usr/local/go/bin`과 시스템 디렉터리, `~/.opencode/bin`, CODEYE 도구 접두사 `~/.local/share/codeye-tools/{bin,cpp/bin,go/bin}`이다. 모양이 정해진 도구는 다음처럼 찾는다.
 
@@ -147,6 +149,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | tsc | 15분 | 32 MiB | 4 MiB |
 | cargo check, clippy | 30분 | 64 MiB | 4 MiB |
 | lizard, jscpd, gitleaks | 15분 | 32 MiB | 4 MiB |
+| Opengrep | scan당 15분(규칙 하나·파일 하나당 30초) | 32 MiB | 4 MiB |
 | 시작 probe·탐색 probe·toolchain probe | 30초 | 64 KiB | |
 
 ### 확인한 도구 버전
@@ -176,6 +179,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | lizard | 1.26.1 | `1.26` |
 | jscpd | 5.4.3 | `5.4` |
 | gitleaks | 8.30.1 | `8.30` |
+| Opengrep | 2.0.0 | `2.0` |
 
 형식이 맞지만 범위 밖인 버전은 실행하고 `tool_version_untested`(rustc는 `rustc_version_untested`)와 `version_tested=false`를 남긴다. 버전 출력을 알아보지 못하면 도구를 코드에 실행하지 않는다(`tool_version_unrecognized`).
 
@@ -194,6 +198,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 | JS/TS | `CODEYE_TEST_NODE`, `CODEYE_TEST_ESLINT`, `CODEYE_TEST_TSC` | `CODEYE_JSTS_CAPTURE`, `CODEYE_JSTS_DUMP` | `-run 'TestRealESLint\|TestRealEngine' ./internal/worker/analysis/eslint/`, `-run TestRealTsc ./internal/worker/analysis/tsc/` |
 | Rust | `CODEYE_TEST_CARGO`, `CODEYE_TEST_CLIPPY`, 링커 시험은 `CODEYE_TEST_TOOLPATH`(`cc` 포함) | `CODEYE_RUST_CAPTURE`, `CODEYE_RUST_DUMP` | `./internal/worker/analysis/rustpack/` |
 | lizard, jscpd, gitleaks | `CODEYE_TEST_LIZARD`, `CODEYE_TEST_JSCPD` + `CODEYE_TEST_NODE`, `CODEYE_TEST_GITLEAKS` | `CODEYE_STRUCTURE_CAPTURE`, `CODEYE_STRUCTURE_DUMP` | `-run TestReal ./internal/worker/analysis/{lizard,jscpd,gitleaks}/` |
+| Opengrep | `CODEYE_TEST_OPENGREP`, 네트워크 추적은 `CODEYE_TEST_STRACE` | `CODEYE_OPENGREP_CAPTURE`(`testdata/fixtures.*`), `CODEYE_OPENGREP_EXAMPLE`(관찰 예시 기록) | `-run TestRealOpengrep ./internal/worker/analysis/opengrep/`, 기대값은 `fixtures/taint/`의 `expect:` 표지 |
 
 시험 대상 소스는 저장소의 gofmt·vet·분석기가 보지 않도록 시험 코드 문자열이나 `fixtures/` 아래에 둔다. 비밀값 fixture는 시험 시점에 생성하고 저장소에는 실제와 비슷한 토큰을 두지 않는다. 시험 전체 구성은 [시험](TESTING.md)을 따른다.
 
@@ -249,12 +254,27 @@ envelope의 `outcome.exit_class`는 다음 중 하나다.
 
 `coverage`는 `unit`(`crate`·`file`·`module`·`package`·`project`·`translation_unit`), `files_in_scope`(null=셀 수 없음), `processed_paths`(null=모름, []=0), `files_skipped`, `files_unlisted`, 단위 상태별 수를 담는다. 도구가 주지 않는 상세 범위는 모름으로 남긴다.
 
+### SARIF 입력 어댑터
+
+`internal/worker/analysis/sarif`는 팩이 실행한 도구의 SARIF 2.1.0 출력을 공통 관찰 모델로 옮기는 입력 어댑터다. 팩 안에서 도구 출력을 읽는 데만 쓰며, 다른 곳에서 만든 SARIF를 올려 결과로 받는 경로는 없다. 지금 쓰는 팩은 [Opengrep 패턴 taint 팩](#opengrep-패턴taint-팩)이다.
+
+- **원시 stream이 근거다.** SARIF는 도구의 stdout으로 받아 그대로 기록한다. 결과마다 `/runs/i/results/j` JSON pointer와 그 결과의 byte 범위를, 위치·관련 위치·흐름 단계마다 자기 byte 범위를 기록하므로 관찰의 `raw_ref`와 관련 위치의 `raw_span`이 원시 파일의 바이트를 가리킨다.
+- **옮기는 것.** `results`(규칙 ID, level, 메시지, 주 위치), `locations`, `relatedLocations`, `codeFlows/threadFlows/locations`(흐름·스레드·순서·`kinds`·`nestingLevel`을 보존하고 도구가 만든 흐름 단계로 표시), `partialFingerprints`·`fingerprints`, `suppressions`(종류), driver의 규칙 메타데이터(ID, 짧은·긴 설명, 기본 level, `CWE-<n>` 태그), 실행 알림(`toolExecutionNotifications`)과 `executionSuccessful`이다.
+- **엄격한 검증.** 모델링한 부분집합 밖의 필드, 중복 키, 64단계를 넘는 중첩, 뒤에 붙은 데이터, 크기 상한(32 MiB)·결과 수 상한(100000)·결과당 흐름 단계 상한(4096) 초과, `kind`가 `fail`이 아닌 결과는 모두 형태 오류(`sarif.ErrShape`)다. 형태 오류는 결과 0건이 아니라 `output_unparsed`다.
+  - 키는 정확히 일치해야 한다. 모델링한 멤버와 대소문자만 다른 키(`Results`, `startline`)는 모르는 필드로 넘기지 않고 형태 오류다. JSON 디코더가 대소문자를 무시하고 같은 멤버로 읽는 것을 막는다. 이름이 자유로운 객체(`properties`, `fingerprints`, `partialFingerprints`, `originalUriBaseIds`)만 예외다.
+  - 위치에 `region`의 시작 줄이 없으면 형태 오류다. 0–0 범위의 위치로 만들지 않는다.
+  - 쓰지 않는 문구는 내용을 검사하지 않는다. 코드 조각(`snippet`), 알림·위치·관련 위치·흐름 단계 메시지, 규칙의 `help`·`helpUri`, 억제의 `justification`이 그렇다. 실제 C 프로젝트(civetweb)의 알림 메시지에 제어 문자가 있어 스캔 전체가 `output_unparsed`가 됐다. 관찰에 옮기는 문구(결과 메시지, 규칙 설명)는 그대로 검사한다.
+- **실행 상태.** run의 `invocations[].executionSuccessful`이 false면 팩은 결과를 쓰지 않고 실패로 본다. 반대로 true라고 해서 모든 파일을 해석했다는 뜻은 아니다. Opengrep 2.0.0은 문법 오류가 있어도 true를 쓴다(측정). 파일별 완전성은 팩이 따로 판정한다.
+- **열 단위.** `Options.ColumnKind`는 도구가 쓰는 열 단위다(`bytes`·`utf16CodeUnits`·`unicodeCodePoints`). run의 `columnKind`가 있고 이 값과 다르면 형태 오류다. 없으면 팩이 정한 값을 쓴다. Opengrep은 `columnKind`를 쓰지 않고 열을 바이트로 센다(측정: 한국어 두 글자와 이모지 뒤의 호출이 바이트 열 28, 코드 포인트 열 21, UTF-16 열 22에서 바이트 열 28로 나왔다). 관찰의 `column_unit`은 `byte`다.
+- **경로.** `artifactLocation.uri`는 작업 사본 상대 경로로만 받는다. 절대 경로, 스킴(`file:` 포함), `..`, 역슬래시, 드라이브 문자(`C:`, `C:/…`), `./` 뒤의 절대 경로(`.//etc/passwd`), 모르는 `uriBaseId`는 작업 사본을 벗어난 위치로 표시되고, 팩은 그 결과를 버리고 작업을 실패시킨다(`result_outside_snapshot`). `a:b.py`처럼 두 번째 글자가 콜론이지만 드라이브가 아닌 이름은 POSIX 상대 이름으로 받는다. URI 형식(퍼센트 인코딩 여부)과 허용 `uriBaseId`는 팩이 도구의 실측 출력대로 고른다.
+  - 허용한 `uriBaseId`를 run의 `originalUriBaseIds`가 정의하면 형태 오류다. 기준을 작업 사본 밖으로 옮길 수 있기 때문이다. 다른 ID의 정의는 쓰지 않으므로 받는다. Opengrep 출력에는 이 멤버가 없다(측정).
+  - `sarif.Maps(path, opt)`는 작업 사본 경로가 도구가 쓸 URI로 갔다가 같은 경로로 돌아오는지 알려준다. 팩은 돌아오지 않는 파일을 도구에 넘기지 않는다(Opengrep은 `skipped_unmappable_name`으로 센다). 스냅샷이 역슬래시·콜론 이름을 이미 받지 않으므로(`source_unsupported`) 지금 이 경로는 방어선이다.
+- 관련 위치의 종류 `tool_flow_step`은 도구가 보고한 데이터 흐름 단계다. 순서는 원시 stream 순서이며 보고서까지 그대로 간다([보고서](REPORT.md)).
+
 ### 설계 계약(미구현)
 
 다음은 설계만 있고 구현하지 않았다.
 
-- SARIF 입력 어댑터(locations·relatedLocations·codeFlows·fingerprints를 공통 모델로 옮기고 원시 파일 보존). SARIF는 외부 도구 어댑터 형식이며 보고서 모델을 대신하지 않는다.
-- Semgrep CE 등 승인된 로컬 패턴 규칙. 구현하더라도 지원 범위만 명세하고 파일 간 완전한 데이터 흐름 분석을 했다고 표시하지 않는다.
 - 승인된 digest·버전을 가진 외부 플러그인 카탈로그. 임의 다운로드 플러그인은 지원하지 않는다.
 - 사용자가 규칙을 끈 이유·범위·기간 기록과 프로젝트별 규칙 정책 revision.
 - 여러 검사기의 진단을 rule family·symbol·문맥으로 묶는 자동 병합. 현재는 도구 사이 자동 병합을 하지 않는다([엔진 중복](#엔진-중복)).
@@ -377,6 +397,7 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 | `tool` | `name`, 관측한 `version`(없으면 null), `version_tested` |
 | `target` | `platform`과 생태계별 `properties` |
 | `rule_pack` | `id`·`version`·`selection`, `repository_config`(`overridden`/`honored`/`none`), `config_files`(경로·manifest SHA-256), `source_suppressions`(`honored`/`reported`/`disabled`/`none`), `unreported_suppression_rules` |
+| `rules` | 선택. 도구가 읽었다고 보고한 규칙의 `id`, `short_description`, `cwe`(`CWE-<n>` 목록). ID 순으로 정렬·중복 없음이고 관찰의 모든 `rule_id`가 여기에 있어야 한다(Opengrep) |
 | `outcome` | `task_status`, `reason`, `exit_class`, `partial_parse` |
 | `executions` | 실행마다 이름, 상태, exit code, 정리 결과, 상대화한 argv·cwd·환경변수 이름, stdout/stderr의 SHA-256·크기·잘림 |
 | `coverage` | [범위 정보](#범위-정보) |
@@ -438,6 +459,7 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 8. **경로 규칙**(`paths.1`, builder 23부터). 시험·예제·벤치마크·생성물·외부 코드 경로의 진단은 계열의 표 심각도를 그대로 쓰지 않고 표의 "배포 코드가 아닌 경로" 열로 낮춘다. `high`·`medium` 계열은 `low`, 중단 경로·성능·유지보수 계열은 `info`, 그 밖은 그대로다. 낮춘 finding의 심각도 사유는 계열 이름과 경로 규칙 버전을 담은 고정 문장이고(`severity.Reasons()`가 모두 싣는다) 원시 등급은 관찰에 그대로 남는다. 표에 없는 규칙과 다른 규칙 팩 버전은 경로와 상관없이 `low`다. 근거는 실제 프로젝트 하나의 분류 측정이다([평가 결과](EVALUATION-RESULTS.md#분류-묶음의-독립-판정)). 배포 코드의 진단은 이전과 같다.
 9. 경로의 종류는 하나의 공용 규칙([`record.PathClass`](../internal/worker/review/record/priority.go))이 파일 경로만 보고 정한다. 시험 파일(`IsTestPath`: Go `_test.go`, Python `test_*.py`·`tests/`, JS·TS `*.test.*`·`__tests__/`, Java `src/test`, Rust `tests/`, C/C++ `test_*`·`tests/`)이 `test`, 기본 보조 경로 규칙의 구간이 `test`(`fixtures`·`testdata`·`test-data`·`tests/data`·`mocks`·`__snapshots__`)·`example`(`examples`·`samples`·`demo`)·`vendored`(`vendor`·`third_party`·`node_modules`)·`generated`(`generated`·`gen`·`dist`·`build`, Go 파일의 `build`·`dist`는 제외), 디렉터리 `benchmark`·`benchmarks`·`benches`가 `benchmark`다. 벤치마크 구간은 보조 경로 규칙이 아니므로 검토 우선순위와 범위 산출물은 그대로다. 파일 첫 줄의 생성 표지는 보고서 생성기가 보지 못하므로 쓰지 않는다(`record.GeneratedHeader`는 검토 우선순위에만 쓴다). 관찰은 위치가 있으면 배포 코드가 아닐 때 그 종류를 `path_class`로 싣고, 도구 finding의 심각도와 도구 진단 접힘의 경로별 수가 이 값 하나를 읽는다.
 10. 경로 규칙을 바꾸면(계열의 낮춘 등급, 경로의 종류) `paths.N`의 N을 올린다. run 비교는 `severity_table` 값이 다르면 그 도구의 finding 심각도 차이를 발견의 변경으로 세지 않고 도구 문맥 차이 `tool:<analyzer>:severity_table` 하나로 보고한다([비교](REPORT.md#run-비교)). 이전 보고서와 비교하면 같은 시험 파일의 finding이 `persisting`이고 심각도 차이는 이 차이 하나다.
+11. 표의 규칙은 계열 등급보다 낮은 **상한**(`Cap`)을 둘 수 있다. 그 규칙이 실제 코드에서 보고하는 것의 정확도가 계열 등급을 뒷받침한다는 측정이 없을 때 쓴다. 같은 줄 병합은 계열로 정하므로 상한을 두어도 다른 도구 보고와 한 묶음이 된다. 상한으로 낮춘 심각도의 사유는 별도의 고정 문장이다. 상한은 계열 등급보다 낮아야 한다(표 검사). 경로 규칙은 상한 뒤에 적용한다. 상한이 정한 등급보다 경로 열이 낮으면 경로 열이 되고 사유는 경로 규칙의 문장이다.
 
 | 계열 | 기본 심각도 | 배포 코드가 아닌 경로 | 같은 줄 병합 | 근거 |
 |---|---|---|---|---|
@@ -462,7 +484,14 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 | `style` | info | info | 아니오 | 명명·단순화 제안이다 |
 | `formatting` | info | info | 아니오 | 서식 차이다 |
 
-팩별 표: go vet(합성 규칙 팩 `codeye-go-vet-default`@1), Staticcheck(`SA5011` 널 역참조, `SA1019` 사용 중단, `SA1*` API 오용, `SA2*` 동시성, `SA4*`·`SA5*` 논리, `SA6*` 성능, `S1*`·`ST1*`·`QF*` 스타일 등), errcheck(오류 무시), gofmt(서식), cppcheck(규칙 ID와 cppcheck 등급 대응), clang-tidy(검사 이름 접두사), GCC 파일 디스크립터 검사(자원 누수), ruff·mypy·pyright·bandit, import-linter·dependency-cruiser(유지보수), ESLint 세 구성과 tsc, cargo check·clippy·rustdoc, PMD·SpotBugs다. 표 목록은 [`builtin.SeverityTables`](../internal/worker/analysis/builtin/severity.go)가 한곳에 모은다.
+팩별 표: go vet(합성 규칙 팩 `codeye-go-vet-default`@1), Staticcheck(`SA5011` 널 역참조, `SA1019` 사용 중단, `SA1*` API 오용, `SA2*` 동시성, `SA4*`·`SA5*` 논리, `SA6*` 성능, `S1*`·`ST1*`·`QF*` 스타일 등), errcheck(오류 무시), gofmt(서식), cppcheck(규칙 ID와 cppcheck 등급 대응), clang-tidy(검사 이름 접두사), GCC 파일 디스크립터 검사(자원 누수), ruff·mypy·pyright·bandit, import-linter·dependency-cruiser(유지보수), ESLint 세 구성과 tsc, cargo check·clippy·rustdoc, PMD·SpotBugs, Opengrep다. 표 목록은 [`builtin.SeverityTables`](../internal/worker/analysis/builtin/severity.go)가 한곳에 모은다.
+
+- **Opengrep**(`codeye-taint` v2, 표 1). 규칙마다 요청 입력이 위험한 호출에 닿는 흐름이다.
+  - 명령·SQL·경로·코드 평가·역직렬화·HTML 출력은 요청 바이트가 명령·질의·파일 이름·코드·페이지가 되므로 `injection` 계열이다. 같은 구성을 보고하는 bandit(셸·SQL·Markup), SpotBugs(SQL·경로·서블릿 XSS), clang-tidy(`bugprone-command-processor`), ESLint(eval 계열)와 같은 계열이어서, 같은 줄의 두 보고는 한 분류 묶음이 된다.
+  - SSRF는 요청이 나가는 요청의 대상을 고르게 한다. 무엇이 드러나는지는 서버가 닿을 수 있는 곳에 달려 있어 `security_weakness` 계열이고 다른 도구 보고와 합치지 않는다.
+  - **기본 심각도는 상한으로 낮춘다.** `injection` 규칙은 medium, SSRF는 low다. 오탐 없는 높은 재현율은 한 파일짜리 벤치마크 코드에서만 쟀다. 실제 애플리케이션 27개에서는 진단 10건 중 실제 흐름이 0건이었다(오탐 9, 설계상 무해 1, [측정](#opengrep-규칙-측정)). 실제 애플리케이션의 정확도를 재지 못했거나 낮으므로, high로 두면 오탐이 목록과 분류의 맨 앞에 선다. 상한을 올리려면 실제 애플리케이션에서 잰 보고 전용 근거가 있어야 한다. 분류가 `problem`으로 보고 검증이 지지한 묶음은 검증이 정한 심각도를 가진 모델 finding이 되므로, 실제 흐름은 이 상한 때문에 낮아지지 않는다(`TestOpengrepDiagnosticTriage`).
+  - 규칙을 더하면 계열과 상한을 정해야 한다(`TestSeverityCoversEveryRule`).
+- SpotBugs 표 2는 [엔진 중복](#엔진-중복-1)에서 taint 팩과 같은 줄을 보고한 경로(`PT_*`)·서블릿 XSS(`XSS_*`) 검출기를 `injection` 계열로 더해 같은 줄 보고를 한 묶음으로 만든다. 기본 심각도는 표에 없던 때와 같은 low 상한이다. 이 검출기가 실제 코드에서 보고하는 것을 재지 않았고, 포함 검사를 거친 음성 fixture에서 `PT_ABSOLUTE_PATH_TRAVERSAL`이 보고됐다. bandit·clang-tidy 표는 바꾸지 않았다.
 
 ### 규칙 문맥과 소스 안 억제
 
@@ -1456,3 +1485,263 @@ gitleaks 탐지는 미검토 낮음 보안 finding이다. 비밀값 엔진은 gi
 - 저장소 `.gitleaksignore`가 숨긴 탐지도 같다. 저장소가 받아들인 값으로 보고 따르며 그 파일은 digest와 함께 규칙 문맥에 남는다.
 - 비밀값 규칙이 모르는 형식(임의 문자열 암호)과 git 이력 안의 지운 비밀값은 선별되지 않는다.
 - pyright 메시지의 문자열 literal 값처럼 다른 분석기의 진단 문구는 이 팩이 가리지 않는다. 탐지된 파일에 위치한 관찰의 문구만 모델 입력에서 뺀다.
+
+## Opengrep 패턴·taint 팩
+
+`any.opengrep`은 CODEYE가 처음부터 쓴 규칙 팩 `codeye-taint`를 Opengrep으로 실행해 **한 파일 안에서** 요청 입력이 위험한 호출에 닿는 흐름을 찾는 추가 깊이 분석기다. 구현은 `internal/worker/analysis/opengrep`, 출력 해석은 [SARIF 입력 어댑터](#sarif-입력-어댑터), 빌트인 연결은 `builtin/any_ecosystem.go`다. [서술](../examples/analyzer-opengrep.yaml) · [실측 관찰 예시](../examples/observations-opengrep.json)
+
+### 지원 범위
+
+- **파일 안 흐름만.** 출발점과 위험한 호출이 같은 파일에 있어야 한다. 그 파일의 함수 사이 호출(인자 → 매개변수 → 반환값)은 따라간다. 파일 사이 흐름, 프레임워크가 주입하는 값, 전역 상태·DB·파일을 거친 흐름은 찾지 않는다(`intra_file_flows_only`). Opengrep 2.0.0에는 파일 사이 분석 스위치(`--enable-interfile`)가 있으나 켜지 않는다. 파일 사이 데이터 흐름을 분석했다고 표시하지 않는다.
+- **출발점은 요청 입력뿐이다**(`request_input_sources_only`). 언어별 출발점은 아래 표와 같다. 명령행 인자, 그 밖의 환경변수, 표준 입력, 파일·DB에서 읽은 값은 출발점이 아니다.
+- **규칙이 아는 API만.** 표에 적은 위험 호출과 값 정리 함수만 안다. 처음 보는 래퍼 함수, 사용자 정의 escape, 다른 라이브러리의 같은 동작은 놓치거나(미탐) 정리되지 않은 것으로 본다(오탐).
+- **포함 검사 정리.** 경로 규칙은 `startsWith`·`HasPrefix`·`starts_with`·`strncmp` 같은 포함 검사를 받은 값을 그 뒤로 안전하다고 본다. 검사 전에 경로를 정규화했는지(`realpath`, `canonicalize`, `normalize`)는 확인하지 않는다.
+- 언어 판정은 확장자다. Python `.py`, JS/TS `.js .jsx .mjs .cjs .ts .tsx .mts .cts`, Go `.go`, Java `.java`, C/C++ `.c .h .cc .cpp .cxx .c++ .hh .hpp .hxx .h++`, Rust `.rs`. 숨김·`testdata`·`vendor`·`node_modules`와 `third-party` 계열 디렉터리는 넘기지 않는다(구조 팩과 같은 선택).
+
+| 언어 | 출발점 | 규칙(CWE) |
+|---|---|---|
+| Python | Flask `request.*`(args, form, values, json, data, cookies, headers, files, view_args, path, url, query_string, stream, get_data·get_json), Django·DRF·aiohttp형 `request.GET/POST/body/COOKIES/FILES/META/data/headers/cookies/query_params/path_params/match_info`, Starlette·aiohttp형 `await request.json()/form()/body()`, Flask 경로 변수(`@app.route("/<name>")` 뷰의 매개변수), `BaseHTTPRequestHandler`의 `self.path/headers/rfile.read` | command-injection(78), path-traversal(22), sql-injection(89), ssrf(918), unsafe-deserialization(502), code-evaluation(95), html-injection(79) |
+| JavaScript·TypeScript | Express형 `req`·`request`의 query, body, params, headers, cookies, originalUrl, url, path와 `get()`·`header()`, Koa `ctx`(query, params, headers, `ctx.request.*`, `ctx.cookies.get()`), socket.io `socket.on` 처리 함수의 인자. HTML 출력 규칙만 브라우저의 `location.*`, `document.URL`, `document.documentURI`도 | command-injection(78), path-traversal(22), sql-injection(89), ssrf(918), unsafe-deserialization(502, node-serialize), code-evaluation(95), html-injection(79) |
+| Go | 파일에서 형이 선언된 `*http.Request`(FormValue, PostFormValue, PathValue, URL.Query, URL.RawQuery, URL.Path, Form, PostForm, Header, Body, Cookie), `*gin.Context`, `echo.Context`의 요청 값, gorilla `mux.Vars`, chi `URLParam`·`URLParamFromCtx`, 부작용으로 채우는 `json.NewDecoder(r.Body).Decode(&v)`·gin `Bind*`·`ShouldBind*`·echo `Bind`의 대상 변수 | command-injection(78), path-traversal(22), sql-injection(89), ssrf(918), html-injection(79) |
+| Java | 파일에서 형이 선언된 `HttpServletRequest`(패키지 이름을 쓴 형 포함)의 getParameter 계열·getParameterNames·getHeader·getHeaderNames·getQueryString·getPathInfo·getRequestURI·getCookies·getInputStream·getReader, Spring MVC `@RequestParam`·`@PathVariable`·`@RequestHeader`·`@RequestBody`·`@CookieValue` 매개변수 | command-injection(78), path-traversal(22), sql-injection(89), ssrf(918), unsafe-deserialization(502), code-evaluation(95), html-injection(79) |
+| C·C++ | `recv`·`recvfrom`으로 받은 버퍼(버퍼의 오프셋 위치 `buf + n`에 받은 경우 포함), CGI 요청 변수(`QUERY_STRING`, `PATH_INFO`, `PATH_TRANSLATED`, `REQUEST_URI`, `SCRIPT_NAME`, `CONTENT_TYPE`, `HTTP_*`)의 `getenv`. `strcpy`·`strcat`·`snprintf`·`memcpy`·`realpath` 등의 복사를 따라간다 | command-injection(78), path-traversal(22), sql-injection(89), ssrf(918, libcurl) |
+| Rust | axum·actix-web의 `Query`·`Path`·`Json`·`Form` 추출 매개변수(`web::` 접두 포함), actix `HttpRequest`의 query_string·uri·path·headers·match_info | command-injection(78), path-traversal(22), sql-injection(89), ssrf(918, reqwest), html-injection(79) |
+
+규칙 ID는 `codeye.<언어>.<규칙>`이다(C·C++은 `codeye.c.*`). Go·C/C++·Rust에는 역직렬화·코드 평가 규칙이 없다. 표준 디코더(encoding/json, serde)는 코드를 실행하지 않고 언어에 eval이 없다. C/C++에는 HTML 출력 규칙이 없다. 규칙마다 한국어 설명(위험한 이유와 고치는 방법, CWE)이 보고서 규칙 설명 표(`internal/report/reportui/rule_descriptions_ko.json`, key `any.opengrep:<규칙 ID>`)에 있고, 보고서 제목은 그 첫 문장을 쓴다.
+
+### 규칙 팩
+
+- **출처.** 모든 규칙은 CODEYE가 각 언어·프레임워크의 공개 API를 보고 새로 썼다. Semgrep 레지스트리 규칙(Semgrep Rules License v1.0, [원문](https://github.com/semgrep/semgrep-rules/blob/develop/LICENSE))이나 라이선스를 확인하지 않은 규칙 집합을 복사하거나 고쳐 쓰지 않았다. 규칙 파일은 저장소의 다른 소스와 같은 조건이다.
+- **내장과 식별.** 규칙 파일 `rules/<언어>.yaml`은 바이너리에 내장(`go:embed`)되고 실행마다 task scratch의 `rules/`에 써서 `--config`로 넘긴다. `rule_pack.selection`은 엔진 스위치와 **이번 실행이 불러온** 규칙 파일마다 SHA-256 앞 12자(`rules/python.yaml@…`)다. 범위에 없는 언어의 규칙 파일은 적지 않는다. 언어가 다른 두 실행은 규칙 문맥이 다르다. 규칙을 바꾸면 선택이 바뀌어 규칙 문맥이 달라진다. 팩 버전은 `codeye-taint` v2다. v2는 아래 [측정](#opengrep-규칙-측정)의 개발 부분에서 찾은 출발점·위험 호출·정리 함수를 더했다.
+- **정밀도 우선.** 규칙마다 양성 fixture(`fixtures/taint/<언어>/<규칙>.*`, 위험 줄에 `expect: <규칙 ID>`)와 음성 fixture(`*_safe.*`: 인자 목록 실행, 매개변수 바인딩, 상수 호스트 접두사, escape, 숫자 변환, 포함 검사)가 있다. 새 출발점·위험 호출·정리 함수의 형태마다 양성과 음성 줄이 있다(프레임워크 출발점은 `framework_sources.*`). 정규식으로 묶은 이름 목록(요청 속성, 정리 함수 이름 등)은 목록마다 대표 이름 몇 개로 시험한다. 음성 줄마다 정리를 뺀 사본을 만들어 같은 규칙이 그 줄을 보고하는지 실제 Opengrep으로 확인했다(28줄, 저장소 밖에서 한 번 실행). 실제 Opengrep 실행에서 양성 122줄을 모두 찾고 음성에서 결과가 없어야 시험을 통과한다. 음성에서 정확하게 만들 수 없는 위험 호출은 규칙에 넣지 않았다(예: Go의 `$X.Get(a, b)` 형태 SQL 호출은 캐시 클라이언트와 구별할 수 없어 뺐다).
+- **YAML.** Opengrep은 YAML anchor를 받지 않으므로 규칙 파일은 출발점·정리 블록을 규칙마다 펼쳐 쓴다.
+
+### 실행
+
+- 버전 probe(`opengrep --version`, 한 줄 `X.Y.Z`) 뒤 scan 한 번(파일 목록이 argv 한도를 넘으면 나눠 최대 64번)이다. 경로 인자의 한도는 Windows 24 KiB, 그 밖 96 KiB다. 경로마다 바이트 수에 `./`, 구분 공백, 공백이 든 이름을 감싸는 Windows 따옴표 두 개(5바이트)를 더해 센다. Windows 명령줄은 UTF-16 32767 단위까지이고 UTF-8 경로의 바이트 수는 UTF-16 단위 수보다 작지 않으며 나머지 argv는 2 KiB 아래다. Linux의 전체 인자 한도(`ARG_MAX`, 보통 2 MiB)보다는 충분히 작다. Windows 한도는 계산값이고 Windows에서 실행해 보지 않았다. 64번을 넘으면 실행하지 않고 `unsupported`/`too_many_files`다.
+- argv: `scan --config <scratch>/…/rules/<언어>.yaml … --no-rewrite-rule-ids --sarif --dataflow-traces --taint-intrafile --json-output <scratch>/…/opengrep.scan.json --project-root . --quiet --jobs 4 --timeout 30 --timeout-threshold 3 --max-target-bytes 1000000 -- ./<파일>…`. cwd는 작업 사본, 환경은 공통값(`PATH`, `LANG`, `SystemRoot`)과 executor의 실행별 `HOME`·임시 디렉터리뿐이다. 범위에 있는 언어의 규칙 파일만 넘긴다.
+- **한 번의 실행, 두 출력.** stdout의 SARIF가 원시 stream이고 관찰의 근거다. `--json-output`이 scratch에 쓰는 JSON 사본은 SARIF에 없는 두 가지, 검사한 파일 목록(`paths.scanned`)과 파일별 구조화 오류를 준다. 두 출력은 대조한다. 오류 수와 SARIF 알림 수가 같아야 하고, 억제되지 않은 결과의 (규칙, 경로, 줄) 다중집합이 같아야 한다(JSON 사본은 억제된 결과를 빼고 쓴다). 다르면 `output_unparsed`다.
+- **네트워크를 쓰지 않는다.** 규칙은 로컬 파일로만 넘기고 레지스트리(`p/…`, `r/…`, `auto`), URL, `git+` 설정, `SEMGREP_RULES` 환경변수를 쓰지 않는다. Opengrep 2.0.0에는 지표 전송 옵션이 없다. 버전 확인도 하지 않는다. 시험 `TestRealOpengrepNoNetwork`(TC-291)가 팩이 만든 argv·환경 그대로 strace(`trace=network,process`)로 실행해 `socket`·`connect`·`sendto`·`bind`가 없고 `execve`가 하나뿐임을 확인했다. 재생 시험은 기록된 argv와 환경에 레지스트리·URL·파일 사이 스위치가 없음을 CI에서 검사한다.
+- 1 MB를 넘는 파일(`files_over_size_limit_skipped`)과 UTF-8이 아닌 파일(`non_text_files_skipped`)은 CODEYE가 넘기지 않는다. 처리 파일이 아니며 단위 상태로 센다.
+
+### 종료 코드와 결과
+
+| 상황 | 판정 |
+|---|---|
+| exit 0, 두 출력 일치 | 결과가 있으면 `success_with_findings`, 없으면 `success_without_findings`. 결과가 있어도 exit 0이다(측정) |
+| exit 4(규칙 패턴), 5(YAML), 7(설정 없음), 8(언어), 규칙 오류 알림, driver 규칙 목록이 내장 규칙과 다름 | `failed`/`rule_pack_load_failed`. 규칙을 읽지 못한 실행은 0건이 아니다 |
+| 그 밖의 0이 아닌 종료(2 등) | `failed`/`opengrep_failed` |
+| run의 `executionSuccessful=false` | `failed`/`opengrep_failed` |
+| driver가 `Opengrep`가 아니거나 버전이 probe와 다름, `columnKind`가 바이트가 아님, 형태 오류, JSON 사본 없음·불일치 | `failed`/`output_unparsed` |
+| 넘기지 않은 파일의 결과나 오류 | 그 결과는 버리고 `failed`/`result_outside_snapshot` |
+| 넘긴 파일 하나에 대한 오류(수준·유형과 관계없이) | 그 파일은 처리 파일에서 빼고 `files_not_fully_analyzed`(파일 목록은 `target.properties.incomplete_files`). 나머지 파일의 결과는 유지하고 작업은 실패하지 않는다 |
+| 파일이 없는 규칙 오류 / 파일도 규칙도 없는 실행 오류 | `failed`/`rule_pack_load_failed` / `failed`/`opengrep_failed` |
+| 검사했다고 보고하지 않은 파일 | 처리 파일에서 빼고 `planned_files_not_scanned` |
+| SARIF URI로 같은 경로를 돌려받을 수 없는 이름 | 넘기지 않고 `skipped_unmappable_name`, `file_names_not_mappable_skipped` |
+
+파일별 오류의 실제 모양(Opengrep 2.0.0, `testdata/errors.json`에 캡처):
+
+- 일부만 해석한 파일은 수준 `warn`, 유형 `["PartialParsing", [범위…]]`다. 끝나지 않은 JS 문자열, 본문 앞의 모르는 C 매크로에서 나왔다.
+- 전혀 해석하지 못한 파일은 수준 `warn`, 유형이 문자열 `"Syntax error"`다. 1 MB 가까운 C 파일(civetweb.c, sqlite3.c)에서 나왔다.
+- 이 두 경우에도 SARIF의 `executionSuccessful`은 true이고 종료 코드는 0이다. Python 2 `print` 문, 일부 깨진 JS·Go·C 파일은 오류 없이 지나갔다. 오류가 없는 파일이 끝까지 해석됐다는 보장은 도구가 주지 않는다.
+- 유형의 모양을 모르면 유형 이름을 `unknown`으로 적는다. 오류가 있다는 사실만으로 그 파일을 불완전으로 센다(TC-304).
+
+### 관찰
+
+- 범주는 `security`, 원문 등급은 SARIF level(`error`·`warning`), 문구는 규칙 메시지(고정 영어 문장)다. 위치는 SARIF의 주 위치, 곧 규칙의 위험 호출에 일치한 식이다(`os.system(…)` 호출 전체, 측정). 열은 바이트 단위(`column_unit=byte`)다.
+- **결과 순서는 실행마다 같다.** 같은 입력을 `--jobs 4`로 세 번 실행한 SARIF가 바이트까지 같았다(Java 600파일, 결과 168건). 관찰 순서와 `raw_ref`의 결과 번호는 이 순서를 따른다. 실제 엔진 시험 `TestRealOpengrepResultOrder`가 fixture를 세 번 실행해 관찰 순서·결과 pointer·SARIF 바이트가 같은지 본다.
+- `--dataflow-traces`의 흐름 단계는 `related`의 `tool_flow_step`이다. 문구는 CODEYE가 만든 고정 문장(`taint flow step N of M: source|propagation|call|callee parameter|callee return|sink`)이고 코드를 인용하지 않는다. 각 단계는 원시 stream의 자기 byte 범위를 가리킨다. 64단계를 넘으면 앞 63단계와 마지막 단계만 남긴다(`flow_steps_truncated`).
+- envelope의 `rules`에 이번 실행이 읽은 규칙의 ID, 짧은 설명, CWE가 있다. `target.properties`는 `analysis=intra_file_taint`, `sources=request_input`, `rule_languages`(넘긴 규칙 파일)다.
+- **원시 stream에는 소스 코드가 있다.** SARIF는 일치한 코드 조각과 흐름 단계의 원문을 담는다(`tool_output_holds_source_text`). 관찰과 보고서 문구에는 넣지 않는다. 코드 제외 내보내기는 원시 stream을 내보내지 않는다.
+
+### 규칙 문맥과 억제
+
+- `repository_config=overridden`, `config_files=[]`. 파일을 명시해 넘기므로 저장소의 `.semgrepignore`·`.gitignore`는 적용되지 않는다(측정). 저장소 안의 규칙 파일·설정은 읽지 않는다.
+- `source_suppressions=reported`. `nosemgrep`·`nosem` 주석(규칙 ID를 적으면 그 규칙만)은 도구가 적용하고 SARIF `suppressions`(`inSource`)로 알린다. 그 결과는 `suppressed=true` 관찰로 남고 발견이 되지 않는다. fixture에서 규칙 없는 주석과 같은 규칙 ID 주석은 억제되고 다른 규칙 ID 주석은 억제되지 않았다(TC-290).
+
+### 엔진 중복
+
+[엔진 중복](#엔진-중복) 절차대로 같은 fixture에 기존 분석기를 CODEYE 선택으로 실행해 같은 줄 보고를 쟀다. 모든 규칙에 다른 도구가 보고하지 않는 변형이 있어 규칙을 모두 남긴다. 같은 줄의 두 보고는 각 작업의 관찰로 남고 보고서는 합치지 않는다.
+
+| 기존 분석기(선택) | 같은 줄에서 함께 보고 | Opengrep만 보고한 변형 | 기존 분석기만 보고(음성 fixture) |
+|---|---|---|---|
+| bandit 1.9.4 (B602·B605 셸 실행, B608 SQL 문자열, B310 urlopen, B301·B506 pickle·yaml, B307·B102 eval·exec, B703·B704 Markup) | Python 양성 23줄 중 11줄 | 경로 4줄 전부, 함수 사이 명령 흐름, requests SSRF, 템플릿 HTML, `yaml.unsafe_load`, `compile` | 셸 상수 명령·숫자 인자·quote 처리 등 음성 8줄(B605·B602·B608·B307·B301). bandit은 입력 출처를 보지 않는다 |
+| ESLint 10.15 기준선(`@eslint/js` recommended) | 없음 | 전부 | 없음 |
+| ESLint type-aware(`@typescript-eslint/no-implied-eval`) | TS의 `new Function(입력)` | `eval(입력)`, vm 실행, JS 파일 | `setTimeout(문자열)` |
+| go vet, Staticcheck(SA·U1000), errcheck | 없음(errcheck는 무시한 오류 반환만) | 전부 | 없음 |
+| SpotBugs 4.10.5(전체 검출기, `-low`) | 서블릿 XSS 2줄(`XSS_REQUEST_PARAMETER_TO_SERVLET_WRITER`), 경로 1줄(`PT_RELATIVE_PATH_TRAVERSAL`), SQL 1줄(`SQL_NONCONSTANT_STRING_PASSED_TO_EXECUTE`) | 메서드 사이 XSS, `Files.*`·`File.delete` 경로, JdbcTemplate SQL, Spring 매개변수 출발점, 명령·SSRF·역직렬화·SpEL | 포함 검사를 거친 경로 1줄(`PT_ABSOLUTE_PATH_TRAVERSAL`) |
+| clang-tidy(`bugprone-command-processor`, cert-env33-c와 같은 검사) | `system`·`popen` 2줄 | `execl("/bin/sh", …, "-c", 입력)` | 상수·숫자 명령의 `system` 2줄 |
+| cppcheck | 없음 | 전부 | 없음 |
+
+- Java 측정은 fixture가 참조하는 서블릿·Spring API의 최소 stub으로 컴파일해 SpotBugs를 실행했다(저장소에 두지 않음). Rust clippy 선택(6개 lint)에는 이 구성을 보는 lint가 없어 실행하지 않았다.
+- 측정은 이 fixture의 구성에 한정된다. 규칙을 바꾸면 다시 잰다. 이 표는 v1 fixture로 쟀고 v2에서 더한 줄로는 다시 재지 않았다. C 명령 fixture는 v2에서 바뀌지 않아 clang-tidy 행은 그대로 맞다.
+
+### Opengrep 규칙 측정
+
+**결론.**
+
+- 이 팩이 믿을 만하게 찾는 것은 한 파일 안에서 요청 입력이 규칙이 아는 위험 호출에 닿는 흐름이다. 한 파일짜리 벤치마크 사례(Juliet Java의 한 파일 변형)에서 명령·SQL·HTML 재현율은 0.95이고 오탐은 0건이었다.
+- 찾지 못하는 것은 파일을 건너는 모든 흐름(Juliet Java 여러 파일 변형 540건을 모두 놓침)과 [출발점 표](#opengrep-패턴taint-팩)에 적은 것 밖의 프레임워크 입력이다.
+- 실제 애플리케이션 27개에서는 실제 흐름을 하나도 찾지 못했고, 오탐이거나 설계상 무해한 진단 10건(오탐 9, 무해 1)을 냈다.
+- 그래서 이 팩은 진단마다 [분류](REVIEW.md#도구-진단-분류)가 필요한 선택형 깊이 분석기다. 결과가 없다는 것은 보안 검사 범위의 근거가 아니다. 기본 심각도도 이에 맞춰 낮췄다([기본 심각도](#기본-심각도)).
+
+모델 호출 없이 규칙 팩 그대로(`TestRealOpengrepMeasureDirectory`, TC-306) 레이블 벤치마크와 공개 웹 애플리케이션을 실행해 쟀다. Opengrep 2.0.0, Linux x86-64. 제3자 소스는 저장소에 넣지 않았고 아래는 집계와 공개 프로젝트 이름뿐이다.
+
+**분할과 오염.** 결과를 보기 전에 개발 부분과 보고 전용 부분을 정했다.
+
+- 벤치마크는 시험 번호의 짝수가 개발, 홀수가 보고 전용이다. Juliet C/C++은 흐름 변형 번호(`_NN`)로 나눴다.
+- 애플리케이션은 언어마다 개발용과 보고 전용을 라이선스·프레임워크로 골라 이름을 먼저 적었다.
+- 규칙은 개발 부분의 놓친 사례와 오탐을 보고 고쳤다.
+
+그러나 분할을 끝까지 지키지 못했다.
+
+- 규칙을 고치는 동안 매번 채점 출력에 두 OWASP 벤치마크의 보고 전용 집계 행이 함께 보였다.
+- 처음 정한 보고 전용 애플리케이션도 매번 함께 실행하고 진단을 읽었다.
+- Python 정리 함수를 설계하면서 BenchmarkPython의 보고 전용 사례 하나를 열어 보았다.
+- C/C++ 규칙을 고치면서 Juliet의 `_01`(홀수) 변형 파일을 보았다.
+
+보고 전용 자료로 규칙을 고치지는 않았지만, 그렇지 않았다고 보일 방법이 없다. 그래서 **아래 OWASP 두 벤치마크와 Juliet C/C++의 홀수 부분, 처음 정한 보고 전용 애플리케이션은 모두 개발 숫자로 센다.**
+
+규칙을 마지막으로 고친 뒤 처음 보는 자료를 따로 정해 최종 보고 전용으로 썼다. 레이블 집합인 Juliet Java 1.3과 애플리케이션 아홉 개(아래 표의 "새 보고 전용")다. 이 자료를 본 뒤에는 규칙을 고치지 않았다. 처음에는 h2o를 더해 열 개였지만, h2o를 처음 실행한 뒤 C 규칙의 `recvfrom` 수정(아래 Juliet C/C++)이 있었다. fixture에서 찾은 수정이고 고친 뒤 다시 실행한 h2o 결과도 같았지만, 그 실행 뒤에 규칙이 바뀌었으므로 h2o는 개발 숫자로 센다. Juliet Java는 Java 규칙만 쓰므로 이 수정과 관계없다. Python·C/C++용으로 보지 않은 레이블 집합은 따로 찾지 않았다. Juliet C/C++의 다른 출발점(환경변수, 파일, 콘솔)은 규칙의 요청 입력 출발점이 아니다.
+
+**레이블 벤치마크.** 사례는 그 범주의 규칙이 시험 파일 안에서 결과를 냈으면 검출이다. 범주는 규칙이 다루는 것만 셌다.
+
+| 벤치마크(고정) | 라이선스 |
+|---|---|
+| OWASP BenchmarkJava `10dfcc54` | GPL-2.0 |
+| OWASP BenchmarkPython `f1291485` | GPL-3.0 |
+| NIST Juliet C/C++ 1.3(CWE-78, CWE-23·36의 POSIX `char` socket 변형 1968파일) | 미국 정부 저작물 |
+| NIST Juliet Java 1.3(CWE-78·89·80·81·83·23·36의 서블릿 출발점 `getParameter`·`getQueryString`·`getCookies` 변형 2175파일, zip SHA-256 `d985f417…`) | 미국 정부 저작물 |
+
+**새 보고 전용: Juliet Java 1.3, v2 규칙.** 메서드 단위로 셌다(`bad` 메서드의 결과는 TP, `good` 메서드의 결과는 FP). 결과 651건은 모두 `bad` 메서드에 있었다. 전체 1,332사례의 재현율은 0.49(651건)다. 한 파일 변형은 0.82(651/792), 여러 파일 변형은 0이다. 여러 파일에 걸친 변형(`_51a`… 등)은 한 사례다.
+
+| CWE | 한 파일 변형 TP/FN/FP/TN | 여러 파일 변형 TP/FN/FP/TN | 한 파일 변형 재현율 |
+|---|---|---|---|
+| 명령(78) | 63/3/0/66 | 0/45/0/45 | 0.95 |
+| SQL(89) | 315/15/0/330 | 0/225/0/225 | 0.95 |
+| HTML(80) | 126/6/0/132 | 0/90/0/90 | 0.95 |
+| HTML 오류 메시지(81) | 0/66/0/66 | 0/45/0/45 | 0 |
+| HTML 속성(83) | 63/3/0/66 | 0/45/0/45 | 0.95 |
+| 상대 경로(23) | 42/24/0/66 | 0/45/0/45 | 0.64 |
+| 절대 경로(36) | 42/24/0/66 | 0/45/0/45 | 0.64 |
+
+한 파일 변형에서 놓친 141건의 원인:
+
+- `response.sendError(…)` 위험 호출을 모델링하지 않음: 66 (CWE-81 전부).
+- `getQueryString`을 잘라 읽는 `token.startsWith("id=")`를 경로 규칙이 포함 검사 정리로 봄: 44 (CWE-23·36).
+- 클래스 필드를 거친 값(변형 45): 31.
+
+여러 파일 변형 540건은 파일 사이 흐름이라 모두 놓쳤다. `good` 메서드에서는 결과가 없어 오탐은 0건이다.
+
+BenchmarkJava, TP/FN/FP/TN(v1 → v2). 짝수·홀수 모두 개발 숫자다(위 오염).
+
+| 범주(CWE) | 짝수 v1 | 짝수 v2 | 홀수 v1 | 홀수 v2 | 홀수 v2 재현율·오탐률 |
+|---|---|---|---|---|---|
+| 명령(78) | 15/49/1/63 | 18/46/1/63 | 7/55/7/54 | 10/52/7/54 | 0.16 · 0.11 |
+| 경로(22) | 0/60/0/72 | 31/29/18/54 | 0/73/0/63 | 34/39/13/50 | 0.47 · 0.21 |
+| SQL(89) | 54/84/12/104 | 89/49/19/97 | 48/86/15/101 | 77/57/23/93 | 0.57 · 0.20 |
+| HTML(79) | 49/71/18/84 | 110/10/17/85 | 46/80/17/90 | 110/16/13/94 | 0.87 · 0.12 |
+
+BenchmarkJava 홀수 부분의 놓친 사례와 오탐의 원인(v2):
+
+| 범주 | 놓친 사례 | 오탐 |
+|---|---|---|
+| 명령 | 새 프로세스의 환경변수로 넘김 27, 실행 시점에 목록으로 만든 `ProcessBuilder` 인자 9, 변수에 둔 셸(`sh`, `-c`) 8, 다른 파일의 출발점 7, 다른 파일 메서드를 거친 흐름 1 | 목록·맵 원소 6, 상수 조건 1 |
+| 경로 | `File.exists`·길이 같은 존재·메타데이터 검사만 함 26, 다른 파일의 출발점 8, 다른 파일 메서드를 거친 흐름 5 | 목록·맵 원소 7, 상수 조건 6 |
+| SQL | 다른 파일에 선언한 JdbcTemplate 46, 다른 파일의 출발점 11 | 목록·맵 원소 15, 상수 조건 8 |
+| HTML | 다른 파일의 출발점 16 | 목록·맵 원소 10, 상수 조건 3 |
+
+BenchmarkPython, TP/FN/FP/TN. 짝수·홀수 모두 개발 숫자다(위 오염).
+
+| 범주(CWE) | 짝수 v1 | 짝수 v2 | 홀수 v1 | 홀수 v2 |
+|---|---|---|---|---|
+| 명령(78) | 4/1/0/5 | 4/1/0/5 | 2/6/0/2 | 2/6/0/2 |
+| 코드 평가(95) | 5/5/9/9 | 5/5/9/9 | 6/4/7/8 | 6/4/7/8 |
+| 역직렬화(502) | 3/6/4/16 | 3/6/4/16 | 8/1/0/16 | 8/1/0/16 |
+| 경로(22) | 4/24/15/42 | 9/19/18/39 | 13/24/6/40 | 20/17/7/39 |
+| SQL(89) | 1/1/0/4 | 1/1/0/4 | 1/2/0/7 | 1/2/0/7 |
+| HTML(79) | 0/13/0/31 | 7/6/6/25 | 0/18/0/27 | 10/8/5/22 |
+
+홀수 사례의 원인(v2):
+
+- 놓친 사례: 다른 파일의 출발점(`separate_request` 래퍼) 12, 모델링하지 않은 위험 호출 14, 사전·목록 원소 4, 문자열 slice 6, 헤더·폼 이름(`keys()`) 2.
+- 오탐: 허용 목록·리터럴 비교를 정리로 보지 못함 5, 목록 원소 6, 상수 조건 3, 모르는 정리 함수 5.
+
+Juliet은 함수 단위로 셌다(`bad` 함수의 결과는 TP, `good` 함수의 결과는 FP). v1은 결과가 0건이었다. v2는 `std::ifstream`·`std::ofstream` 위험 호출과 버퍼 오프셋 수신을 더했다. 모두 개발 숫자다.
+
+| CWE | 위험 호출 | 짝수 v2 | 홀수 v2 |
+|---|---|---|---|
+| 23·36 | `ifstream`·`ofstream`(각각) | 20/28/0/48 | 26/22/0/48 |
+| 23·36 | `fopen`·`open` | 0/48/0/48 | 0/48/0/48 |
+| 78 | `system`·`popen`·`execl`·`execlp` | 0/48/0/48 | 0/48/0/48 |
+
+- Juliet은 `fopen`·`system` 등을 매크로로 감싸 호출한다. Opengrep은 매크로 뒤의 호출을 보지 못해 그 위험 호출은 하나도 찾지 못했다. 실제 코드의 같은 호출은 fixture에서 찾는다.
+- `fstream`의 놓친 사례는 여러 파일에 걸친 변형(짝수 88, 홀수 72)과 포인터·참조·union·함수 포인터·전역을 거친 한 파일 변형(짝수 24, 홀수 16)이다.
+- 측정 뒤 새 출발점마다 양성·음성 줄을 맞추다가, `recvfrom`으로 버퍼 오프셋에 받은 뒤 종료 문자를 넣으면(`buf[n] = '\0'`) 흐름이 끊기는 것을 fixture에서 찾아 고쳤다(`recv`에는 있던 형태). 고친 뒤 Juliet C/C++, civetweb, lighttpd, h2o를 다시 실행했고 숫자는 같았다.
+
+**레이블 집합이 없는 언어.** JS/TS·Go·Rust에서 라이선스가 분명한 웹 taint 레이블 벤치마크를 찾지 못했다. SecBench.js는 라이선스가 없어 쓰지 않았다. 이 언어들은 애플리케이션 진단만 쟀다.
+
+**애플리케이션.** 고정 커밋의 저장소 전체를 팩 그대로 실행했다. 진단을 모두 읽고 한 줄 이유와 함께 판정했다. 판정은 세 가지다: 실제 흐름, 오탐, 실제 흐름이지만 설계상 무해. 숫자는 v2 규칙의 활성 진단이다.
+
+처리 파일 수 뒤의 괄호는 일부만 해석해 처리 파일에서 뺀 파일 수다. "새 보고 전용"은 v2 규칙으로만 실행했다.
+
+| 부분 | 언어 | 애플리케이션(커밋, 라이선스) | 처리 파일 | 진단 v1 → v2 | v2 진단의 판정 |
+|---|---|---|---|---|---|
+| 개발 | Python | CTFd/CTFd (`f9fa28b2`, Apache-2.0) | 522 (4) | 2 → 3 | 경로 3. 설계상 무해 1: 관리자 전용이고 경로 변환기가 `/`를 막는다. 오탐 2: `send_file`이 경로가 아니라 파일 객체를 받는다 |
+| 개발 | Python | healthchecks/healthchecks (`c1039ad2`, BSD-3-Clause) | 700 | 1 → 0 | v1의 1건은 `urlencode` 결과의 HTML 출력으로 무해했다. v2에서 정리로 본다 |
+| 개발 | JS/TS | louislam/uptime-kuma (`9431d555`, MIT) | 516 | 0 → 0 | |
+| 개발 | JS/TS | umami-software/umami (`dbb8d606`, MIT) | 1518 | 0 → 0 | |
+| 개발 | Java | spring-projects/spring-petclinic (`500158f7`, Apache-2.0) | 50 | 0 → 0 | |
+| 개발 | Java | jhipster/jhipster-sample-app (`6b000b5d`, Apache-2.0) | 425 (1) | 0 → 0 | |
+| 개발 | Go | gotify/server (`912af9f3`, MIT) | 215 | 0 → 0 | |
+| 개발 | Go | go-shiori/shiori (`aebb4021`, MIT) | 229 | 0 → 0 | 출발점을 더한 중간 규칙이 오탐 5건(`strconv.Itoa`로 만든 숫자 ID)을 냈고 v2에서 숫자 변환을 정리로 본다 |
+| 개발 | Rust | orhun/rustypaste (`507fcbd4`, MIT) | 13 | 6 → 0 | v1의 6건은 다른 파일의 `safe_path_join`으로 결합한 경로라 오탐이었다. v2에서 이름으로 정리로 본다 |
+| 개발 | Rust | atuinsh/atuin (`2fdcb592`, MIT) | 632 (21) | 0 → 0 | |
+| 개발 | C | civetweb/civetweb (`588860e3`, MIT) | 37 (1) | 실패 → 0 | v1 어댑터는 알림 메시지의 제어 문자로 `output_unparsed`였다. 본체 `civetweb.c`는 엔진이 해석하지 못해 처리 파일이 아니다 |
+| 처음 정한 보고 전용(개발로 셈) | Python | getredash/redash (`f561a53d`, BSD-2-Clause) | 970 | 0 → 0 | |
+| 처음 정한 보고 전용(개발로 셈) | JS/TS | hoppscotch/hoppscotch (`6177eae1`, MIT) | 1287 (4) | 4 → 4 | 오탐 4. 앱이 보내려고 만드는 클라이언트 쪽 `request` 객체를 요청 입력으로 보았다(SQL 3건은 이름이 같은 `execute`, SSRF 1건) |
+| 처음 정한 보고 전용(개발로 셈) | Java | macrozheng/mall (`dcaa93b3`, Apache-2.0) | 524 | 1 → 1 | 오탐 1. 숫자 `@PathVariable Long`이 고정 호스트 URL에 붙는다 |
+| 처음 정한 보고 전용(개발로 셈) | Go | miniflux/v2 (`5117f365`, Apache-2.0) | 453 | 0 → 0 | |
+| 처음 정한 보고 전용(개발로 셈) | Rust | svix/svix-webhooks (`c5e2ded5`, MIT) | 2067 (8) | 0 → 0 | |
+| 처음 정한 보고 전용(개발로 셈) | C | lighttpd/lighttpd1.4 (`2ddc5138`, BSD-3-Clause) | 174 (23) | 0 → 0 | |
+| 새 보고 전용 | Python | netbox-community/netbox (`4cfaa8f7`, Apache-2.0) | 1354 (1) | 2 | HTML 2, 모두 오탐. `dcim/views.py`: 장치 이름은 `escape()`로 정리했고 남은 값 `device.get_absolute_url()`은 정수 기본 키로 만든 URL이다. `generic/object_views.py`: 같은 구성으로 객체 이름은 `escape()`, URL은 기본 키에서 만든다 |
+| 새 보고 전용 | Python | saleor/saleor (`e1ccf4d5`, BSD-3-Clause) | 4373 (2) | 0 | |
+| 새 보고 전용 | Java | elunez/eladmin (`646c58c3`, Apache-2.0) | 274 | 0 | |
+| 새 보고 전용 | Java | yangzongzhuan/RuoYi (`d6708994`, MIT) | 376 (1) | 0 | |
+| 새 보고 전용 | JS/TS | keystonejs/keystone (`25f427e8`, MIT) | 1008 (3) | 0 | |
+| 새 보고 전용 | JS/TS | parse-community/parse-server (`a3f152f6`, Apache-2.0) | 377 | 0 | |
+| 새 보고 전용 | Go | filebrowser/filebrowser (`833d9088`, Apache-2.0) | 181 | 0 | |
+| 새 보고 전용 | Go | gogs/gogs (`c2380640`, MIT) | 691 (3) | 0 | |
+| 새 보고 전용 | Rust | qdrant/qdrant (`23065a0b`, Apache-2.0) | 2344 (35) | 0 | |
+| 새로 정했으나 개발로 셈 | C | h2o/h2o (`d3e43fcf`, MIT) | 761 (26) | 0 | 첫 실행 뒤 C 규칙이 바뀌어 개발로 옮겼다(위 분할). 바뀐 규칙으로 다시 실행해도 0건이다 |
+
+- v2 진단은 모두 10건이고 실제 흐름은 없다. 개발 3건은 무해 1, 오탐 2다. 처음 정한 보고 전용(개발로 셈) 5건은 모두 오탐이다. h2o는 0건이다.
+- 새 보고 전용 애플리케이션 아홉 개(Python 2, Java 2, JS/TS 2, Go 2, Rust 1)의 진단은 2건(netbox)이고 둘 다 오탐이다. 실제 흐름은 0건이다.
+- 애플리케이션 27개에서 실제 결함을 하나도 찾지 못했다. 그래서 애플리케이션 측정은 오탐을 보여 줄 뿐이고 재현율의 근거가 아니다. 진단이 없는 애플리케이션에 흐름이 없다는 뜻도 아니다.
+- 언어·규칙별 v2 진단:
+  - Python 경로 3, Python HTML 2.
+  - JS/TS SQL 3, JS/TS SSRF 1.
+  - Java SSRF 1.
+  - Go·Rust·C 0.
+- `clang-tidy cert-env33-c`(`bugprone-command-processor`의 별칭, LLVM 23.1.5)는 C 명령 fixture에서 쟀다([엔진 중복](#엔진-중복-1) 표의 clang-tidy 행). 양성의 `system`·`popen`을 찾고 `execl("/bin/sh", "-c", 입력)`은 놓쳤다. 상수·숫자 명령의 `system` 두 줄도 보고했다. Juliet·애플리케이션에서는 재지 않았다.
+
+**측정의 한계.** 아래는 v2 규칙이 다루지 않는다. 이 구성에서 결과가 없는 것은 결함이 없다는 뜻이 아니다.
+
+- 파일 사이 흐름: 다른 파일의 출발점·래퍼·헬퍼(JdbcTemplate), 프레임워크가 주입하는 값.
+- 매크로로 감싼 위험 호출(Juliet `fopen`·`system`), 포인터·참조·union·함수 포인터·전역·Java 클래스 필드를 거친 값, 상수 조건, 목록·맵 원소의 구분, Python 문자열 slice.
+- 디코드한 본문은 통째로 오염된다. DRF serializer의 `validated_data`, 요청 본문으로 만든 모델 객체, Go에서 구조체로 디코드한 변수의 모든 필드가 출발점으로 이어진다(확인함). 숫자형 필드나 serializer 검증은 정리로 보지 않으므로 과하게 보고할 수 있다.
+- NestJS 매개변수 데코레이터(`@Query()`, `@Body()`, `@Param()`): Opengrep 2.0.0이 javascript 언어에서 이 패턴을 해석하지 못해 출발점에 없다.
+- socket.io는 `socket.on` 처리 함수의 인자만 본다. 다른 이름의 소켓 객체나 미들웨어는 보지 않는다.
+- 위험 호출 밖의 동작: 새 프로세스의 환경변수(`exec(cmd, env)`), 실행 시점에 고른 셸, 존재·메타데이터 검사만 하는 경로 사용. Java `response.sendError(…)`의 HTML 메시지도 위험 호출로 보지 않는다.
+- 정리: 허용 목록·정규식·리터럴 비교 같은 검증 분기는 정리로 보지 않는다. 경로 규칙의 포함 검사(`startsWith`·`HasPrefix` 등)는 검사한 문자열이 경로인지 보지 않는다. 질의 문자열 토큰의 `token.startsWith("id=")` 뒤의 값도 안전하다고 본다(Juliet Java 44건). Go의 `strings.HasPrefix` 검사는 부작용 정리로 보아 검사 뒤에는 어느 분기에서도 값을 안전하다고 본다. 거부 분기(`if !HasPrefix { 사용; return }`) 안의 사용도 보고하지 않는다(확인함). Python escape·Rust 경로 결합 정리는 함수 이름(`escape_html`, `safe_path_join` 등)으로 인정하므로 이름만 같은 다른 함수도 정리로 본다.
+- 파일 내용: Python에서 파일에서 읽은 값(`open(…).read()`)은 경로 규칙 밖에서는 정리된 값으로 본다. 업로드 파일을 읽어 곧바로 쓰는 흐름은 놓친다.
+
+### Opengrep 설치
+
+Opengrep은 [opengrep/opengrep](https://github.com/opengrep/opengrep)의 LGPL-2.1 프로그램이다([LICENSE](https://github.com/opengrep/opengrep/blob/main/LICENSE)). CODEYE는 바이너리를 저장소에 넣거나 내려받지 않는다. 운영자가 설치한다.
+
+1. [릴리스 v2.0.0](https://github.com/opengrep/opengrep/releases/tag/v2.0.0)에서 플랫폼 파일을 받는다. Linux x86-64는 `opengrep_linux_x86`이다(시험한 파일 SHA-256 `37e93f4da5fd04a18c5c1febbdd12f7e98dfccd4d0c9cf2593bcb25eeb462da0`). 같은 릴리스의 `.sig`·`.cert`로 서명을 확인할 수 있다(CODEYE 시험에서는 확인하지 않았다).
+2. 이름을 `opengrep`으로 바꿔 `~/.local/share/codeye-tools/bin/`에 두고 실행 권한을 준다. 다른 위치면 `agent.tools.opengrep`(에이전트 플래그 `--opengrep`)에 절대 경로를 적는다.
+3. `codeye tools`에서 `opengrep`이 `found`, 버전 2.0.0, `version_tested=true`인지 확인한다. `codeye doctor`도 같은 검사를 한다.
+
+설치하지 않으면 지원 언어 소스가 있는 분석에서 작업이 계획되고 `unsupported`/`tool_not_configured`로 끝난다(0건 통과 아님). 실제 실행은 Linux x86-64에서만 확인했다. macOS·Windows 릴리스 파일은 시험하지 않았다.

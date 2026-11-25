@@ -143,8 +143,8 @@ def check_report(report: dict, source_root: Path = ROOT) -> None:
                    "Path class before builder 23 or without a location")
             related_end = raw["byte_start"]
             for note in obs.get("related_locations", []):
-                ensure(obs["tool"] in ("cpp.cppcheck", "cpp.clang_tidy", "cpp.gcc_analyzer") and "metric" not in obs,
-                       "Related note is not a C/C++ diagnostic")
+                ensure(obs["tool"] in ("cpp.cppcheck", "cpp.clang_tidy", "cpp.gcc_analyzer", "any.opengrep") and "metric" not in obs,
+                       "Related note is not from an analyzer that keeps related locations")
                 ensure(report["export"]["include_code"] or not ("raw_message" in note or "excerpt" in note),
                        "Code-free export has related tool text")
                 if ref := note.get("raw_ref"):

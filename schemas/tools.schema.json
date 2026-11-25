@@ -64,7 +64,7 @@
     "tools": {
       "type": "array",
       "minItems": 24,
-      "maxItems": 31,
+      "maxItems": 32,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -84,6 +84,7 @@
               "staticcheck",
               "errcheck",
               "gitleaks",
+              "opengrep",
               "ruff",
               "mypy",
               "pyright",
@@ -331,6 +332,19 @@
             "properties": {
               "name": {
                 "const": "gitleaks"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "const": "opengrep"
               }
             },
             "required": [

@@ -55,6 +55,7 @@ var versionOutputs = map[string]string{
 	"go":          "go version go1.27.4 linux/amd64",
 	"staticcheck": "staticcheck 2026.2.2 (0.8.2)",
 	"gitleaks":    "v8.30.1",
+	"opengrep":    "2.0.0",
 	"ruff":        "ruff 0.16.3",
 	"mypy":        "mypy 2.4.1 (compiled: yes)",
 	"bandit":      "bandit 1.9.4\n  python version = 3.12.3",
@@ -173,7 +174,7 @@ func TestDetectFindsEveryToolInItsLocation(t *testing.T) {
 	// OpenCode answers only when the probe turns its self-update off.
 	write(t, filepath.Join(tr.home, ".opencode", "bin", "opencode"), "#!/bin/sh\n[ \"$OPENCODE_DISABLE_AUTOUPDATE\" = 1 ] || exit 3\n"+printfLines("1.19.5"), 0o755)
 	tools := tr.tools()
-	for _, n := range []string{"mypy", "bandit", "lizard"} {
+	for _, n := range []string{"mypy", "bandit", "lizard", "opengrep"} {
 		script(t, filepath.Join(tools, "bin", n), versionOutputs[n])
 	}
 	for _, n := range []string{"cppcheck", "clang-tidy"} {
@@ -222,6 +223,7 @@ func TestDetectFindsEveryToolInItsLocation(t *testing.T) {
 		"clang-tidy":  {filepath.Join(tools, "cpp", "bin", "clang-tidy"), "23.1.5", "codeye-tools/cpp/bin"},
 		"staticcheck": {filepath.Join(tools, "go", "bin", "staticcheck"), "2026.2.2", "codeye-tools/go/bin"},
 		"gitleaks":    {filepath.Join(tools, "go", "bin", "gitleaks"), "8.30.1", "codeye-tools/go/bin"},
+		"opengrep":    {filepath.Join(tools, "bin", "opengrep"), "2.0.0", "codeye-tools/bin"},
 		"pyright":     {filepath.Join(nm, "pyright", "index.js"), "1.1.414", "codeye-tools/node"},
 		"eslint":      {filepath.Join(nm, "eslint", "bin", "eslint.js"), "10.15.0", "codeye-tools/node"},
 		"jscpd":       {filepath.Join(globalModules, "jscpd", "run-jscpd.js"), "5.4.3", "node installation"},

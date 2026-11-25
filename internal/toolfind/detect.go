@@ -65,6 +65,7 @@ var specs = map[string]spec{
 	"errcheck":           {kindExec, "errcheck", "", "install github.com/kisielk/errcheck for this host or set agent.tools.errcheck"},
 	"staticcheck":        {kindExec, "staticcheck", "", "`go install honnef.co/go/tools/cmd/staticcheck@latest` or set `agent.tools.staticcheck`"},
 	"gitleaks":           {kindExec, "gitleaks", "", "download a release from https://github.com/gitleaks/gitleaks/releases into ~/" + ToolPrefixRel + "/bin or set `agent.tools.gitleaks`"},
+	"opengrep":           {kindExec, "opengrep", "", "download the opengrep_<os>_<arch> release binary from https://github.com/opengrep/opengrep/releases, rename it opengrep into ~/" + ToolPrefixRel + "/bin, or set `agent.tools.opengrep`"},
 	"ruff":               {kindExec, "ruff", "", uvHint("ruff")},
 	"mypy":               {kindExec, "mypy", "", uvHint("mypy")},
 	"bandit":             {kindExec, "bandit", "", uvHint("bandit")},

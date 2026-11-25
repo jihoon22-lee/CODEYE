@@ -200,7 +200,7 @@ func ValidateReport(r Report) error {
 		if o.PathClass != wantClass {
 			return invalidf("observation %s path class differs from its location", o.ID)
 		}
-		if len(o.Related) > 64 || len(o.Related) > 0 && (version < AnalysisEvidenceSince || o.Metric != nil || o.Tool != "cpp.cppcheck" && o.Tool != "cpp.clang_tidy" && o.Tool != "cpp.gcc_analyzer") {
+		if len(o.Related) > 64 || len(o.Related) > 0 && (version < AnalysisEvidenceSince || o.Metric != nil || !carriesRelated(o.Tool)) {
 			return invalidf("invalid related diagnostic locations")
 		}
 		next := o.RawRef.ByteStart

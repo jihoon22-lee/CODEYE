@@ -58,6 +58,41 @@ type triageDiagInput struct {
 	Message       string  `json:"message"`
 	StartLine     int     `json:"start_line"`
 	EndLine       int     `json:"end_line"`
+	// Related are the diagnostic's related locations (a note, a taint flow
+	// step) inside the group's own context excerpts, in the tool's order.
+	Related []obsRelatedInput `json:"related,omitempty"`
+}
+
+// triageRelatedShown bounds the related locations of one example: the
+// first ones and the last (a flow's sink) are kept.
+const triageRelatedShown = 8
+
+// triageRelated is the related locations of o that lie in the group's
+// context (its unit or the file header sent with it), each naming that
+// excerpt; outside says some were left out because they lie elsewhere or
+// past triageRelatedShown.
+func triageRelated(o toolObservation, u triageUnit, unitID, headerID string) (out []obsRelatedInput, outside bool) {
+	for _, r := range o.Related {
+		l := r.Location
+		id := ""
+		switch {
+		case l == nil || l.Path != u.entry.Path || l.BlobSHA256 != u.entry.SHA256:
+		case u.span.start <= l.StartLine && l.EndLine <= u.span.end:
+			id = unitID
+		case headerID != "" && 1 <= l.StartLine && l.EndLine <= u.headerEnd():
+			id = headerID
+		}
+		if id == "" {
+			outside = true
+			continue
+		}
+		out = append(out, obsRelatedInput{Kind: r.Kind, EvidenceID: id, StartLine: l.StartLine, EndLine: max(l.EndLine, l.StartLine)})
+	}
+	if len(out) > triageRelatedShown {
+		out = append(out[:triageRelatedShown-1], out[len(out)-1])
+		outside = true
+	}
+	return out, outside
 }
 
 type triageRepair struct {
@@ -606,8 +641,10 @@ func (s *roleStage) triageRequest(bin []*triageGroup) ([]triageSent, []record.Ex
 	var out []triageSent
 	for i, g := range bin {
 		t := triageSent{id: fmt.Sprintf("g%d", i+1), group: g}
+		headerID := ""
 		if h := g.unit.headerEnd(); h > 0 && !first[g.unit.entry.Path] {
-			t.context = append(t.context, add(g.unit, 1, h, record.OriginHeader))
+			headerID = add(g.unit, 1, h, record.OriginHeader)
+			t.context = append(t.context, headerID)
 		}
 		unitID := add(g.unit, g.unit.span.start, g.unit.span.end, "context")
 		t.context = append([]string{unitID}, t.context...)
@@ -624,8 +661,12 @@ func (s *roleStage) triageRequest(bin []*triageGroup) ([]triageSent, []record.Ex
 				if lim != "" {
 					s.rec.Limitations = addLim(s.rec.Limitations, lim)
 				}
+				related, outside := triageRelated(d.obs, g.unit, unitID, headerID)
+				if outside {
+					s.rec.Limitations = addLim(s.rec.Limitations, "observation_context_outside_input")
+				}
 				in.Examples = append(in.Examples, triageDiagInput{ObservationID: d.obs.ID, Tool: d.obs.Tool, RuleID: d.obs.RuleID, RawSeverity: d.obs.Severity,
-					Message: msg, StartLine: d.obs.Location.StartLine, EndLine: max(d.obs.Location.EndLine, d.obs.Location.StartLine)})
+					Message: msg, StartLine: d.obs.Location.StartLine, EndLine: max(d.obs.Location.EndLine, d.obs.Location.StartLine), Related: related})
 			}
 		}
 		t.input = in

@@ -1,0 +1,48 @@
+use actix_web::{web, HttpResponse};
+use std::fs;
+use std::path::{Path, PathBuf};
+
+pub async fn read(path: web::Path<String>) -> HttpResponse {
+    let name = path.into_inner();
+    let leaf = Path::new(&name).file_name().unwrap_or_default().to_owned();
+    match fs::read_to_string(PathBuf::from("/srv/files").join(leaf)) {
+        Ok(body) => HttpResponse::Ok().body(body),
+        Err(_) => HttpResponse::NotFound().finish(),
+    }
+}
+
+pub async fn download(path: web::Path<String>) -> HttpResponse {
+    let root = PathBuf::from("/srv/files");
+    let full = match root.join(path.into_inner()).canonicalize() {
+        Ok(p) => p,
+        Err(_) => return HttpResponse::NotFound().finish(),
+    };
+    if !full.starts_with(&root) {
+        return HttpResponse::BadRequest().finish();
+    }
+    match fs::read(&full) {
+        Ok(body) => HttpResponse::Ok().body(body),
+        Err(_) => HttpResponse::NotFound().finish(),
+    }
+}
+
+pub async fn remove(path: web::Path<String>) -> HttpResponse {
+    let root = PathBuf::from("/srv/files");
+    // The project's own checked join, defined in another module.
+    match crate::util::safe_path_join(&root, &path.into_inner()) {
+        Some(p) => match fs::remove_file(&p) {
+            Ok(_) => HttpResponse::Ok().finish(),
+            Err(_) => HttpResponse::NotFound().finish(),
+        },
+        None => HttpResponse::NotFound().finish(),
+    }
+}
+
+pub async fn upload(path: web::Path<String>) -> HttpResponse {
+    // A filename cleaner named after what it does, from a crate.
+    let name = sanitize_filename::sanitize_filename(&path.into_inner());
+    match fs::write(PathBuf::from("/srv/uploads").join(name), b"") {
+        Ok(_) => HttpResponse::Ok().finish(),
+        Err(_) => HttpResponse::NotFound().finish(),
+    }
+}

@@ -85,7 +85,7 @@
         "location_state": {"$ref": "#/$defs/location_state"},
         "related": {"type": "array", "maxItems": 64, "items": {"type": "object", "additionalProperties": false, "required": ["raw_message", "path", "location", "location_state"], "properties": {
           "raw_message": {"type": "string"},
-          "kind": {"enum": ["reported_position", "tool_note", "condition_assumption", "assumed_branch"]},
+          "kind": {"enum": ["reported_position", "tool_note", "condition_assumption", "assumed_branch", "tool_flow_step"]},
           "raw_span": {"type": "object", "additionalProperties": false, "required": ["byte_start", "byte_end"],
             "properties": {"byte_start": {"type": "integer", "minimum": 0}, "byte_end": {"type": "integer", "minimum": 1}}},
           "path": {"anyOf": [{"$ref": "#/$defs/relpath"}, {"type": "null"}]},
@@ -128,7 +128,11 @@
       "shape_errors": {"type": "integer", "minimum": 0}, "decode_error": {"type": "string", "maxLength": 256},
       "observations": {"type": "integer", "minimum": 0}, "unresolved_observations": {"type": "integer", "minimum": 0}, "tool_errors": {"type": "integer", "minimum": 0}}},
     "workspace_drift": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/relpath"}},
-    "limitations": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"}}
+    "limitations": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"}},
+    "rules": {"type": "array", "minItems": 1, "maxItems": 4096, "description": "도구가 설명한 규칙(SARIF reportingDescriptor): id, 한 줄 설명, CWE. 있으면 모든 관찰의 rule_id가 여기 있다(docs/ANALYZERS.md#sarif-입력-어댑터).", "items": {"type": "object", "additionalProperties": false, "required": ["id", "short_description", "cwe"], "properties": {
+      "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\s]+$"},
+      "short_description": {"type": "string", "maxLength": 1024},
+      "cwe": {"type": "array", "maxItems": 16, "uniqueItems": true, "items": {"type": "string", "pattern": "^CWE-[1-9][0-9]{0,5}$"}}}}}
   },
   "allOf": [
     {"if": {"properties": {"outcome": {"properties": {"task_status": {"const": "succeeded"}}}}},
