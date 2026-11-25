@@ -92,6 +92,15 @@ func ValidationClass(f Finding) int {
 	return 4
 }
 
+// summaryClass is ValidationClass with reproduced and supported as one
+// class: ValidateReport recomputes the stored summary, and the summaries of
+// earlier builders ranked the two together by severity. The other classes
+// keep the order those summaries had (a triage problem exists only from
+// builder 22).
+func summaryClass(f Finding) int {
+	return max(1, ValidationClass(f))
+}
+
 // ComputeSummary is the single source of every count a format shows.
 func ComputeSummary(findings []Finding, obs []Observation) Summary {
 	s := Summary{TotalFindings: len(findings), RawObservations: len(obs), Priorities: []string{}}
@@ -116,12 +125,12 @@ func ComputeSummary(findings []Finding, obs []Observation) Summary {
 		case "supported", "reproduced":
 			if !hiddenDisposition[f.Disposition] {
 				s.ActionableFindings++
-				cands = append(cands, cand{f, ValidationClass(f)})
+				cands = append(cands, cand{f, summaryClass(f)})
 			}
 		case "unreviewed", "inconclusive":
 			s.PendingCandidates++
 			if !hiddenDisposition[f.Disposition] {
-				cands = append(cands, cand{f, ValidationClass(f)})
+				cands = append(cands, cand{f, summaryClass(f)})
 			}
 		case "refuted":
 			s.RefutedFindings++
