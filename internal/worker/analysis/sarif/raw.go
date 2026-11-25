@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -213,6 +214,11 @@ func (w *walker) value(path []string) error {
 				if seen[key] {
 					return shape("duplicate key %q", key)
 				}
+				// encoding/json matches member names without regard to case;
+				// only the exact name is a member of the modelled subset.
+				if name, ok := memberNames[strings.ToLower(key)]; ok && name != key && !openKeys(path) {
+					return shape("member %q is not %q", key, name)
+				}
 				seen[key] = true
 				if err := w.value(append(path, key)); err != nil {
 					return err
@@ -235,6 +241,50 @@ func (w *walker) value(path []string) error {
 		w.out[pointer(path)] = span{start: begin, end: w.dec.InputOffset()}
 	}
 	return nil
+}
+
+// memberNames maps the lower-case form of every modelled member name to the
+// name itself.
+var memberNames = func() map[string]string {
+	out := map[string]string{}
+	var walk func(t reflect.Type)
+	seen := map[reflect.Type]bool{}
+	walk = func(t reflect.Type) {
+		for t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice || t.Kind() == reflect.Map {
+			t = t.Elem()
+		}
+		if t.Kind() != reflect.Struct || seen[t] {
+			return
+		}
+		seen[t] = true
+		for i := 0; i < t.NumField(); i++ {
+			f := t.Field(i)
+			if name, _, _ := strings.Cut(f.Tag.Get("json"), ","); name != "" && name != "-" {
+				out[strings.ToLower(name)] = name
+			}
+			walk(f.Type)
+		}
+	}
+	walk(reflect.TypeOf(rawLog{}))
+	return out
+}()
+
+// openKeys: the members of a property bag, a fingerprint map and the
+// originalUriBaseIds map are free-form names.
+func openKeys(path []string) bool {
+	for _, p := range path {
+		if p == "properties" {
+			return true
+		}
+	}
+	if len(path) == 0 {
+		return false
+	}
+	switch path[len(path)-1] {
+	case "fingerprints", "partialFingerprints", "originalUriBaseIds":
+		return true
+	}
+	return false
 }
 
 // wanted keeps results and the locations below them.

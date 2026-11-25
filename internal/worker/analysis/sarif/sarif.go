@@ -8,9 +8,13 @@
 // The log is the raw stream an observation points into: every result keeps
 // its JSON pointer and byte range, every code flow step its byte range.
 // Decoding is strict: input that is too large, malformed, holds a field this
-// adapter does not model, or a value out of range is a shape error, never
-// "no results". It is an adapter for the output of a tool a pack runs, not
-// a way to import results produced elsewhere.
+// adapter does not model (member names are matched exactly), or a value out
+// of range is a shape error, never "no results". Text the adapter returns is
+// checked (length, control characters); text it does not use (snippets,
+// notification and location messages, help) is bounded only by the size of
+// the log, so one long or odd source line does not reject the log. It is an
+// adapter for the output of a tool a pack runs, not a way to import results
+// produced elsewhere.
 package sarif
 
 import (
@@ -71,9 +75,23 @@ type Options struct {
 	URIForm    URIForm
 	// BaseIDs are the uriBaseId values that mean "the directory the tool ran
 	// in" (the work copy root). A location with another base, an absolute
-	// URI or a path that climbs out of that directory is outside.
+	// URI or a path that climbs out of that directory is outside. A log that
+	// gives one of them a URI in originalUriBaseIds is rejected: the adapter
+	// does not resolve bases, it only knows they name the work copy.
 	BaseIDs []string
+	// ColumnKind is the unit the tool counts columns in, as the pack measured
+	// it (ColumnBytes, or a SARIF columnKind). A log that declares another
+	// columnKind is rejected; a log that declares none is read with this unit
+	// (empty: the SARIF default, utf16CodeUnits).
+	ColumnKind string
 }
+
+// Column units of Run.ColumnKind.
+const (
+	ColumnBytes      = "bytes"
+	ColumnUTF16      = "utf16CodeUnits"
+	ColumnCodePoints = "unicodeCodePoints"
+)
 
 // ErrShape marks a log that is not a well-formed SARIF 2.1.0 log of the
 // modelled subset. A pack records it as a parse failure.
@@ -95,10 +113,12 @@ type Run struct {
 	Rules         []Rule
 	Notifications []Notification
 	// Invocations is the number of invocations; ExecutionSuccessful is
-	// false when any invocation says so.
+	// false when any invocation says so (a pack treats that as a failed run).
 	Invocations         int
 	ExecutionSuccessful bool
-	Results             []Result
+	// ColumnKind is the unit of the columns of every location of the run.
+	ColumnKind string
+	Results    []Result
 }
 
 // Driver identifies the tool.
@@ -119,9 +139,11 @@ type Rule struct {
 	Tags             []string
 }
 
-// Notification is a toolExecutionNotification.
+// Notification is a toolExecutionNotification or
+// toolConfigurationNotification: its descriptor id and level. Its message
+// is not returned.
 type Notification struct {
-	ID, Level, Message string
+	ID, Level string
 }
 
 // Result is one result with the place of its raw bytes.
@@ -165,23 +187,21 @@ type Step struct {
 	// Kinds are the threadFlowLocation kinds ("call", "enter", "exit"...).
 	Kinds        []string
 	NestingLevel int
-	Message      string
 	Location     *Location
 	// ByteStart/ByteEnd: the step's object in the log.
 	ByteStart, ByteEnd int64
 }
 
-// Location is a physical location.
+// Location is a physical location. Its messages are not returned.
 type Location struct {
 	// URI is the artifact URI as written; Path the work-copy relative path
 	// it names ("" when it is outside, see Outside).
 	URI     string
 	Path    string
 	Outside bool
-	// Lines and columns as written (1-based, end column exclusive); 0 when
-	// absent.
+	// Lines and columns as written (1-based, end column exclusive, in the
+	// run's ColumnKind); 0 when absent.
 	StartLine, StartColumn, EndLine, EndColumn int
-	Message                                    string
 }
 
 // Decode strictly decodes data as a SARIF 2.1.0 log.
@@ -243,12 +263,25 @@ func decodeRun(ri int, rr rawRun, spans map[string]span, opt Options) (Run, erro
 	if !text(run.Driver.Version, 128) || !text(run.Driver.SemanticVersion, 128) || !text(str(d.InformationURI), maxShortText) {
 		return run, shape("run %d: driver version", ri)
 	}
-	if rr.ColumnKind != nil && *rr.ColumnKind != "utf16CodeUnits" && *rr.ColumnKind != "unicodeCodePoints" {
-		return run, shape("run %d: columnKind", ri)
+	run.ColumnKind = opt.ColumnKind
+	if run.ColumnKind == "" {
+		run.ColumnKind = ColumnUTF16
+	}
+	if rr.ColumnKind != nil {
+		if *rr.ColumnKind != ColumnUTF16 && *rr.ColumnKind != ColumnCodePoints {
+			return run, shape("run %d: columnKind", ri)
+		}
+		if opt.ColumnKind != "" && *rr.ColumnKind != opt.ColumnKind {
+			return run, shape("run %d: columnKind %s, the tool was measured to write %s", ri, *rr.ColumnKind, opt.ColumnKind)
+		}
+		run.ColumnKind = *rr.ColumnKind
 	}
 	for k, v := range rr.OriginalURIBaseIDs {
 		if !text(k, 256) || v.URI == nil || !text(*v.URI, maxShortText) {
 			return run, shape("run %d: originalUriBaseIds", ri)
+		}
+		if slices.Contains(opt.BaseIDs, k) {
+			return run, shape("run %d: originalUriBaseIds gives %s a URI; only an unresolved work copy base is read", ri, k)
 		}
 	}
 	if len(d.Rules) > maxRules {
@@ -287,10 +320,9 @@ func decodeRun(ri int, rr rawRun, spans map[string]span, opt Options) (Run, erro
 			if n.Descriptor != nil && n.Descriptor.ID != nil {
 				note.ID = *n.Descriptor.ID
 			}
-			if n.Message == nil || n.Message.Text == nil || !text(*n.Message.Text, maxText) || !level(note.Level) || !text(note.ID, 256) {
+			if n.Message == nil || n.Message.Text == nil || !level(note.Level) || !text(note.ID, 256) {
 				return run, shape("run %d: notification", ri)
 			}
-			note.Message = *n.Message.Text
 			run.Notifications = append(run.Notifications, note)
 		}
 	}
@@ -316,11 +348,8 @@ func decodeRule(r rawRule) (Rule, error) {
 	}
 	rule.ID, rule.Name = *r.ID, str(r.Name)
 	rule.ShortDescription, rule.FullDescription = msgText(r.ShortDescription), msgText(r.FullDescription)
-	if !text(rule.Name, maxShortText) || !text(rule.ShortDescription, maxShortText) || !text(rule.FullDescription, maxText) || !text(str(r.HelpURI), maxShortText) {
+	if !text(rule.Name, maxShortText) || !text(rule.ShortDescription, maxShortText) || !text(rule.FullDescription, maxText) {
 		return rule, errors.New("text")
-	}
-	if r.Help != nil && (!text(str(r.Help.Text), maxText) || !text(str(r.Help.Markdown), maxText)) {
-		return rule, errors.New("help")
 	}
 	if r.DefaultConfiguration != nil && r.DefaultConfiguration.Level != nil {
 		if !level(*r.DefaultConfiguration.Level) {
@@ -427,9 +456,6 @@ func decodeResult(ri, i int, r rawResult, rules []Rule, spans map[string]span, o
 		if s.Status != nil && *s.Status != "accepted" && *s.Status != "underReview" && *s.Status != "rejected" {
 			return res, shape("%s: suppression status", ptr)
 		}
-		if !text(str(s.Justification), maxText) {
-			return res, shape("%s: suppression justification", ptr)
-		}
 		res.SuppressionKinds = append(res.SuppressionKinds, *s.Kind)
 		if s.Status == nil || *s.Status == "accepted" {
 			res.Suppressed = true
@@ -448,19 +474,25 @@ func decodeResult(ri, i int, r rawResult, rules []Rule, spans map[string]span, o
 			res.Primary = loc
 			continue
 		}
-		p := ptr + "/locations/" + strconv.Itoa(li)
-		res.Steps = append(res.Steps, Step{Kind: StepLocation, Message: loc.Message, Location: loc, ByteStart: spans[p].start, ByteEnd: spans[p].end})
+		sp, ok := spans[ptr+"/locations/"+strconv.Itoa(li)]
+		if !ok {
+			return res, shape("%s/locations/%d: no byte range", ptr, li)
+		}
+		res.Steps = append(res.Steps, Step{Kind: StepLocation, Location: loc, ByteStart: sp.start, ByteEnd: sp.end})
 	}
 	for li, l := range r.RelatedLocations {
 		loc, err := decodeLocation(l, opt)
 		if err != nil {
 			return res, shape("%s/relatedLocations/%d: %v", ptr, li, err)
 		}
-		p := ptr + "/relatedLocations/" + strconv.Itoa(li)
-		res.Steps = append(res.Steps, Step{Kind: StepRelated, Message: loc.Message, Location: loc, ByteStart: spans[p].start, ByteEnd: spans[p].end})
+		sp, ok := spans[ptr+"/relatedLocations/"+strconv.Itoa(li)]
+		if !ok {
+			return res, shape("%s/relatedLocations/%d: no byte range", ptr, li)
+		}
+		res.Steps = append(res.Steps, Step{Kind: StepRelated, Location: loc, ByteStart: sp.start, ByteEnd: sp.end})
 	}
 	for fi, f := range r.CodeFlows {
-		if f.Message != nil && (f.Message.Text == nil || !text(*f.Message.Text, maxText)) {
+		if f.Message != nil && f.Message.Text == nil {
 			return res, shape("%s/codeFlows/%d: message", ptr, fi)
 		}
 		if len(f.ThreadFlows) == 0 {
@@ -476,7 +508,11 @@ func decodeResult(ri, i int, r rawResult, rules []Rule, spans map[string]span, o
 					return res, shape("%s: more than %d locations", ptr, MaxSteps)
 				}
 				p := fmt.Sprintf("%s/codeFlows/%d/threadFlows/%d/locations/%d", ptr, fi, ti, si)
-				step := Step{Kind: StepFlow, Flow: fi + 1, Thread: ti + 1, Position: si + 1, Of: len(tf.Locations), ByteStart: spans[p].start, ByteEnd: spans[p].end}
+				sp, ok := spans[p]
+				if !ok {
+					return res, shape("%s: no byte range", p)
+				}
+				step := Step{Kind: StepFlow, Flow: fi + 1, Thread: ti + 1, Position: si + 1, Of: len(tf.Locations), ByteStart: sp.start, ByteEnd: sp.end}
 				if tl.NestingLevel != nil {
 					if *tl.NestingLevel < 0 || *tl.NestingLevel > 1024 {
 						return res, shape("%s: nestingLevel", p)
@@ -500,7 +536,7 @@ func decodeResult(ri, i int, r rawResult, rules []Rule, spans map[string]span, o
 					if err != nil {
 						return res, shape("%s: %v", p, err)
 					}
-					step.Location, step.Message = loc, loc.Message
+					step.Location = loc
 				}
 				res.Steps = append(res.Steps, step)
 			}
@@ -516,18 +552,15 @@ func decodeResult(ri, i int, r rawResult, rules []Rule, spans map[string]span, o
 
 func decodeLocation(l rawLocation, opt Options) (*Location, error) {
 	loc := &Location{}
-	if l.Message != nil {
-		if l.Message.Text == nil || !text(*l.Message.Text, maxText) {
-			return nil, errors.New("location message")
-		}
-		loc.Message = *l.Message.Text
+	if l.Message != nil && l.Message.Text == nil {
+		return nil, errors.New("location message")
 	}
 	if l.ID != nil && *l.ID < -1 {
 		return nil, errors.New("location id")
 	}
 	p := l.PhysicalLocation
 	if p == nil {
-		if loc.Message == "" {
+		if l.Message == nil || *l.Message.Text == "" {
 			return nil, errors.New("location without physicalLocation or message")
 		}
 		return loc, nil
@@ -545,10 +578,10 @@ func decodeLocation(l rawLocation, opt Options) (*Location, error) {
 	}
 	loc.Path, loc.Outside = mapURI(loc.URI, base, opt)
 	if r := p.Region; r != nil {
-		if r.Message != nil && (r.Message.Text == nil || !text(*r.Message.Text, maxText)) {
+		if r.Message != nil && r.Message.Text == nil {
 			return nil, errors.New("region message")
 		}
-		if r.Snippet != nil && (r.Snippet.Text == nil || !text(*r.Snippet.Text, maxText)) {
+		if r.Snippet != nil && r.Snippet.Text == nil {
 			return nil, errors.New("region snippet")
 		}
 		if r.StartLine == nil || *r.StartLine < 1 {
@@ -578,9 +611,6 @@ func decodeLocation(l rawLocation, opt Options) (*Location, error) {
 				return nil, errors.New("region offset")
 			}
 		}
-		if loc.Message == "" && r.Message != nil {
-			loc.Message = *r.Message.Text
-		}
 	}
 	if p.ContextRegion != nil && p.ContextRegion.StartLine != nil && *p.ContextRegion.StartLine < 1 {
 		return nil, errors.New("contextRegion")
@@ -602,17 +632,44 @@ func mapURI(uri, base string, opt Options) (string, bool) {
 		}
 		p = u.Path
 	}
-	if strings.ContainsRune(p, 0) || strings.Contains(p, `\`) || strings.HasPrefix(p, "/") || (len(p) >= 2 && p[1] == ':') {
+	if strings.ContainsRune(p, 0) || strings.Contains(p, `\`) || strings.HasPrefix(p, "/") || driveLetter(p) {
 		return "", true
 	}
 	if opt.URIForm == URIRawPath && strings.Contains(p, "://") {
 		return "", true
 	}
-	clean := path.Clean(strings.TrimPrefix(p, "./"))
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+	// "./" names the base; what follows must still be relative
+	// (".//etc/passwd" is the absolute path /etc/passwd).
+	rest := strings.TrimPrefix(p, "./")
+	if strings.HasPrefix(rest, "/") {
+		return "", true
+	}
+	clean := path.Clean(rest)
+	if path.IsAbs(clean) || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || driveLetter(clean) {
 		return "", true
 	}
 	return clean, false
+}
+
+// Maps reports whether a work-copy relative path written by a tool as its
+// artifact URI is read back as that same path. A pack does not give a tool
+// a file it could not name back.
+func Maps(p string, opt Options) bool {
+	uri := p
+	if opt.URIForm == URIEncoded {
+		uri = (&url.URL{Path: p}).EscapedPath()
+	}
+	got, outside := mapURI(uri, "", opt)
+	return !outside && got == p
+}
+
+// driveLetter:"C:", "C:/x" or "C:\\x" (a Windows drive), not a name such as
+// "a:b.py", which is an ordinary relative file name on POSIX.
+func driveLetter(p string) bool {
+	if len(p) < 2 || p[1] != ':' || !('a' <= p[0] && p[0] <= 'z' || 'A' <= p[0] && p[0] <= 'Z') {
+		return false
+	}
+	return len(p) == 2 || p[2] == '/' || p[2] == '\\'
 }
 
 func level(s string) bool { return s == "none" || s == "note" || s == "warning" || s == "error" }

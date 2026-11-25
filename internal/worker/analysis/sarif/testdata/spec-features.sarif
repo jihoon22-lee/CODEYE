@@ -24,7 +24,7 @@
           ]
         }
       },
-      "originalUriBaseIds": {"SRCROOT": {"uri": "file:///work/"}},
+      "originalUriBaseIds": {"TOOLHOME": {"uri": "file:///opt/tool/"}},
       "invocations": [{"executionSuccessful": true, "toolExecutionNotifications": []}],
       "results": [
         {

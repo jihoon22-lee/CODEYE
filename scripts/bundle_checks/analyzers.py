@@ -587,7 +587,11 @@ def check_opengrep_pack(validators: dict) -> int:
         ensure(pack["id"] == go_string_constant(package / "opengrep.go", "RulePackID") and pack["version"] == go_string_constant(package / "opengrep.go", "RulePackVersion"),
                "opengrep: rule pack identity differs from the Go constants")
         ensure(pack["repository_config"] == "overridden" and pack["config_files"] == [] and pack["source_suppressions"] == "reported", "opengrep rule context")
-        ensure([r for r in pack["selection"] if r.startswith("rules/")] == sorted(f"rules/{p.stem}.yaml@" + hashlib.sha256(p.read_bytes()).hexdigest()[:12] for p in (package / "rules").glob("*.yaml")),
+        # The selection lists the rule files Opengrep loaded: those of the
+        # languages that have a selected file, each with its embedded digest.
+        embedded = {f"rules/{p.stem}.yaml": f"rules/{p.stem}.yaml@" + hashlib.sha256(p.read_bytes()).hexdigest()[:12] for p in (package / "rules").glob("*.yaml")}
+        loaded = [r for r in pack["selection"] if r.startswith("rules/")]
+        ensure(loaded and loaded == sorted(loaded) and all(embedded.get(r.split("@")[0]) == r for r in loaded),
                "opengrep: selection digests differ from the embedded rule files")
         listed = {r["id"]: r for r in doc["rules"]}
         ensure(set(listed) <= ids and all(listed[i]["cwe"] == [cwe[i]] for i in listed), "opengrep: envelope rules are embedded rules with their CWE")

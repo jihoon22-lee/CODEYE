@@ -76,6 +76,7 @@ func assertFixtureResult(t *testing.T, files map[string][]byte, doc obsdoc.Docum
 		t.Fatalf("suppressed %v, want %v", suppressed, suppressedWant)
 	}
 	checkObservations(t, doc)
+	checkByteColumns(t, files, doc)
 	var ids []string
 	for _, r := range doc.Rules {
 		ids = append(ids, r.ID)

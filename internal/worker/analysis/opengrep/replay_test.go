@@ -2,8 +2,10 @@ package opengrep
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -167,18 +169,129 @@ func TestReplayOpengrepFailures(t *testing.T) {
 	}
 }
 
-// A partially parsed file keeps its findings but is not claimed processed.
-func TestReplayOpengrepPartialParse(t *testing.T) {
+// A file Opengrep reports an error about (parsed in part, not parsed at all,
+// a rule timed out on it; any level, any shape of the error type) keeps its
+// findings but is not claimed processed, and the other files keep theirs:
+// one bad file does not fail the optional task. The first entries are the
+// error objects Opengrep 2.0.0 wrote (testdata/errors.json, paths moved onto
+// fixture files); the rest are shapes the adapter must not read as clean.
+func TestReplayOpengrepFileErrors(t *testing.T) {
+	var captured []struct {
+		Error json.RawMessage `json:"error"`
+	}
+	b, err := os.ReadFile("testdata/errors.json")
+	if err != nil || json.Unmarshal(b, &captured) != nil || len(captured) != 3 {
+		t.Fatalf("errors.json: %v", err)
+	}
+	cases := map[string]string{}
+	for i, c := range captured {
+		cases["captured "+strconv.Itoa(i)] = string(c.Error)
+	}
+	for name, typ := range map[string]string{"null type": `null`, "empty type": `""`, "empty list": `[]`, "object": `{"PartialParsing":[]}`,
+		"nested list": `[["PartialParsing"]]`, "number": `3`} {
+		cases[name] = `{"code":3,"level":"warn","type":` + typ + `,"message":"x","path":"python/ssrf.py"}`
+	}
+	cases["error level"] = `{"code":3,"level":"error","type":"Fatal error","message":"x","path":"python/ssrf.py"}`
+	cases["rule timeout"] = `{"code":3,"level":"warn","type":"Timeout","message":"x","path":"python/ssrf.py","rule_id":"codeye.python.ssrf"}`
+	note := []byte(`"toolExecutionNotifications":[{"descriptor":{"id":"Syntax error"},"level":"warning","message":{"text":"Syntax error at line \u000c 1"}}]`)
+	for name, entry := range cases {
+		t.Run(name, func(t *testing.T) {
+			var e struct {
+				Path string `json:"path"`
+			}
+			if err := json.Unmarshal([]byte(entry), &e); err != nil {
+				t.Fatal(err)
+			}
+			got := replay(t, replayCase{
+				stdout: func(b []byte) []byte { return bytes.Replace(b, []byte(`"toolExecutionNotifications":[]`), note, 1) },
+				copy: func(b []byte) []byte {
+					return bytes.Replace(b, []byte(`"errors":[]`), []byte(`"errors":[`+entry+`]`), 1)
+				}})
+			if got.res.Status != domain.TaskSucceeded || slices.Contains(got.doc.Coverage.ProcessedPaths, e.Path) ||
+				got.doc.Target.Properties["incomplete_files"] != e.Path || !slices.Contains(got.doc.Limitations, LimIncomplete) {
+				t.Fatalf("%s/%s processed %v props %v lims %v", got.res.Status, got.res.Reason, got.doc.Coverage.ProcessedPaths, got.doc.Target.Properties, got.doc.Limitations)
+			}
+			if got.doc.Coverage.Units[UnitIncomplete] != 1 || len(got.doc.Coverage.ProcessedPaths) == 0 || len(got.doc.Observations) == 0 {
+				t.Fatalf("units %v observations %d", got.doc.Coverage.Units, len(got.doc.Observations))
+			}
+		})
+	}
+	// An error of the run that names no file and no rule fails the task.
 	got := replay(t, replayCase{
-		stdout: func(b []byte) []byte {
-			return bytes.Replace(b, []byte(`"toolExecutionNotifications":[]`), []byte(`"toolExecutionNotifications":[{"descriptor":{"id":"Syntax error"},"level":"warning","message":{"text":"Syntax error at line python/ssrf.py:1"}}]`), 1)
-		},
+		stdout: func(b []byte) []byte { return bytes.Replace(b, []byte(`"toolExecutionNotifications":[]`), note, 1) },
 		copy: func(b []byte) []byte {
-			return bytes.Replace(b, []byte(`"errors":[]`), []byte(`"errors":[{"code":3,"level":"warn","type":["PartialParsing",[]],"message":"Syntax error","path":"python/ssrf.py"}]`), 1)
+			return bytes.Replace(b, []byte(`"errors":[]`), []byte(`"errors":[{"code":2,"level":"error","type":"Fatal error","message":"x"}]`), 1)
 		}})
-	if got.res.Status != domain.TaskSucceeded || slices.Contains(got.doc.Coverage.ProcessedPaths, "python/ssrf.py") || got.doc.Target.Properties["incomplete_files"] != "python/ssrf.py" ||
-		!slices.Contains(got.doc.Limitations, LimIncomplete) {
-		t.Fatalf("%s/%s processed %v props %v lims %v", got.res.Status, got.res.Reason, got.doc.Coverage.ProcessedPaths, got.doc.Target.Properties, got.doc.Limitations)
+	if got.res.Status != domain.TaskFailed || got.res.Reason != ReasonFailed {
+		t.Fatalf("run error: %s/%s", got.res.Status, got.res.Reason)
+	}
+}
+
+// What the review found the adapter took for success or for the work copy:
+// a run that says it did not execute successfully, a columnKind other than
+// the measured byte columns, a base id given a URI, and an absolute path
+// written after "./".
+func TestReplayOpengrepRejectedLogs(t *testing.T) {
+	cases := map[string]func([]byte) []byte{
+		"execution not successful": func(b []byte) []byte {
+			return bytes.Replace(b, []byte(`"executionSuccessful":true`), []byte(`"executionSuccessful":false`), 1)
+		},
+		"utf-16 columns": func(b []byte) []byte {
+			return bytes.Replace(b, []byte(`"results":[`), []byte(`"columnKind":"utf16CodeUnits","results":[`), 1)
+		},
+		"base given a uri": func(b []byte) []byte {
+			return bytes.Replace(b, []byte(`"results":[`), []byte(`"originalUriBaseIds":{"%SRCROOT%":{"uri":"file:///elsewhere/"}},"results":[`), 1)
+		},
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := replay(t, replayCase{stdout: mutate}); got.res.Status != domain.TaskFailed {
+				t.Fatalf("%s/%s", got.res.Status, got.res.Reason)
+			}
+		})
+	}
+	got := replay(t, replayCase{stdout: func(b []byte) []byte {
+		return bytes.ReplaceAll(b, []byte(`"uri":"python/ssrf.py"`), []byte(`"uri":".//etc/passwd"`))
+	}, copy: func(b []byte) []byte {
+		return bytes.ReplaceAll(b, []byte(`"path":"python/ssrf.py","start"`), []byte(`"path":".//etc/passwd","start"`))
+	}})
+	if got.res.Status != domain.TaskFailed || got.res.Reason != ReasonOutsideSnapshot {
+		t.Fatalf("absolute path after ./: %s/%s", got.res.Status, got.res.Reason)
+	}
+}
+
+// The rule context names the rule files the run loaded: a Python-only
+// snapshot records the Python file and no other language's.
+func TestOpengrepSelectionIsLoadedFiles(t *testing.T) {
+	files := map[string][]byte{}
+	for p, b := range fixtureFiles(t) {
+		if strings.HasPrefix(p, "python/") {
+			files[p] = b
+		}
+	}
+	got := replay(t, replayCase{files: files, copy: func(b []byte) []byte {
+		return bytes.Replace(b, []byte(`"errors":[]`), []byte(`"errors":[]`), 1)
+	}})
+	sel := got.doc.RulePack.Selection
+	if !slices.ContainsFunc(sel, func(s string) bool { return strings.HasPrefix(s, "rules/python.yaml@") }) ||
+		slices.ContainsFunc(sel, func(s string) bool {
+			return strings.HasPrefix(s, "rules/") && !strings.HasPrefix(s, "rules/python.yaml@")
+		}) {
+		t.Fatalf("selection %v", sel)
+	}
+	if got.doc.Target.Properties["rule_languages"] != "python" {
+		t.Fatalf("rule languages %q", got.doc.Target.Properties["rule_languages"])
+	}
+}
+
+// The path arguments of one scan stay under the Windows command line limit
+// there and under 96 KiB elsewhere.
+func TestMaxArgBytes(t *testing.T) {
+	if maxArgBytes("windows") != 24<<10 || maxArgBytes("linux") != 96<<10 || maxArgBytes("darwin") != 96<<10 {
+		t.Fatal("argument bound")
+	}
+	if 32767-maxArgBytes("windows") < 4096 {
+		t.Fatal("no room for the rest of the argv on Windows")
 	}
 }
 

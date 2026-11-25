@@ -125,3 +125,27 @@ func checkObservations(t *testing.T, doc obsdoc.Document) {
 		}
 	}
 }
+
+// checkByteColumns: Opengrep counts columns in bytes (measured); on the
+// fixture line with Korean and an emoji before the match the start column is
+// the byte column of the sink call (28; the code point column is 21, the
+// UTF-16 one 22).
+func checkByteColumns(t *testing.T, files map[string][]byte, doc obsdoc.Document) {
+	t.Helper()
+	const path = "python/command_injection.py"
+	lines := strings.Split(string(files[path]), "\n")
+	found := false
+	for _, o := range doc.Observations {
+		if o.Location == nil || o.Location.Path != path || !strings.Contains(lines[o.Location.StartLine-1], "알림") {
+			continue
+		}
+		found = true
+		line := lines[o.Location.StartLine-1]
+		if o.Location.ColumnUnit != "byte" || !strings.HasPrefix(line[o.Location.StartCol-1:], `os.system("notify-send "`) || !strings.HasSuffix(line[:o.Location.EndCol-1], `request.args["msg"])`) {
+			t.Fatalf("columns %d..%d (%s) of %q", o.Location.StartCol, o.Location.EndCol, o.Location.ColumnUnit, line)
+		}
+	}
+	if !found {
+		t.Fatal("no finding on the non-ASCII fixture line")
+	}
+}

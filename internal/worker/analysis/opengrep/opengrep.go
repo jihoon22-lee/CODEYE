@@ -21,6 +21,7 @@ import (
 	"errors"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/anypack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/sarif"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -50,8 +52,6 @@ const (
 	// MaxFileBytes: larger files are not given to Opengrep (its own default
 	// --max-target-bytes; named targets bypass that filter, measured).
 	MaxFileBytes = 1_000_000
-	// MaxArgBytes bounds the path arguments of one scan execution.
-	MaxArgBytes = 96 << 10
 	// MaxScans bounds the scan executions of one task.
 	MaxScans = 64
 	// RuleTimeoutSeconds bounds one rule on one file.
@@ -60,6 +60,19 @@ const (
 	// process).
 	Jobs = 4
 )
+
+// MaxArgBytes bounds the path arguments of one scan execution: 96 KiB, and
+// 24 KiB on Windows, whose command line holds at most 32767 UTF-16 code
+// units (a UTF-8 path has at least as many bytes as UTF-16 units; the rest
+// of the argv is under 2 KiB).
+var MaxArgBytes = maxArgBytes(runtime.GOOS)
+
+func maxArgBytes(goos string) int {
+	if goos == "windows" {
+		return 24 << 10
+	}
+	return 96 << 10
+}
 
 // Execution names.
 const (
@@ -234,6 +247,10 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		switch {
 		case f.Size != nil && *f.Size > MaxFileBytes:
 			in.Units[UnitTooLarge]++
+		case !sarif.Maps(f.Path, SARIFOptions):
+			// A name the SARIF log could not name back (a backslash, a
+			// drive-like prefix) is not given to Opengrep.
+			in.Units[UnitBadName]++
 		default:
 			switch anypack.ClassifyText(job.Snapshot.SnapshotDir, f) {
 			case anypack.TextUnreadable:

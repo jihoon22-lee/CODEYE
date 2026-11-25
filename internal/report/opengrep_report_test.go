@@ -56,7 +56,7 @@ func TestOpengrepFlowStepsSurviveReportProjection(t *testing.T) {
 	if err := ValidateReport(r); err != nil {
 		t.Fatal(err)
 	}
-	if len(r.Observations) != 9 || len(r.Findings) != 7 {
+	if len(r.Observations) != 10 || len(r.Findings) != 8 {
 		t.Fatalf("observations %d findings %d", len(r.Observations), len(r.Findings))
 	}
 	var flow *Observation

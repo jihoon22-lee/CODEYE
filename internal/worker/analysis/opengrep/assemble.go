@@ -50,6 +50,9 @@ const (
 	LimFilesTooLarge = "files_over_size_limit_skipped"
 	LimNotText       = "non_text_files_skipped"
 	LimNotScanned    = "planned_files_not_scanned"
+	// LimBadNames: files whose names the SARIF log could not name back
+	// (a backslash, a drive-like prefix) were not given to Opengrep.
+	LimBadNames = "file_names_not_mappable_skipped"
 )
 
 // Coverage unit states (files).
@@ -59,6 +62,7 @@ const (
 	UnitNotText    = "skipped_not_text"
 	UnitNotScanned = "not_scanned"
 	UnitIncomplete = "not_fully_analyzed"
+	UnitBadName    = "skipped_unmappable_name"
 )
 
 // maxRelated is the envelope's bound on related locations of one
@@ -68,9 +72,12 @@ const maxRelated = 64
 // maxCopyBytes bounds the JSON copy read back from the task scratch.
 const maxCopyBytes = 64 << 20
 
-// SARIFOptions read Opengrep 2.0 logs: URIs are written as raw paths and
-// the primary location's base %SRCROOT% is the scan directory.
-var SARIFOptions = sarif.Options{URIForm: sarif.URIRawPath, BaseIDs: []string{"%SRCROOT%"}}
+// SARIFOptions read Opengrep 2.0 logs: URIs are written as raw paths, the
+// primary location's base %SRCROOT% is the scan directory, and columns are
+// byte offsets although the log declares no columnKind (measured with a
+// Korean and an emoji string before a match: startColumn 25 is the byte
+// column; the code point column is 18, the UTF-16 one 19).
+var SARIFOptions = sarif.Options{URIForm: sarif.URIRawPath, BaseIDs: []string{"%SRCROOT%"}, ColumnKind: sarif.ColumnBytes}
 
 // jsonCopy is the part of Opengrep's JSON output (written with
 // --json-output by the same run) the adapter reads.
@@ -117,18 +124,21 @@ func readCopy(p string) (*jsonCopy, error) {
 	return &c, nil
 }
 
-// errorType is the first name of a JSON error type ("PartialParsing",
-// "Timeout", "Rule parse error"...).
+// errorType is the name of a JSON error type. Opengrep 2.0.0 writes a
+// string ("Syntax error" for a file it could not parse at all, "Timeout")
+// or a list whose first member names it (["PartialParsing", [spans]])
+// (captured in testdata/errors.json). Any other shape is "unknown": the
+// type only labels the error; that a file has one is recorded apart.
 func errorType(raw json.RawMessage) string {
 	var s string
-	if json.Unmarshal(raw, &s) == nil {
+	if json.Unmarshal(raw, &s) == nil && s != "" {
 		return s
 	}
 	var list []json.RawMessage
-	if json.Unmarshal(raw, &list) == nil && len(list) > 0 && json.Unmarshal(list[0], &s) == nil {
+	if json.Unmarshal(raw, &list) == nil && len(list) > 0 && json.Unmarshal(list[0], &s) == nil && s != "" {
 		return s
 	}
-	return ""
+	return "unknown"
 }
 
 type scan struct {
@@ -222,7 +232,9 @@ func assemble(in assembleInput) obsdoc.Document {
 	// a repository .semgrepignore or .gitignore says, and Opengrep has no
 	// other repository configuration. nosem comments are reported, not
 	// hidden: the SARIF result carries an inSource suppression.
-	doc.RulePack = obsdoc.RulePack{ID: RulePackID, Version: RulePackVersion, Selection: Selection(in.Languages),
+	// The selection names the rule files this run loaded, not every file of
+	// the pack: runs over different languages are different rule contexts.
+	doc.RulePack = obsdoc.RulePack{ID: RulePackID, Version: RulePackVersion, Selection: Selection(in.Loaded),
 		RepositoryConfig: obsdoc.RepoConfigOverridden, SourceSuppressions: obsdoc.SuppressReported, ConfigFiles: []obsdoc.ConfigFile{}, UnreportedSuppressionRules: []string{}}
 	names := []string{}
 	for _, l := range in.Loaded {
@@ -347,9 +359,9 @@ func assemble(in assembleInput) obsdoc.Document {
 			// A rule file that does not load is a failed task, never fewer
 			// findings.
 			o.Fail(domain.TaskFailed, ReasonRulePackLoad, obsdoc.ExitConfigurationError)
-		case code != 0:
+		case code != 0, !run.ExecutionSuccessful:
 			o.Fail(domain.TaskFailed, ReasonFailed, obsdoc.ExitExecutionError)
-		case len(log.Runs) != 1 || run.Driver.Name != "Opengrep" || run.Driver.SemanticVersion != version:
+		case len(log.Runs) != 1 || run.Driver.Name != "Opengrep" || run.Driver.SemanticVersion != version || run.ColumnKind != sarif.ColumnBytes:
 			o.Fail(domain.TaskFailed, anypack.ReasonOutputUnparsed, obsdoc.ExitExecutionError)
 		}
 		// The JSON copy of the same run: scanned files and per-file errors,
@@ -400,15 +412,20 @@ func assemble(in assembleInput) obsdoc.Document {
 			}
 			for _, e := range *c.Errors {
 				switch {
-				case e.Path != nil && batch[*e.Path] && e.Level != "error" || e.Path != nil && batch[*e.Path] && errorType(e.Type) == "Timeout":
+				case e.Path != nil && batch[*e.Path]:
+					// An error about one given file, whatever its level and
+					// type (a file parsed in part or not at all, a rule that
+					// timed out on it): that file is not fully analyzed and
+					// the other files keep their results.
 					if _, ok := incomplete[*e.Path]; !ok {
 						incomplete[*e.Path] = errorType(e.Type)
 					}
-				case e.Path != nil && !batch[*e.Path]:
-					o.Fail(domain.TaskFailed, ReasonOutsideSnapshot, obsdoc.ExitExecutionError)
-				case e.RuleID != nil || e.Path == nil:
+				case e.RuleID != nil:
 					o.Fail(domain.TaskFailed, ReasonRulePackLoad, obsdoc.ExitConfigurationError)
+				case e.Path != nil:
+					o.Fail(domain.TaskFailed, ReasonOutsideSnapshot, obsdoc.ExitExecutionError)
 				default:
+					// An error of the run, about no file and no rule.
 					o.Fail(domain.TaskFailed, ReasonFailed, obsdoc.ExitExecutionError)
 				}
 			}
@@ -496,7 +513,7 @@ func assemble(in assembleInput) obsdoc.Document {
 		switch {
 		case !scanned[f.Path]:
 			units[UnitNotScanned]++
-		case incomplete[f.Path] != "":
+		case hasKey(incomplete, f.Path):
 			units[UnitIncomplete]++
 			partial = append(partial, f.Path)
 		default:
@@ -514,11 +531,14 @@ func assemble(in assembleInput) obsdoc.Document {
 	if units[UnitNotText] > 0 {
 		lims = append(lims, LimNotText)
 	}
+	if units[UnitBadName] > 0 {
+		lims = append(lims, LimBadNames)
+	}
 	if len(in.Scans) > 0 && units[UnitNotScanned] > 0 {
 		lims = append(lims, LimNotScanned)
 	}
 	doc.Coverage.Units = units
-	doc.Coverage.FilesSkipped = units[UnitTooLarge] + units[UnitNotText]
+	doc.Coverage.FilesSkipped = units[UnitTooLarge] + units[UnitNotText] + units[UnitBadName]
 	doc.Coverage.FilesUnlisted = units[UnitNotScanned]
 	doc.Coverage.ProcessedPaths = processed
 	if !o.Failed() && len(processed) == 0 {
@@ -533,6 +553,11 @@ func assemble(in assembleInput) obsdoc.Document {
 	}
 	doc.Limitations = lims
 	return doc
+}
+
+func hasKey(m map[string]string, k string) bool {
+	_, ok := m[k]
+	return ok
 }
 
 // listProperty joins sorted paths into a target property of at most 256

@@ -35,3 +35,9 @@ def ping_view(request):
     host = request.GET.get("host")
     stream = os.popen("ping -c 1 %s" % host)  # expect: codeye.python.command-injection
     return stream.read()
+
+
+@app.route("/notify")
+def notify():
+    label = "알림 😀"; os.system("notify-send " + request.args["msg"])  # expect: codeye.python.command-injection
+    return label
