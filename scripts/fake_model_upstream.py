@@ -40,9 +40,18 @@ verify task ends incomplete. In a triage answer the chosen group cites such
 an ID (problem or harmless; the group is rejected) and the answer adds an
 entry for a group the request did not offer (`triage_group_unknown`).
 
-The triage role classifies the offered diagnostic groups in turn as problem,
-harmless and unclear, citing each group's first context excerpt (as a range
-when it is longer than the citation limit). The choice of an item depends
+The investigate role also raises a candidate about the first excerpt on a
+path that is not shipped code (the request's `path_class`), beside its candidate
+about shipped code: the product does not send it to verification and the report
+counts it instead of listing it. The triage role classifies the offered
+diagnostic groups in turn as problem, harmless and unclear, citing each group's
+first context excerpt (as a range when it is longer than the citation limit).
+An unclear answer names what is missing (`missing`); a harmless group of two or
+more diagnostics is answered part by part (the first diagnostic harmless, the
+others unclear). `--shape-errors` also makes a share of the unclear answers name
+a function the request holds as the missing definition
+(`triage_unclear_input_present`, the group is left out) and of the part answers
+list a diagnostic twice (`triage_diagnostics_invalid`, the group is left out). The choice of an item depends
 on its role, the snapshot digest and the item (candidate ID or position), not
 on the repair block, so the repair of an item gets the same fault.
 
@@ -88,10 +97,11 @@ TEXT = "Placeholder from the dry-run upstream; no model produced this text."
 CITED_LINES = 80
 
 
-def _evidence(node, out, ranges=None):
+def _evidence(node, out, ranges=None, classes=None):
     """Collect (id, kind) of every cited-able excerpt in the review input, and
     into ranges the citation of each one: its id, or its first lines as a
-    range when it is longer than CITED_LINES."""
+    range when it is longer than CITED_LINES. classes gets the path class of
+    each excerpt a request names as not shipped code."""
     if isinstance(node, dict):
         ident, path = node.get("id") or node.get("evidence_id"), node.get("path")
         if isinstance(ident, str) and ident.startswith("ev_") and isinstance(path, str):
@@ -99,6 +109,8 @@ def _evidence(node, out, ranges=None):
             if kind not in ("code", "document"):
                 kind = "code" if CODE_SUFFIX.search(path) else "document"
             out.setdefault(ident, kind)
+            if classes is not None and node.get("path_class"):
+                classes[ident] = node["path_class"]
             start, end = node.get("start_line"), node.get("end_line")
             if ranges is not None and ident not in ranges:
                 ranges[ident] = ident
@@ -106,10 +118,26 @@ def _evidence(node, out, ranges=None):
                         and node.get("origin") != "cited"):
                     ranges[ident] = f"{ident}:{start}-{start + CITED_LINES - 1}"
         for value in node.values():
-            _evidence(value, out, ranges)
+            _evidence(value, out, ranges, classes)
     elif isinstance(node, list):
         for value in node:
-            _evidence(value, out, ranges)
+            _evidence(value, out, ranges, classes)
+
+
+def _texts(node, out):
+    """Collect the numbered text of every excerpt of the request by its id."""
+    if isinstance(node, dict):
+        ident = node.get("id")
+        if isinstance(ident, str) and ident.startswith("ev_") and isinstance(node.get("text"), str):
+            out[ident] = node["text"]
+        for value in node.values():
+            _texts(value, out)
+    elif isinstance(node, list):
+        for value in node:
+            _texts(value, out)
+
+
+FUNCTION = re.compile(r"^\d+\| func ([A-Za-z_][A-Za-z0-9_]*)\(", re.M)
 
 
 def _candidates(node, out):
@@ -228,8 +256,10 @@ def _comparisons(data: dict) -> list[dict]:
 def result_for(role: str, review_input, echo: str | None = None, shape: float = 0.0, integrity: float = 0.0) -> dict:
     evidence: dict[str, str] = {}
     cited: dict[str, str] = {}
-    _evidence(review_input, evidence, cited)
-    code = [cited[i] for i, k in evidence.items() if k == "code"]
+    classes: dict[str, str] = {}
+    _evidence(review_input, evidence, cited, classes)
+    code = [cited[i] for i, k in evidence.items() if k == "code" and i not in classes] or [cited[i] for i, k in evidence.items() if k == "code"]
+    aside = [cited[i] for i, k in evidence.items() if k == "code" and i in classes]
     title = "Placeholder candidate (dry run)" + (": " + echo if echo else "")
     candidate = {"title": title, "condition": TEXT, "mechanism": TEXT, "impact": TEXT,
                  "improvement": TEXT, "counterpoint": TEXT, "evidence_ids": code[:1]}
@@ -242,6 +272,8 @@ def result_for(role: str, review_input, echo: str | None = None, shape: float = 
         if code and _pick(shape, role, review_input, 0):
             candidate["evidence_ids"] = code[:1] * 2  # evidence_id_duplicate
         out = {"candidates": [candidate] if code else []}
+        if code and aside and code[0] not in aside:  # a candidate about a test or example: not verified
+            out["candidates"].append(dict(candidate, title="Placeholder candidate about a test path (dry run)", evidence_ids=aside[:1]))
         if isinstance(data.get("scope"), dict) and data["scope"].get("whole_run") is True:
             comparisons = _comparisons(data)
             if comparisons:
@@ -288,6 +320,8 @@ def result_for(role: str, review_input, echo: str | None = None, shape: float = 
         data = review_input if isinstance(review_input, dict) else {}
         groups = [g for g in data.get("groups") or [] if isinstance(g, dict) and isinstance(g.get("id"), str)]
         out, unknown = [], False
+        texts: dict[str, str] = {}
+        _texts(review_input, texts)
         for index, g in enumerate(groups):
             context = [cited.get(i, i) for i in g.get("context_evidence_ids") or [] if isinstance(i, str)]
             kind = ("problem", "harmless", "unclear")[index % 3]
@@ -296,14 +330,31 @@ def result_for(role: str, review_input, echo: str | None = None, shape: float = 
                 answer.update(title="Placeholder triage problem (dry run)", condition=TEXT, mechanism=TEXT, impact=TEXT, improvement=TEXT)
             if kind != "unclear":
                 answer["evidence_ids"] = context[:1]
+            else:
+                answer["missing"] = [{"kind": "other", "name": ""}]
+            count = g.get("diagnostics") if isinstance(g.get("diagnostics"), int) else 0
+            parts = kind == "harmless" and count >= 2
             if kind != "unclear" and _pick(integrity, role + ".integrity", review_input, g["id"]):
                 answer["evidence_ids"] = ["ev_" + "0" * 24]  # evidence_id_unknown
                 unknown = True
             elif _pick(shape, role, review_input, g["id"]):
-                if kind == "unclear":
+                functions = FUNCTION.findall(texts.get((g.get("context_evidence_ids") or [""])[0], ""))
+                if kind == "unclear" and functions and (index // 3) % 2 == 1:
+                    answer["missing"] = [{"kind": "definition", "name": functions[0]}]  # triage_unclear_input_present
+                elif kind == "unclear":
                     answer["classification"] = "maybe"  # triage_classification_invalid
-                else:
+                elif not parts:
                     answer["evidence_ids"] = context[:1] * 2  # evidence_id_duplicate
+            if parts:
+                # A group answered part by part: the first diagnostic is
+                # harmless, the others unclear.
+                rest = list(range(2, count + 1))
+                if _pick(shape, role, review_input, g["id"]):
+                    rest = [1] + rest  # triage_diagnostics_invalid
+                answer["diagnostics"] = [1]
+                out.append(answer)
+                answer = {"group_id": g["id"], "classification": "unclear", "reason": TEXT, "diagnostics": rest,
+                          "missing": [{"kind": "other", "name": ""}]}
             out.append(answer)
         if unknown:
             out.append({"group_id": "g65", "classification": "unclear", "reason": TEXT})  # triage_group_unknown

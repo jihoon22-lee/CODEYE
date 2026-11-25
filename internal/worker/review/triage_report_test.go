@@ -51,6 +51,7 @@ func triageScript(t *testing.T, classOf func(g triageGroupInput) string) func(in
 				a["evidence_ids"] = []string{g.Context[0]}
 			default:
 				a["classification"], a["reason"] = record.TriageUnclear, "호출자 코드가 입력에 없어 진단의 영향을 판단할 수 없다."
+				a["missing"] = []map[string]any{{"kind": "caller", "name": ""}}
 			}
 			out = append(out, a)
 		}
@@ -457,9 +458,9 @@ func TestTriageRepairsFormAndKeepsIntegrityFaults(t *testing.T) {
 				// The first group misclassified, the second missing and an
 				// unknown group added.
 				out := []map[string]any{{"group_id": in.Groups[0].ID, "classification": "maybe", "reason": "모름", "evidence_ids": []string{}},
-					{"group_id": "g64", "classification": record.TriageUnclear, "reason": "입력에 없는 묶음이다.", "evidence_ids": []string{}}}
+					{"group_id": "g64", "classification": record.TriageUnclear, "reason": "입력에 없는 묶음이다.", "evidence_ids": []string{}, "missing": []map[string]any{{"kind": "other", "name": ""}}}}
 				for _, g := range in.Groups[2:] {
-					out = append(out, map[string]any{"group_id": g.ID, "classification": record.TriageUnclear, "reason": "호출자 코드가 입력에 없다.", "evidence_ids": []string{}})
+					out = append(out, map[string]any{"group_id": g.ID, "classification": record.TriageUnclear, "reason": "호출자 코드가 입력에 없다.", "evidence_ids": []string{}, "missing": []map[string]any{{"kind": "caller", "name": ""}}})
 				}
 				return asJSON(map[string]any{"triage": out})
 			}

@@ -192,6 +192,17 @@ func docID(in docsInput, p string) string {
 	return ""
 }
 
+// shippedExcerpt is the first excerpt of list on shipped code (the first one
+// when all lie on other paths): a candidate about it is verified.
+func shippedExcerpt(list []record.Excerpt) record.Excerpt {
+	for _, e := range list {
+		if record.PathClass(e.Path) == "" {
+			return e
+		}
+	}
+	return list[0]
+}
+
 func excerptID(list []record.Excerpt, p string) string {
 	for _, e := range list {
 		if e.Path == p {

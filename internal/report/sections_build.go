@@ -581,6 +581,7 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 		s.Ledger = c.ledger()
 	}
 	s.DiagnosticTriage = c.diagnosticTriage()
+	s.CandidatesNotShipped = c.candidatesNotShipped()
 	c.addStrengths(s)
 	return s
 }
@@ -592,4 +593,20 @@ func roleOrder(key string) int {
 		}
 	}
 	return 99
+}
+
+// candidatesNotShipped counts the investigation candidates, of the whole run
+// and of every module slice, whose verification the platform skipped because
+// all their evidence is not shipped code (record.LimCandidateNotShipped).
+func (c sectionContext) candidatesNotShipped() int {
+	n := 0
+	for _, k := range c.keys {
+		if k != "review.verify" && !(strings.HasPrefix(k, "review.verify.s") && !isTriageTask(k)) {
+			continue
+		}
+		if st := c.states[k]; st != nil && !st.rejected && verdictsUsable(k, st) {
+			n += len(record.NotShippedSet(st.reviewResult.Record.Verifications))
+		}
+	}
+	return n
 }

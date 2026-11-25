@@ -29,6 +29,11 @@ func (e Excerpt) MarshalJSON() ([]byte, error) {
 	if e.Text != "" {
 		e.Text = NumberLines(e.Text, e.Start)
 	}
+	if (e.Text != "" || e.Within != "") && (e.Kind == "code" || e.Kind == "test") {
+		// A request names the class of a path that is not shipped code, so
+		// the model need not guess it (a record never holds text or within).
+		e.PathClass = PathClass(e.Path)
+	}
 	return json.Marshal(plainExcerpt(e))
 }
 
@@ -46,6 +51,9 @@ func (e *Excerpt) UnmarshalJSON(b []byte) error {
 			p.Text = raw
 		}
 	}
+	// The class is derived from the path, so the excerpt reads back as the
+	// worker held it.
+	p.PathClass = ""
 	*e = Excerpt(p)
 	return nil
 }

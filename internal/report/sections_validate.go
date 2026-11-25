@@ -48,6 +48,9 @@ func validateSections(r Report) error {
 	if err := validateLedger(r); err != nil {
 		return err
 	}
+	if cr := r.CodeReview; cr != nil && (cr.CandidatesNotShipped < 0 || (cr.CandidatesNotShipped > 0 && !builderAtLeast(r.Builder.Version, ShippedFocusSince))) {
+		return invalidf("candidates_not_shipped in a revision of builder %s", r.Builder.Version)
+	}
 	if !sectionsExpected(r.Builder.Version) {
 		if r.hasSections() {
 			return invalidf("sections in a revision of builder %s", r.Builder.Version)

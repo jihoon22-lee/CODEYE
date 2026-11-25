@@ -481,6 +481,10 @@ type CodeReviewSection struct {
 	// diagnostics (builder 22, review_triage.go); present when the plan held
 	// them.
 	DiagnosticTriage *DiagnosticTriage `json:"diagnostic_triage,omitempty"`
+	// CandidatesNotShipped counts investigation candidates the verify stage
+	// did not send and the findings leave out because all their evidence is
+	// on test, example, benchmark, generated or vendored paths (builder 24).
+	CandidatesNotShipped int `json:"candidates_not_shipped,omitempty"`
 }
 
 // ReviewLedger tells, per module, how much of the eligible code and test

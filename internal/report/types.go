@@ -22,7 +22,7 @@ const (
 	BuilderID     = "codeye-report"
 	// Stored revisions keep their original builder and schema. Bump this
 	// version when the same accepted inputs would produce a different report.
-	BuilderVersion             = "23"
+	BuilderVersion             = "24"
 	TestCaseResultsSince       = 19
 	AnalysisEvidenceSince      = 17
 	GoTestFailureEvidenceSince = 18
@@ -31,6 +31,10 @@ const (
 	// of a tool finding on a path that is not shipped code and records the
 	// path class of every located observation.
 	PathSeveritySince = 23
+	// ShippedFocusSince is the first builder that leaves an investigation
+	// candidate whose evidence is all on paths that are not shipped code out
+	// of the findings and counts it (code_review.candidates_not_shipped).
+	ShippedFocusSince = 24
 )
 
 // Report statuses (schemas/report.schema.json).

@@ -181,6 +181,7 @@ var Korean = Locale{
 		"verification_excerpt_hashes_omitted": "요청 크기를 맞추기 위해 검증 요청에서 발췌 해시를 생략했다. 근거 ID와 발췌는 유지했다.",
 		"verification_observations_trimmed":   "진단이 많은 후보는 검증 요청에 앞의 진단 8개만 이름으로 실었다. 검토 기록과 발견은 진단을 모두 가진다.",
 		"verification_budget_exceeded":        "요청 크기 한도 때문에 일부 후보를 검증하지 못했다(미검토).",
+		"candidate_not_shipped":               "시험·예제·벤치마크·생성물·외부 코드 경로의 줄만 인용한 조사 후보는 배포 코드의 결함이 아니므로 검증 요청에 보내지 않고 발견에서 뺐다(개수만 센다).",
 		"verification_call_failed":            "후속 검증 호출이 실패해 일부 후보를 검증하지 못했다(미검토). 앞서 수락한 판정은 유지했다.",
 		"code_excerpts_go_only":               "코드 발췌는 Go 파일만 사용했다.",
 		"execution_claim_rejected":            "실행·재현을 주장한 모델 서술을 거부했다.",
@@ -586,6 +587,7 @@ var koSectionLabels = map[string]string{
 	"count.code_review.diagnostics":                 "분류 대상 도구 진단",
 	"count.code_review.diagnostics_triaged":         "그중 모델이 답한 진단(판단 보류 포함)",
 	"count.code_review.diagnostics_not_shipped":     "그중 시험·예제 등 배포 코드가 아닌 경로의 진단",
+	"count.code_review.candidates_not_shipped":      "시험·예제 등 배포 코드가 아닌 경로만 인용해 검증하지 않은 모델 후보",
 	"count.gaps.gaps":                               "공백",
 
 	"discovery.accepted":        "탐색 산출물을 검증해 사용했다.",
