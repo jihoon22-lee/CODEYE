@@ -118,6 +118,29 @@ describe('action-first overview', () => {
     expect(overview.querySelectorAll('.report-action-card[data-finding-card="review_fixture"]')).toHaveLength(0);
   });
 
+  it('lists a candidate that was not sent to verification in the secondary-path fold with its fixed label', () => {
+    for (const includesCode of [true, false]) {
+      const report = scenario();
+      report.includesCode = includesCode;
+      const f = report.findings.find(x => x.id === 'review_fixture')!;
+      f.validation = 'unreviewed';
+      f.limitations = ['candidate_not_shipped'];
+      f.verification = ['호출자와 테스트에서 후보의 발생 조건을 확인하세요.'];
+      const plan = actionPlan(report, report.sections!);
+      expect(plan.secondary.map(x => x.id)).toContain('review_fixture');
+      expect(plan.actions.map(x => x.id)).not.toContain('review_fixture');
+      const { overview } = overviewOf(report);
+      const fold = within(overview).getByText(a.secondary(1) + a.secondaryNotShipped(1)).closest('details')!;
+      expect(fold.open).toBe(false);
+      expect(fold.textContent).toContain(a.notShippedLabel);
+      expect(fold.textContent).toContain(a.notShippedText);
+      expect(fold.textContent).toContain('fixtures/data.go');
+      expect(fold.textContent).not.toContain('호출자와 테스트에서 후보의 발생 조건을 확인하세요.');
+      expect(overview.querySelectorAll('.report-action-card[data-finding-card="review_fixture"]')).toHaveLength(0);
+      cleanup();
+    }
+  });
+
   it('keeps the code-free export to locations and states', () => {
     const report = scenario();
     report.includesCode = false;

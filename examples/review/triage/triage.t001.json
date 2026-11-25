@@ -2,7 +2,7 @@
   "schema_version": "0.8",
   "pack": {
     "id": "review",
-    "version": "2.9.0"
+    "version": "2.10.0"
   },
   "snapshot_manifest_digest": "840681d09d3bb73dce858521d38c9e5a92fed83224e675c8f629d617110adfc7",
   "run_id": "0195f3a0-0000-7000-8000-000000000a01",
@@ -27,7 +27,7 @@
     {
       "source": "review.interpret",
       "state": "accepted",
-      "sha256": "9d195c5e611fd398ea4a4d7f764f2f13df01ac6e586a9ae39fa079fc139d092f"
+      "sha256": "012891bd1ed7e12b5e1e52be1fcccb66b292a08c37cd85f9fe1d4f24f7ddb36c"
     }
   ],
   "evidence": [
@@ -380,8 +380,8 @@
       "model": "fake/scripted",
       "opencode_version": "1.19.5",
       "pack_id": "review",
-      "pack_version": "2.9.0",
-      "pack_sha256": "ead8df9ed695a66132a9beb004a55718804cc0da546db120672171e4c67aa4dc",
+      "pack_version": "2.10.0",
+      "pack_sha256": "3da49d865f52937c6b94bf22169af4bc8b861851f7ccf71affbdda86ee996b46",
       "pack_files": [
         "00-core.md",
         "domains.md",
@@ -389,10 +389,10 @@
         "pack.yaml",
         "triage.md"
       ],
-      "request_sha256": "54a3850217aaccde29e6f28b8c7fce4dbdf086e39ec3bfca2c25026b438d40f1",
-      "request_bytes": 18871,
+      "request_sha256": "a7e5bfd9c5ecddb31f0abc1a15a7a582196b96122828f7870e7a18ac5631b226",
+      "request_bytes": 23210,
       "usage": {
-        "input": 7640,
+        "input": 8059,
         "output": 50
       },
       "attempt": 1,

@@ -37,6 +37,10 @@ const (
 	LimReproductionRejected = "reproduction_claim_rejected"
 	LimQuarantined          = "verification_quarantined"
 	LimNotCompleted         = "verification_not_completed"
+	// LimCandidateNotShipped marks an investigation candidate the verify
+	// stage did not send: all of its code and test evidence lies on paths
+	// that are not shipped code (OnlyNotShipped).
+	LimCandidateNotShipped = "candidate_not_shipped"
 
 	// LimOutputDegraded marks a record whose accepted output had faults of
 	// form only, resolved by the platform once no further format repair could
@@ -84,6 +88,9 @@ type Excerpt struct {
 	// Within is set in a request only: the ID of another excerpt of the
 	// same request whose text holds these lines, so they are not sent twice.
 	Within string `json:"within,omitempty"`
+	// PathClass is set in a request only, for a code or test excerpt that is
+	// not shipped code (PathClass of its path); records never store it.
+	PathClass string `json:"path_class,omitempty"`
 }
 
 type CandidateText struct {
@@ -216,6 +223,10 @@ type Expect struct {
 	// 0.3); empty for every other record, which then must carry no slice.
 	Slice  string
 	Lookup func(path string) (sha256 string, ok bool)
+	// ShippedSource is ShippedSourceIn of the run (nil when the caller does
+	// not know it; the marker of a candidate that was not sent to
+	// verification is then not checked against the scope).
+	ShippedSource *bool
 }
 
 var errInvalid = errors.New("review record invalid")

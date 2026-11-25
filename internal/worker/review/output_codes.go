@@ -133,6 +133,9 @@ var outputCodes = map[string]codeClass{
 	errTriageClassInvalid:   classForm,
 	errTriageNotAtGroup:     classForm,
 	errTriageAnswerMissing:  classForm,
+	errTriageMissingInvalid: classForm,
+	errTriageUnclearPresent: classForm,
+	errTriageDiagnostics:    classForm,
 	// Contract follow-up.
 	"contract_comparison_invalid":      classIntegrity,
 	"contract_evidence_not_new":        classIntegrity,

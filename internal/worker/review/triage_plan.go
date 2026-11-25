@@ -20,9 +20,9 @@ import (
 // time each slot recomputes the same assignment from the same inputs (the
 // accepted analyzer envelopes, the whole-run interpretation, the snapshot,
 // the secrets screen and the node's request budget, all fixed within an
-// attempt) and takes the bin with its number: the groups of diagnostics
-// most severe first (the severity the report gives their findings), shipped
-// code before other paths of the same severity, then by count.
+// attempt) and takes the bin with its number: the groups of diagnostics on
+// shipped code before the groups on other paths, within each the most severe
+// first (the severity the report gives their findings), then by count.
 
 const (
 	// triageFilesPerSlot: one slot per this many eligible source files.
@@ -226,11 +226,13 @@ func (s *roleStage) planTriage(docs []toolDoc, interpreted map[string]bool, slot
 		}
 	}
 	slices.SortStableFunc(chunks, func(a, b *triageGroup) int {
-		// Shipped code goes before a test, example, benchmark, generated or
-		// vendored path of the same severity: the triage share of the call
-		// ceiling is limited, and a diagnostic outside shipped code is rarely
-		// a defect of the project.
-		return cmp.Or(cmp.Compare(severity.Rank(b.effective), severity.Rank(a.effective)), cmp.Compare(boolRank(!a.shipped()), boolRank(!b.shipped())), cmp.Compare(len(b.diags), len(a.diags)),
+		// Every group on shipped code goes before any group on a test,
+		// example, benchmark, generated or vendored path, whatever their
+		// severities: the triage share of the call ceiling is limited, and a
+		// diagnostic outside shipped code is rarely a defect of the project.
+		// A request has room for both, so the first-fit packing still gives
+		// the groups of other paths the room the shipped groups leave.
+		return cmp.Or(cmp.Compare(boolRank(!a.shipped()), boolRank(!b.shipped())), cmp.Compare(severity.Rank(b.effective), severity.Rank(a.effective)), cmp.Compare(len(b.diags), len(a.diags)),
 			cmp.Compare(a.unit.entry.Path, b.unit.entry.Path), cmp.Compare(a.diags[0].obs.Location.StartLine, b.diags[0].obs.Location.StartLine),
 			cmp.Compare(a.diags[0].obs.Tool, b.diags[0].obs.Tool), cmp.Compare(a.diags[0].obs.RuleID, b.diags[0].obs.RuleID))
 	})
@@ -365,11 +367,12 @@ func triageInputBytes(l limits) int { return max(8000, l.request/16) }
 
 // triageGroupInputBytes estimates one group's description in a request.
 func (s *roleStage) triageGroupInputBytes(g *triageGroup) int {
-	n := 256 + 8*len(g.diags)
+	// The fixed fields of a group, with its path_class and rule_families.
+	n := 256 + 96 + 8*len(g.diags)
 	for i, d := range g.diags {
 		if i < triageShownDiagnostics {
 			m, _ := s.shownMessage(d.obs)
-			n += 160 + len(m) + 112*min(len(d.obs.Related), triageRelatedShown)
+			n += 160 + 16 + len(m) + 112*min(len(d.obs.Related), triageRelatedShown)
 		}
 	}
 	return n

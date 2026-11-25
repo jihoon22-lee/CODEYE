@@ -23,9 +23,9 @@ import (
 // (or why the slot had nothing to send) is written next to the call
 // counter and the slot's verify follows it.
 
-const triageContract = `For this role use exactly {"triage":[{"group_id":"<id of input.groups>","classification":"problem|harmless|unclear","title":"what goes wrong (problem)","condition":"the code condition under which it bites (problem)","mechanism":"how the cited lines produce the failure (optional)","impact":"what breaks (problem)","improvement":"fix direction (problem)","reason":"problem: what would make it harmless; harmless: the guard, caller, type or test-only path that makes it harmless here; unclear: what the input lacks","evidence_ids":["ev_...:12-30"]}]}, ignoring any wider output examples. Return one entry per input group, at most %d. Cite only lines inside the entry's own group's context_evidence_ids: a problem cites at least one code or test line there; a harmless group cites the lines that make it harmless; an unclear group may cite. At most 6 evidence IDs per entry; fields a classification does not use stay empty. Keep each tool, rule, line, raw grade, count and default severity as given: do not restate the tool's run status, counts or severity, assign no severity, and never describe absent diagnostics as clean code.`
+const triageContract = `For this role use exactly {"triage":[{"group_id":"<id of input.groups>","classification":"problem|harmless|unclear","positions":[],"title":"what goes wrong (problem)","condition":"the code condition under which it bites (problem)","mechanism":"how the cited lines produce the failure (optional)","impact":"what breaks (problem)","improvement":"fix direction (problem)","reason":"problem: what would make it harmless; harmless: the guard, caller, type or test-only path that makes it harmless here; unclear: what the input lacks","missing":[{"kind":"definition|caller|external_behavior|dependency_or_type|build_condition|other","name":"identifier of a missing definition, else empty"}],"evidence_ids":["ev_...:12-30"]}]}, ignoring any wider output examples. Return one entry per input group, at most %d. An entry with empty positions classifies its whole group. Only when the diagnostics of one group need different classifications, answer that group with one entry per part instead: positions lists the 1-based positions in the group's lines (input.groups[].lines) of the diagnostics of that part, the parts do not overlap, a group has at most %d parts, and a position no part lists is not triaged. Cite only lines inside the entry's own group's context_evidence_ids: a problem cites at least one code or test line there; a harmless group cites the lines that make it harmless; an unclear group may cite. At most 6 evidence IDs per entry; fields a classification does not use stay empty. Keep each tool, rule, line, raw grade, count and default severity as given: do not restate the tool's run status, counts or severity, assign no severity, and never describe absent diagnostics as clean code.` + contractUnclear
 
-const triageRepairRules = " Answer again only the groups listed in input.repair.groups."
+const triageRepairRules = " Answer again only the groups listed in input.repair.groups. An item of input.repair.items whose id names an excerpt points at the code that holds a definition you said was missing: decide from it and, for that group, you may cite it."
 
 type triageInput struct {
 	Groups []triageGroupInput `json:"groups"`
@@ -38,19 +38,30 @@ type triageInput struct {
 }
 
 type triageGroupInput struct {
-	ID              string            `json:"id"`
-	Tools           []string          `json:"tools"`
-	Rules           []string          `json:"rule_ids"`
-	DefaultSeverity string            `json:"default_severity"`
-	Count           int               `json:"diagnostics"`
-	CrossTool       bool              `json:"cross_tool,omitempty"`
-	Path            string            `json:"path"`
-	Lines           []int             `json:"lines"`
-	Examples        []triageDiagInput `json:"examples"`
-	Context         []string          `json:"context_evidence_ids"`
+	ID    string   `json:"id"`
+	Tools []string `json:"tools"`
+	Rules []string `json:"rule_ids"`
+	// DefaultSeverity is the severity the report gives the group's findings:
+	// the table's value, lowered on a path that is not shipped code.
+	DefaultSeverity string `json:"default_severity"`
+	// PathClass is the class of a path that is not shipped code; absent for
+	// shipped code (record.PathClass).
+	PathClass string `json:"path_class,omitempty"`
+	// Families are the rule families (the severity tables') of the group's
+	// diagnostics, so that the instruction can speak of a kind of diagnostic
+	// without naming tool rules.
+	Families  []string          `json:"rule_families"`
+	Count     int               `json:"diagnostics"`
+	CrossTool bool              `json:"cross_tool,omitempty"`
+	Path      string            `json:"path"`
+	Lines     []int             `json:"lines"`
+	Examples  []triageDiagInput `json:"examples"`
+	Context   []string          `json:"context_evidence_ids"`
 }
 
 type triageDiagInput struct {
+	// Index is the 1-based position of the diagnostic in the group's lines.
+	Index         int     `json:"index"`
 	ObservationID string  `json:"observation_id"`
 	Tool          string  `json:"tool"`
 	RuleID        string  `json:"rule_id"`
@@ -111,6 +122,16 @@ type triageAnswer struct {
 	Improvement    string   `json:"improvement"`
 	Reason         string   `json:"reason"`
 	Evidence       []string `json:"evidence_ids"`
+	// Diagnostics are the 1-based positions in the group's lines of the
+	// diagnostics a part of a mixed group classifies; empty: the whole group.
+	// Positions and Missing are the optional fields of a part answer and an
+	// unclear answer, read leniently by their own accessors: a field of the
+	// wrong type is a fault of form of the entry, not of the whole output.
+	Positions json.RawMessage `json:"positions"`
+	Missing   json.RawMessage `json:"missing"`
+	// Diagnostics is the name of a request field (the count of the group's
+	// diagnostics); an answer that echoes it is not a schema failure.
+	Diagnostics json.RawMessage `json:"diagnostics"`
 }
 
 // Output codes of the triage role (output_codes.go).
@@ -120,6 +141,7 @@ const (
 	errTriageClassInvalid   = "triage_classification_invalid"
 	errTriageNotAtGroup     = "triage_evidence_not_at_group"
 	errTriageAnswerMissing  = "triage_answer_missing"
+	errTriageDiagnostics    = "triage_diagnostics_invalid"
 )
 
 // triageSlots is the planned slot count of a job (Plan and every slot use
@@ -290,6 +312,10 @@ type triageOutcome struct {
 	// form: the answer's faults were all of form, so a group the repair
 	// answer then left out is omitted as form (triage_item_omitted).
 	form bool
+	// parts: the group was answered part by part; uncovered are the
+	// 0-based positions no part listed.
+	parts     []triagePart
+	uncovered []int
 }
 
 func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []record.Upstream) analysis.TaskResult {
@@ -299,7 +325,10 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 	s.noteUpstream(upstream[len(upstream)-1])
 	s.rec.Limitations = addLim(s.rec.Limitations, plan.lims...)
 	sent, excerpts := s.triageRequest(bin)
-	instructions := s.instructions(fmt.Sprintf(triageContract, triageGroupLimit(s.h.Budget)))
+	// The parts a model may give for a group: the same number in the contract
+	// and in the check.
+	partsLimit := triagePartsLimit(len(sent))
+	instructions := s.instructions(fmt.Sprintf(triageContract, triageGroupLimit(s.h.Budget), partsLimit))
 	build := func(list []triageSent, r *triageRepair) ([]byte, error) {
 		var in triageInput
 		in.Scope.Snapshot, in.Scope.Limitations, in.Repair = s.j.Snapshot.Digest, s.rec.Limitations, r
@@ -309,6 +338,15 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 			in.Groups[i] = g.input
 			for _, id := range g.context {
 				used[id] = true
+			}
+		}
+		if r != nil {
+			// The excerpt a repair points at, which holds a definition the
+			// answer said was missing, travels with it.
+			for _, it := range r.Items {
+				if pointsAtExcerpt(it) {
+					used[it.ID] = true
+				}
 			}
 		}
 		for _, x := range excerpts {
@@ -355,6 +393,10 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 	for _, g := range sent {
 		byID[g.id] = g
 	}
+	// What the repair added to a group's context and where the request holds
+	// the definitions of its Go files (triage_unclear.go).
+	pointed := map[string][]string{}
+	defs := newDefinitionIndex(sent)
 	done := map[string]triageOutcome{}
 	faults := map[string]triageOutcome{}
 	cited := map[string]record.Excerpt{}
@@ -391,6 +433,9 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 		}
 		reply := newCiter(s.j.Snapshot.Digest, kept)
 		seen := map[string]bool{}
+		// The entries of each group, in the order of the answer.
+		entries := map[string][]triageEntry{}
+		var order []string
 		for i, a := range out.Triage {
 			g, ok := byID[a.GroupID]
 			if !ok {
@@ -398,27 +443,47 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 				issues = append(issues, itemIssue{List: "triage", Index: i + 1, Field: "group_id", Error: errTriageGroupUnknown})
 				continue
 			}
-			// A second answer for a group in one output is a fault even when
-			// the first was accepted; an answer for a group an earlier
-			// output settled is not read again.
-			if seen[g.id] {
+			if _, ok := entries[g.id]; !ok {
+				order = append(order, g.id)
+			}
+			entries[g.id] = append(entries[g.id], triageEntry{a, i + 1})
+		}
+		for _, id := range order {
+			g := byID[id]
+			read, repeated, parts := readEntries(entries[id])
+			// A second whole answer for a group in one output, or one that
+			// overlaps its parts, is a fault even when the first was
+			// accepted; an answer for a group an earlier output settled is
+			// not read again.
+			for _, e := range repeated {
 				codes = addLim(codes, errTriageGroupDuplicate)
-				issues = append(issues, itemIssue{List: "triage", Index: i + 1, Field: "group_id", Error: errTriageGroupDuplicate})
+				issues = append(issues, itemIssue{List: "triage", Index: e.index, Field: "group_id", Error: errTriageGroupDuplicate})
+			}
+			seen[id] = true
+			if _, ok := done[id]; ok {
 				continue
 			}
-			seen[g.id] = true
-			if _, ok := done[g.id]; ok {
-				continue
+			var o triageOutcome
+			var itemCodes []string
+			if !parts {
+				var itemIssues []itemIssue
+				o, itemCodes, itemIssues = s.checkTriageEntry(read[0].a, g, read[0].index, reply, final, defs, pointed)
+				issues = append(issues, itemIssues...)
+			} else {
+				o, itemCodes, issues = s.checkParts(read, g, reply, final, defs, pointed, issues, partsLimit)
 			}
-			o, itemCodes, itemIssues := s.checkTriageAnswer(a, g, i+1, reply, final)
 			codes = addLim(codes, itemCodes...)
-			issues = append(issues, itemIssues...)
 			switch {
 			case o.omitted == "" && len(itemCodes) == 0, o.omitted == "" && final:
 				done[g.id] = o
 				delete(faults, g.id)
 				accepted++
-				keepCited(reply, o.text.Evidence, o.ids)
+				for _, p := range append([]triagePart{{out: o}}, o.parts...) {
+					// A part left out has no group that cites its lines.
+					if p.out.omitted == "" {
+						keepCited(reply, p.out.text.Evidence, p.out.ids)
+					}
+				}
 			default:
 				o.form = formOnly(itemCodes)
 				faults[g.id] = o
@@ -464,6 +529,16 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 		}
 		q := opencode.Request{Role: s.role, Scratch: s.j.Scratch, SnapshotDigest: s.j.Snapshot.Digest, Instructions: text, Input: body, ProtectedRoots: []string{s.j.Snapshot.SnapshotDir}}
 		size := len(opencode.Prompt(q))
+		if size > s.limit().request && repair != nil && slices.ContainsFunc(repair.Items, pointsAtExcerpt) {
+			// The excerpt a repair points at does not fit: the repair goes
+			// without it (the answer may then stand as it is) instead of
+			// failing the slot.
+			repair.Items = slices.DeleteFunc(slices.Clone(repair.Items), pointsAtExcerpt)
+			if body, err = build(list, repair); err == nil {
+				q.Input = body
+				size = len(opencode.Prompt(q))
+			}
+		}
 		if size > s.limit().request {
 			r := result(domain.TaskFailed, reasonInputTooLarge)
 			failed = &r
@@ -561,22 +636,21 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 	var groups []record.TriageGroup
 	var candidates []record.Candidate
 	omitted := false
-	for _, g := range sent {
-		tg := record.TriageGroup{ID: g.id, ContextIDs: append([]string{}, g.context...), CrossTool: g.group.crossTool}
-		for _, d := range g.group.diags {
+	// store appends the stored group of the diagnostics at positions of a
+	// sent group (all of them for a group answered as a whole) with the
+	// outcome o, or without a classification when answered is false.
+	store := func(g triageSent, positions []int, o triageOutcome, answered bool, missing string) {
+		tg := record.TriageGroup{ID: fmt.Sprintf("g%d", len(groups)+1), ContextIDs: append([]string{}, g.context...)}
+		tools := map[string]bool{}
+		for _, i := range positions {
+			d := g.group.diags[i]
 			tg.ObservationIDs = append(tg.ObservationIDs, d.obs.ID)
+			tools[d.obs.Tool] = true
 		}
-		o, ok := done[g.id]
+		tg.CrossTool = len(tools) > 1
 		switch {
-		case !ok:
-			tg.Omitted = record.TriageAnswerMissing
-			if f, faulted := faults[g.id]; faulted && f.omitted != "" {
-				tg.Omitted = f.omitted
-			} else if faulted && f.form {
-				tg.Omitted = record.TriageItemOmitted
-			} else if faulted {
-				tg.Omitted = record.TriageItemRejected
-			}
+		case !answered:
+			tg.Omitted = missing
 			omitted = true
 		case o.answer.Classification == record.TriageProblem:
 			tg.Classification = record.TriageProblem
@@ -587,10 +661,41 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 		default:
 			tg.Classification, tg.Reason, tg.EvidenceIDs = o.answer.Classification, o.answer.Reason, o.ids
 		}
-		if ok {
+		if answered {
 			s.rec.Limitations = addLim(s.rec.Limitations, o.lims...)
 		}
 		groups = append(groups, tg)
+	}
+	for _, g := range sent {
+		all := make([]int, len(g.group.diags))
+		for i := range all {
+			all[i] = i
+		}
+		o, ok := done[g.id]
+		if !ok {
+			why := record.TriageAnswerMissing
+			if f, faulted := faults[g.id]; faulted && f.omitted != "" {
+				why = f.omitted
+			} else if faulted && f.form {
+				why = record.TriageItemOmitted
+			} else if faulted {
+				why = record.TriageItemRejected
+			}
+			store(g, all, triageOutcome{}, false, why)
+			continue
+		}
+		if o.parts == nil {
+			store(g, all, o, true, "")
+			continue
+		}
+		// A group answered part by part: each part is a stored group, the
+		// positions no part lists are one more without a classification.
+		for _, p := range o.parts {
+			store(g, p.diags, p.out, p.out.omitted == "", p.out.omitted)
+		}
+		if len(o.uncovered) > 0 {
+			store(g, o.uncovered, triageOutcome{}, false, record.TriageAnswerMissing)
+		}
 	}
 	if omitted {
 		s.rec.Limitations = addLim(s.rec.Limitations, record.LimTriageGroupsNotTriaged)
@@ -648,10 +753,18 @@ func (s *roleStage) triageRequest(bin []*triageGroup) ([]triageSent, []record.Ex
 		}
 		unitID := add(g.unit, g.unit.span.start, g.unit.span.end, "context")
 		t.context = append([]string{unitID}, t.context...)
-		in := triageGroupInput{ID: t.id, Tools: g.analyzers(), Rules: g.rules(), DefaultSeverity: g.severity, Count: len(g.diags), CrossTool: g.crossTool,
+		// The default severity is the one the report gives the group's
+		// findings, lowered on a path that is not shipped code.
+		in := triageGroupInput{ID: t.id, Tools: g.analyzers(), Rules: g.rules(), DefaultSeverity: g.effective, PathClass: record.PathClass(g.unit.entry.Path), Count: len(g.diags), CrossTool: g.crossTool,
 			Path: g.unit.entry.Path, Context: t.context, Examples: []triageDiagInput{}}
 		if in.DefaultSeverity == "" {
 			in.DefaultSeverity = "low"
+		}
+		in.Families = []string{}
+		for _, d := range g.diags {
+			if d.def.Family != "" {
+				in.Families = addLim(in.Families, d.def.Family)
+			}
 		}
 		for j, d := range g.diags {
 			in.Lines = append(in.Lines, d.obs.Location.StartLine)
@@ -665,7 +778,7 @@ func (s *roleStage) triageRequest(bin []*triageGroup) ([]triageSent, []record.Ex
 				if outside {
 					s.rec.Limitations = addLim(s.rec.Limitations, "observation_context_outside_input")
 				}
-				in.Examples = append(in.Examples, triageDiagInput{ObservationID: d.obs.ID, Tool: d.obs.Tool, RuleID: d.obs.RuleID, RawSeverity: d.obs.Severity,
+				in.Examples = append(in.Examples, triageDiagInput{Index: j + 1, ObservationID: d.obs.ID, Tool: d.obs.Tool, RuleID: d.obs.RuleID, RawSeverity: d.obs.Severity,
 					Message: msg, StartLine: d.obs.Location.StartLine, EndLine: max(d.obs.Location.EndLine, d.obs.Location.StartLine), Related: related})
 			}
 		}
@@ -791,3 +904,7 @@ func (s *roleStage) checkTriageAnswer(a triageAnswer, g triageSent, index int, r
 	note("classification", errTriageClassInvalid, "")
 	return settle()
 }
+
+// pointsAtExcerpt is a repair item that names the excerpt holding a definition
+// an unclear answer said was missing.
+func pointsAtExcerpt(it itemIssue) bool { return it.Field == "missing" && it.ID != "" }

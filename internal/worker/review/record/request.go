@@ -26,8 +26,19 @@ type plainExcerpt Excerpt
 // MarshalJSON numbers the lines of an excerpt that carries text. An excerpt
 // without text (every stored record) encodes exactly as its fields.
 func (e Excerpt) MarshalJSON() ([]byte, error) {
+	generated := e.Start == 1 && GeneratedHeader([]byte(e.Text))
 	if e.Text != "" {
 		e.Text = NumberLines(e.Text, e.Start)
+	}
+	if (e.Text != "" || e.Within != "") && (e.Kind == "code" || e.Kind == "test") {
+		// A request names the class of a file that is certainly not shipped
+		// code (PathClass), so the model need not guess it (a record never
+		// holds text or within). A file whose first lines say it is generated
+		// is named too: the request carries those lines.
+		e.PathClass = PathClass(e.Path)
+		if e.PathClass == "" && generated {
+			e.PathClass = PathGenerated
+		}
 	}
 	return json.Marshal(plainExcerpt(e))
 }
@@ -46,6 +57,9 @@ func (e *Excerpt) UnmarshalJSON(b []byte) error {
 			p.Text = raw
 		}
 	}
+	// The class is derived from the path, so the excerpt reads back as the
+	// worker held it.
+	p.PathClass = ""
 	*e = Excerpt(p)
 	return nil
 }

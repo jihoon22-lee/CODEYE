@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/severity"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/staticcheck"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
@@ -114,5 +115,26 @@ func TestTriageOrderWithinShippedCodeIsUnchanged(t *testing.T) {
 	}
 	if !slices.Equal(order, []string{"svc/a.go", "svc/b.go", "svc/c.go"}) {
 		t.Fatalf("order %v", order)
+	}
+}
+
+// Every group on shipped code comes before any group on another path, also
+// when the shipped group's severity is lower than the other path's lowered
+// one (a style diagnostic on shipped code, a lowered nil dereference in a
+// test): the request still carries the severity the report gives.
+func TestTriageShippedGroupsPrecedeOtherPathsOfHigherSeverity(t *testing.T) {
+	files := []string{"svc/a.go", "svc/b_test.go"}
+	j := treeJob(t, pathTree(files...))
+	s := roleStage{ctx: t.Context(), j: j, task: "review.triage.t001", role: record.StageTriage, triage: "t001"}
+	obs := append(triagePathDiags("SA5011", 3, "svc/b_test.go"), triagePathDiags("ST1000", 1, "svc/a.go")...)
+	plan := s.planTriage([]toolDoc{staticcheckDoc(obs...)}, nil, 1)
+	var order []string
+	var severities []string
+	for _, g := range plan.bins[0] {
+		order = append(order, g.unit.entry.Path)
+		severities = append(severities, g.effective)
+	}
+	if !slices.Equal(order, []string{"svc/a.go", "svc/b_test.go"}) || severity.Rank(severities[0]) >= severity.Rank(severities[1]) {
+		t.Fatalf("order %v with severities %v: the shipped group must come first although its severity is lower", order, severities)
 	}
 }

@@ -561,8 +561,13 @@ func (s *roleStage) fail(res analysis.TaskResult) *analysis.TaskResult {
 		r.Candidates = nil
 	} else {
 		r.Verifications = make([]record.Verification, len(r.Candidates))
+		catalog, shipped := catalogOf(r.Evidence), shippedSourceOf(s.j)
 		for i, c := range r.Candidates {
 			r.Verifications[i] = unreviewed(c.ID, record.LimNotCompleted)
+			if shipped && c.OnlyNotShipped(catalog) {
+				// The decision does not depend on how the verification ended.
+				r.Verifications[i] = unreviewed(c.ID, record.LimCandidateNotShipped)
+			}
 		}
 	}
 	r.Calls = append([]record.Call{}, r.Calls...)

@@ -451,6 +451,16 @@ func (v secView) candidateFold(id, label, note string, findings []Finding, ancho
 	}
 	l := v.L
 	fold := candidateFold{ID: id, Label: tf(l, label, len(findings)), Note: l.Label(note)}
+	notShipped := 0
+	for _, f := range findings {
+		if FindingNotShipped(f) {
+			notShipped++
+		}
+	}
+	if notShipped > 0 {
+		// The summary line says how many of the items were not verified.
+		fold.Label += " · " + tf(l, "actions.secondary_not_shipped", notShipped)
+	}
 	for _, f := range findings {
 		row := candidateRow{
 			Title: openingText(f.Title, f.ID), State: lab(l, "validation", f.Validation), Tone: "attention",
@@ -463,7 +473,10 @@ func (v secView) candidateFold(id, label, note string, findings []Finding, ancho
 			loc := f.Locations[0]
 			row.Location = sourceRange(loc.Path, loc.StartLine, loc.EndLine)
 		}
-		if next := readerVerification(f.Verification); next != "" {
+		if FindingNotShipped(f) {
+			// A fixed label, whatever the model wrote, kept in the code-free export.
+			row.Next = &actionRow{Label: l.Label("actions.not_shipped_label"), Text: l.Label("actions.not_shipped_text")}
+		} else if next := readerVerification(f.Verification); next != "" {
 			row.Next = &actionRow{Label: l.Label("opening.verification"), Text: next}
 		}
 		if anchors[f.ID] {

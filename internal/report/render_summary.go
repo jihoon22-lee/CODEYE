@@ -550,6 +550,9 @@ func (v secView) findingCard(f Finding) secCard {
 // findingSecondary reports a finding supported only by secondary source.
 // If no source evidence has line ranges, use the recorded finding locations.
 func findingSecondary(f Finding) bool {
+	if FindingNotShipped(f) {
+		return true
+	}
 	hasSource := false
 	for _, e := range f.Evidence {
 		loc := e.Location
@@ -1337,4 +1340,13 @@ func mdCards(p func(...string), cards []secCard) {
 		}
 		p()
 	}
+}
+
+// FindingNotShipped reports a model candidate the platform did not send to
+// verification because all its evidence is on paths that are not shipped code
+// (builder 24): unreviewed with the limitation candidate_not_shipped. It is
+// listed with the items of secondary paths and is neither an action item nor a
+// pending candidate: it does not move the verdict.
+func FindingNotShipped(f Finding) bool {
+	return f.Validation == ValidationUnreviewed && slices.Contains(f.Limitations, record.LimCandidateNotShipped)
 }

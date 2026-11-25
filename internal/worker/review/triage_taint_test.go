@@ -146,10 +146,14 @@ func TestOpengrepDiagnosticTriage(t *testing.T) {
 	}
 	for _, g := range sent {
 		want := map[string][]int{"a.go": {13, 14}, "examples/b.go": {14, 19}}[g.Path]
-		// The model is told the table's severity (the medium cap) for both;
-		// the path rule lowers only the report's finding of the example file
-		// and orders the shipped a.go first, as for any tool.
-		if g.DefaultSeverity != severity.Medium || !slices.Equal(g.Tools, []string{opengrep.AnalyzerID}) || len(g.Examples) != 1 {
+		// The model is told the severity the report gives the findings: the
+		// table's medium cap for the shipped a.go, lowered for the example
+		// file, which is ordered after it, as for any tool.
+		wantSeverity, wantClass := severity.Medium, ""
+		if g.Path == "examples/b.go" {
+			wantSeverity, wantClass = "low", "example"
+		}
+		if g.DefaultSeverity != wantSeverity || g.PathClass != wantClass || !slices.Equal(g.Tools, []string{opengrep.AnalyzerID}) || len(g.Examples) != 1 {
 			t.Fatalf("group %+v", g)
 		}
 		var lines []int

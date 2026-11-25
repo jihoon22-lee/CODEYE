@@ -8,6 +8,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/report"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/severity"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
 // pathAdmissionTree is a Go module of test files that sort before the
@@ -89,7 +90,9 @@ func TestTriageAtATightCeilingClassifiesShippedCodeFirst(t *testing.T) {
 	if d.Triaged >= d.Diagnostics || !slices.Contains(d.Limitations, limDiagnosticsOutside) && run.results["review.triage.t002"].Status != "budget_exhausted" {
 		t.Fatalf("triaged %d of %d, limitations %v, slot 2 %s", d.Triaged, d.Diagnostics, d.Limitations, run.results["review.triage.t002"].Status)
 	}
-	// What the request told the model is the table's value, on every path.
+	// What the request told the model is the severity the report gives the
+	// findings: the table's value on shipped code, lowered on a test path,
+	// with the path class named.
 	var firstPaths []string
 	for _, g := range sent[:min(len(sent), 6)] {
 		firstPaths = append(firstPaths, g.Path)
@@ -98,8 +101,12 @@ func TestTriageAtATightCeilingClassifiesShippedCodeFirst(t *testing.T) {
 		t.Fatalf("first request groups %v", firstPaths)
 	}
 	for _, g := range sent {
-		if g.DefaultSeverity != "high" {
-			t.Fatalf("group %s at %s has default severity %s", g.ID, g.Path, g.DefaultSeverity)
+		wantSeverity, wantClass := "high", ""
+		if record.PathClass(g.Path) != "" {
+			wantSeverity, wantClass = "low", record.PathClass(g.Path)
+		}
+		if g.DefaultSeverity != wantSeverity || g.PathClass != wantClass {
+			t.Fatalf("group %s at %s has default severity %s and path class %q", g.ID, g.Path, g.DefaultSeverity, g.PathClass)
 		}
 	}
 	// The findings: lowered on test paths with their reason, unchanged on shipped code.
