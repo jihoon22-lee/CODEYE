@@ -32,6 +32,12 @@ public class PathTraversalSafe {
         new java.io.FileOutputStream("/srv/uploads/" + name, false).close();
     }
 
+    public boolean purge(HttpServletRequest req) {
+        String name = new java.io.File(req.getParameter("purge")).getName();
+        java.io.File f = new java.io.File("/srv/files", name);
+        return f.delete();
+    }
+
     public byte[] index() throws IOException {
         return Files.readAllBytes(ROOT.resolve("index.txt"));
     }

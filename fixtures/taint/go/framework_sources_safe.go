@@ -66,6 +66,19 @@ func Import(c echo.Context) error {
 	return os.Remove(filepath.Join(root, "import", strconv.FormatUint(in.ID, 10)))
 }
 
+type tuneRequest struct {
+	Delay float64 `json:"delay"`
+	Fast  bool    `json:"fast"`
+}
+
+func Tune(w http.ResponseWriter, r *http.Request) {
+	var in tuneRequest
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		return
+	}
+	exec.Command("sh", "-c", "sleep "+strconv.FormatFloat(in.Delay, 'f', -1, 64)+" && tune --fast="+strconv.FormatBool(in.Fast)).Run()
+}
+
 func Settings(w http.ResponseWriter, r *http.Request) {
 	var in deleteRequest
 	in.IDs = []int{1}

@@ -32,3 +32,8 @@ def tag(request):
 async def print_job(request: Request):
     form = await request.form()
     os.system("lp " + form["file"])  # expect: codeye.python.command-injection
+
+
+async def print_raw(request: Request):
+    body = await request.body()
+    os.system("lp " + body.decode())  # expect: codeye.python.command-injection

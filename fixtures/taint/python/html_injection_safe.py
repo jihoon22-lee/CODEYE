@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, render_template_string, request
 from markupsafe import escape
+from . import helpers
 
 app = Flask(__name__)
 
@@ -31,3 +32,9 @@ def search():
     page = "<h2>Results</h2>"
     page += f"<p>No match for {escape_html(term)}</p>"
     return page
+
+
+@app.route("/tag")
+def tag():
+    # An escaper of the project, named after what it does.
+    return "<b>" + helpers.html_escape(request.args.get("t", "")) + "</b>"

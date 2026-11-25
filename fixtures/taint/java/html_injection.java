@@ -40,4 +40,8 @@ public class HtmlInjection {
             resp.getWriter().println("<li>" + names.nextElement() + "</li>"); // expect: codeye.java.html-injection
         }
     }
+
+    public void badge(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        resp.getWriter().format("<span class=\"%s\"></span>", req.getHeader("X-Class")); // expect: codeye.java.html-injection
+    }
 }

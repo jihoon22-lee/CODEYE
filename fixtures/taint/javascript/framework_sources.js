@@ -29,6 +29,7 @@ async function koaConvert(ctx) {
   exec("convert " + ctx.request.body.name, () => {}); // expect: codeye.javascript.command-injection
   ctx.body = fs.readFileSync(path.join(ROOT, ctx.params.name)); // expect: codeye.javascript.path-traversal
   ctx.body = fs.readFileSync(path.join(ROOT, "themes", ctx.cookies.get("theme"))); // expect: codeye.javascript.path-traversal
+  exec("echo " + ctx.headers["x-run"], () => {}); // expect: codeye.javascript.command-injection
 }
 
 module.exports = { lang, koaDownload, sockets, attachment, koaConvert };

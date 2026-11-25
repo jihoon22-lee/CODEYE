@@ -170,6 +170,18 @@ func TestOpengrepDiagnosticTriage(t *testing.T) {
 	if err := report.ValidateReport(report.Project(r, false)); err != nil {
 		t.Fatalf("code-free export: %v", err)
 	}
+	rows := 0
+	for _, row := range r.Coverage.Tools {
+		if row.Analyzer == opengrep.AnalyzerID {
+			rows++
+			if row.SeverityTable != opengrep.RulePackID+"/1" {
+				t.Fatalf("tool row severity table %q", row.SeverityTable)
+			}
+		}
+	}
+	if rows != 1 {
+		t.Fatalf("%d opengrep tool rows", rows)
+	}
 	d := r.CodeReview.DiagnosticTriage
 	if d == nil || d.Diagnostics != 2 || d.Triaged != 2 || len(d.Groups) != 2 {
 		t.Fatalf("triage %+v", d)
@@ -209,6 +221,47 @@ func TestOpengrepDiagnosticTriage(t *testing.T) {
 		default:
 			t.Fatalf("group %+v", g)
 		}
+	}
+}
+
+// TC-302: the related locations of a triage example are the ones in the
+// group's own context, each naming its excerpt: a step in the unit names the
+// unit, one in the file header sent with it names the header; a step in
+// another unit, another file or another blob of the file is left out; past
+// eight the first seven and the last stay. Leaving any out is reported.
+func TestTriageRelatedInGroupContext(t *testing.T) {
+	const sha = "sha-a"
+	u := triageUnit{entry: source.Entry{Path: "a.go", SHA256: sha}, span: lineSpan{start: 20, end: 40}, header: 8}
+	step := func(path, blob string, line int) obsdoc.Related {
+		return obsdoc.Related{Kind: obsdoc.RelatedFlowStep, Location: &obsdoc.Location{Path: path, StartLine: line, EndLine: line, BlobSHA256: blob}}
+	}
+	o := toolObservation{Related: []obsdoc.Related{step("a.go", sha, 5), step("a.go", sha, 22), step("a.go", sha, 30)}}
+	got, outside := triageRelated(o, u, "unit", "head")
+	want := []obsRelatedInput{{Kind: obsdoc.RelatedFlowStep, EvidenceID: "head", StartLine: 5, EndLine: 5},
+		{Kind: obsdoc.RelatedFlowStep, EvidenceID: "unit", StartLine: 22, EndLine: 22}, {Kind: obsdoc.RelatedFlowStep, EvidenceID: "unit", StartLine: 30, EndLine: 30}}
+	if !slices.Equal(got, want) || outside {
+		t.Fatalf("in context: %+v outside %v", got, outside)
+	}
+	// Without the header in the request, a header step is outside; so are
+	// a step past the header, another file and another blob.
+	for _, r := range []obsdoc.Related{step("a.go", sha, 5), step("a.go", sha, 12), step("a.go", sha, 41), step("b.go", sha, 22), step("a.go", "sha-old", 22)} {
+		header := ""
+		if r.Location.StartLine != 5 {
+			header = "head"
+		}
+		got, outside := triageRelated(toolObservation{Related: []obsdoc.Related{r}}, u, "unit", header)
+		if len(got) != 0 || !outside {
+			t.Fatalf("%+v: %+v outside %v", r.Location, got, outside)
+		}
+	}
+	// Twelve steps in the unit: the first seven and the sink.
+	var long []obsdoc.Related
+	for line := 21; line <= 32; line++ {
+		long = append(long, step("a.go", sha, line))
+	}
+	got, outside = triageRelated(toolObservation{Related: long}, u, "unit", "")
+	if len(got) != triageRelatedShown || got[6].StartLine != 27 || got[7].StartLine != 32 || !outside {
+		t.Fatalf("long flow: %+v outside %v", got, outside)
 	}
 }
 

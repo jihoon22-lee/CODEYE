@@ -45,4 +45,9 @@ public class PathTraversal {
         File f = new File(ROOT, name);
         return f.delete(); // expect: codeye.java.path-traversal
     }
+
+    public boolean purge(HttpServletRequest req) {
+        java.io.File f = new java.io.File(ROOT, req.getParameter("purge"));
+        return f.delete(); // expect: codeye.java.path-traversal
+    }
 }

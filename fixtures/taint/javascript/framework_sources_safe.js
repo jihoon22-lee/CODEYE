@@ -28,6 +28,7 @@ async function koaDownload(ctx) {
   ctx.body = fs.readFileSync(path.join(ROOT, path.basename(ctx.params.name)));
   ctx.body = fs.readFileSync(path.join(ROOT, "themes", path.basename(ctx.cookies.get("theme"))));
   ctx.body = fs.readFileSync(path.join(ROOT, path.basename(ctx.request.body.name)));
+  ctx.body = fs.readFileSync(path.join(ROOT, path.basename(ctx.headers["x-file"])));
 }
 
 module.exports = { tail, sockets, lang, koaDownload };
