@@ -531,7 +531,7 @@ func Project(r Report, includeCode bool) Report {
 		g.Verification = safeTexts(f.Verification)
 		g.Limitations = safeTexts(f.Limitations)
 		for j, s := range f.Limitations {
-			if s == record.LimCandidateNotShipped {
+			if s == record.LimCandidateNotShipped || s == record.LimHypothesisNotShipped {
 				g.Limitations[j] = s
 			}
 		}

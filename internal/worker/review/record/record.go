@@ -41,6 +41,11 @@ const (
 	// stage did not send: all of its code and test evidence lies on paths
 	// that are not shipped code (OnlyNotShipped).
 	LimCandidateNotShipped = "candidate_not_shipped"
+	// LimHypothesisNotShipped marks a finding of an interpretation hypothesis
+	// whose tool diagnostics and code evidence all lie on paths that are not
+	// shipped code (HypothesisNotShipped). The report, not a record, carries
+	// it: the verification of such a hypothesis is the model's own.
+	LimHypothesisNotShipped = "hypothesis_not_shipped"
 
 	// LimOutputDegraded marks a record whose accepted output had faults of
 	// form only, resolved by the platform once no further format repair could

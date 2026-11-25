@@ -479,9 +479,9 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "2c561740b11d1bf75093ce22316251646ab13eb8597bb65d0631ce96334bcbde",
+    "input_digest": "2a6fa662d09817eb77155c3e21b4a60bd902e941a37203a14495ac59527a3285",
     "result_manifest_artifact_id": null,
-    "version": "24"
+    "version": "25"
   },
   "code_review": {
     "accepted_calls": 14,

@@ -123,13 +123,18 @@ func ComputeSummary(findings []Finding, obs []Observation) Summary {
 		}
 		switch f.Validation {
 		case "supported", "reproduced":
+			if FindingHypothesisNotShipped(f) {
+				// Listed with its verified state, not an action item.
+				continue
+			}
 			if !hiddenDisposition[f.Disposition] {
 				s.ActionableFindings++
 				cands = append(cands, cand{f, summaryClass(f)})
 			}
 		case "unreviewed", "inconclusive":
-			if FindingNotShipped(f) {
-				// Listed, not pending: it was not verified by design.
+			if findingHeldBack(f) {
+				// Listed, not pending: it was not verified by design, or it
+				// is about diagnostics outside shipped code.
 				continue
 			}
 			s.PendingCandidates++

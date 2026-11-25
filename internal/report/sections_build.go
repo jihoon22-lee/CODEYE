@@ -582,6 +582,7 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 	}
 	s.DiagnosticTriage = c.diagnosticTriage()
 	s.CandidatesNotShipped = c.candidatesNotShipped(s.FindingIDs)
+	s.HypothesesNotShipped = countHypothesesNotShipped(c.r.Findings, s.FindingIDs)
 	if c.r.scopeNonShipped {
 		s.Subject = record.SubjectNonShipped
 	}

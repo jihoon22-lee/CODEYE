@@ -34,6 +34,38 @@ func (c Candidate) OnlyNotShipped(catalog map[string]Excerpt) bool {
 	return cited
 }
 
+// HypothesisNotShipped reports an interpretation hypothesis about material
+// that is not shipped code: every tool diagnostic it relates to is located on
+// a test, example, benchmark, generated or vendored path (PathClass of the
+// path observationPath gives; a diagnostic without a location or an unknown
+// one is not on such a path), and every code or test excerpt it cites is on
+// one too. A hypothesis that relates to a diagnostic of shipped code, or
+// cites shipped code, is about shipped code. Only the hypothesis's own
+// observations and evidence count: the excerpts a verification adds (callers,
+// supporting and counter evidence) do not change what the hypothesis is about.
+// The verification of such a hypothesis is not skipped (its verdict is
+// information, and the call is made with the others); the report lists it
+// with the items of secondary paths and does not count it as an action item
+// (docs/REPORT.md#조치-항목-우선-배치). The caller applies the decision only
+// when the scope holds shipped code (ShippedSourceIn).
+func (c Candidate) HypothesisNotShipped(observationPath func(id string) (string, bool), catalog map[string]Excerpt) bool {
+	if c.Origin != StageInterpret || len(c.ObservationIDs) == 0 {
+		return false
+	}
+	for _, id := range c.ObservationIDs {
+		if p, ok := observationPath(id); !ok || PathClass(p) == "" {
+			return false
+		}
+	}
+	for _, id := range c.Evidence {
+		e, ok := catalog[id]
+		if ok && (e.Kind == "code" || e.Kind == "test") && PathClass(e.Path) == "" {
+			return false
+		}
+	}
+	return true
+}
+
 // PackSetsAside reports a record written by an instruction pack that sets
 // candidates aside (2.10 and later): the earlier packs verified every
 // candidate, and their records stay readable as they were.

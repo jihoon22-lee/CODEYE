@@ -57,6 +57,17 @@ func validateSections(r Report) error {
 	if err := validateNotShipped(r); err != nil {
 		return err
 	}
+	if cr := r.CodeReview; cr != nil && (cr.HypothesesNotShipped < 0 || (cr.HypothesesNotShipped > 0 && !builderAtLeast(r.Builder.Version, HypothesisNotShippedSince))) {
+		return invalidf("hypotheses_not_shipped in a revision of builder %s", r.Builder.Version)
+	}
+	if err := validateHypothesisNotShipped(r); err != nil {
+		return err
+	}
+	if cr := r.CodeReview; cr != nil && builderAtLeast(r.Builder.Version, HypothesisNotShippedSince) {
+		if n := countHypothesesNotShipped(r.Findings, cr.FindingIDs); n != cr.HypothesesNotShipped {
+			return invalidf("hypotheses_not_shipped %d does not match the %d hypotheses about diagnostics outside shipped code", cr.HypothesesNotShipped, n)
+		}
+	}
 	if cr := r.CodeReview; cr != nil && builderAtLeast(r.Builder.Version, ShippedFocusSince) {
 		n := 0
 		for _, f := range r.Findings {
@@ -690,6 +701,75 @@ func validateNotShipped(r Report) error {
 		// A scope without shipped code sets nothing aside.
 		if want := cited && !shipped && !(r.CodeReview != nil && r.CodeReview.Subject == record.SubjectNonShipped); want != marked && (known || marked) {
 			return invalidf("finding %s: the candidate_not_shipped marker does not match the places it cites", f.ID)
+		}
+	}
+	return nil
+}
+
+var interpretFindingID = regexp.MustCompile(`^review_interpret_[0-9]+$`)
+
+// countHypothesesNotShipped counts the listed model hypotheses about
+// diagnostics outside shipped code that are still open questions of the
+// lists: the refuted ones stay in the refuted list and are not counted.
+func countHypothesesNotShipped(findings []Finding, ids []string) int {
+	n := 0
+	for _, f := range findings {
+		if FindingHypothesisNotShipped(f) && f.Validation != ValidationRefuted && slices.Contains(ids, f.ID) {
+			n++
+		}
+	}
+	return n
+}
+
+// validateHypothesisNotShipped checks the marker of a hypothesis about
+// diagnostics outside shipped code against the finding's own observations and
+// evidence: an interpretation hypothesis carries hypothesis_not_shipped
+// exactly when every diagnostic it relates to is located on a path that is
+// certainly not shipped code and so is every code or test excerpt it cites
+// (the first claim's evidence, which is the hypothesis's own; the excerpts a
+// verification adds are not), unless the scope holds no shipped code. A forged
+// marker would hide a hypothesis about shipped code from the action items; a
+// missing one would rank a test-only hypothesis among them.
+func validateHypothesisNotShipped(r Report) error {
+	if !builderAtLeast(r.Builder.Version, HypothesisNotShippedSince) {
+		for _, f := range r.Findings {
+			if FindingHypothesisNotShipped(f) {
+				return invalidf("finding %s: hypothesis_not_shipped in a revision of builder %s", f.ID, r.Builder.Version)
+			}
+		}
+		return nil
+	}
+	paths := map[string]string{}
+	for _, o := range r.Observations {
+		if o.Location != nil {
+			paths[o.ID] = o.Location.Path
+		}
+	}
+	subjectNonShipped := r.CodeReview != nil && r.CodeReview.Subject == record.SubjectNonShipped
+	for _, f := range r.Findings {
+		marked := FindingHypothesisNotShipped(f)
+		if !interpretFindingID.MatchString(f.ID) {
+			if marked {
+				return invalidf("finding %s is marked as a hypothesis about diagnostics outside shipped code but is not a hypothesis", f.ID)
+			}
+			continue
+		}
+		c := record.Candidate{Origin: record.StageInterpret, ObservationIDs: f.ObservationIDs}
+		if len(f.Claims) > 0 {
+			c.Evidence = f.Claims[0].EvidenceIDs
+		}
+		catalog := map[string]record.Excerpt{}
+		for _, e := range f.Evidence {
+			if e.Kind == "code" && e.Location != nil {
+				catalog[e.ID] = record.Excerpt{ID: e.ID, Path: e.Location.Path, Kind: "code"}
+			}
+		}
+		want := !subjectNonShipped && c.HypothesisNotShipped(func(id string) (string, bool) {
+			p, ok := paths[id]
+			return p, ok
+		}, catalog)
+		if want != marked {
+			return invalidf("finding %s: the hypothesis_not_shipped marker does not match the diagnostics and places it cites", f.ID)
 		}
 	}
 	return nil

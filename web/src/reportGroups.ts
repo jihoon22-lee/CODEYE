@@ -194,8 +194,16 @@ export function findingNotShipped(finding: Finding): boolean {
   return finding.validation === 'unreviewed' && finding.limitations.includes('candidate_not_shipped');
 }
 
+// findingHypothesisNotShipped reports a model hypothesis about tool diagnostics
+// that all lie on paths that are not shipped code (builder 25). It keeps the
+// validation its verification gave it, but it is listed with the secondary
+// paths and is no action item or pending candidate.
+export function findingHypothesisNotShipped(finding: Finding): boolean {
+  return finding.limitations.includes('hypothesis_not_shipped');
+}
+
 export function secondaryReviewFinding(finding: Finding): boolean {
-  if (findingNotShipped(finding)) return true;
+  if (findingNotShipped(finding) || findingHypothesisNotShipped(finding)) return true;
   const evidence = sourceEvidence(finding);
   return evidence.length > 0
     ? evidence.every(e => e.kind === 'test' || secondaryReviewPath(e.path))

@@ -200,7 +200,7 @@ var countOrder = map[string][]string{
 	SectionMetrics:        {"tools", "observations", "metrics"},
 	SectionSecrets:        {"tools", "detections", "files"},
 	SectionCodeReview: {"calls", "files_sent_to_model", "files_not_sent_to_model", "primary_modules", "primary_files", "primary_files_sent_to_model",
-		"secondary_files", "secondary_files_not_reached", "diagnostics", "diagnostics_triaged", "diagnostics_not_shipped", "candidates_not_shipped", "findings", "actionable", "pending", "refuted"},
+		"secondary_files", "secondary_files_not_reached", "diagnostics", "diagnostics_triaged", "diagnostics_not_shipped", "candidates_not_shipped", "hypotheses_not_shipped", "findings", "actionable", "pending", "refuted"},
 	SectionGaps: {"gaps"},
 }
 

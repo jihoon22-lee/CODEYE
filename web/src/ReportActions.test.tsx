@@ -141,6 +141,24 @@ describe('action-first overview', () => {
     }
   });
 
+  it('lists a hypothesis about diagnostics outside shipped code with its verified state, never as an action', () => {
+    const report = scenario();
+    const f = report.findings.find(x => x.id === 'review_fixture')!;
+    f.validation = 'supported';
+    f.limitations = ['hypothesis_not_shipped'];
+    const plan = actionPlan(report, report.sections!);
+    expect(plan.secondary.map(x => x.id)).toContain('review_fixture');
+    expect(plan.actions.map(x => x.id)).not.toContain('review_fixture');
+    expect(plan.candidates.map(x => x.id)).not.toContain('review_fixture');
+    const { overview } = overviewOf(report);
+    const fold = within(overview).getByText(a.secondary(1) + a.secondaryHypotheses(1)).closest('details')!;
+    expect(fold.open).toBe(false);
+    expect(fold.textContent).toContain(a.hypothesisNotShippedLabel);
+    expect(fold.textContent).toContain(a.hypothesisNotShippedText);
+    expect(fold.textContent).not.toContain(a.notShippedLabel);
+    expect(overview.querySelectorAll('.report-action-card[data-finding-card="review_fixture"]')).toHaveLength(0);
+  });
+
   it('keeps the code-free export to locations and states', () => {
     const report = scenario();
     report.includesCode = false;

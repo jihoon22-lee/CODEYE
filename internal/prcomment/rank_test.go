@@ -50,3 +50,20 @@ func TestChangedItemsLeaveOutCandidatesNotSentToVerification(t *testing.T) {
 		t.Fatalf("listed %+v", findings)
 	}
 }
+
+// A hypothesis about diagnostics outside shipped code keeps the validation its
+// verification gave it but is never in the comment's short list.
+func TestChangedItemsLeaveOutHypothesesAboutNonShippedPaths(t *testing.T) {
+	r := &report.Report{}
+	s := &report.PullRequestSection{}
+	add := func(id string, limitations ...string) {
+		r.Findings = append(r.Findings, report.Finding{ID: id, Severity: "high", Validation: report.ValidationSupported, Disposition: "open", Limitations: limitations})
+		s.Items = append(s.Items, report.PullRequestItem{Kind: "finding", ID: id, Path: "a_test.go", Line: 1})
+	}
+	add("review_interpret_1", "hypothesis_not_shipped")
+	add("review_interpret_2")
+	findings, _ := changedItems(r, s)
+	if len(findings) != 1 || findings[0].f.ID != "review_interpret_2" {
+		t.Fatalf("listed %+v", findings)
+	}
+}

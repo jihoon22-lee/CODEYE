@@ -354,6 +354,9 @@ func overviewOf(r Report) Overview {
 		if cr.CandidatesNotShipped > 0 {
 			n["candidates_not_shipped"] = cr.CandidatesNotShipped
 		}
+		if cr.HypothesesNotShipped > 0 {
+			n["hypotheses_not_shipped"] = cr.HypothesesNotShipped
+		}
 		line(SectionCodeReview, &cr.Stage, n)
 		need("0", SectionCodeReview, "actionable_findings", fs.ActionableFindings)
 		if r.Coverage.AIReview.Status != AIReviewPerformed {

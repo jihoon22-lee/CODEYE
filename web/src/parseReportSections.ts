@@ -197,6 +197,10 @@ export type Sections = {
     // Investigation candidates left out of the findings because all their
     // evidence is on paths that are not shipped code (builder 24; 0 otherwise).
     candidatesNotShipped: number;
+    // Model hypotheses about tool diagnostics that all lie on paths that are
+    // not shipped code: listed with the secondary paths, no action items
+    // (builder 25; 0 otherwise).
+    hypothesesNotShipped: number;
   };
   gaps: { section: string; code: string; subject: string | null; detail: string | null }[];
 };
@@ -744,6 +748,7 @@ export function parseSections(
       ledger: parseLedger(cr.ledger),
       triage: parseTriage(cr.diagnostic_triage),
       candidatesNotShipped: cr.candidates_not_shipped === undefined ? 0 : count(cr.candidates_not_shipped),
+      hypothesesNotShipped: cr.hypotheses_not_shipped === undefined ? 0 : count(cr.hypotheses_not_shipped),
     },
     gaps: array(r.gaps ?? [], (v) => {
       const x = object(v);
@@ -766,6 +771,7 @@ export function parseSections(
   checkContractFollowup(r, out.documents, includesCode);
   checkRelatedWorkflow(r, out.documents);
   if (out.codeReview.candidatesNotShipped > 0 && Number(str(object(r.builder).version)) < 24) invalid();
+  if (out.codeReview.hypothesesNotShipped > 0 && Number(str(object(r.builder).version)) < 25) invalid();
   if (out.codeReview.triage) validateTriage(out.codeReview.triage, Number(str(object(r.builder).version)), observationIDs, out.codeReview.findings);
   const ledger = out.codeReview.ledger;
   if (ledger?.extended && Number(str(object(r.builder).version)) < 16) invalid();
