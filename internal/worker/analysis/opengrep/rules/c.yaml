@@ -22,6 +22,11 @@ rules:
           - pattern-either:
               - pattern: recv($S, $BUF, ...)
               - pattern: recvfrom($S, $BUF, ...)
+              # Received bytes appended at an offset of the buffer.
+              - pattern: recv($S, $BUF + $OFF, ...)
+              - pattern: recv($S, ($T)($BUF + $OFF), ...)
+              - pattern: recvfrom($S, $BUF + $OFF, ...)
+              - pattern: recvfrom($S, ($T)($BUF + $OFF), ...)
           - focus-metavariable: $BUF
       # Terminating the received bytes (buf[n] = '\0') leaves them in the
       # buffer.
@@ -42,6 +47,12 @@ rules:
                   ...
               - pattern-inside: |
                   $T $N = recvfrom($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, $BUF + $OFF, ...);
                   ...
           - pattern: $BUF[$I] = $V;
           - focus-metavariable: $BUF
@@ -120,6 +131,11 @@ rules:
           - pattern-either:
               - pattern: recv($S, $BUF, ...)
               - pattern: recvfrom($S, $BUF, ...)
+              # Received bytes appended at an offset of the buffer.
+              - pattern: recv($S, $BUF + $OFF, ...)
+              - pattern: recv($S, ($T)($BUF + $OFF), ...)
+              - pattern: recvfrom($S, $BUF + $OFF, ...)
+              - pattern: recvfrom($S, ($T)($BUF + $OFF), ...)
           - focus-metavariable: $BUF
       # Terminating the received bytes (buf[n] = '\0') leaves them in the
       # buffer.
@@ -140,6 +156,12 @@ rules:
                   ...
               - pattern-inside: |
                   $T $N = recvfrom($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, $BUF + $OFF, ...);
                   ...
           - pattern: $BUF[$I] = $V;
           - focus-metavariable: $BUF
@@ -203,6 +225,19 @@ rules:
               - pattern: std::ifstream $F($PATH, ...);
               - pattern: std::ofstream $F($PATH, ...);
               - pattern: std::fstream $F($PATH, ...);
+              # A stream declared first and opened later.
+              - patterns:
+                  - pattern-either:
+                      - pattern-inside: |
+                          std::ifstream $F;
+                          ...
+                      - pattern-inside: |
+                          std::ofstream $F;
+                          ...
+                      - pattern-inside: |
+                          std::fstream $F;
+                          ...
+                  - pattern: $F.open($PATH, ...)
               - pattern: std::filesystem::remove($PATH, ...)
               - pattern: std::filesystem::remove_all($PATH, ...)
           - focus-metavariable: $PATH
@@ -220,6 +255,11 @@ rules:
           - pattern-either:
               - pattern: recv($S, $BUF, ...)
               - pattern: recvfrom($S, $BUF, ...)
+              # Received bytes appended at an offset of the buffer.
+              - pattern: recv($S, $BUF + $OFF, ...)
+              - pattern: recv($S, ($T)($BUF + $OFF), ...)
+              - pattern: recvfrom($S, $BUF + $OFF, ...)
+              - pattern: recvfrom($S, ($T)($BUF + $OFF), ...)
           - focus-metavariable: $BUF
       # Terminating the received bytes (buf[n] = '\0') leaves them in the
       # buffer.
@@ -240,6 +280,12 @@ rules:
                   ...
               - pattern-inside: |
                   $T $N = recvfrom($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, $BUF + $OFF, ...);
                   ...
           - pattern: $BUF[$I] = $V;
           - focus-metavariable: $BUF
@@ -316,6 +362,11 @@ rules:
           - pattern-either:
               - pattern: recv($S, $BUF, ...)
               - pattern: recvfrom($S, $BUF, ...)
+              # Received bytes appended at an offset of the buffer.
+              - pattern: recv($S, $BUF + $OFF, ...)
+              - pattern: recv($S, ($T)($BUF + $OFF), ...)
+              - pattern: recvfrom($S, $BUF + $OFF, ...)
+              - pattern: recvfrom($S, ($T)($BUF + $OFF), ...)
           - focus-metavariable: $BUF
       # Terminating the received bytes (buf[n] = '\0') leaves them in the
       # buffer.
@@ -336,6 +387,12 @@ rules:
                   ...
               - pattern-inside: |
                   $T $N = recvfrom($S, $BUF, ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, ($T)($BUF + $OFF), ...);
+                  ...
+              - pattern-inside: |
+                  $N = recv($S, $BUF + $OFF, ...);
                   ...
           - pattern: $BUF[$I] = $V;
           - focus-metavariable: $BUF
