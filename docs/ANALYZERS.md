@@ -456,6 +456,7 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 5. 보고서 도구 행에는 쓰인 표가 `severity_table`(`<규칙 팩>/<표 버전>`)로 남는다. 표가 없는 행은 이 필드를 생략한다.
 6. 지표(`metrics`)와 비밀값(`secrets`) 분석기는 표를 두지 않는다. 카탈로그의 진단 분석기는 모두 표가 있어야 한다(TC-292).
 7. 계열의 `merge`는 서로 다른 두 도구가 같은 파일·같은 줄에서 그 계열의 규칙을 보고하면 같은 구성으로 본다는 뜻이다. 이 판단은 [도구 진단 분류](REVIEW.md#도구-진단-분류)의 묶음에만 쓰고 finding은 합치지 않는다(TC-102 유지).
+8. 표의 규칙은 계열 등급보다 낮은 **상한**(`Cap`)을 둘 수 있다. 그 규칙이 실제 코드에서 보고하는 것의 정확도가 계열 등급을 뒷받침한다는 측정이 없을 때 쓴다. 같은 줄 병합은 계열로 정하므로 상한을 두어도 다른 도구 보고와 한 묶음이 된다. 상한으로 낮춘 심각도의 사유는 별도의 고정 문장이다. 상한은 계열 등급보다 낮아야 한다(표 검사).
 
 | 계열 | 기본 심각도 | 같은 줄 병합 | 근거 |
 |---|---|---|---|
@@ -482,11 +483,12 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 
 팩별 표: go vet(합성 규칙 팩 `codeye-go-vet-default`@1), Staticcheck(`SA5011` 널 역참조, `SA1019` 사용 중단, `SA1*` API 오용, `SA2*` 동시성, `SA4*`·`SA5*` 논리, `SA6*` 성능, `S1*`·`ST1*`·`QF*` 스타일 등), errcheck(오류 무시), gofmt(서식), cppcheck(규칙 ID와 cppcheck 등급 대응), clang-tidy(검사 이름 접두사), GCC 파일 디스크립터 검사(자원 누수), ruff·mypy·pyright·bandit, import-linter·dependency-cruiser(유지보수), ESLint 세 구성과 tsc, cargo check·clippy·rustdoc, PMD·SpotBugs, Opengrep다. 표 목록은 [`builtin.SeverityTables`](../internal/worker/analysis/builtin/severity.go)가 한곳에 모은다.
 
-- **Opengrep**(`codeye-taint` v2, 표 1). 규칙마다 요청 입력이 위험한 호출에 닿는 흐름이라 스타일 지적인 규칙은 없다.
-  - 명령·SQL·경로·코드 평가·역직렬화·HTML 출력은 요청 바이트가 명령·질의·파일 이름·코드·페이지가 되므로 `injection`(high)이다. 같은 구성을 보고하는 bandit(셸·SQL·Markup), SpotBugs(SQL·경로·서블릿 XSS), clang-tidy(`bugprone-command-processor`), ESLint(eval 계열)와 같은 계열이어서, 같은 줄의 두 보고는 한 분류 묶음이 된다.
-  - SSRF는 요청이 나가는 요청의 대상을 고르게 한다. 무엇이 드러나는지는 서버가 닿을 수 있는 곳에 달려 있어 `security_weakness`(medium)이고 다른 도구 보고와 합치지 않는다.
-  - 규칙을 더하면 계열을 정해야 한다(`TestSeverityCoversEveryRule`).
-- SpotBugs 표 2는 [엔진 중복](#엔진-중복-1)에서 taint 팩과 같은 줄을 보고한 경로(`PT_*`)·서블릿 XSS(`XSS_*`) 검출기를 `SQL_*`처럼 `injection`으로 더했다.
+- **Opengrep**(`codeye-taint` v2, 표 1). 규칙마다 요청 입력이 위험한 호출에 닿는 흐름이다.
+  - 명령·SQL·경로·코드 평가·역직렬화·HTML 출력은 요청 바이트가 명령·질의·파일 이름·코드·페이지가 되므로 `injection` 계열이다. 같은 구성을 보고하는 bandit(셸·SQL·Markup), SpotBugs(SQL·경로·서블릿 XSS), clang-tidy(`bugprone-command-processor`), ESLint(eval 계열)와 같은 계열이어서, 같은 줄의 두 보고는 한 분류 묶음이 된다.
+  - SSRF는 요청이 나가는 요청의 대상을 고르게 한다. 무엇이 드러나는지는 서버가 닿을 수 있는 곳에 달려 있어 `security_weakness` 계열이고 다른 도구 보고와 합치지 않는다.
+  - **기본 심각도는 상한으로 낮춘다.** `injection` 규칙은 medium, SSRF는 low다. 오탐 없는 높은 재현율은 한 파일짜리 벤치마크 코드에서만 쟀다. 실제 애플리케이션 27개에서는 진단 10건 중 실제 흐름이 0건이었다(오탐 9, 설계상 무해 1, [측정](#opengrep-규칙-측정)). 실제 애플리케이션의 정확도를 재지 못했거나 낮으므로, high로 두면 오탐이 목록과 분류의 맨 앞에 선다. 상한을 올리려면 실제 애플리케이션에서 잰 보고 전용 근거가 있어야 한다. 분류가 `problem`으로 보고 검증이 지지한 묶음은 검증이 정한 심각도를 가진 모델 finding이 되므로, 실제 흐름은 이 상한 때문에 낮아지지 않는다(`TestOpengrepDiagnosticTriage`).
+  - 규칙을 더하면 계열과 상한을 정해야 한다(`TestSeverityCoversEveryRule`).
+- SpotBugs 표 2는 [엔진 중복](#엔진-중복-1)에서 taint 팩과 같은 줄을 보고한 경로(`PT_*`)·서블릿 XSS(`XSS_*`) 검출기를 `injection` 계열로 더해 같은 줄 보고를 한 묶음으로 만든다. 기본 심각도는 표에 없던 때와 같은 low 상한이다. 이 검출기가 실제 코드에서 보고하는 것을 재지 않았고, 포함 검사를 거친 음성 fixture에서 `PT_ABSOLUTE_PATH_TRAVERSAL`이 보고됐다. bandit·clang-tidy 표는 바꾸지 않았다.
 
 ### 규칙 문맥과 소스 안 억제
 
@@ -1544,7 +1546,7 @@ gitleaks 탐지는 미검토 낮음 보안 finding이다. 비밀값 엔진은 gi
 ### 관찰
 
 - 범주는 `security`, 원문 등급은 SARIF level(`error`·`warning`), 문구는 규칙 메시지(고정 영어 문장)다. 위치는 SARIF의 주 위치, 곧 규칙의 위험 호출에 일치한 식이다(`os.system(…)` 호출 전체, 측정). 열은 바이트 단위(`column_unit=byte`)다.
-- **결과 순서는 실행마다 같다.** 같은 입력을 `--jobs 4`로 세 번 실행한 SARIF가 바이트까지 같았다(Java 600파일, 결과 168건). 관찰 순서와 `raw_ref`의 결과 번호는 이 순서를 따른다.
+- **결과 순서는 실행마다 같다.** 같은 입력을 `--jobs 4`로 세 번 실행한 SARIF가 바이트까지 같았다(Java 600파일, 결과 168건). 관찰 순서와 `raw_ref`의 결과 번호는 이 순서를 따른다. 실제 엔진 시험 `TestRealOpengrepResultOrder`가 fixture를 세 번 실행해 관찰 순서·결과 pointer·SARIF 바이트가 같은지 본다.
 - `--dataflow-traces`의 흐름 단계는 `related`의 `tool_flow_step`이다. 문구는 CODEYE가 만든 고정 문장(`taint flow step N of M: source|propagation|call|callee parameter|callee return|sink`)이고 코드를 인용하지 않는다. 각 단계는 원시 stream의 자기 byte 범위를 가리킨다. 64단계를 넘으면 앞 63단계와 마지막 단계만 남긴다(`flow_steps_truncated`).
 - envelope의 `rules`에 이번 실행이 읽은 규칙의 ID, 짧은 설명, CWE가 있다. `target.properties`는 `analysis=intra_file_taint`, `sources=request_input`, `rule_languages`(넘긴 규칙 파일)다.
 - **원시 stream에는 소스 코드가 있다.** SARIF는 일치한 코드 조각과 흐름 단계의 원문을 담는다(`tool_output_holds_source_text`). 관찰과 보고서 문구에는 넣지 않는다. 코드 제외 내보내기는 원시 stream을 내보내지 않는다.
@@ -1573,6 +1575,13 @@ gitleaks 탐지는 미검토 낮음 보안 finding이다. 비밀값 엔진은 gi
 
 ### Opengrep 규칙 측정
 
+**결론.**
+
+- 이 팩이 믿을 만하게 찾는 것은 한 파일 안에서 요청 입력이 규칙이 아는 위험 호출에 닿는 흐름이다. 한 파일짜리 벤치마크 사례(Juliet Java의 한 파일 변형)에서 명령·SQL·HTML 재현율은 0.95이고 오탐은 0건이었다.
+- 찾지 못하는 것은 파일을 건너는 모든 흐름(Juliet Java 여러 파일 변형 540건을 모두 놓침)과 [출발점 표](#opengrep-패턴taint-팩)에 적은 것 밖의 프레임워크 입력이다.
+- 실제 애플리케이션 27개에서는 실제 흐름을 하나도 찾지 못했고, 오탐이거나 설계상 무해한 진단 10건(오탐 9, 무해 1)을 냈다.
+- 그래서 이 팩은 진단마다 [분류](REVIEW.md#도구-진단-분류)가 필요한 선택형 깊이 분석기다. 결과가 없다는 것은 보안 검사 범위의 근거가 아니다. 기본 심각도도 이에 맞춰 낮췄다([기본 심각도](#기본-심각도)).
+
 모델 호출 없이 규칙 팩 그대로(`TestRealOpengrepMeasureDirectory`, TC-303) 레이블 벤치마크와 공개 웹 애플리케이션을 실행해 쟀다. Opengrep 2.0.0, Linux x86-64. 제3자 소스는 저장소에 넣지 않았고 아래는 집계와 공개 프로젝트 이름뿐이다.
 
 **분할과 오염.** 결과를 보기 전에 개발 부분과 보고 전용 부분을 정했다.
@@ -1590,7 +1599,7 @@ gitleaks 탐지는 미검토 낮음 보안 finding이다. 비밀값 엔진은 gi
 
 보고 전용 자료로 규칙을 고치지는 않았지만, 그렇지 않았다고 보일 방법이 없다. 그래서 **아래 OWASP 두 벤치마크와 Juliet C/C++의 홀수 부분, 처음 정한 보고 전용 애플리케이션은 모두 개발 숫자로 센다.**
 
-규칙을 마지막으로 고친 뒤 처음 보는 자료를 따로 정해 최종 보고 전용으로 썼다. 레이블 집합인 Juliet Java 1.3과 애플리케이션 열 개(아래 표의 "새 보고 전용")다. 이 자료를 본 뒤에는 Java 규칙을 고치지 않는다. 예외가 하나 있다. C 규칙의 `recvfrom` 수정(아래 Juliet C/C++)은 h2o를 처음 실행한 뒤 fixture에서 찾아 고쳤다. h2o 결과를 보고 고친 것이 아니고, 고친 뒤 다시 실행한 h2o 결과도 같았다. Juliet Java는 Java 규칙만 쓰므로 이 수정과 관계없다. Python·C/C++용으로 보지 않은 레이블 집합은 따로 찾지 않았다. Juliet C/C++의 다른 출발점(환경변수, 파일, 콘솔)은 규칙의 요청 입력 출발점이 아니다.
+규칙을 마지막으로 고친 뒤 처음 보는 자료를 따로 정해 최종 보고 전용으로 썼다. 레이블 집합인 Juliet Java 1.3과 애플리케이션 아홉 개(아래 표의 "새 보고 전용")다. 이 자료를 본 뒤에는 규칙을 고치지 않았다. 처음에는 h2o를 더해 열 개였지만, h2o를 처음 실행한 뒤 C 규칙의 `recvfrom` 수정(아래 Juliet C/C++)이 있었다. fixture에서 찾은 수정이고 고친 뒤 다시 실행한 h2o 결과도 같았지만, 그 실행 뒤에 규칙이 바뀌었으므로 h2o는 개발 숫자로 센다. Juliet Java는 Java 규칙만 쓰므로 이 수정과 관계없다. Python·C/C++용으로 보지 않은 레이블 집합은 따로 찾지 않았다. Juliet C/C++의 다른 출발점(환경변수, 파일, 콘솔)은 규칙의 요청 입력 출발점이 아니다.
 
 **레이블 벤치마크.** 사례는 그 범주의 규칙이 시험 파일 안에서 결과를 냈으면 검출이다. 범주는 규칙이 다루는 것만 셌다.
 
@@ -1701,9 +1710,10 @@ Juliet은 함수 단위로 셌다(`bad` 함수의 결과는 TP, `good` 함수의
 | 새 보고 전용 | Go | filebrowser/filebrowser (`833d9088`, Apache-2.0) | 181 | 0 | |
 | 새 보고 전용 | Go | gogs/gogs (`c2380640`, MIT) | 691 (3) | 0 | |
 | 새 보고 전용 | Rust | qdrant/qdrant (`23065a0b`, Apache-2.0) | 2344 (35) | 0 | |
-| 새 보고 전용 | C | h2o/h2o (`d3e43fcf`, MIT) | 761 (26) | 0 | |
+| 새로 정했으나 개발로 셈 | C | h2o/h2o (`d3e43fcf`, MIT) | 761 (26) | 0 | 첫 실행 뒤 C 규칙이 바뀌어 개발로 옮겼다(위 분할). 바뀐 규칙으로 다시 실행해도 0건이다 |
 
-- v2 진단은 모두 10건이고 실제 흐름은 없다. 개발 3건은 무해 1, 오탐 2다. 처음 정한 보고 전용(개발로 셈) 5건과 새 보고 전용 2건은 모두 오탐이다.
+- v2 진단은 모두 10건이고 실제 흐름은 없다. 개발 3건은 무해 1, 오탐 2다. 처음 정한 보고 전용(개발로 셈) 5건은 모두 오탐이다. h2o는 0건이다.
+- 새 보고 전용 애플리케이션 아홉 개(Python 2, Java 2, JS/TS 2, Go 2, Rust 1)의 진단은 2건(netbox)이고 둘 다 오탐이다. 실제 흐름은 0건이다.
 - 애플리케이션 27개에서 실제 결함을 하나도 찾지 못했다. 그래서 애플리케이션 측정은 오탐을 보여 줄 뿐이고 재현율의 근거가 아니다. 진단이 없는 애플리케이션에 흐름이 없다는 뜻도 아니다.
 - 언어·규칙별 v2 진단:
   - Python 경로 3, Python HTML 2.

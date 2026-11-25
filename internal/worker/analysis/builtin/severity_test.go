@@ -49,6 +49,11 @@ func TestDefaultSeverityByFamily(t *testing.T) {
 		{cpp.CppcheckID, cpp.CppcheckRulePackID, cpp.CppcheckRulePackVersion, "someNewCheck", "style", severity.Info, "style"},
 		{cpp.CppcheckID, cpp.CppcheckRulePackID, cpp.CppcheckRulePackVersion, "someNewCheck", "", severity.Low, ""},
 		{"python.import_linter", "codeye-import-linter", "1", "any contract", "", severity.Low, "maintainability"},
+		// SpotBugs path and servlet XSS reports merge as injection but keep
+		// the low they had as unknown rules; SQL keeps high.
+		{"java.spotbugs", "codeye-java-spotbugs", "1", "PT_RELATIVE_PATH_TRAVERSAL", "", severity.Low, "injection"},
+		{"java.spotbugs", "codeye-java-spotbugs", "1", "XSS_REQUEST_PARAMETER_TO_SERVLET_WRITER", "", severity.Low, "injection"},
+		{"java.spotbugs", "codeye-java-spotbugs", "1", "SQL_NONCONSTANT_STRING_PASSED_TO_EXECUTE", "", severity.High, "injection"},
 	} {
 		got := DefaultSeverity(c.analyzer, c.pack, c.version, c.rule, c.grade)
 		if got.Severity != c.want || got.Family != c.family {
@@ -65,6 +70,18 @@ func TestDefaultSeverityByFamily(t *testing.T) {
 	for _, r := range severity.Reasons() {
 		if r == "" {
 			t.Fatal("empty reason")
+		}
+	}
+	// A capped severity has its own fixed reason, one Reasons lists.
+	capped := DefaultSeverity("java.spotbugs", "codeye-java-spotbugs", "1", "PT_ABSOLUTE_PATH_TRAVERSAL", "")
+	if !capped.Capped || !slices.Contains(severity.Reasons(), severity.Reason(capped)) || severity.Reason(capped) == severity.Reason(severity.Result{Family: "injection"}) {
+		t.Fatalf("capped: %+v %q", capped, severity.Reason(capped))
+	}
+	// A cap must be a severity below the family's.
+	for _, c := range []string{severity.High, "critical", "x"} {
+		tb := severity.Table{Analyzer: "a", RulePack: "p", RulePackVersions: []string{"1"}, Version: "1", Rules: []severity.Rule{{Pattern: "r", Family: "injection", Cap: c}}}
+		if tb.Validate() == "" {
+			t.Errorf("cap %s accepted", c)
 		}
 	}
 }

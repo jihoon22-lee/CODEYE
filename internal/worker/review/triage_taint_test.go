@@ -146,7 +146,7 @@ func TestOpengrepDiagnosticTriage(t *testing.T) {
 	}
 	for _, g := range sent {
 		want := map[string][]int{"a.go": {13, 14}, "b.go": {14, 19}}[g.Path]
-		if g.DefaultSeverity != severity.High || !slices.Equal(g.Tools, []string{opengrep.AnalyzerID}) || len(g.Examples) != 1 {
+		if g.DefaultSeverity != severity.Medium || !slices.Equal(g.Tools, []string{opengrep.AnalyzerID}) || len(g.Examples) != 1 {
 			t.Fatalf("group %+v", g)
 		}
 		var lines []int
@@ -201,8 +201,8 @@ func TestOpengrepDiagnosticTriage(t *testing.T) {
 	for _, g := range d.Groups {
 		tf := toolFinding[g.ObservationIDs[0]]
 		// The tool finding keeps the fixed Korean rule description and the
-		// table's high default, whatever the triage says.
-		if !strings.HasPrefix(tf.Impact, "요청 입력이") || tf.Severity != "high" {
+		// table's medium cap, whatever the triage says.
+		if !strings.HasPrefix(tf.Impact, "요청 입력이") || tf.Severity != "medium" {
 			t.Fatalf("tool finding %s: %q %s", tf.ID, tf.Impact, tf.Severity)
 		}
 		switch g.Classification {
@@ -211,7 +211,9 @@ func TestOpengrepDiagnosticTriage(t *testing.T) {
 			if !ok || f.Validation != report.ValidationSupported || g.Bucket != report.TriageAttention || len(f.Locations) == 0 || f.Locations[0].Path != "a.go" {
 				t.Fatalf("problem group %+v, finding %+v", g, f)
 			}
-			if strings.HasPrefix(f.Impact, "요청 입력이") || f.Severity == "critical" {
+			// The verified model finding has the severity verify gave it, so
+			// the tool default's cap does not hide a real flow.
+			if strings.HasPrefix(f.Impact, "요청 입력이") || f.Severity != "high" {
 				t.Fatalf("candidate finding %q %s", f.Impact, f.Severity)
 			}
 		case record.TriageHarmless:

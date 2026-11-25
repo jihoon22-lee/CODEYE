@@ -7,23 +7,31 @@ import (
 )
 
 // ruleFamilies maps the last part of a rule ID (codeye.<language>.<rule>)
-// to its family (docs/ANALYZERS.md#기본-심각도). Every rule reports a flow
-// from request input to a dangerous call, so none is a style note:
+// to its family and the cap the table holds it to
+// (docs/ANALYZERS.md#기본-심각도):
 //   - command, SQL, path, code evaluation, deserialization and HTML output
 //     put request bytes into a command, query, file name, code or page:
-//     injection (high), the family bandit, SpotBugs, clang-tidy and ESLint
-//     use for the same constructs, so triage groups their same-line reports;
+//     injection, the family bandit, SpotBugs, clang-tidy and ESLint use for
+//     the same constructs, so triage groups their same-line reports;
 //   - SSRF lets the request choose the target of an outbound request; what
 //     that exposes depends on what the server can reach, so it is a
-//     security weakness (medium) and not merged with another tool's rule.
-var ruleFamilies = map[string]string{
-	"command-injection":      "injection",
-	"sql-injection":          "injection",
-	"path-traversal":         "injection",
-	"code-evaluation":        "injection",
-	"unsafe-deserialization": "injection",
-	"html-injection":         "injection",
-	"ssrf":                   "security_weakness",
+//     security weakness and not merged with another tool's rule.
+//
+// The caps hold every rule below its family: high recall without false
+// alarms was measured only on single-file benchmark code, and on 27 real
+// applications the pack raised 10 diagnostics, none a real flow (9 false
+// alarms, 1 harmless by design). Injection rules are therefore at most
+// medium and SSRF at most low; raising a cap needs report-only evidence on
+// real applications. A triage problem verdict that verify supports still
+// yields a model finding with its own severity.
+var ruleFamilies = map[string]severity.Rule{
+	"command-injection":      {Family: "injection", Cap: severity.Medium},
+	"sql-injection":          {Family: "injection", Cap: severity.Medium},
+	"path-traversal":         {Family: "injection", Cap: severity.Medium},
+	"code-evaluation":        {Family: "injection", Cap: severity.Medium},
+	"unsafe-deserialization": {Family: "injection", Cap: severity.Medium},
+	"html-injection":         {Family: "injection", Cap: severity.Medium},
+	"ssrf":                   {Family: "security_weakness", Cap: severity.Low},
 }
 
 // Severity is the default-severity table of the codeye-taint rule pack:
@@ -37,8 +45,9 @@ var Severity = severity.Table{
 func severityRules() []severity.Rule {
 	var out []severity.Rule
 	for _, id := range RuleIDs() {
-		if f, ok := ruleFamilies[id[strings.LastIndex(id, ".")+1:]]; ok {
-			out = append(out, severity.Rule{Pattern: id, Family: f})
+		if r, ok := ruleFamilies[id[strings.LastIndex(id, ".")+1:]]; ok {
+			r.Pattern = id
+			out = append(out, r)
 		}
 	}
 	return out

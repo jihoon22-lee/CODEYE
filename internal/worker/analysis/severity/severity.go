@@ -75,6 +75,11 @@ func FamilyOf(name string) (Family, bool) {
 type Rule struct {
 	Pattern string
 	Family  string
+	// Cap is the highest default severity of the rule's diagnostics ("" =
+	// the family's). A table sets it when what the rule was measured to
+	// report does not support the family's severity (the rationale is next
+	// to the table); the family still decides same-line merging.
+	Cap string
 }
 
 func (r Rule) matches(id string) bool {
@@ -114,6 +119,9 @@ type Result struct {
 	// Mismatch says the analyzer's table exists but was written for
 	// another rule-pack version.
 	Mismatch bool
+	// Capped says the table rule's Cap is below the family's severity:
+	// Severity is the cap and the reason says so.
+	Capped bool
 }
 
 // Known reports whether a family decided the severity.
@@ -131,10 +139,10 @@ func Lookup(tables []Table, analyzer, rulePack, rulePackVersion, rule, grade str
 			out.Mismatch = true
 			continue
 		}
-		name := ""
+		name, limit := "", ""
 		for _, r := range t.Rules {
 			if r.matches(rule) {
-				name = r.Family
+				name, limit = r.Family, r.Cap
 				break
 			}
 		}
@@ -148,7 +156,11 @@ func Lookup(tables []Table, analyzer, rulePack, rulePackVersion, rule, grade str
 		if !ok {
 			return Result{Severity: Low, Table: t.ID()}
 		}
-		return Result{Severity: f.Severity, Family: f.Name, Table: t.ID()}
+		res := Result{Severity: f.Severity, Family: f.Name, Table: t.ID()}
+		if limit != "" && Rank(limit) < Rank(f.Severity) {
+			res.Severity, res.Capped = limit, true
+		}
+		return res
 	}
 	return out
 }
@@ -173,9 +185,16 @@ const (
 	ReasonMismatch = "기본 심각도 low: 이 진단을 만든 규칙 팩 버전에 맞는 심각도 표가 없다. 도구가 표시한 원문 등급은 관찰에 그대로 남고 이 위치의 영향은 검토하지 않았다."
 )
 
+// cappedSuffix ends the reason of a severity a table rule's Cap held below
+// the family's.
+const cappedSuffix = "'에 속하지만, 이 규칙이 실제 코드에서 보고하는 것의 정확도가 계열 등급을 뒷받침한다는 측정이 없어 분석기 규칙 팩의 심각도 표가 계열보다 낮게 정한 등급이다. 구조화 데이터로만 정했고 이 위치의 영향은 검토하지 않았다. 도구가 표시한 원문 등급은 관찰에 그대로 남는다."
+
 // Reason is the fixed sentence that explains r.
 func Reason(r Result) string {
 	if f, ok := FamilyOf(r.Family); ok {
+		if r.Capped {
+			return reasonPrefix + f.Label + cappedSuffix
+		}
 		return reasonPrefix + f.Label + reasonSuffix
 	}
 	if r.Mismatch {
@@ -189,6 +208,9 @@ func Reasons() []string {
 	out := []string{ReasonUnknown, ReasonMismatch}
 	for _, f := range families {
 		out = append(out, reasonPrefix+f.Label+reasonSuffix)
+		if f.Severity != Info {
+			out = append(out, reasonPrefix+f.Label+cappedSuffix)
+		}
 	}
 	return out
 }
@@ -209,15 +231,20 @@ func Rank(s string) int {
 }
 
 // Validate reports the first malformed part of a table: an unknown family,
-// an empty or repeated pattern, a table without its rule pack.
+// an empty or repeated pattern, a cap that is not below its family's
+// severity, a table without its rule pack.
 func (t Table) Validate() string {
 	if t.Analyzer == "" || t.RulePack == "" || len(t.RulePackVersions) == 0 || t.Version == "" {
 		return "table identity"
 	}
 	seen := map[string]bool{}
 	for _, r := range t.Rules {
-		if _, ok := FamilyOf(r.Family); !ok {
+		f, ok := FamilyOf(r.Family)
+		if !ok {
 			return "family " + r.Family
+		}
+		if r.Cap != "" && (Rank(r.Cap) == 0 || Rank(r.Cap) >= Rank(f.Severity)) {
+			return "cap " + r.Pattern
 		}
 		if r.Pattern == "" || r.Pattern == "*" || seen[r.Pattern] {
 			return "pattern " + r.Pattern

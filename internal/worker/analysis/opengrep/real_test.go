@@ -66,6 +66,38 @@ func TestRealOpengrepFixtures(t *testing.T) {
 	capture(t, fx.Job.Scratch, res.Executions[len(res.Executions)-1].Result)
 }
 
+// The result order does not depend on how the Jobs workers were scheduled:
+// three scans of the fixtures give the observations in the same order with
+// the same raw result pointers, and the same SARIF bytes.
+func TestRealOpengrepResultOrder(t *testing.T) {
+	a, err := New(Settings{Executable: testOpengrep(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var first []string
+	var firstLog []byte
+	for run := range 3 {
+		fx := anypacktest.New(t, filepath.Join(t.TempDir(), "src"), fixtureFiles(t), domain.Scope{})
+		res := packtest.RunTask(t, a, fx.Job, Name, &executor.Executor{})
+		doc, _ := anypacktest.ReadEnvelope(t, fx.Job, res)
+		if res.Status != domain.TaskSucceeded || len(doc.Observations) == 0 {
+			t.Fatalf("run %d: %s/%s", run, res.Status, res.Reason)
+		}
+		var got []string
+		for _, o := range doc.Observations {
+			got = append(got, strings.Join([]string{o.RuleID, o.Location.Path, strconv.Itoa(o.Location.StartLine), strconv.Itoa(o.Location.StartCol), o.RawRef.JSONPointer}, " "))
+		}
+		log := res.Executions[len(res.Executions)-1].Result.Stdout.Data
+		if run == 0 {
+			first, firstLog = got, log
+			continue
+		}
+		if !slices.Equal(got, first) || !bytes.Equal(log, firstLog) {
+			t.Fatalf("run %d differs from the first: %d vs %d observations", run, len(got), len(first))
+		}
+	}
+}
+
 func assertFixtureResult(t *testing.T, files map[string][]byte, doc obsdoc.Document) {
 	t.Helper()
 	active, suppressed := places(doc)
