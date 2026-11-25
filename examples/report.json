@@ -14,7 +14,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000583",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "a6c9dba35aef2069184151b47ed1edc2f841c4415f5ca18be1b2acd2f66b0bf9",
+      "sha256": "72337e5a3d57f0797f2b5ef17adc99c89473116088740bc09d586e4fd700aca2",
       "size_bytes": 26016,
       "task_key": null
     },
@@ -734,7 +734,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000567",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "a727743c51d33004387b0ec2f730648ef4654c3d44f9b203432b5ab9529d2302",
+      "sha256": "d1696bb4b986b58e48e267efb9dc11a1a90b26656f7c4ae969e2dec923001a02",
       "size_bytes": 3309,
       "task_key": "review.investigate"
     },
@@ -752,7 +752,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000056b",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "203324085b480854fa3cb1326e3421cca78ee484b2016e27df25b869257df6ba",
+      "sha256": "23cefd585bda7c2c5802972b96590adc26962aba28c3b8100b00c1babb5ddb90",
       "size_bytes": 4826,
       "task_key": "review.verify"
     },
@@ -761,7 +761,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000056d",
       "media_type": "application/vnd.codeye.review-scope+json",
       "role": "other",
-      "sha256": "eafbec72f1896a3b2641b0c8db929143441a7b03b7df44e49a80489e6e671622",
+      "sha256": "de08cee6d6bb6273fe13573c35716a7016370052f9305f451866107ca2dd9aab",
       "size_bytes": 2471,
       "task_key": "review.scope"
     },
@@ -770,7 +770,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000057e",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "164d8036cc5152a63ff131928acf74b3b48a981a5045a7cd4e3dc6e9b35d65a3",
+      "sha256": "d77b0e3b856564326d529445ed316b2a05066ade6e00324607109c239e9c66ac",
       "size_bytes": 2692,
       "task_key": "review.triage.t001"
     },
@@ -779,7 +779,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000580",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "816e3596b0aa91e23939ba3463c3149c08bdeb7ef7d025dab794b045771e740f",
+      "sha256": "50a72c706eee26568b7a38ca2dc81a2697b95c953b3fb92ebbfad4c31c8d6f3b",
       "size_bytes": 1248,
       "task_key": "review.verify.t001"
     }
@@ -794,7 +794,7 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "0422e02f9d5a2e18c4103df29257c58df81c726c4985bf035fdc382392b4893d",
+    "input_digest": "45fcb03ae783236d5642a539f376d251399a854d4b0a98ab63a07a4d023e6618",
     "result_manifest_artifact_id": null,
     "version": "24"
   },
@@ -967,7 +967,7 @@
           "slices": []
         }
       ],
-      "request_bytes_sent": 95461,
+      "request_bytes_sent": 96731,
       "scope": {
         "key": "review.scope",
         "result": "accepted",
@@ -977,7 +977,7 @@
     },
     "pack_id": "review",
     "pack_version": "2.10.0",
-    "request_bytes": 95461,
+    "request_bytes": 96731,
     "roles": [
       {
         "key": "review.investigate",
@@ -1211,9 +1211,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "9d28e79ec2af5ec9a99377a7316d5fa79ed6ae374d2b777c745405b6f93adcb1",
+        "pack_sha256": "5d1d9671dad9cb9e3c65ee9bb3f90ec2a1cc25fadccc976004dc6ac0dfd2d5ed",
         "pack_version": "2.10.0",
-        "request_sha256": "07abb26ebfacea5d87c9ace8b29d0b0059d77b0f230250262a0f0c885b5b13a7",
+        "request_sha256": "7dc5468c7d26b0852a13dd372f5f55331cf76387e13c7e6b883cf4b8bf43e865",
         "role": "investigate",
         "task_key": "review.investigate"
       },
@@ -1244,9 +1244,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "0fcedaf7f514ba017e0b31dc98bade94121d477f52afd54c620e8452e441d17b",
+        "pack_sha256": "2f7ea0691be686908eca79f781bf1ee2313c0c7ca48e67f8eb77278538078aaf",
         "pack_version": "2.10.0",
-        "request_sha256": "c40c71e46a0433283e48e501133823b6cb7864de9a91e313dcc57198021b7437",
+        "request_sha256": "2ff0c8bfbfe13701d85c0389a089ed61ab353823378cd06b3e553c7bd8061c82",
         "role": "triage",
         "task_key": "review.triage.t001"
       }

@@ -381,7 +381,7 @@
       "opencode_version": "1.19.5",
       "pack_id": "review",
       "pack_version": "2.10.0",
-      "pack_sha256": "0fcedaf7f514ba017e0b31dc98bade94121d477f52afd54c620e8452e441d17b",
+      "pack_sha256": "2f7ea0691be686908eca79f781bf1ee2313c0c7ca48e67f8eb77278538078aaf",
       "pack_files": [
         "00-core.md",
         "domains.md",
@@ -389,10 +389,10 @@
         "pack.yaml",
         "triage.md"
       ],
-      "request_sha256": "92731bec57356a90844d30e6418775b334a295aaba81368bc16dab6ff2e190f4",
-      "request_bytes": 21645,
+      "request_sha256": "71e8d1e7f4aa6eaad5109b00c57a6b215393425eb5bddade6d0414a414ef9377",
+      "request_bytes": 23129,
       "usage": {
-        "input": 7830,
+        "input": 8059,
         "output": 50
       },
       "attempt": 1,

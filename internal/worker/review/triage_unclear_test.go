@@ -288,3 +288,43 @@ func triageRequestOf(t *testing.T) []triageGroupInput {
 	runTriageReport(t, script, 0, Budget{})
 	return sent
 }
+
+// A diagnostic of the unused-value family is a lead: the request names the
+// family (rule_families) so the instruction can refer to it without a tool
+// rule, and the two answers the instruction asks for are accepted as they
+// are: a problem that states the concrete input and the result against the
+// promised one, a harmless one that shows the value is unused by design.
+func TestUnusedValueFamilyAnswersAreAccepted(t *testing.T) {
+	var families [][]string
+	script := triageReviewScript(t)
+	script["triage"] = func(n int, q opencode.Request) opencode.Reply {
+		var in triageCall
+		if err := json.Unmarshal(q.Input, &in); err != nil {
+			t.Fatal(err)
+		}
+		answers, order := triageAnswers(t, n, q)
+		for _, g := range in.Groups {
+			if g.Path == "b.go" && in.Repair == nil {
+				families = append(families, g.Families)
+			}
+			switch g.Path {
+			case "c.go":
+				answers[g.ID] = map[string]any{"group_id": g.ID, "classification": record.TriageProblem, "title": "덮어쓴 값 대신 입력이 반환에 쓰인다",
+					"condition": "p가 가리키는 값이 0이 아닌 경우: 짝 함수는 그 값을 반환하지만 이 함수는 2를 반환한다", "mechanism": "x가 읽힌 직후 상수로 덮어써져 짝 함수의 패턴(읽은 값을 반환)과 달라진다.",
+					"impact": "호출자는 입력과 무관한 값을 받는다.", "improvement": "덮어쓰기를 제거한다.", "reason": "상수 반환이 의도라면 무해하다.", "evidence_ids": []string{g.Context[0]}}
+			case "b.go":
+				answers[g.ID] = map[string]any{"group_id": g.ID, "classification": record.TriageHarmless, "reason": "쓰지 않는 값은 인터페이스를 맞추려 남긴 것이고 짝 함수도 같은 방식으로 무시한다.",
+					"evidence_ids": []string{g.Context[0]}}
+			}
+		}
+		return reply(answers, order)
+	}
+	run := runTriageReport(t, script, 0, Budget{})
+	if len(families) == 0 || !slices.Contains(families[0], "unused_code") {
+		t.Fatalf("rule families of the group: %v", families)
+	}
+	rec := triageRecord(t, run)
+	if len(rec.Calls) != 1 || len(rec.Calls[0].OutputErrors) != 0 {
+		t.Fatalf("calls %+v", rec.Calls)
+	}
+}

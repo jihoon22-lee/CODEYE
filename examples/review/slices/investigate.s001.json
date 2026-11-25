@@ -29,7 +29,7 @@
     {
       "source": "review.scope",
       "state": "accepted",
-      "sha256": "6f5076d1afe380a9eb10ff3ed08cb4b9f22e01b18d73c4f9c2a6292694467b0b"
+      "sha256": "fb1fc94b08a8f31296d4609cc61cca7c951a4f754ec21fd067ddc3bf2070e77d"
     }
   ],
   "evidence": [
@@ -123,7 +123,7 @@
       "opencode_version": "1.19.5",
       "pack_id": "review",
       "pack_version": "2.10.0",
-      "pack_sha256": "b30e3943706d277590d3d345c68007fc525c0541361cdfaa2f51dcfa5df66e43",
+      "pack_sha256": "0bd71a3fa7ea84d3eeb8c50e5322cc05a106941a96eb0bcee58fc3df17524ca5",
       "pack_files": [
         "00-core.md",
         "domains.md",
@@ -133,8 +133,8 @@
         "languages/python.md",
         "pack.yaml"
       ],
-      "request_sha256": "aab769a173b51adb70ca378c007000f68b6aa4da9df36ddf4f30223ad5c6cc85",
-      "request_bytes": 34671,
+      "request_sha256": "2ccc328382bfaa4883109ce8fa34b5a9eacf605ffeb4b122ebdfb5b39729333b",
+      "request_bytes": 34654,
       "usage": {
         "input": 16589,
         "output": 50

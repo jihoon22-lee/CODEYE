@@ -46,7 +46,11 @@ type triageGroupInput struct {
 	DefaultSeverity string `json:"default_severity"`
 	// PathClass is the class of a path that is not shipped code; absent for
 	// shipped code (record.PathClass).
-	PathClass string            `json:"path_class,omitempty"`
+	PathClass string `json:"path_class,omitempty"`
+	// Families are the rule families (the severity tables') of the group's
+	// diagnostics, so that the instruction can speak of a kind of diagnostic
+	// without naming tool rules.
+	Families  []string          `json:"rule_families"`
 	Count     int               `json:"diagnostics"`
 	CrossTool bool              `json:"cross_tool,omitempty"`
 	Path      string            `json:"path"`
@@ -733,6 +737,12 @@ func (s *roleStage) triageRequest(bin []*triageGroup) ([]triageSent, []record.Ex
 			Path: g.unit.entry.Path, Context: t.context, Examples: []triageDiagInput{}}
 		if in.DefaultSeverity == "" {
 			in.DefaultSeverity = "low"
+		}
+		in.Families = []string{}
+		for _, d := range g.diags {
+			if d.def.Family != "" {
+				in.Families = addLim(in.Families, d.def.Family)
+			}
 		}
 		for j, d := range g.diags {
 			in.Lines = append(in.Lines, d.obs.Location.StartLine)

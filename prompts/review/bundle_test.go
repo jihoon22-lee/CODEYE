@@ -184,9 +184,9 @@ func TestGoSelectionDigestsPinned(t *testing.T) {
 	want := map[string]string{
 		"environment": "c7fe033a9b9b174e605e959a50f565bc6b22171bfa4cd600b7586069dc0f0e83",
 		"documents":   "bfd65e2c623fb7950d8a1d740445fdb3e863f729fce0f58c41c700902c595462",
-		"investigate": "9d28e79ec2af5ec9a99377a7316d5fa79ed6ae374d2b777c745405b6f93adcb1",
+		"investigate": "5d1d9671dad9cb9e3c65ee9bb3f90ec2a1cc25fadccc976004dc6ac0dfd2d5ed",
 		"interpret":   "0f085b48a9c0e7a37c2c27c6096494e25c84e2c3dd061f244e42eaa1c4e0fb88",
-		"triage":      "0fcedaf7f514ba017e0b31dc98bade94121d477f52afd54c620e8452e441d17b",
+		"triage":      "2f7ea0691be686908eca79f781bf1ee2313c0c7ca48e67f8eb77278538078aaf",
 		"verify":      "f34909e035ecf7bca46aafd021ff978510e11bb64e8b666cb4d213edabb67dfa",
 		"contract":    "78a1f4df25ad2788b37fba370bc55f0cf3d2332e4453a8d0f7ff5ad8ea83cbee",
 	}
