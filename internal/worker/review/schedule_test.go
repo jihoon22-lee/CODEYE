@@ -128,8 +128,17 @@ type pairsFixture struct {
 // follow-up and triage slots, at the smallest request budget.
 func newPairsFixture(t *testing.T, files, fns, ceiling int) *pairsFixture {
 	t.Helper()
+	return newPairsFixtureWith(t, files, fns, ceiling, nil)
+}
+
+// newPairsFixtureWith is newPairsFixture with more files in the tree.
+func newPairsFixtureWith(t *testing.T, files, fns, ceiling int, extra map[string]string) *pairsFixture {
+	t.Helper()
 	tree, names, diags := admissionTree(files, fns)
 	tree["README.md"] = "# Triage\n\nThe functions return the larger of two values.\n"
+	for name, text := range extra {
+		tree[name] = text
+	}
 	j := treeJob(t, tree)
 	j.RunID, j.AttemptID = "0195f3a0-0000-7000-8000-000000000a01", "0195f3a0-0000-7000-8000-000000000a02"
 	script := triageReviewScript(t)
@@ -636,6 +645,62 @@ func TestPairsVerifyWithoutCallsAndTriageRetries(t *testing.T) {
 	if len(emptied) < 2 || retried == 0 {
 		t.Fatalf("%d emptied slots, %d triage slots that asked again (calls %v): want both", len(emptied), retried, per)
 	}
+}
+
+// TC-312: a slot whose every candidate cites test code alone sets them all
+// aside: its verification makes no call, records candidate_not_shipped, and
+// the units after it are decided as in sequential execution. The ceiling
+// is low enough that later decisions wait for the units before them.
+func TestPairsVerifySetsAsideEveryCandidate(t *testing.T) {
+	t.Parallel()
+	extra := map[string]string{}
+	for i := range 8 {
+		name := fmt.Sprintf("f%02d", i+1)
+		extra[name+"_test.go"] = fmt.Sprintf("package triage\n\nimport \"testing\"\n\nfunc Test%s(t *testing.T) {\n\tx := 1\n\tif %s_0(&x, 0) != 1 {\n\t\tt.Fatal(\"larger\")\n\t}\n}\n", strings.ToUpper(name), name)
+	}
+	f := newPairsFixtureWith(t, 8, 40, 16, extra)
+	f.caller.fault = func(q opencode.Request) (opencode.Reply, bool) {
+		if q.Role != "investigate" {
+			return opencode.Reply{}, false
+		}
+		in := decodeAs[investigateInput](t, q)
+		if in.Repair != nil {
+			return opencode.Reply{}, false
+		}
+		for _, e := range in.Scope.Excerpts {
+			if record.PathClass(e.Path) != "" {
+				return asJSON(map[string]any{"candidates": []map[string]any{{"title": "시험 코드의 단언 누락", "condition": "입력이 같은 경우", "mechanism": "단언이 한 경우만 본다.", "impact": "시험이 통과한다.",
+					"improvement": "경우를 더한다.", "counterpoint": "다른 시험이 덮을 수 있다.", "evidence_ids": []string{e.ID}}}}), true
+			}
+		}
+		return opencode.Reply{}, false
+	}
+	ref, waited := checkPairs(t, f, nil)
+	per := map[string]int{}
+	for _, k := range ref.counts {
+		per[k]++
+	}
+	var aside []string
+	for name, b := range ref.files {
+		key := strings.TrimSuffix(name, ".json")
+		if !strings.HasPrefix(key, "review.verify.s") {
+			continue
+		}
+		var rec record.Record
+		if err := json.Unmarshal(b, &rec); err != nil {
+			t.Fatal(err)
+		}
+		if slices.Contains(rec.Limitations, record.LimCandidateNotShipped) {
+			if ref.results[key].Status != domain.TaskSucceeded || per[key] != 0 {
+				t.Fatalf("%s: %v with %d calls, want succeeded without a call", key, ref.results[key], per[key])
+			}
+			aside = append(aside, key)
+		}
+	}
+	if len(aside) == 0 || waited == 0 {
+		t.Fatalf("%d slots set their candidates aside, %d decisions waited (calls %v): want both", len(aside), waited, per)
+	}
+	t.Logf("slots with every candidate set aside: %v", aside)
 }
 
 // scopeOf is the scope artifact review.scope wrote.
