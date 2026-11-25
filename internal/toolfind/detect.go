@@ -280,7 +280,9 @@ func (d *detector) validate(name string, sp spec, path string) outcome {
 		}
 		return outcome{ok: true, version: m[1], tested: true}
 	case kindOpenCode:
-		v, err := d.version(path, "--version")
+		// The probe never lets OpenCode update itself, as every other
+		// CODEYE invocation does not (docs/REVIEW.md#opencode-어댑터-계약).
+		v, err := d.versionWith(path, map[string]string{"OPENCODE_DISABLE_AUTOUPDATE": "1"}, "--version")
 		if err != "" {
 			return outcome{reason: err}
 		}
@@ -288,7 +290,7 @@ func (d *detector) validate(name string, sp spec, path string) outcome {
 		if m == nil {
 			return outcome{reason: "version output not recognized"}
 		}
-		return outcome{ok: true, version: m[1], tested: m[1] == opencode.Version, series: opencode.Version}
+		return outcome{ok: true, version: m[1], tested: opencode.VersionTested(m[1]), series: opencode.TestedVersionList()}
 	}
 	if out, ok := d.validateManager(name, path); ok {
 		return out
@@ -341,6 +343,11 @@ var (
 
 // version runs `<exe> args` and returns the trimmed first output line.
 func (d *detector) version(exe string, args ...string) (string, string) {
+	return d.versionWith(exe, nil, args...)
+}
+
+// versionWith is version with extra environment variables.
+func (d *detector) versionWith(exe string, extra map[string]string, args ...string) (string, string) {
 	if d.probeDir == "" {
 		return "", "no probe directory"
 	}
@@ -358,6 +365,9 @@ func (d *detector) version(exe string, args ...string) (string, string) {
 		return "", "probe directory is not writable"
 	}
 	env := map[string]string{"PATH": filepath.Dir(resolved), "LANG": "C.UTF-8"}
+	for k, v := range extra {
+		env[k] = v
+	}
 	if runtime.GOOS == "windows" {
 		if v := os.Getenv("SystemRoot"); v != "" {
 			env["SystemRoot"] = v

@@ -39,12 +39,15 @@ var _ = template.Must(htmlSectionsTemplate.Parse(`
 <ul class="report-actions-notices">{{range .Notices}}<li>{{template "item" .}}</li>{{end}}</ul>
 </div>{{end}}
 {{template "candidate_fold" .Candidates}}{{template "candidate_fold" .Secondary}}
-{{with .Diagnostics}}{{if .Groups}}<details class="card report-disclosure" id="{{.ID}}"><summary>{{reportIcon "chevron-down"}} {{.Label}}</summary>
+{{with .Diagnostics}}{{if or .Groups .Sections}}<details class="card report-disclosure" id="{{.ID}}"><summary>{{reportIcon "chevron-down"}} {{.Label}}</summary>
 <p>{{.Note}}</p>{{with .Unplaced}}<p>{{.}}</p>{{end}}
-<div class="report-diag-groups">{{range .Groups}}<details class="report-diag-group"><summary><span class="report-diag-name"><code>{{.Analyzer}}</code> <code>{{.Rule}}</code></span> <span class="report-diag-count">{{.Count}}</span>{{with .Severity}} <span class="report-diag-severity">{{.}}</span>{{end}}{{with .Description}}<span class="report-diag-description">{{.}}</span>{{end}}</summary>
-<ul>{{range .Places}}<li><code class="report-path-text">{{.}}</code></li>{{end}}</ul>{{with .More}}<p><small>{{.}}</small></p>{{end}}</details>
-{{end}}</div></details>{{end}}{{end}}
+{{if .Groups}}{{template "diag_groups" .Groups}}{{end}}{{range .Sections}}<section class="report-diag-bucket" id="{{.ID}}"><h4>{{.Label}}</h4><p>{{.Note}}</p>{{template "diag_groups" .Groups}}</section>
+{{end}}</details>{{end}}{{end}}
 </section>{{end}}{{end}}{{end}}
+{{define "diag_groups"}}<div class="report-diag-groups">{{range .}}<details class="report-diag-group"><summary><span class="report-diag-name"><code>{{.Analyzer}}</code> <code>{{.Rule}}</code></span> <span class="report-diag-count">{{.Count}}</span>{{with .Severity}} <span class="report-diag-severity">{{.}}</span>{{end}}{{with .Description}}<span class="report-diag-description">{{.}}</span>{{end}}</summary>
+{{if .Notes}}<ul class="report-diag-notes">{{range .Notes}}<li><strong>{{.Label}}</strong>{{with .Text}} {{.}}{{end}}{{range .Places}} <code class="report-path-text">{{.}}</code>{{end}}{{if .Link}} <a href="#{{.Link}}">{{.LinkLabel}}</a>{{end}}</li>{{end}}</ul>{{end}}
+<ul>{{range .Places}}<li><code class="report-path-text">{{.}}</code></li>{{end}}</ul>{{with .More}}<p><small>{{.}}</small></p>{{end}}</details>
+{{end}}</div>{{end}}
 {{define "mismatch_card"}}<article class="card report-action-card report-mismatch-card" id="{{.Anchor}}" data-comparison="{{.Status}}">
 <div class="card-body">
 <header class="report-action-head">

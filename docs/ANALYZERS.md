@@ -417,12 +417,49 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 2. `analyzer.required`가 DB task와 다르거나, DB task가 성공인데 문서가 성공이 아니면 거부한다. 문서가 성공인데 DB가 아니면 DB를 따르고 제약을 남긴다.
 3. 문서의 각 실행은 워커가 기록한 실행이어야 한다. stdout·stderr artifact의 SHA-256·크기, 성공 task의 exit code를 대조한다.
 4. `raw_severity`는 짧은 단어(`^[A-Za-z][A-Za-z0-9_-]{0,31}$`)일 때만 보고서 관찰로 옮긴다. byte가 아닌 열은 0으로 두고 제약을 남긴다.
-5. manifest와 맞고 억제되지 않은 비지표 관찰은 **검토 전 도구 finding**이 된다. severity `low`, validation `unreviewed`, disposition `open`이며 검토 없이는 actionable이 아니다. 문구는 도구 이름이나 코드를 담지 않는 고정 템플릿이다. 억제된 관찰과 지표 관찰은 보고서 관찰로만 남고, 그것을 인용하는 finding은 보고서 검증이 거부한다.
+5. manifest와 맞고 억제되지 않은 비지표 관찰은 **검토 전 도구 finding**이 된다. severity는 [기본 심각도](#기본-심각도) 표가 정하고(builder `22`부터. 그 전 보고서는 모두 `low`), validation `unreviewed`, disposition `open`이며 검토 없이는 actionable이 아니다. 문구는 도구 이름이나 코드를 담지 않는 고정 템플릿이다. 심각도 사유도 표가 정한 고정 문장이다. 억제된 관찰과 지표 관찰은 보고서 관찰로만 남고, 그것을 인용하는 finding은 보고서 검증이 거부한다.
 6. 분석기·규칙·경로·시작 행·시작 열·메시지가 모두 같은 관찰만 한 finding으로 묶는다(TC-09). 도구 사이 자동 병합은 하지 않는다(TC-102).
 7. fingerprint는 공용 `report.ToolFingerprint(analyzer, rule, path, "", message)`(fp2)로 만든다. 팩 decoder가 자기 hash를 만들지 않는다. 줄 이동은 identity를 바꾸지 않는다.
 8. task마다 도구 범위 행(`coverage.tools`)을 하나 만든다. `processed_files`는 DB가 성공으로 받은 task이거나 `not_run`(0)일 때만 센다. `processed_paths`는 성공한 task에만 기록하며, run 비교는 이 경로의 위치만 다시 검사한 것으로 본다. 보고서 `tool_processed_files`는 처리 경로의 합집합이다(같은 파일을 두 분석기가 읽으면 한 번). 처리 수와 경로 수가 다른 행이 있으면 합계를 쓴다. 행에는 `rule_context`를 기록한다.
 
 거부된 envelope는 `artifact_rejected:<key>` 제약이 되고, 그 task는 해석되지 않은 것으로, 처리 파일 수는 미확정으로 처리한다.
+
+### 기본 심각도
+
+도구 finding의 심각도는 분석기 팩마다 둔 표가 정한다([`internal/worker/analysis/severity`](../internal/worker/analysis/severity/severity.go), 팩 디렉터리의 `severity.go`). 모델은 관여하지 않는다. 표는 구조화 데이터만 읽는다. 분석기 ID, envelope의 규칙 팩 ID·버전, 규칙 ID, 도구 원시 등급이다.
+
+1. 표는 규칙 ID(정확히 같은 ID, 또는 `*`로 끝나는 접두사)를 **규칙 계열**에 대응시킨다. 규칙이 표에 없으면 소문자로 바꾼 원시 등급의 대응을 보고, 그것도 없으면 표의 기본 계열을 쓴다. 계열이 심각도를 정한다.
+2. 표는 자기가 쓰인 규칙 팩 버전 목록을 갖는다. envelope의 규칙 팩 버전이 목록에 없으면 표를 쓰지 않고 `low`로 둔다(사유: 규칙 팩 버전이 표와 다름). 규칙 선택을 바꿔 규칙 팩 버전을 올리면 표도 함께 검토해 목록에 넣는다. 표가 없는 분석기, 대응이 없는 규칙도 `low`다.
+3. 원시 등급은 관찰에 그대로 남는다. 표는 원시 등급을 고치지 않는다.
+4. `critical`은 기본값이 될 수 없다. 실행 근거나 사람의 판단이 필요하다.
+5. 보고서 도구 행에는 쓰인 표가 `severity_table`(`<규칙 팩>/<표 버전>`)로 남는다. 표가 없는 행은 이 필드를 생략한다.
+6. 지표(`metrics`)와 비밀값(`secrets`) 분석기는 표를 두지 않는다. 카탈로그의 진단 분석기는 모두 표가 있어야 한다(TC-292).
+7. 계열의 `merge`는 서로 다른 두 도구가 같은 파일·같은 줄에서 그 계열의 규칙을 보고하면 같은 구성으로 본다는 뜻이다. 이 판단은 [도구 진단 분류](REVIEW.md#도구-진단-분류)의 묶음에만 쓰고 finding은 합치지 않는다(TC-102 유지).
+
+| 계열 | 기본 심각도 | 같은 줄 병합 | 근거 |
+|---|---|---|---|
+| `null_dereference` | high | 예 | 경로에 들어오면 프로세스가 멈추거나 정의되지 않은 동작이 된다 |
+| `memory_safety` | high | 예 | 범위 밖 접근·해제 뒤 사용·초기화하지 않은 값은 데이터 손상과 보안 문제로 이어진다 |
+| `undefined_behavior` | high | 예 | 컴파일러와 플랫폼에 따라 결과가 달라 시험으로 드러나지 않을 수 있다 |
+| `concurrency` | high | 예 | 경합·잠금 복사·공유 변수 포획은 재현이 어렵고 데이터를 바꾼다 |
+| `injection` | high | 예 | 외부 입력이 명령·질의·경로·코드로 실행된다 |
+| `resource_leak` | medium | 예 | 오래 실행하면 파일·연결·잠금이 고갈되지만 한 번의 호출은 대개 끝난다 |
+| `unchecked_error` | medium | 예 | 실패가 조용히 사라져 이후 동작이 틀린 상태로 이어질 수 있다 |
+| `exception_handling` | medium | 아니오 | 빈 처리부·너무 넓은 처리는 실패를 숨기지만 영향은 호출 경로마다 다르다 |
+| `logic_error` | medium | 예 | 항상 같은 비교·자기 대입 등은 의도와 다른 동작일 가능성이 높다 |
+| `api_misuse` | medium | 예 | 라이브러리 계약을 어겨 특정 입력에서 잘못된 결과가 난다 |
+| `type_error` | medium | 아니오 | 타입·컴파일 오류는 빌드 문맥에 따라 분석 공백일 수도 있다 |
+| `security_weakness` | medium | 아니오 | 약한 암호·안전하지 않은 설정은 배포 맥락에 따라 위험이 달라진다 |
+| `panic_path` | low | 아니오 | unwrap·panic·assert는 의도한 불변식 표현인 경우가 많다 |
+| `deprecated_api` | low | 아니오 | 지금 동작은 맞고 이후 버전에서 문제가 된다 |
+| `unused_code` | low | 예 | 동작에는 영향이 없거나 작고, 남은 값이 논리 실수를 가리킬 때만 문제다 |
+| `performance` | low | 아니오 | 정확성은 맞고 비용만 늘어난다 |
+| `maintainability` | low | 아니오 | 복잡도·의존 규칙·시험 형태는 변경 비용의 문제다 |
+| `documentation` | info | 아니오 | 문서 주석의 형식이다 |
+| `style` | info | 아니오 | 명명·단순화 제안이다 |
+| `formatting` | info | 아니오 | 서식 차이다 |
+
+팩별 표: go vet(합성 규칙 팩 `codeye-go-vet-default`@1), Staticcheck(`SA5011` 널 역참조, `SA1019` 사용 중단, `SA1*` API 오용, `SA2*` 동시성, `SA4*`·`SA5*` 논리, `SA6*` 성능, `S1*`·`ST1*`·`QF*` 스타일 등), errcheck(오류 무시), gofmt(서식), cppcheck(규칙 ID와 cppcheck 등급 대응), clang-tidy(검사 이름 접두사), GCC 파일 디스크립터 검사(자원 누수), ruff·mypy·pyright·bandit, import-linter·dependency-cruiser(유지보수), ESLint 세 구성과 tsc, cargo check·clippy·rustdoc, PMD·SpotBugs다. 표 목록은 [`builtin.SeverityTables`](../internal/worker/analysis/builtin/severity.go)가 한곳에 모은다.
 
 ### 규칙 문맥과 소스 안 억제
 
@@ -474,7 +511,7 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 
 - 같은 엔진을 두 번 실행하지 않는다(clang-tidy 안의 CSA와 `clang --analyze`, ruff S와 bandit, lizard `-Eduplicate`와 jscpd).
 - 서로 다른 엔진이 같은 줄에서 같은 구성을 보고하는 검사는 기준 분석기 쪽을 남기고 추가 깊이 쪽 검사를 선택에서 뺀다. 판단은 고정 fixture에서 두 도구를 함께 실행해 측정한다. 추가 깊이 쪽만 보고한 변형이 있으면 그 검사는 남긴다. 측정은 그 fixture의 구성에 한정되므로 다른 코드에서 다시 고를 때는 규칙 팩 버전을 올린다.
-- 남은 같은 줄 보고는 각 task의 관찰로 남고 보고서는 도구 사이에서 자동 병합하지 않는다. 같은 원인인지 판단하는 일은 검토 단계에 둔다. 처리 파일은 합집합으로 센다.
+- 남은 같은 줄 보고는 각 task의 관찰로 남고 보고서는 도구 사이에서 자동 병합하지 않는다. 같은 원인인지 판단하는 일은 검토 단계에 둔다. [도구 진단 분류](REVIEW.md#도구-진단-분류)는 같은 선언 단위·같은 줄·병합 계열의 두 도구 진단을 한 묶음으로 모델에 보내고 그 사실을 기록하지만 finding은 도구마다 남는다. 처리 파일은 합집합으로 센다.
 
 ## 의존성 준비
 

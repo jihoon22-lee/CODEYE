@@ -255,8 +255,16 @@ var sensitiveParts = []string{"TOKEN", "SECRET", "PASSWORD", "PASSWD", "API_KEY"
 
 var sensitivePrefixes = []string{"AWS_", "AZURE_", "CODEYE_DB", "ANTHROPIC_", "OPENAI_", "OPENCODE_"}
 
+// switchEnv are flags under a sensitive prefix that carry no secret: the
+// native OpenCode version probe (codeye tools) turns OpenCode's self-update
+// off.
+var switchEnv = map[string]bool{"OPENCODE_DISABLE_AUTOUPDATE": true}
+
 func isSensitiveEnv(key string) bool {
 	k := strings.ToUpper(key)
+	if switchEnv[k] {
+		return false
+	}
 	if sensitiveExact[k] {
 		return true
 	}

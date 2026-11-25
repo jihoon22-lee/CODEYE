@@ -190,11 +190,12 @@ type findingAt struct {
 }
 
 var severityOrder = map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
-var validationOrder = map[string]int{"reproduced": 0, "supported": 1}
 
-// changedItems are the open findings and the diagnostics in the changes,
-// most severe first (reproduced and supported before unconfirmed ones), in
-// the order of the section's items otherwise.
+// changedItems are the open findings and the diagnostics in the changes:
+// by validation class first (reproduced, supported, a triage problem not
+// yet confirmed, other unconfirmed ones; report.ValidationClass), most
+// severe first within a class, in the order of the section's items
+// otherwise.
 func changedItems(r *report.Report, s *report.PullRequestSection) ([]findingAt, []report.Observation) {
 	findings := map[string]report.Finding{}
 	for _, f := range r.Findings {
@@ -220,10 +221,10 @@ func changedItems(r *report.Report, s *report.PullRequestSection) ([]findingAt, 
 	}
 	sort.SliceStable(fs, func(i, j int) bool {
 		a, b := fs[i].f, fs[j].f
-		if sa, sb := rank(severityOrder, a.Severity, 5), rank(severityOrder, b.Severity, 5); sa != sb {
-			return sa < sb
+		if ca, cb := report.ValidationClass(a), report.ValidationClass(b); ca != cb {
+			return ca < cb
 		}
-		return rank(validationOrder, a.Validation, 2) < rank(validationOrder, b.Validation, 2)
+		return rank(severityOrder, a.Severity, 5) < rank(severityOrder, b.Severity, 5)
 	})
 	return fs, os
 }

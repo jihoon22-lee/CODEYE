@@ -43,7 +43,7 @@ func TestAnalyzerDecoderJSTS(t *testing.T) {
 		t.Fatalf("summary %+v", r.Summary)
 	}
 	for _, x := range r.Findings {
-		if x.Validation != "unreviewed" || x.Severity != "low" || x.FingerprintBasis == nil {
+		if x.Validation != "unreviewed" || !defaultSeverityOK(x) || x.FingerprintBasis == nil {
 			t.Fatalf("tool finding %+v", x)
 		}
 		analyzer := x.FingerprintBasis.Analyzer
@@ -113,7 +113,7 @@ func TestESLintPromiseRejectionGuidance(t *testing.T) {
 				continue
 			}
 			found = true
-			if x.Severity != "low" || x.Validation != "unreviewed" || x.Impact != textRejectImpact ||
+			if !defaultSeverityOK(x) || x.Severity != "medium" || x.Validation != "unreviewed" || x.Impact != textRejectImpact ||
 				x.Recommendation.Summary != textRejectAction || len(x.Verification) != 1 || x.Verification[0] != textRejectVerification {
 				t.Fatalf("warning guidance %+v", x)
 			}

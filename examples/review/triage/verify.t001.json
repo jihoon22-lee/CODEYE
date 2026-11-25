@@ -1,0 +1,245 @@
+{
+  "schema_version": "0.8",
+  "pack": {
+    "id": "review",
+    "version": "2.9.0"
+  },
+  "snapshot_manifest_digest": "840681d09d3bb73dce858521d38c9e5a92fed83224e675c8f629d617110adfc7",
+  "run_id": "0195f3a0-0000-7000-8000-000000000a01",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000a02",
+  "stage": "verify",
+  "slice": {
+    "key": "t001",
+    "modules": []
+  },
+  "outcome": "accepted",
+  "upstream": [
+    {
+      "source": "review.documents",
+      "state": "accepted",
+      "sha256": "c4e936e9d1161122838403e513bb51d393c4d041914b751a33854649052ffff8"
+    },
+    {
+      "source": "review.triage.t001",
+      "state": "accepted",
+      "sha256": "aecc3446ad1ab86f61316048d7386de8806516c76e93f2edea6f65ef49b70776"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_65b7cfb225a766c9acf2ce74",
+      "path": "a.go",
+      "sha256": "025a7faed81d5d7cb3f69a99744a80f6f81329676931eb28746b41f7c4ccfc75",
+      "start_line": 1,
+      "end_line": 19,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_fa50fc330a513ea33cfdffad",
+      "path": "c.go",
+      "sha256": "8607231f59e65d153c6540814a3b39e12d045db518d108b50e8ef00417ec7e3c",
+      "start_line": 1,
+      "end_line": 19,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_57128abbe6dae07c7bf1e4c2",
+      "path": "b.go",
+      "sha256": "cbbdd512949f840329a153286408c3cf5056b23ca18e761216ddd78d83a189e9",
+      "start_line": 1,
+      "end_line": 19,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_267090da47dd7034e2c8ce70",
+      "path": "d.go",
+      "sha256": "12da08ec82b21918f455fdb94500cca4483d4132c57a8f8d2c9ff33d94328898",
+      "start_line": 1,
+      "end_line": 19,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_4cb4e084eb0f834538dbc81c",
+      "path": "e.go",
+      "sha256": "62956cc91763cc4435a52604ba9faf6cf84ec22a2a0af8b03d2be2ed2cd761fd",
+      "start_line": 1,
+      "end_line": 19,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_135408264c43e59808fd049e",
+      "path": "f.go",
+      "sha256": "90bfe87d58da20d5d6fe5b7953cb0f22b069765c293b5690522e96b2d3d197fc",
+      "start_line": 1,
+      "end_line": 19,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_e5250ae3b0b81e2069ed7111",
+      "path": "README.md",
+      "sha256": "31e328822ff948929e4c3623423bb1c27e73f23bdfb4bd3e4566a2de65742a87",
+      "start_line": 1,
+      "end_line": 3,
+      "kind": "document"
+    }
+  ],
+  "observations": [
+    {
+      "id": "obs_bb86f70a01992b10fa52",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA5011",
+      "path": "a.go",
+      "start_line": 4
+    },
+    {
+      "id": "obs_00000000000000000001",
+      "task_key": "go-vet",
+      "tool": "go.vet",
+      "rule_id": "nilness",
+      "path": "a.go",
+      "start_line": 4
+    },
+    {
+      "id": "obs_7994bc73932025e8434b",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "c.go",
+      "start_line": 5
+    },
+    {
+      "id": "obs_01423b14db8b7f0b31cb",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "c.go",
+      "start_line": 11
+    },
+    {
+      "id": "obs_0a921e3776ab02f7ad92",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "c.go",
+      "start_line": 17
+    }
+  ],
+  "candidates": [
+    {
+      "id": "triage_1",
+      "title": "SA5011,nilness 진단 위치에서 값이 잘못 쓰인다",
+      "condition": "진단이 가리키는 분기에 들어오는 경우",
+      "impact": "호출자가 잘못된 결과를 받는다.",
+      "improvement": "진단 위치 앞에서 값을 검사한다.",
+      "counterpoint": "호출자가 항상 유효한 값을 넘기면 무해하다.",
+      "evidence_ids": [
+        "ev_65b7cfb225a766c9acf2ce74"
+      ],
+      "origin": "triage",
+      "observation_ids": [
+        "obs_bb86f70a01992b10fa52",
+        "obs_00000000000000000001"
+      ]
+    },
+    {
+      "id": "triage_2",
+      "title": "SA4006 진단 위치에서 값이 잘못 쓰인다",
+      "condition": "진단이 가리키는 분기에 들어오는 경우",
+      "impact": "호출자가 잘못된 결과를 받는다.",
+      "improvement": "진단 위치 앞에서 값을 검사한다.",
+      "counterpoint": "호출자가 항상 유효한 값을 넘기면 무해하다.",
+      "evidence_ids": [
+        "ev_fa50fc330a513ea33cfdffad"
+      ],
+      "origin": "triage",
+      "observation_ids": [
+        "obs_7994bc73932025e8434b",
+        "obs_01423b14db8b7f0b31cb",
+        "obs_0a921e3776ab02f7ad92"
+      ]
+    }
+  ],
+  "verifications": [
+    {
+      "candidate_id": "triage_1",
+      "verdict": "supported",
+      "category": "correctness",
+      "severity": "high",
+      "severity_reason": "nil 인자로 호출하면 프로세스가 멈춘다.",
+      "impact": "nil 인자로 호출하면 panic이 난다.",
+      "valid_conditions": [
+        "호출자가 nil을 넘긴다."
+      ],
+      "invalid_conditions": [],
+      "supporting_evidence_ids": [
+        "ev_65b7cfb225a766c9acf2ce74"
+      ],
+      "counterevidence_ids": [],
+      "unresolved_assumptions": [],
+      "next_verification": [
+        "다른 호출자의 정리 경로를 읽는다."
+      ],
+      "limitations": []
+    },
+    {
+      "candidate_id": "triage_2",
+      "verdict": "refuted",
+      "category": "correctness",
+      "severity": "medium",
+      "severity_reason": "파일 descriptor 수명 문제다.",
+      "impact": "덮어쓴 값은 의도한 상수 반환이다.",
+      "valid_conditions": [],
+      "invalid_conditions": [
+        "함수는 항상 상수를 반환하도록 작성되었다."
+      ],
+      "supporting_evidence_ids": [],
+      "counterevidence_ids": [
+        "ev_fa50fc330a513ea33cfdffad"
+      ],
+      "unresolved_assumptions": [],
+      "next_verification": [
+        "다른 호출자의 정리 경로를 읽는다."
+      ],
+      "limitations": []
+    }
+  ],
+  "limitations": [
+    "caller_expansion_go_only",
+    "caller_expansion_package_functions_only",
+    "model_input_not_secret_screened",
+    "no_callers_found"
+  ],
+  "calls": [
+    {
+      "role": "verify",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_id": "review",
+      "pack_version": "2.9.0",
+      "pack_sha256": "3062b9e6e6e18764caa5013497cecafcb135d9cde85244637e7dc2bf295d804c",
+      "pack_files": [
+        "00-core.md",
+        "domains.md",
+        "languages/go.md",
+        "pack.yaml",
+        "verify.md"
+      ],
+      "request_sha256": "151e7a77107fff57820a312f2bdb7186154b07a41670f1bb4cfcf7262f8cf633",
+      "request_bytes": 17914,
+      "usage": {
+        "input": 5051,
+        "output": 50
+      },
+      "attempt": 1,
+      "outcome": "accepted",
+      "output_errors": []
+    }
+  ]
+}

@@ -124,6 +124,15 @@ var outputCodes = map[string]codeClass{
 	record.CompareCodeRangeMissing: classForm,
 	record.CompareInSlice:          classIntegrity,
 	record.CompareTooMany:          classForm,
+	// Diagnostic triage items: an entry for a group the request did not
+	// offer cannot be bound and is dropped; a group whose integrity fault
+	// remains after the repair is rejected (triage_item_rejected), one with a
+	// fault of form is resolved or left out (triage_item_omitted).
+	errTriageGroupUnknown:   classIntegrity,
+	errTriageGroupDuplicate: classForm,
+	errTriageClassInvalid:   classForm,
+	errTriageNotAtGroup:     classForm,
+	errTriageAnswerMissing:  classForm,
 	// Contract follow-up.
 	"contract_comparison_invalid":      classIntegrity,
 	"contract_evidence_not_new":        classIntegrity,

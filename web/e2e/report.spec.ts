@@ -287,6 +287,14 @@ for (const surface of ['web panel', 'saved HTML']) {
       </div></article>
       <details class="report-more report-action-fold" open><summary>추가 확인이 필요한 후보 1건</summary><div class="report-more-body"><ul class="report-action-list"><li>
         <div class="report-action-list-head"><strong>${long('candidate')}</strong></div><code class="report-path-text">${long('candidate-path')}</code><p><strong>확인 방법</strong> ${long('candidate-check')}</p></li></ul></div></details>
+      <details class="card report-disclosure" id="tool-diagnostics" open><summary>도구 진단 853건 중 238건 판정(문제·무해), 120건 판단 보류 (규칙 41종, 도구 3종)</summary>
+        <p>모델의 분류는 결함 확인이 아니다.</p>
+        <section class="report-diag-bucket" id="tool-diagnostics-harmless"><h4>무해하다고 판단한 진단 3건</h4><p>${long('bucket-note')}</p>
+        <div class="report-diag-groups"><details class="report-diag-group" open><summary><span class="report-diag-name"><code>${long('triage-analyzer')}</code> <code>${long('triage-rule')}</code></span> <span class="report-diag-count">3건</span> <span class="report-diag-severity">기본 심각도 높음</span><span class="report-diag-description">${long('triage-description')}</span></summary>
+          <ul class="report-diag-notes"><li><strong>무해</strong> ${long('triage-reason')} 앞선 검사가 이 경로를 막는다. <code class="report-path-text">${long('triage-location')}</code> <a href="#finding">${long('triage-link')}</a></li>
+            <li><strong>판단 보류</strong> ${'호출자 코드가 입력에 없어 진단의 영향을 판단할 수 없다. '.repeat(12)}<code class="report-path-text">${long('triage-location-2')}</code></li></ul>
+          <ul><li><code class="report-path-text">${long('triage-place')}</code></li></ul></details></div></section>
+      </details>
       </div></section>
       <section class="card report-card report-tab-content"><div class="card-body"><div class="report-finding-workbench" data-selected="true"><section class="report-workbench-detail"><h6 class="report-finding-heading">${long('finding-title')}</h6>
         <div class="finding-body">${source}

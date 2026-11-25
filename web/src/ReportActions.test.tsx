@@ -107,7 +107,7 @@ describe('action-first overview', () => {
     const fold = (title: string) => within(overview).getByText(title).closest('details')!;
     expect(fold(a.candidates(1)).open).toBe(false);
     expect(fold(a.secondary(1)).open).toBe(false);
-    const diagnostics = fold(a.diagnostics(2, 2, 1));
+    const diagnostics = fold(a.diagnosticsTriaged(2, 0, 1, 2, 1));
     expect(diagnostics.open).toBe(false);
     expect(within(diagnostics).getAllByText(a.diagnosticCount(1))).toHaveLength(2);
     expect(diagnostics.textContent).toContain('SA4006');
@@ -177,6 +177,14 @@ describe('action-first overview', () => {
     expect(plan.assessed).toBe(true);
     expect(plan.mismatches.map(m => m.comparison.status)).toEqual(['mismatch', 'partial']);
   });
+  it('lists the confirmed secondary findings before an unconfirmed more severe one', () => {
+    const report = scenario();
+    const fixture = report.findings.find(f => f.id === 'review_fixture')!;
+    fixture.severity = 'low';
+    report.findings.push({ ...structuredClone(fixture), id: 'review_fixture_pending', severity: 'critical', validation: 'unreviewed', observations: [] });
+    report.sections!.codeReview.findings.push('review_fixture_pending');
+    expect(actionPlan(report, report.sections!).secondary.map(f => f.id)).toEqual(['review_fixture', 'review_fixture_pending']);
+  });
   it('opens the evidence of a card in the code analysis tab and names the document comparison', () => {
     const { overview } = overviewOf(scenario());
     fireEvent.click(within(overview.querySelector<HTMLElement>('[data-finding-card="review_second"]')!).getByRole('button', { name: a.evidenceLink(1, 0) }));
@@ -188,6 +196,63 @@ describe('action-first overview', () => {
     const again = overviewOf(scenario()).overview;
     fireEvent.click(within(again.querySelector<HTMLElement>('.report-mismatch-card')!).getByRole('button', { name: a.openComparison }));
     expect(screen.getByRole('tab', { name: t.sections.titles.documents }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('splits the diagnostics by triage result with the default severity, the reason and what was not triaged', () => {
+    const { overview } = overviewOf(parsed('report.json'));
+    const diagnostics = within(overview).getByText(a.diagnosticsTriaged(2, 0, 1, 2, 1)).closest('details')!;
+    expect(diagnostics.textContent).toContain(a.diagnosticsTriageNote);
+    const buckets = [...diagnostics.querySelectorAll<HTMLElement>('.report-diag-bucket')];
+    expect(buckets.map(b => b.dataset.bucket)).toEqual(['attention', 'not_triaged']);
+    const attention = within(buckets[0]);
+    expect(attention.getByText(a.diagnosticBucket.attention(1))).toBeTruthy();
+    expect(buckets[0].textContent).toContain('SA6005');
+    expect(attention.getByText(a.triageClassification.unclear)).toBeTruthy();
+    expect(buckets[0].textContent).toContain('호출자 코드가 입력에 없어 진단의 영향을 판단할 수 없다.');
+    expect(attention.getByText(a.defaultSeverity(t.severity.low))).toBeTruthy();
+    // The diagnostic the interpret role covered is not triaged, and the fold says so.
+    expect(buckets[1].textContent).toContain('SA4006');
+    expect(buckets[1].textContent).toContain(a.diagnosticBucketNote.not_triaged + ' ' + a.diagnosticInterpreted(1));
+  });
+
+  it('keeps a harmless group with its reason and cited code, and a refuted problem with a link to its finding', () => {
+    const report = parsed('report.json');
+    const triage = report.sections!.codeReview.triage!;
+    const g = triage.groups[0];
+    Object.assign(g, { classification: 'harmless', bucket: 'harmless', reason: '앞선 검사가 이 경로를 막는다.', locations: [{ path: 'svc/a/gateway.go', start: 3, end: 9 }] });
+    let { overview } = overviewOf(report);
+    let bucket = overview.querySelector<HTMLElement>('.report-diag-bucket[data-bucket="harmless"]')!;
+    expect(within(bucket).getByText(a.diagnosticBucket.harmless(1))).toBeTruthy();
+    expect(within(bucket).getByText(a.triageClassification.harmless)).toBeTruthy();
+    expect(bucket.textContent).toContain('앞선 검사가 이 경로를 막는다.');
+    expect(bucket.textContent).toContain('svc/a/gateway.go');
+    cleanup();
+    Object.assign(g, { classification: 'problem', bucket: 'refuted', reason: null, locations: [], finding: 'review_investigate_1' });
+    ({ overview } = overviewOf(report));
+    bucket = overview.querySelector<HTMLElement>('.report-diag-bucket[data-bucket="refuted"]')!;
+    expect(within(bucket).getByText(a.diagnosticBucket.refuted(1))).toBeTruthy();
+    expect(within(bucket).getByText(a.triageRefuted)).toBeTruthy();
+    fireEvent.click(within(bucket).getByRole('button', { name: a.openFinding }));
+    expect(screen.getByRole('tab', { name: t.sections.titles.code_review }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('renders an older revision without triage as one list and rejects a triage it cannot place', () => {
+    const doc = example('report.json');
+    delete doc.code_review.diagnostic_triage;
+    doc.tasks = doc.tasks.filter((x: Doc) => !/^review\.(triage|verify)\.t/.test(x.key));
+    const older = parseAnalysisReport(doc, doc.run_id);
+    expect(older.sections!.codeReview.triage).toBeNull();
+    const { overview } = overviewOf(older);
+    const diagnostics = within(overview).getByText(a.diagnostics(2, 2, 1)).closest('details')!;
+    expect(diagnostics.querySelectorAll('.report-diag-bucket')).toHaveLength(0);
+    const broken = (edit: (d: Doc) => void) => {
+      const d = example('report.json');
+      edit(d);
+      return () => parseAnalysisReport(d, d.run_id);
+    };
+    expect(broken(d => { d.code_review.diagnostic_triage.groups[0].observation_ids = ['obs_unknown']; })).toThrow();
+    expect(broken(d => { d.code_review.diagnostic_triage.groups[0].bucket = 'harmless'; })).toThrow();
+    expect(broken(d => { d.code_review.diagnostic_triage.triaged = 2; })).toThrow();
   });
 
   it('says a partial review that found nothing may have missed what it did not read', () => {

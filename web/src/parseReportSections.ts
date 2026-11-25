@@ -192,6 +192,8 @@ export type Sections = {
     limits: { statement: string; observations: string[] }[];
     // The per-module review ledger (builder 6), null when no slice was planned.
     ledger: Ledger | null;
+    // The diagnostic triage (builder 22), null when no triage slot was planned.
+    triage: DiagnosticTriage | null;
   };
   gaps: { section: string; code: string; subject: string | null; detail: string | null }[];
 };
@@ -245,6 +247,71 @@ type LedgerFile = {
   reason: string | null;
   remaining: { start: number; end: number; reason: string }[];
 };
+
+// DiagnosticTriage is the model triage of the tool diagnostics
+// (docs/REPORT.md#도구-진단-분류). The counts come from the report's own
+// observations; diagnostics - triaged - interpreted were not triaged.
+export type TriageGroup = {
+  task: string;
+  id: string;
+  classification: 'problem' | 'harmless' | 'unclear';
+  bucket: 'attention' | 'refuted' | 'harmless';
+  observations: string[];
+  crossTool: boolean;
+  reason: string | null;
+  locations: { path: string; start: number; end: number }[];
+  finding: string | null;
+};
+export type DiagnosticTriage = {
+  diagnostics: number;
+  triaged: number;
+  interpreted: number;
+  groups: TriageGroup[];
+  limitations: string[];
+};
+
+const TRIAGE_BUCKETS: Record<string, string[]> = { problem: ['attention', 'refuted'], harmless: ['harmless'], unclear: ['attention'] };
+
+function parseTriage(v: unknown): DiagnosticTriage | null {
+  if (v == null) return null;
+  const x = object(v);
+  const groups = array(x.groups, (g) => {
+    const y = object(g);
+    const classification = str(y.classification);
+    const bucket = str(y.bucket);
+    if (!(TRIAGE_BUCKETS[classification] ?? []).includes(bucket)) invalid();
+    const finding = nullable(y.finding_id);
+    const reason = nullable(y.reason);
+    if ((classification === 'problem') !== (reason === null) || (classification !== 'problem' && finding !== null)) invalid();
+    return {
+      task: str(y.task_key),
+      id: str(y.group_id),
+      classification: classification as TriageGroup['classification'],
+      bucket: bucket as TriageGroup['bucket'],
+      observations: array(y.observation_ids, str),
+      crossTool: bool(y.cross_tool),
+      reason,
+      locations: array(y.locations, (l) => {
+        const z = object(l);
+        return { path: str(z.path), start: count(z.start_line), end: count(z.end_line) };
+      }),
+      finding,
+    };
+  });
+  return { diagnostics: count(x.diagnostics), triaged: count(x.triaged), interpreted: count(x.interpreted), groups, limitations: array(x.limitations, str) };
+}
+
+// validateTriage checks the triage against the report: builder 22 on, the
+// grouped diagnostics are the report's and in one group each, the triaged
+// count is theirs and a problem group's finding is a code review finding.
+function validateTriage(triage: DiagnosticTriage, builder: number, observationIDs: string[], reviewFindings: string[]) {
+  if (builder < 22) invalid();
+  const known = new Set(observationIDs);
+  const grouped = triage.groups.flatMap(g => g.observations);
+  if (new Set(grouped).size !== grouped.length || grouped.some(id => !known.has(id))) invalid();
+  if (grouped.length !== triage.triaged || triage.triaged + triage.interpreted > triage.diagnostics) invalid();
+  if (triage.groups.some(g => g.finding !== null && !reviewFindings.includes(g.finding))) invalid();
+}
 
 function parseLedger(v: unknown): Ledger | null {
   if (v == null) return null;
@@ -672,6 +739,7 @@ export function parseSections(
         return { statement: str(x.statement), observations: array(x.observation_ids, str) };
       }),
       ledger: parseLedger(cr.ledger),
+      triage: parseTriage(cr.diagnostic_triage),
     },
     gaps: array(r.gaps ?? [], (v) => {
       const x = object(v);
@@ -693,6 +761,7 @@ export function parseSections(
   if (sectionCount('gaps', 'gaps') !== out.gaps.length) invalid();
   checkContractFollowup(r, out.documents, includesCode);
   checkRelatedWorkflow(r, out.documents);
+  if (out.codeReview.triage) validateTriage(out.codeReview.triage, Number(str(object(r.builder).version)), observationIDs, out.codeReview.findings);
   const ledger = out.codeReview.ledger;
   if (ledger?.extended && Number(str(object(r.builder).version)) < 16) invalid();
   if (ledger?.files !== null && ledger?.files !== undefined) {

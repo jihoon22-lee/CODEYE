@@ -525,8 +525,9 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 		ExposedFiles: c.r.Coverage.LLMExposedFiles, FindingIDs: []string{}, Limits: []InterpretationLimit{}}
 	ai := c.r.Coverage.AIReview
 	for _, t := range append(append([]AIReviewTask{}, ai.RequiredTasks...), ai.OptionalTasks...) {
-		// The scope and slice tasks are the ledger's rows, not roles.
-		if t.Key == record.TaskScope || isSliceTask(t.Key) {
+		// The scope and slice tasks are the ledger's rows, the triage slots
+		// the diagnostic triage's, not roles.
+		if t.Key == record.TaskScope || isSliceTask(t.Key) || isTriageTask(t.Key) {
 			continue
 		}
 		if t.Key != "review.environment" && t.Key != "review.documents" && (c.reviewPlanned || t.Result != "not_planned") {
@@ -579,6 +580,7 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 	if c.reviewPlanned {
 		s.Ledger = c.ledger()
 	}
+	s.DiagnosticTriage = c.diagnosticTriage()
 	c.addStrengths(s)
 	return s
 }

@@ -60,6 +60,19 @@ export function places(primary: string[], secondary: string[]): Places {
 const SEVERITY: Record<string, number> = { critical: 5, high: 4, medium: 3, low: 2, info: 1 };
 export const sevRank = (s: string) => SEVERITY[s] ?? 0;
 
+// The validation class every ranked or cut finding list orders by before
+// severity (report.ValidationClass): reproduced, supported, a diagnostic
+// triage problem not yet confirmed, any other unconfirmed finding, refuted.
+export function validationClass(f: { id: string; validation: string }): number {
+  switch (f.validation) {
+    case 'reproduced': return 0;
+    case 'supported': return 1;
+    case 'unreviewed':
+    case 'inconclusive': return /^review_t[0-9]{3}_/.test(f.id) ? 2 : 3;
+  }
+  return 4;
+}
+
 // RuleGroup is the diagnostics of one rule of one analyzer in one language.
 export type RuleGroup = { analyzer: string; rule: string; count: number; severity: string; message: string | null; primary: string[]; secondary: string[]; observations: string[] };
 

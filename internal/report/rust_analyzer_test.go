@@ -37,7 +37,7 @@ func TestAnalyzerDecoderRustPack(t *testing.T) {
 		t.Fatalf("summary %+v (check %d clippy %d)", r.Summary, nCheck, nClippy)
 	}
 	for _, x := range r.Findings {
-		if x.Validation != "unreviewed" || x.Severity != "low" || x.Disposition != "open" || !ValidFingerprint(x.Fingerprint) || x.FingerprintBasis == nil {
+		if x.Validation != "unreviewed" || !defaultSeverityOK(x) || x.Disposition != "open" || !ValidFingerprint(x.Fingerprint) || x.FingerprintBasis == nil {
 			t.Fatalf("tool finding %+v", x)
 		}
 		// Finding identity: the shared ToolFingerprint with the analyzer ID.

@@ -12,7 +12,9 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/builtin"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/severity"
 )
 
 // PolicyGoVet is the deterministic mapping from go vet analyzers to finding
@@ -144,6 +146,9 @@ func (GoVetDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 	// carries the synthesized go vet context (docs/ANALYZERS.md#규칙-문맥과-소스-안-억제).
 	rc := GoVetRuleContext()
 	tc.RuleContext = &rc
+	if t, ok := severity.TableFor(builtin.SeverityTables(), govet.AnalyzerID, rc.RulePack, rc.RulePackVersion); ok {
+		tc.SeverityTable = t.ID()
+	}
 	for k, v := range d.Coverage.Packages {
 		tc.Packages[k] = v
 	}
@@ -221,13 +226,14 @@ func goVetFinding(ctx DecodeContext, obs []Observation) Finding {
 	fp, basis := ToolFingerprint(govet.AnalyzerID, first.RuleID, l.Path, "", msg)
 	idSum := sha256.Sum256([]byte(strings.Join([]string{ctx.Task.Key, first.RuleID, l.Path, itoa(l.StartLine), msg}, "\x00")))
 	id := "fnd_" + hex.EncodeToString(idSum[:])[:20]
-	category, reason := goVetCategory[first.RuleID], textSeverityReason
+	category := goVetCategory[first.RuleID]
 	if category == "" {
-		category, reason = "correctness", textSeverityUnmapped
+		category = "correctness"
 	}
+	def := builtin.DefaultSeverity(govet.AnalyzerID, GoVetRulePack, GoVetRulePackVersion, first.RuleID, "")
 	loc := Location{SnapshotID: ctx.Snapshot.ID, Path: l.Path, StartLine: l.StartLine, EndLine: l.EndLine}
 	codeID := "ev_" + id[4:] + "_code"
-	f := Finding{SchemaVersion: "0.1", ID: id, Title: truncateRunes("go vet "+first.RuleID+": "+msg, 160), Category: category, Severity: "low", SeverityReason: reason,
+	f := Finding{SchemaVersion: "0.1", ID: id, Title: truncateRunes("go vet "+first.RuleID+": "+msg, 160), Category: category, Severity: def.Severity, SeverityReason: severity.Reason(def),
 		Validation: "unreviewed", Disposition: "open", Impact: textImpact, Locations: []Location{loc},
 		Evidence:           []Evidence{{ID: codeID, Kind: "code", Description: textEvidenceCode, Location: &loc, BlobSHA256: l.BlobSHA256}},
 		CounterevidenceIDs: []string{}, ObservationIDs: []string{}, Fingerprint: fp, FingerprintBasis: &basis,

@@ -10,7 +10,9 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/builtin"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/severity"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
@@ -196,11 +198,26 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 	}
 	sort.Strings(order)
 	for _, k := range order {
-		out.Findings = append(out.Findings, toolFinding(ctx, d.Analyzer.ID, categories[k], groups[k]))
+		// The key has no grade: diagnostics at one position with different
+		// tool grades are one finding with the highest default severity.
+		var def severity.Result
+		for i, o := range groups[k] {
+			grade := ""
+			if o.RawSeverity != nil {
+				grade = *o.RawSeverity
+			}
+			if x := builtin.DefaultSeverity(d.Analyzer.ID, d.RulePack.ID, d.RulePack.Version, o.RuleID, grade); i == 0 || severity.Rank(x.Severity) > severity.Rank(def.Severity) {
+				def = x
+			}
+		}
+		out.Findings = append(out.Findings, toolFinding(ctx, d.Analyzer.ID, categories[k], def, groups[k]))
 	}
 	tc := ToolCoverage{TaskKey: ctx.Task.Key, Analyzer: d.Analyzer.ID, ToolVersion: d.Tool.Version, ExitClass: d.Outcome.ExitClass, PartialParse: d.Outcome.PartialParse,
 		IgnoredFiles: d.Coverage.FilesSkipped, UnlistedFiles: d.Coverage.FilesUnlisted, Packages: map[string]int{}, StderrFailures: len(d.ToolErrors), AnalyzerErrors: 0, Limitations: []string{},
 		RuleContext: ruleContextOf(d.RulePack)}
+	if t, ok := severity.TableFor(builtin.SeverityTables(), d.Analyzer.ID, d.RulePack.ID, d.RulePack.Version); ok {
+		tc.SeverityTable = t.ID()
+	}
 	if d.Coverage.FilesInScope != nil {
 		tc.FilesInScope = *d.Coverage.FilesInScope
 	} else {
@@ -234,8 +251,10 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 	return out, nil
 }
 
-// toolFinding builds the unreviewed finding of identical observations.
-func toolFinding(ctx DecodeContext, analyzerID, category string, obs []Observation) Finding {
+// toolFinding builds the unreviewed finding of identical observations; def
+// is the default severity of their analyzer, rule pack, rule and raw grade
+// (docs/ANALYZERS.md#기본-심각도).
+func toolFinding(ctx DecodeContext, analyzerID, category string, def severity.Result, obs []Observation) Finding {
 	first := obs[0]
 	l := first.Location
 	msg := *first.RawMessage
@@ -247,7 +266,7 @@ func toolFinding(ctx DecodeContext, analyzerID, category string, obs []Observati
 	loc := Location{SnapshotID: ctx.Snapshot.ID, Path: l.Path, StartLine: l.StartLine, EndLine: l.EndLine}
 	codeID := "ev_" + id[4:] + "_code"
 	fp, basis := ToolFingerprint(analyzerID, first.RuleID, l.Path, "", msg)
-	f := Finding{SchemaVersion: "0.1", ID: id, Title: truncateRunes(analyzerID+" "+first.RuleID+": "+msg, 160), Category: category, Severity: "low", SeverityReason: textToolSeverityReason,
+	f := Finding{SchemaVersion: "0.1", ID: id, Title: truncateRunes(analyzerID+" "+first.RuleID+": "+msg, 160), Category: category, Severity: def.Severity, SeverityReason: severity.Reason(def),
 		Validation: "unreviewed", Disposition: "open", Impact: textImpact, Locations: []Location{loc},
 		Evidence:           []Evidence{{ID: codeID, Kind: "code", Description: textEvidenceCode, Location: &loc, BlobSHA256: l.BlobSHA256}},
 		CounterevidenceIDs: []string{}, ObservationIDs: []string{}, Fingerprint: fp, FingerprintBasis: &basis,

@@ -68,16 +68,36 @@ type candidateFold struct {
 	Rows            []candidateRow
 }
 
-// diagGroup is the diagnostics of one rule of one analyzer.
+// diagGroup is the diagnostics of one rule of one analyzer. Notes are the
+// triage results of its diagnostics (builder 22).
 type diagGroup struct {
 	Analyzer, Rule, Count, Severity, Description string
 	Places                                       []string
 	More                                         string
+	Notes                                        []diagNote
 }
 
+// diagNote is one triage group's result on a rule's diagnostics: its
+// classification, the model's reason and the code it cited, or the link to
+// a problem's finding.
+type diagNote struct {
+	Label, Text     string
+	Places          []string
+	Link, LinkLabel string
+}
+
+// diagSection is one triage bucket of the fold.
+type diagSection struct {
+	ID, Label, Note string
+	Groups          []diagGroup
+}
+
+// diagFold is the tool diagnostics: by analyzer and rule, and with the
+// diagnostic triage (builder 22) first by its result (Sections).
 type diagFold struct {
 	ID, Label, Note, Unplaced string
 	Groups                    []diagGroup
+	Sections                  []diagSection
 }
 
 // actionBlock is the opening shown before the status tables.
@@ -225,7 +245,10 @@ func (v secView) buildActions() actionBlock {
 	mismatches := v.mismatchCards(anchors)
 	pending, secondaryPending := v.pendingCandidates()
 	secondary := append(secondaryActions, secondaryPending...)
-	slices.SortStableFunc(secondary, func(a, b Finding) int { return cmp.Compare(sevRank(b.Severity), sevRank(a.Severity)) })
+	// Confirmed findings before unconfirmed ones, most severe first within.
+	slices.SortStableFunc(secondary, func(a, b Finding) int {
+		return cmp.Or(cmp.Compare(ValidationClass(a), ValidationClass(b)), cmp.Compare(sevRank(b.Severity), sevRank(a.Severity)))
+	})
 
 	switch {
 	case len(a.Cards) > 0:
@@ -449,7 +472,9 @@ func (v secView) candidateFold(id, label, note string, findings []Finding, ancho
 }
 
 // diagnosticFold groups the tool diagnostics by analyzer and rule with the
-// rule's description and where it was reported.
+// rule's description and where it was reported. With a diagnostic triage
+// the rule groups are split by its result first: needs attention, refuted
+// by the verification, judged harmless, not triaged.
 func (v secView) diagnosticFold(findings map[string]Finding) diagFold {
 	l := v.L
 	obs := make(map[string]Observation, len(v.R.Observations))
@@ -457,47 +482,127 @@ func (v secView) diagnosticFold(findings map[string]Finding) diagFold {
 		obs[o.ID] = o
 	}
 	sevOf := staticSeverities(v.R, findings)
-	var merged []ruleGroup
-	index := map[string]int{}
-	for _, lang := range regularStaticLanguages(v.R) {
-		for _, g := range v.staticGroups(lang, obs, sevOf) {
-			key := g.Analyzer + "\x00" + g.Rule
-			if at, ok := index[key]; ok {
-				merged[at].Count += g.Count
-				merged[at].Primary = append(merged[at].Primary, g.Primary...)
-				merged[at].Secondary = append(merged[at].Secondary, g.Secondary...)
-				continue
+	// merged is the rule groups of the diagnostics keep accepts (nil: all).
+	merged := func(keep func(string) bool) []ruleGroup {
+		var out []ruleGroup
+		index := map[string]int{}
+		for _, lang := range regularStaticLanguages(v.R) {
+			if keep != nil {
+				lang.Tools = slices.Clone(lang.Tools)
+				for i := range lang.Tools {
+					lang.Tools[i].ObservationIDs = slices.DeleteFunc(slices.Clone(lang.Tools[i].ObservationIDs), func(id string) bool { return !keep(id) })
+				}
 			}
-			index[key] = len(merged)
-			merged = append(merged, g)
+			for _, g := range v.staticGroups(lang, obs, sevOf) {
+				key := g.Analyzer + "\x00" + g.Rule
+				if at, ok := index[key]; ok {
+					out[at].Count += g.Count
+					out[at].Primary = append(out[at].Primary, g.Primary...)
+					out[at].Secondary = append(out[at].Secondary, g.Secondary...)
+					out[at].ObservationIDs = append(out[at].ObservationIDs, g.ObservationIDs...)
+					continue
+				}
+				index[key] = len(out)
+				out = append(out, g)
+			}
 		}
+		return out
 	}
-	if len(merged) == 0 {
+	all := merged(nil)
+	if len(all) == 0 {
 		return diagFold{}
 	}
-	total, rules, tools := 0, len(merged), map[string]bool{}
-	fold := diagFold{ID: "tool-diagnostics", Note: l.Label("actions.diagnostics_note")}
-	unplaced := false
-	for _, g := range merged {
+	total, tools := 0, map[string]bool{}
+	for _, g := range all {
 		total += g.Count
 		tools[g.Analyzer] = true
+	}
+	fold := diagFold{ID: "tool-diagnostics", Note: l.Label("actions.diagnostics_note"), Label: tf(l, "actions.diagnostics", total, len(all), len(tools))}
+	unplaced := false
+	var triage *DiagnosticTriage
+	if v.R.CodeReview != nil {
+		triage = v.R.CodeReview.DiagnosticTriage
+	}
+	if triage == nil {
+		fold.Groups = v.diagGroups(all, nil, nil, &unplaced)
+	} else {
+		// The headline counts what was decided (problem or harmless) and
+		// what the model left unclear apart: an unclear group is answered,
+		// not judged.
+		decided, unclear := triageDecided(triage)
+		fold.Label = tf(l, "actions.diagnostics_triaged", total, decided, unclear, len(all), len(tools))
+		fold.Note = l.Label("actions.diagnostics_triage_note")
+		bucket := map[string]string{}
+		for _, g := range triage.Groups {
+			for _, id := range g.ObservationIDs {
+				bucket[id] = g.Bucket
+			}
+		}
+		anchors := v.anchorSet()
+		for _, b := range []string{TriageAttention, TriageRefuted, TriageHarmless, ""} {
+			groups := merged(func(id string) bool { return bucket[id] == b })
+			if len(groups) == 0 {
+				continue
+			}
+			n := 0
+			for _, g := range groups {
+				n += g.Count
+			}
+			name := cmp.Or(b, "not_triaged")
+			sec := diagSection{ID: "tool-diagnostics-" + name, Label: tf(l, "actions.diag_bucket."+name, n), Note: l.Label("actions.diag_bucket_note." + name),
+				Groups: v.diagGroups(groups, triage, anchors, &unplaced)}
+			if b == "" && triage.Interpreted > 0 {
+				sec.Note += " " + tf(l, "actions.diag_interpreted", triage.Interpreted)
+			}
+			fold.Sections = append(fold.Sections, sec)
+		}
+	}
+	if unplaced {
+		fold.Unplaced = l.Label("actions.diagnostics_unplaced")
+	}
+	return fold
+}
+
+// diagGroups are the fold rows of rule groups, with the triage results of
+// their diagnostics when triage is not nil.
+func (v secView) diagGroups(groups []ruleGroup, triage *DiagnosticTriage, anchors map[string]bool, unplaced *bool) []diagGroup {
+	l := v.L
+	var out []diagGroup
+	for _, g := range groups {
 		places := append(slices.Clone(g.Primary), g.Secondary...)
 		group := diagGroup{Analyzer: g.Analyzer, Rule: g.Rule, Count: tf(l, "actions.diag_count", g.Count), Severity: g.Severity, Description: g.Message}
+		if triage != nil && g.Severity != "" {
+			group.Severity = tf(l, "actions.diag_default_severity", lab(l, "severity", g.Severity))
+		}
 		for _, p := range places {
-			unplaced = unplaced || p == l0(l)
+			*unplaced = *unplaced || p == l0(l)
 		}
 		if len(places) > diagPlaceLimit {
 			group.More = tf(l, "actions.diag_more", len(places)-diagPlaceLimit)
 			places = places[:diagPlaceLimit]
 		}
 		group.Places = places
-		fold.Groups = append(fold.Groups, group)
+		if triage != nil {
+			for _, t := range triage.Groups {
+				if !slices.ContainsFunc(t.ObservationIDs, func(id string) bool { return slices.Contains(g.ObservationIDs, id) }) {
+					continue
+				}
+				note := diagNote{Label: lab(l, "triage.classification", t.Classification), Text: openingText(deref(t.Reason), "")}
+				if t.Bucket == TriageRefuted {
+					note.Label = l.Label("triage.refuted")
+				}
+				for _, loc := range t.Locations {
+					note.Places = append(note.Places, sourceRange(loc.Path, loc.StartLine, loc.EndLine))
+				}
+				if t.FindingID != nil && anchors[*t.FindingID] {
+					note.Link, note.LinkLabel = *t.FindingID, l.Label("actions.open_finding")
+				}
+				group.Notes = append(group.Notes, note)
+			}
+		}
+		out = append(out, group)
 	}
-	fold.Label = tf(l, "actions.diagnostics", total, rules, len(tools))
-	if unplaced {
-		fold.Unplaced = l.Label("actions.diagnostics_unplaced")
-	}
-	return fold
+	return out
 }
 
 // anchorSet is every id a link inside the report can reach: sections, parts,
@@ -625,7 +730,7 @@ func mdCandidateFold(p func(...string), fold candidateFold) {
 }
 
 func mdDiagnosticFold(p func(...string), fold diagFold) {
-	if len(fold.Groups) == 0 {
+	if len(fold.Groups) == 0 && len(fold.Sections) == 0 {
 		return
 	}
 	mdReadingAnchor(p, fold.ID)
@@ -637,7 +742,21 @@ func mdDiagnosticFold(p func(...string), fold diagFold) {
 		p(mdText(fold.Unplaced))
 		p()
 	}
-	for _, g := range fold.Groups {
+	mdDiagGroups(p, fold.Groups)
+	for _, s := range fold.Sections {
+		mdReadingAnchor(p, s.ID)
+		p("**", mdText(s.Label), "**")
+		p()
+		p(mdText(s.Note))
+		p()
+		mdDiagGroups(p, s.Groups)
+	}
+	p("</details>")
+	p()
+}
+
+func mdDiagGroups(p func(...string), groups []diagGroup) {
+	for _, g := range groups {
 		summary := g.Analyzer + " " + g.Rule + " · " + g.Count
 		if g.Severity != "" {
 			summary += " · " + g.Severity
@@ -647,6 +766,22 @@ func mdDiagnosticFold(p func(...string), fold diagFold) {
 		}
 		p("<details><summary>", mdSummary(summary), "</summary>")
 		p()
+		for _, n := range g.Notes {
+			line := "- **" + mdText(n.Label) + "**"
+			if n.Text != "" {
+				line += " " + mdText(n.Text)
+			}
+			for _, place := range n.Places {
+				line += " " + mdCode(place)
+			}
+			if n.Link != "" {
+				line += " [" + mdText(n.LinkLabel) + "](#" + n.Link + ")"
+			}
+			p(line)
+		}
+		if len(g.Notes) > 0 {
+			p()
+		}
 		for _, place := range g.Places {
 			p("- ", mdCode(place))
 		}
@@ -657,8 +792,6 @@ func mdDiagnosticFold(p func(...string), fold diagFold) {
 		p("</details>")
 		p()
 	}
-	p("</details>")
-	p()
 }
 
 // mdActionBlock prints the opening. The caller adds the status table after it.

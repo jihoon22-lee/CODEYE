@@ -222,6 +222,15 @@ func Compare(cur, base Side) Comparison {
 			}
 		default:
 			e.Changes = changes(e.Current, e.Baseline)
+			// A tool finding's default severity comes from its analyzer's
+			// severity table: when the two sides applied different tables
+			// (a builder before the tables, or another table version), a
+			// severity difference is that table difference, which the
+			// comparison reports once as tool context
+			// (tool:<analyzer>:severity_table), not a change of the finding.
+			if e.Producer == report.ProducerTool && !slices.Equal(severityTables(cur.Report, e.Analyzer), severityTables(base.Report, e.Analyzer)) {
+				e.Changes = slices.DeleteFunc(e.Changes, func(ch string) bool { return ch == "severity" })
+			}
 			e.State = StatePersisting
 			for _, ch := range e.Changes {
 				if ch != "lines" {
@@ -336,6 +345,24 @@ func toolsOf(r report.Report, analyzer string) []report.ToolCoverage {
 		}
 	}
 	return out
+}
+
+// severityTables are the severity tables an analyzer's rows applied ("none"
+// for a row without one), sorted and distinct.
+func severityTables(r report.Report, analyzer string) []string {
+	var out []string
+	for _, tc := range toolsOf(r, analyzer) {
+		out = append(out, cmpOr(tc.SeverityTable, "none"))
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+func cmpOr(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
+	return s
 }
 
 func versions(tcs []report.ToolCoverage) ([]string, bool) {
@@ -605,6 +632,8 @@ func differences(cur, base Side) []Difference {
 						state = "succeeded"
 					}
 					parts = append(parts, tc.TaskKey+"="+state+"/"+tc.ExitClass)
+				case "severity_table":
+					parts = append(parts, cmpOr(tc.SeverityTable, "none"))
 				case "processed_files":
 					n := "unknown"
 					if tc.ProcessedFiles != nil {
@@ -616,7 +645,7 @@ func differences(cur, base Side) []Difference {
 			slices.Sort(parts)
 			return ptr(strings.Join(slices.Compact(parts), ", "))
 		}
-		for _, what := range []string{"version", "rule_context", "result", "processed_files"} {
+		for _, what := range []string{"version", "rule_context", "severity_table", "result", "processed_files"} {
 			diff("tool:"+a+":"+what, label(base, what), label(cur, what))
 		}
 	}

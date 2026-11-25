@@ -26,7 +26,7 @@ except ImportError as exc:
 from bundle_checks.common import ROOT, ensure, expect_invalid, json_file, make_validators, within_root, yaml_file
 from bundle_checks.report import check_analyzer, check_analyzer_observations, check_document_comparisons, check_document_excerpt_contracts, check_go_test_failure_contracts, check_observations, check_plan, check_report
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
-from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_slice_examples, check_workflow_example, pack_selection, shared_excerpt, slice_examples
+from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_slice_examples, check_triage_examples, check_workflow_example, pack_selection, shared_excerpt, slice_examples, triage_examples
 from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_shared_service_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
 from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_project_defect_corpus, check_markdown_anchors, check_mode_names, check_stage_labels, heading_anchors
 
@@ -254,6 +254,8 @@ def main() -> None:
     print(f"PASS: final contract review bound to accepted documents and overview artifacts; {contract_negatives} negative cases")
     slice_negatives = check_slice_examples(slice_examples(), validators)
     print(f"PASS: review slices (scope and review records bound to the coverage fixture; {slice_negatives} negative cases)")
+    triage_negatives = check_triage_examples(triage_examples(), validators)
+    print(f"PASS: diagnostic triage slot (triage and verify records bound to the triage fixture; {triage_negatives} negative cases)")
     # Review 2.0.0 (docs/REVIEW.md#복구-경로): a stage keeps at most three calls (the
     # request, one repair, one retry of a reply that was not JSON).
     retried = copy.deepcopy(role_docs["verify"])

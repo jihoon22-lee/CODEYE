@@ -171,7 +171,7 @@ func TestModelProbeOutput(t *testing.T) {
 	var out, errb bytes.Buffer
 	code := modelCommand(context.Background(), []string{"probe", "--executable", exe, "--model", "openai/gpt-6.2-sol", "--credential-file", cred, "--timeout", "20s"}, &out, &errb)
 	text := out.String()
-	if code != 1 || !strings.Contains(text, "provider openai, model openai/gpt-6.2-sol, OpenCode 1.20.0 (not the tested "+opencode.Version) ||
+	if code != 1 || !strings.Contains(text, "provider openai, model openai/gpt-6.2-sol, OpenCode 1.20.0 (not a tested release: "+opencode.TestedVersionList()) ||
 		!strings.Contains(text, "FAILED at request: model_auth_failed") || strings.Contains(text+errb.String(), "sk-probe-key") {
 		t.Fatalf("code %d\n%s%s", code, text, errb.String())
 	}

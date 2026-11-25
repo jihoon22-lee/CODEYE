@@ -11,6 +11,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/severity"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
@@ -264,7 +265,7 @@ func TestAnalyzerDecoderStaticcheckFindings(t *testing.T) {
 	}
 	sa4006 := 0
 	for _, x := range r.Findings {
-		if x.Validation != "unreviewed" || x.Severity != "low" || x.Disposition != "open" || !ValidFingerprint(x.Fingerprint) || x.FingerprintBasis == nil {
+		if x.Validation != "unreviewed" || !defaultSeverityOK(x) || x.Disposition != "open" || !ValidFingerprint(x.Fingerprint) || x.FingerprintBasis == nil {
 			t.Fatalf("tool finding %+v", x)
 		}
 		if strings.HasPrefix(x.Title, "go.staticcheck") {
@@ -431,4 +432,16 @@ func TestAnalyzerDecoderRejects(t *testing.T) {
 	sc = staticcheckTask(t)
 	sc.doc["observations"].([]any)[0].(map[string]any)["location"].(map[string]any)["blob_sha256"] = strings.Repeat("0", 64)
 	reject("location blob differs from the manifest", analyzerFixture(t, nil, goVet(t), sc))
+}
+
+// defaultSeverityOK reports a tool finding whose severity is the default of
+// a severity table and whose reason is the table's fixed sentence for it
+// (docs/ANALYZERS.md#기본-심각도): never critical, never a model's.
+func defaultSeverityOK(x Finding) bool {
+	for _, f := range severity.Families() {
+		if x.SeverityReason == severity.Reason(severity.Result{Family: f.Name}) {
+			return x.Severity == f.Severity
+		}
+	}
+	return x.Severity == severity.Low && (x.SeverityReason == severity.ReasonUnknown || x.SeverityReason == severity.ReasonMismatch)
 }

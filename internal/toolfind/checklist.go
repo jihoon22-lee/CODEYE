@@ -51,7 +51,7 @@ var offlinePlaces = map[string]string{
 func TestedSeries(name string) string {
 	switch name {
 	case "opencode":
-		return opencode.Version
+		return opencode.TestedVersionList()
 	case "uv":
 		return uvTestedSeries
 	case "python":

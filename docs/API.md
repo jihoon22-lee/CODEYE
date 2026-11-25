@@ -429,6 +429,8 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 | `observations[].metric.counterpart` | 중복된 코드의 두 번째 블록. 첫 블록은 같은 관찰의 `location`이다. |
 | `observations[].related_locations` | C/C++ 도구가 원래 진단과 연결한 보조 위치·가정. 코드 미포함 응답은 위치와 유형을 남긴다. |
 | `metrics.go_package_dependencies` | Go 모듈의 import 관계와 줄 위치. 목록 조사가 끝나면 `unlisted_files`로 목록에 없던 후보 파일 수를 표시한다. |
+| `code_review.diagnostic_triage` | 생성기 22부터 분류 slot이 계획된 실행의 도구 진단 분류. `diagnostics`(대상 진단 수), `triaged`(분류한 진단 수), `interpreted`(해석 후보가 다룬 진단 수)는 보고서의 관찰에서 센 값이고 나머지는 분류하지 않은 진단이다. `groups[]`는 묶음마다 `classification`(`problem`·`harmless`·`unclear`), `bucket`(`attention`·`refuted`·`harmless`), `observation_ids`, 모델의 `reason`(코드 미포함 응답은 생략 문구), 인용 위치 `locations`, 문제 묶음의 `finding_id`를 준다. [도구 진단 분류](REPORT.md#도구-진단-분류) |
+| `coverage.tools[].severity_table` | 생성기 22부터 그 도구 finding의 심각도를 정한 기본 심각도 표(`<규칙 팩>/<표 버전>`). 표가 없으면 생략하고 finding은 `low`다. [기본 심각도](ANALYZERS.md#기본-심각도) |
 | `documents.quality`, `documents.comparisons`, `code_review.strengths` | 수락된 모델 해석과 근거 ID. 문서 비교의 `code_evidence_ids`를 따라가면 근거가 코드인지 테스트인지 구별할 수 있다. |
 | `documents.documentation_gaps` | 공개 CLI 선언의 `source`와 이름을 검색한 안내 문서 `searched`를 함께 제공한다. 코드 미포함 응답은 `symbol`과 `default`를 생략하고 선언 위치와 검색 범위를 보존한다. |
 | `documents.evidence[].directive_path`, `package_reference` | Python docstring을 가리킨 원래 문서, 또는 사용 예제와 연결된 로컬 npm 패키지의 manifest와 진입 파일. |

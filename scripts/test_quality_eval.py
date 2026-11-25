@@ -135,10 +135,11 @@ class PlannerTests(unittest.TestCase):
         est = quality_eval.estimate(plan)
         self.assertEqual(est["variants"], 10)
         self.assertTrue(est["basis"].startswith("constants:"))
-        self.assertEqual(est["upper"]["calls"], 75)  # 5 original roles and up to 2 followup calls per variant
-        self.assertAlmostEqual(est["upper"]["ledger_microusd"], 10 * (5 * 1.1 + 2) * 22_148 * 1.5, delta=2)
+        # 5 original roles, a triage call and its verify, and up to 2 followup calls per variant
+        self.assertEqual(est["upper"]["calls"], 97)
+        self.assertAlmostEqual(est["upper"]["ledger_microusd"], 10 * (5 * 1.1 + 2 * 1.1 + 2) * 22_148 * 1.5, delta=2)
         self.assertLess(est["expected"]["ledger_microusd"], est["upper"]["ledger_microusd"])
-        report = {"remaining_microusd": 4_000_000, "max_requests": 200, "requests": 63, "halted": False}
+        report = {"remaining_microusd": 4_500_000, "max_requests": 200, "requests": 63, "halted": False}
         self.assertEqual(quality_eval.budget_gate(est, report, 1_000_000, 5), [])
         report["remaining_microusd"] = 2_500_000
         self.assertEqual(len(quality_eval.budget_gate(est, report, 1_000_000, 5)), 1)
@@ -181,7 +182,7 @@ class PlannerTests(unittest.TestCase):
             per_call = est["per_call_microusd"]
             self.assertEqual(est["max_calls"], 40)
             self.assertEqual(est["expected"]["calls"], 12)
-            self.assertEqual(est["upper"]["calls"], 40 + int(5 * 1.1 + 2 + 0.999))
+            self.assertEqual(est["upper"]["calls"], 40 + int(5 * 1.1 + 2 * 1.1 + 2 + 0.999))
             dearest = max(per_call[r] for r in ("investigate", "verify", "contract"))
             self.assertGreaterEqual(est["upper"]["ledger_microusd"], int(40 * dearest * 1.5))
 
@@ -201,6 +202,16 @@ class RegressionPilotCoverageTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def test_kept_records_of_every_schema_version(self):
+        # A kept record of any schema version counts; current records are 0.7
+        # (whole run, slices) and 0.8 (diagnostic triage).
+        schema = json.loads((SCRIPTS.parent / "schemas/review-record.schema.json").read_text())
+        self.assertEqual(list(self.rp.RECORD_VERSIONS), schema["$defs"]["record"]["properties"]["schema_version"]["enum"])
+        for version, name in (("0.7", "investigate.s001"), ("0.8", "triage.t001")):
+            (self.out / "pilot" / (name + ".json")).write_text(json.dumps({"schema_version": version, "stage": name.split(".")[0]}))
+        records, _ = self.rp._kept_docs(self.out / "pilot")
+        self.assertEqual(sorted(r["schema_version"] for r in records), ["0.7", "0.8"])
 
     def record(self, name, stage, files, calls, slice_key=None, line=1):
         doc = {"schema_version": "0.3" if slice_key else "0.2", "stage": stage, "calls": [{}] * calls,
@@ -687,7 +698,7 @@ class ProjectCorpusTests(unittest.TestCase):
         plan = quality_eval.variant_plan(PROJECT, [PROJECT.by_id[PCASE]])
         small = quality_eval.estimate(plan)
         sliced = quality_eval.estimate(plan, slices_unknown=True, max_calls=40)
-        self.assertEqual(small["upper"]["calls"], 2 * int(5 * 1.1 + 2 + 0.999) - 1)  # 7.5 per variant, rounded up once
+        self.assertEqual(small["upper"]["calls"], 20)  # 9.7 per variant (with a triage call and its verify), rounded up once
         self.assertEqual(sliced["upper"]["calls"], 80)
         self.assertTrue(sliced["slices_unknown"])
 

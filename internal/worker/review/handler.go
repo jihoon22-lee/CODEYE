@@ -143,6 +143,15 @@ func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec,
 	if j.AllowModelReview && h.Caller != nil && docs && (slices.ContainsFunc(sp.Overview, isCode) || slices.ContainsFunc(sp.Rest, isCode)) {
 		plan = append(plan, analysis.TaskSpec{Key: record.TaskContract, Title: "문서 계약 후속 검토", Stage: domain.StageCodeReview})
 	}
+	// The diagnostic triage slots come last: the module slices and the
+	// contract follow-up are admitted first and leave the triage a bounded
+	// share of the call ceiling (triageHold, docs/REVIEW.md#호출-비용).
+	for i := range triageSlotCount(groups.eligible) {
+		tri, ver := "review."+record.StageTriage+"."+triageKey(i), "review."+record.StageVerify+"."+triageKey(i)
+		plan = append(plan,
+			analysis.TaskSpec{Key: tri, Required: false, Title: "도구 진단 분류 " + triageKey(i), Stage: domain.StageCodeReview},
+			analysis.TaskSpec{Key: ver, Required: false, Title: "분류 후보 검증 " + triageKey(i), Stage: domain.StageCodeReview})
+	}
 	return plan, nil
 }
 
@@ -151,11 +160,14 @@ func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r
 	if !ok {
 		return h.Static.Run(ctx, j, t, runner)
 	}
-	slice := ""
+	slice, triage := "", ""
+	tStage, tKey, isTriage := record.TriageTask(t.Key)
 	switch stage, key, isSlice := record.SliceTask(t.Key); {
 	case t.Key == record.TaskScope:
 	case isSlice:
 		role, slice = stage, key
+	case isTriage:
+		role, triage = tStage, tKey
 	case !slices.Contains(reviewpack.Roles, role):
 		return result(domain.TaskFailed, reasonUnknownRole)
 	}
@@ -174,6 +186,9 @@ func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r
 	}
 	if slice != "" {
 		return s.sliceTask(slice)
+	}
+	if triage != "" {
+		return s.triageTask(triage)
 	}
 	switch role {
 	case record.StageEnvironment:
@@ -204,7 +219,10 @@ type roleStage struct {
 	screen secretScreen
 	// slice is set for a slice task: its entry of the review.scope artifact
 	// and that artifact's upstream binding (slice_run.go).
-	slice        *record.ScopeSlice
+	slice *record.ScopeSlice
+	// triage is the slot key of a diagnostic triage task or its verify
+	// (triage_run.go).
+	triage       string
 	sliceLimits  record.ScopeLimits
 	scopeUp      record.Upstream
 	sliceReserve int
@@ -247,6 +265,9 @@ func (s *roleStage) begin(upstream []record.Upstream) *analysis.TaskResult {
 		Evidence: []record.Excerpt{}, Observations: []record.ObservationRef{}, Limitations: []string{}, Calls: []record.Call{}}
 	if s.slice != nil {
 		s.rec.Slice = &record.SliceRef{Key: s.slice.Key, Modules: append([]string{}, s.slice.Modules...)}
+	}
+	if s.triage != "" {
+		s.rec.Schema, s.rec.Slice = record.SchemaVersionTriage, record.TriageSlotRef(s.triage)
 	}
 	return nil
 }
@@ -492,6 +513,15 @@ func (s *roleStage) reserveCall() *analysis.TaskResult {
 		reserve := 0
 		if s.slice != nil && s.role == record.StageInvestigate && s.sliceReserve == record.SliceMinCalls {
 			reserve = 1
+		}
+		// A triage retry keeps the call its verification needs.
+		if s.triage != "" && s.role == record.StageTriage {
+			reserve = 1
+		}
+		// The module slices and the contract follow-up leave the triage
+		// slots their held share.
+		if s.slice != nil || s.role == record.StageContract {
+			reserve += s.triageHold()
 		}
 		if used >= s.h.maxCalls(s.j.Scope)-reserve {
 			r := result(domain.TaskBudgetExhausted, reasonBudgetExhausted)

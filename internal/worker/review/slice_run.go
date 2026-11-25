@@ -77,6 +77,27 @@ func callsUsed(j analysis.Job) (int, error) {
 	return bytes.Count(b, []byte("\n")), nil
 }
 
+// wholeRunCallsUsed counts the calls of the whole-run roles: every counted
+// call except those of the diagnostic triage slots, whose records the
+// report's ledger counts like a slice's. It is the scope artifact's
+// calls_before_slices, which the whole-run call bound still limits.
+func wholeRunCallsUsed(j analysis.Job) (int, error) {
+	b, err := readBounded(callsPath(j), 64<<10)
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for line := range strings.SplitSeq(string(b), "\n") {
+		if _, _, triage := record.TriageTask(line); line != "" && !triage {
+			n++
+		}
+	}
+	return n, nil
+}
+
 // priorityInputs are what the analyzers say about the files: per path the
 // non-metric diagnostics located in it and their highest severity rank, and
 // the modules (<ecosystem>:<dir>) of required analyzer tasks that did not
@@ -238,7 +259,7 @@ func (s *roleStage) sliceTask(key string) analysis.TaskResult {
 		return result(domain.TaskFailed, reasonCallCountFailed)
 	}
 	decision := decisionAdmitted
-	if s.h.maxCalls(s.j.Scope)-used < s.sliceReserve {
+	if s.h.maxCalls(s.j.Scope)-used < s.sliceReserve+s.triageHold() {
 		decision = decisionExhausted
 	}
 	if err := os.WriteFile(admissionPath(s.j, key), []byte(decision), 0o600); err != nil {
