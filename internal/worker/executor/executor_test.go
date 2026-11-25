@@ -85,6 +85,12 @@ func TestEnvIsolation(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
 	t.Setenv("CODEYE_LEAK_CANARY", "parent-only")
 	t.Setenv("GITHUB_TOKEN", "ghp_parent")
+	// A caller's XDG directories must not reach a child either: OpenCode
+	// (and any tool that follows the convention) keeps its cache, state and
+	// data under the per-run HOME, never in the user's own directories.
+	for _, key := range []string{"XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME"} {
+		t.Setenv(key, "/tmp/parent-"+key)
+	}
 	ws := newWorkspace(t)
 	spec := helperSpec(t, ws, "env")
 	spec.Env = map[string]string{"CODEYE_VISIBLE": "yes", "LANG": "C.UTF-8"}

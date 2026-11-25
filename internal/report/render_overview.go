@@ -109,7 +109,7 @@ func (v secView) selectDecision(assessment, representative int) projectDecision 
 	var action, pending *Finding
 	for i := range r.Findings {
 		f := &r.Findings[i]
-		if !slices.Contains(review.FindingIDs, f.ID) || hiddenDisposition[f.Disposition] || !hasProductFindingEvidence(*f) ||
+		if !slices.Contains(review.FindingIDs, f.ID) || hiddenDisposition[f.Disposition] || findingHeldBack(*f) || !hasProductFindingEvidence(*f) ||
 			openingText(f.Title, "") == "" {
 			continue
 		}

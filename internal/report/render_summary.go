@@ -550,7 +550,7 @@ func (v secView) findingCard(f Finding) secCard {
 // findingSecondary reports a finding supported only by secondary source.
 // If no source evidence has line ranges, use the recorded finding locations.
 func findingSecondary(f Finding) bool {
-	if FindingNotShipped(f) {
+	if findingHeldBack(f) {
 		return true
 	}
 	hasSource := false
@@ -1349,4 +1349,24 @@ func mdCards(p func(...string), cards []secCard) {
 // pending candidate: it does not move the verdict.
 func FindingNotShipped(f Finding) bool {
 	return f.Validation == ValidationUnreviewed && slices.Contains(f.Limitations, record.LimCandidateNotShipped)
+}
+
+// FindingHypothesisNotShipped reports a model hypothesis about tool
+// diagnostics that all lie on paths that are not shipped code, whose own
+// evidence is on such paths too (builder 25, record.HypothesisNotShipped). It
+// keeps the validation the model's verification gave it and is listed with the
+// items of secondary paths, but it is neither an action item nor a pending
+// candidate: it does not move the verdict, the priorities or the pull request
+// comment. The report decides it from the recorded observations and evidence,
+// whatever became of the verification.
+func FindingHypothesisNotShipped(f Finding) bool {
+	return slices.Contains(f.Limitations, record.LimHypothesisNotShipped)
+}
+
+// findingHeldBack reports a finding that is listed with the items of
+// secondary paths and counted by neither the action items nor the pending
+// candidates: a candidate not sent to verification or a hypothesis about
+// diagnostics outside shipped code.
+func findingHeldBack(f Finding) bool {
+	return FindingNotShipped(f) || FindingHypothesisNotShipped(f)
 }

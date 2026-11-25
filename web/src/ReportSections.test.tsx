@@ -202,6 +202,22 @@ describe('existing test results', () => {
 });
 
 describe('analysis sections', () => {
+  it('counts the hypotheses about diagnostics outside shipped code, from builder 25 on', () => {
+    const withCount = (builder: string) => {
+      const doc = example('report-slices.json');
+      doc.builder.version = builder;
+      doc.code_review.hypotheses_not_shipped = 1;
+      doc.overview.sections.find((x: { key: string }) => x.key === 'code_review').counts.hypotheses_not_shipped = 1;
+      return doc;
+    };
+    const doc = withCount('25');
+    expect(parseAnalysisReport(doc, doc.run_id).sections!.codeReview.hypothesesNotShipped).toBe(1);
+    expect(t.sections.countLabels['code_review.hypotheses_not_shipped']).toContain('해석 가설');
+    expect(parseAnalysisReport(example('report-slices.json'), doc.run_id).sections!.codeReview.hypothesesNotShipped).toBe(0);
+    const old = withCount('24');
+    expect(() => parseAnalysisReport(old, old.run_id)).toThrow();
+  });
+
   it('counts the candidates left out because their evidence is not shipped code, from builder 24 on', () => {
     const withCount = (builder: string) => {
       const doc = example('report-slices.json');

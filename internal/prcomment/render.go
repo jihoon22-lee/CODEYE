@@ -210,9 +210,10 @@ func changedItems(r *report.Report, s *report.PullRequestSection) ([]findingAt, 
 	for _, it := range s.Items {
 		switch it.Kind {
 		case "finding":
-			// A candidate that was not sent to verification is listed in the
-			// report, never in the short list of a comment.
-			if f, ok := findings[it.ID]; ok && f.Disposition == "open" && !report.FindingNotShipped(f) {
+			// A candidate that was not sent to verification, or a hypothesis about
+			// diagnostics outside shipped code, is listed in the report, never in
+			// the short list of a comment.
+			if f, ok := findings[it.ID]; ok && f.Disposition == "open" && !report.FindingNotShipped(f) && !report.FindingHypothesisNotShipped(f) {
 				fs = append(fs, findingAt{f: f, path: it.Path, line: it.Line})
 			}
 		case "observation":

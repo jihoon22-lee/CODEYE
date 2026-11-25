@@ -34,6 +34,7 @@ var ForbiddenClaims = []string{"AI 검토 완료", "검토를 완료", "문제 �
 // ValidateReport checks referential integrity, counts and the status/verdict
 // rules. Build calls it; the publisher calls it again on stored bytes.
 func ValidateReport(r Report) error {
+	r = r.withoutLaterMarkers()
 	if r.SchemaVersion != SchemaVersion || r.Demo || !domain.ValidID(r.ID) || !domain.ValidID(r.RunID) || r.Revision < 1 {
 		return invalidf("report header is invalid")
 	}
@@ -421,7 +422,42 @@ func Unmarshal(b []byte) (Report, error) {
 	if err := dec.Decode(&r); err != nil || !json.Valid(b) {
 		return Report{}, invalidf("stored report is not a report document")
 	}
+	r = r.withoutLaterMarkers()
 	return r, ValidateReport(r)
+}
+
+// withoutLaterMarkers returns r with the limitation codes a later builder
+// gave a meaning taken out of the findings of a revision older than that
+// builder (hypothesis_not_shipped before builder 25, candidate_not_shipped
+// before builder 24). An older builder wrote model sentences into the same
+// list without stripping them, so the string in such a revision is model
+// text: it is neither a marker the validation checks nor one the summary,
+// the lists and the renderers act on. The findings of r are not changed.
+func (r Report) withoutLaterMarkers() Report {
+	drop := map[string]bool{}
+	if !builderAtLeast(r.Builder.Version, HypothesisNotShippedSince) {
+		drop[record.LimHypothesisNotShipped] = true
+	}
+	if !builderAtLeast(r.Builder.Version, ShippedFocusSince) {
+		drop[record.LimCandidateNotShipped] = true
+	}
+	if _, err := strconv.Atoi(r.Builder.Version); err != nil {
+		return r
+	}
+	var findings []Finding
+	for i, f := range r.Findings {
+		if !slices.ContainsFunc(f.Limitations, func(s string) bool { return drop[s] }) {
+			continue
+		}
+		if findings == nil {
+			findings = slices.Clone(r.Findings)
+		}
+		findings[i].Limitations = slices.DeleteFunc(slices.Clone(f.Limitations), func(s string) bool { return drop[s] })
+	}
+	if findings != nil {
+		r.Findings = findings
+	}
+	return r
 }
 
 // Digest is the sha256 of the canonical JSON; it is printed in every format.
@@ -531,7 +567,7 @@ func Project(r Report, includeCode bool) Report {
 		g.Verification = safeTexts(f.Verification)
 		g.Limitations = safeTexts(f.Limitations)
 		for j, s := range f.Limitations {
-			if s == record.LimCandidateNotShipped {
+			if s == record.LimCandidateNotShipped || s == record.LimHypothesisNotShipped {
 				g.Limitations[j] = s
 			}
 		}

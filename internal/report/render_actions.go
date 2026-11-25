@@ -451,15 +451,23 @@ func (v secView) candidateFold(id, label, note string, findings []Finding, ancho
 	}
 	l := v.L
 	fold := candidateFold{ID: id, Label: tf(l, label, len(findings)), Note: l.Label(note)}
-	notShipped := 0
+	notShipped, hypotheses := 0, 0
 	for _, f := range findings {
 		if FindingNotShipped(f) {
 			notShipped++
+		}
+		if FindingHypothesisNotShipped(f) {
+			hypotheses++
 		}
 	}
 	if notShipped > 0 {
 		// The summary line says how many of the items were not verified.
 		fold.Label += " · " + tf(l, "actions.secondary_not_shipped", notShipped)
+	}
+	if hypotheses > 0 {
+		// And how many are hypotheses about diagnostics outside shipped code,
+		// whose verdict is the model's but which are no action items.
+		fold.Label += " · " + tf(l, "actions.secondary_hypotheses", hypotheses)
 	}
 	for _, f := range findings {
 		row := candidateRow{
@@ -476,6 +484,9 @@ func (v secView) candidateFold(id, label, note string, findings []Finding, ancho
 		if FindingNotShipped(f) {
 			// A fixed label, whatever the model wrote, kept in the code-free export.
 			row.Next = &actionRow{Label: l.Label("actions.not_shipped_label"), Text: l.Label("actions.not_shipped_text")}
+		} else if FindingHypothesisNotShipped(f) {
+			// Fixed too: the validation state above is the model's verdict.
+			row.Next = &actionRow{Label: l.Label("actions.hypothesis_not_shipped_label"), Text: l.Label("actions.hypothesis_not_shipped_text")}
 		} else if next := readerVerification(f.Verification); next != "" {
 			row.Next = &actionRow{Label: l.Label("opening.verification"), Text: next}
 		}

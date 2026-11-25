@@ -22,7 +22,7 @@ const (
 	BuilderID     = "codeye-report"
 	// Stored revisions keep their original builder and schema. Bump this
 	// version when the same accepted inputs would produce a different report.
-	BuilderVersion             = "24"
+	BuilderVersion             = "25"
 	TestCaseResultsSince       = 19
 	AnalysisEvidenceSince      = 17
 	GoTestFailureEvidenceSince = 18
@@ -35,6 +35,12 @@ const (
 	// candidate whose evidence is all on paths that are not shipped code out
 	// of the findings and counts it (code_review.candidates_not_shipped).
 	ShippedFocusSince = 24
+	// HypothesisNotShippedSince is the first builder that keeps a model
+	// hypothesis about tool diagnostics on paths that are not shipped code
+	// out of the action items, the summary's actionable and pending counts,
+	// its priorities and the pull request comment's list, and counts it
+	// (code_review.hypotheses_not_shipped).
+	HypothesisNotShippedSince = 25
 )
 
 // Report statuses (schemas/report.schema.json).

@@ -485,6 +485,12 @@ type CodeReviewSection struct {
 	// did not send and the findings leave out because all their evidence is
 	// on test, example, benchmark, generated or vendored paths (builder 24).
 	CandidatesNotShipped int `json:"candidates_not_shipped,omitempty"`
+	// HypothesesNotShipped counts the model hypotheses about tool
+	// diagnostics that all lie on paths that are not shipped code, which keep
+	// the verdict of their verification but are no action items or pending
+	// candidates and are listed with the items of secondary paths; the
+	// refuted ones are not counted (builder 25).
+	HypothesesNotShipped int `json:"hypotheses_not_shipped,omitempty"`
 	// Subject is non_shipped when the reviewable scope holds no shipped code
 	// (an examples-only repository, a pull request that changes only tests):
 	// the review then treats that code as its subject and sets no candidate

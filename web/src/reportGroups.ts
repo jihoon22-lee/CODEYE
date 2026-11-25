@@ -194,8 +194,25 @@ export function findingNotShipped(finding: Finding): boolean {
   return finding.validation === 'unreviewed' && finding.limitations.includes('candidate_not_shipped');
 }
 
+// findingHypothesisNotShipped reports a model hypothesis about tool diagnostics
+// that all lie on paths that are not shipped code (builder 25). It keeps the
+// validation its verification gave it, but it is listed with the secondary
+// paths and is no action item or pending candidate.
+export function findingHypothesisNotShipped(finding: Finding): boolean {
+  return finding.limitations.includes('hypothesis_not_shipped');
+}
+
+// findingHeldBack reports a finding the report lists with the secondary paths
+// and counts as neither an action item nor a pending candidate.
+export function findingHeldBack(finding: Finding): boolean {
+  return findingNotShipped(finding) || findingHypothesisNotShipped(finding);
+}
+
+// secondaryReviewFinding: the report's marker decides; the path guess below
+// is only the fallback for a finding without one (every finding of an older
+// revision, and the candidates the report cannot decide from paths alone).
 export function secondaryReviewFinding(finding: Finding): boolean {
-  if (findingNotShipped(finding)) return true;
+  if (findingHeldBack(finding)) return true;
   const evidence = sourceEvidence(finding);
   return evidence.length > 0
     ? evidence.every(e => e.kind === 'test' || secondaryReviewPath(e.path))
@@ -452,6 +469,11 @@ export function projectReadings(report: AnalysisReport, sections: Sections) {
   const followups: Decision[] = [];
   for (const finding of report.findings) {
     if (!reviewed.has(finding.id) || hiddenDispositions.has(finding.disposition)) continue;
+    // The report's own decision, not a second path guess: a hypothesis about
+    // diagnostics outside shipped code and a candidate that was not sent to
+    // verification are listed with the secondary paths, never offered as an
+    // action or a follow-up (older revisions carry no such limitation).
+    if (findingHeldBack(finding)) continue;
     const sources = sourceEvidence(finding).filter(e => e.kind === 'code' && !secondaryReviewPath(e.path) && !finding.counter.includes(e.id));
     const basis = [
       ...finding.conditions,
