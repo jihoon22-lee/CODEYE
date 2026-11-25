@@ -79,6 +79,9 @@ type Hello struct {
 	// ReviewMaxCalls is the node operator's model call ceiling per review
 	// attempt; 0 means the default (docs/REVIEW.md#모듈-단위-검토-분할).
 	ReviewMaxCalls int `json:"review_max_calls,omitempty"`
+	// ReviewParallel is how many independent review pairs of an attempt run
+	// at once; 0 means one at a time (docs/REVIEW.md#호출-상한과-승인).
+	ReviewParallel int `json:"review_parallel,omitempty"`
 	// ReviewRequestBytes and ReviewOutputTokens are the node operator's
 	// review request budget; 0 means the default (docs/REVIEW.md#요청-크기).
 	ReviewRequestBytes int `json:"review_request_bytes,omitempty"`

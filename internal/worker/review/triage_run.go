@@ -2,6 +2,7 @@ package review
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -174,12 +175,16 @@ func (s *roleStage) triageTask(key string) analysis.TaskResult {
 	if s.h.Caller == nil {
 		return s.triageSkip(key, domain.TaskUnsupported, "model_not_configured")
 	}
-	used, err := callsUsed(s.j)
+	// Admitted while max - used >= the pair's two calls.
+	admitted, err := s.callsBelow(s.h.maxCalls(s.j.Scope)-record.SliceMinCalls+1, false)
+	if errors.Is(err, errCallsCancelled) {
+		return result(domain.TaskCancelled, "cancelled")
+	}
 	if err != nil {
 		return result(domain.TaskFailed, reasonCallCountFailed)
 	}
 	decision := decisionAdmitted
-	if s.h.maxCalls(s.j.Scope)-used < record.SliceMinCalls {
+	if !admitted {
 		decision = decisionExhausted
 	}
 	if err := s.triageDecision(key, decision); err != nil {
@@ -230,6 +235,11 @@ func triageHoldPath(j analysis.Job) string { return filepath.Join(j.Scratch, "re
 // contract admission, and kept next to the call counter; without an
 // accepted scope artifact, a model or diagnostics nothing is held.
 func (s *roleStage) triageHold() int {
+	if l := ledgerOf(s.ctx); l != nil {
+		// Concurrent slices decide it once.
+		l.holdMu.Lock()
+		defer l.holdMu.Unlock()
+	}
 	if b, err := readBounded(triageHoldPath(s.j), 32); err == nil {
 		if n, err := strconv.Atoi(string(b)); err == nil && n >= 0 {
 			return n

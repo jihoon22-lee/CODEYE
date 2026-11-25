@@ -78,7 +78,7 @@ var usageGroups = []usageGroup{
 			"             [--lizard /abs/lizard] [--jscpd /abs/jscpd/run-jscpd.js] [--gitleaks /abs/gitleaks] [--opengrep /abs/opengrep]\n" +
 			"             [--repo-code-source-root ID ...] [--project-analysis-policy] [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]\n" +
 			"             [--opencode /abs/opencode --model PROVIDER/MODEL [--model-config-file PATH] [--model-credential-file PATH | --model-relay-file PATH]] [--model-source-root ID ...] [--review-max-calls 15..2013]\n" +
-			"             [--review-request-bytes 40000..1048576] [--review-output-tokens 1536..65536]\n" +
+			"             [--review-parallel 1..16] [--review-request-bytes 40000..1048576] [--review-output-tokens 1536..65536]\n" +
 			"             [--offline] [--ca-bundle /abs/ca-bundle.pem]",
 			"A node agent. --offline: no built-in public registry or model endpoint; --ca-bundle: the CAs the fetch, Git and model processes trust."},
 	}},

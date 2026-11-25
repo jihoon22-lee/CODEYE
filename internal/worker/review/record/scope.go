@@ -33,6 +33,11 @@ const (
 
 	// Call budget of the review (codeye agent --review-max-calls).
 	DefaultMaxCalls = 99
+	// DefaultParallel is how many independent review pairs of an attempt
+	// run at once by default (codeye agent --review-parallel): a few
+	// requests wait on the provider together; 1 is one at a time.
+	DefaultParallel = 4
+	MaxParallel     = 16
 	// WholeRunMaxCalls is the most the five whole-run roles can call
 	// (5 x RoleMaxCalls); they are never cut, so it is the ceiling's minimum.
 	WholeRunMaxCalls = 5 * RoleMaxCalls
@@ -81,6 +86,10 @@ const (
 // ValidMaxCalls reports a call ceiling the review accepts (0 is the
 // default and is resolved before it is recorded).
 func ValidMaxCalls(n int) bool { return n >= WholeRunMaxCalls && n <= MaxMaxCalls }
+
+// ValidParallel reports a degree of parallelism of the review pairs the
+// agent accepts.
+func ValidParallel(n int) bool { return n >= 1 && n <= MaxParallel }
 
 // Scope file states. Every eligible code or test file of the run is in
 // exactly one place: the overview list holds covered_by_overview, withheld,

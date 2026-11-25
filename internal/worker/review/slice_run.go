@@ -20,14 +20,15 @@ import (
 
 // Running the review slices (docs/REVIEW.md#모듈-단위-검토-분할).
 //
-// The call budget is attempt-local: one attempt is one worker process that
-// runs its tasks one after another, and every review model call of the
-// attempt appends one line to a counter file in the attempt scratch before
-// the call is made (countCall). A slice investigate is admitted, in plan
-// order, when a call for investigation and one for candidate verification
-// remain. An investigation retry preserves the second call. The decision
-// is written next to the counter and the slice's verify follows it. The
-// whole-run roles run before every slice and share the same ceiling.
+// The call budget is attempt-local: one attempt is one worker process, and
+// every review model call of the attempt appends one line to a counter file
+// in the attempt scratch before the call is made (callsBelow). A slice
+// investigate is admitted, in plan order, when a call for investigation and
+// one for candidate verification remain. An investigation retry preserves
+// the second call. The decision is written next to the counter and the
+// slice's verify follows it. The whole-run roles run before every slice and
+// share the same ceiling. Pairs may run concurrently (schedule.go); each
+// decision still counts only the calls before the pair in plan order.
 const (
 	reasonBudgetExhausted = "review_budget_exhausted"
 	reasonCallCountFailed = "review_call_count_failed"
@@ -48,20 +49,6 @@ func callsPath(j analysis.Job) string { return filepath.Join(j.Scratch, "review.
 func scopePath(j analysis.Job) string { return filepath.Join(j.Scratch, "review.scope.json") }
 func admissionPath(j analysis.Job, key string) string {
 	return filepath.Join(j.Scratch, "review.admission."+key)
-}
-
-// countCall records one model call of this attempt before it is made. A
-// call that cannot be counted is not made.
-func (s *roleStage) countCall() error {
-	f, err := os.OpenFile(callsPath(s.j), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
-	if err != nil {
-		return err
-	}
-	_, err = f.WriteString(s.task + "\n")
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	return err
 }
 
 // callsUsed counts the model calls this attempt has made. An unreadable
@@ -254,12 +241,16 @@ func (s *roleStage) sliceTask(key string) analysis.TaskResult {
 	if !pending {
 		return result(domain.TaskSkippedPolicy, domain.ReasonNoReviewScope)
 	}
-	used, err := callsUsed(s.j)
+	// Admitted while max - used >= reserve + hold.
+	admitted, err := s.callsBelow(s.h.maxCalls(s.j.Scope)-s.sliceReserve-s.triageHold()+1, false)
+	if errors.Is(err, errCallsCancelled) {
+		return result(domain.TaskCancelled, "cancelled")
+	}
 	if err != nil {
 		return result(domain.TaskFailed, reasonCallCountFailed)
 	}
 	decision := decisionAdmitted
-	if s.h.maxCalls(s.j.Scope)-used < s.sliceReserve+s.triageHold() {
+	if !admitted {
 		decision = decisionExhausted
 	}
 	if err := os.WriteFile(admissionPath(s.j, key), []byte(decision), 0o600); err != nil {

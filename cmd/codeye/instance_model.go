@@ -29,7 +29,7 @@ func modelAgentArgs(cfg *instance.Config, layout instance.Layout) []string {
 	if path := cfg.FilePath(); path != "" {
 		args := []string{"--model-instance-config", path}
 		if m := cfg.Agent.Model; m != nil {
-			args = append(args, budgetArgs(m.ReviewMaxCalls, m.ReviewRequestBytes, m.ReviewOutputTokens)...)
+			args = append(args, budgetArgs(m.ReviewMaxCalls, m.ReviewParallel, m.ReviewRequestBytes, m.ReviewOutputTokens)...)
 		}
 		return args
 	}
@@ -50,15 +50,18 @@ func modelAgentArgs(cfg *instance.Config, layout instance.Layout) []string {
 	if m.Timeout != opencode.DefaultTimeout {
 		args = append(args, "--model-timeout", m.Timeout.String())
 	}
-	return append(args, budgetArgs(m.ReviewMaxCalls, m.ReviewRequestBytes, m.ReviewOutputTokens)...)
+	return append(args, budgetArgs(m.ReviewMaxCalls, m.ReviewParallel, m.ReviewRequestBytes, m.ReviewOutputTokens)...)
 }
 
 // budgetArgs are the agent's review budget flags of the configured values
 // (0: the agent's default).
-func budgetArgs(maxCalls, requestBytes, outputTokens int) []string {
+func budgetArgs(maxCalls, parallel, requestBytes, outputTokens int) []string {
 	var args []string
 	if maxCalls != 0 {
 		args = append(args, "--review-max-calls", strconv.Itoa(maxCalls))
+	}
+	if parallel != 0 {
+		args = append(args, "--review-parallel", strconv.Itoa(parallel))
 	}
 	if requestBytes != 0 {
 		args = append(args, "--review-request-bytes", strconv.Itoa(requestBytes))

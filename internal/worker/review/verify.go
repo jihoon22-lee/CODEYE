@@ -477,7 +477,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 			break
 		}
 		if r := s.reserveCall(); r != nil {
-			if len(accepted)+len(held) == 0 {
+			if len(accepted)+len(held) == 0 || r.Status == domain.TaskCancelled {
 				return *s.fail(*r)
 			}
 			s.rec.Limitations = addLim(s.rec.Limitations, limRepairNotSent)

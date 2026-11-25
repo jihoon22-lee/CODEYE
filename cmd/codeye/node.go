@@ -68,6 +68,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 	modelInstance := fs.String("model-instance-config", "", "")
 	modelTimeout := fs.Duration("model-timeout", opencode.DefaultTimeout, "")
 	reviewMaxCalls := fs.Int("review-max-calls", review.DefaultMaxCalls, "")
+	reviewParallel := fs.Int("review-parallel", review.DefaultParallel, "")
 	reviewRequestBytes := fs.Int("review-request-bytes", review.DefaultRequestBytes, "")
 	reviewOutputTokens := fs.Int("review-output-tokens", review.DefaultOutputTokens, "")
 	fs.Var(&modelRoots, "model-source-root", "")
@@ -151,6 +152,10 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "invalid --review-max-calls; expected 15..2013 (default 99)")
 		return agent.ExitUsage
 	}
+	if !review.ValidParallel(*reviewParallel) {
+		fmt.Fprintf(stderr, "invalid --review-parallel; expected 1..%d (default %d)\n", review.MaxParallel, review.DefaultParallel)
+		return agent.ExitUsage
+	}
 	if !review.ValidRequestBytes(*reviewRequestBytes) {
 		fmt.Fprintf(stderr, "invalid --review-request-bytes; expected %d..%d (default %d)\n", review.MinRequestBytes, review.MaxRequestBytes, review.DefaultRequestBytes)
 		return agent.ExitUsage
@@ -230,7 +235,7 @@ func runAgent(ctx context.Context, args []string, stderr io.Writer) int {
 		ControllerURL: *controller, StateDir: abs, Name: *name, EnrollTokenFile: *tokenFile,
 		SourceRoots: mapping, Workers: *workers, Autoscale: *autoscale, MaxWorkers: *maxWorkers,
 		ToolPath: *toolPath, JavaClasspathCatalog: *javaClasspath, GitExecutable: *git, GitHosts: gitHosts, GitCredentialFile: *gitCredential, GoExecutable: *goExe, GoModCache: *goModCache, AnalyzerTools: tools,
-		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelCredentialFile: *modelCredential, ModelTimeout: *modelTimeout, ModelSourceRoots: approved, ReviewMaxCalls: *reviewMaxCalls,
+		ModelExecutable: *modelExe, ModelName: *modelName, ModelRelayFile: *modelRelay, ModelCredentialFile: *modelCredential, ModelTimeout: *modelTimeout, ModelSourceRoots: approved, ReviewMaxCalls: *reviewMaxCalls, ReviewParallel: *reviewParallel,
 		ReviewRequestBytes: *reviewRequestBytes, ReviewOutputTokens: *reviewOutputTokens,
 		RepositoryCodeSourceRoots: codeApproved,
 		StorageQuota:              limits,
@@ -345,6 +350,9 @@ func workerHandlers(ctx context.Context, h *workerproto.Hello, runner executor.R
 func workerHandlersWithCaller(ctx context.Context, h *workerproto.Hello, runner executor.Runner, caller review.Caller) ([]analysis.Handler, []string, error) {
 	if h.ReviewMaxCalls != 0 && !review.ValidMaxCalls(h.ReviewMaxCalls) {
 		return nil, nil, errors.New("review call ceiling out of range")
+	}
+	if h.ReviewParallel != 0 && !review.ValidParallel(h.ReviewParallel) {
+		return nil, nil, errors.New("review parallelism out of range")
 	}
 	if !review.ValidRequestBytes(h.ReviewRequestBytes) || !review.ValidOutputTokens(h.ReviewOutputTokens) {
 		return nil, nil, errors.New("review request budget out of range")

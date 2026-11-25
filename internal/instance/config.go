@@ -225,6 +225,9 @@ type Model struct {
 	// ReviewMaxCalls is the model call ceiling per review attempt
 	// (codeye agent --review-max-calls); 0 means the default.
 	ReviewMaxCalls int `json:"review_max_calls,omitempty"`
+	// ReviewParallel is how many independent review pairs of an attempt
+	// run at once (codeye agent --review-parallel); 0 means the default.
+	ReviewParallel int `json:"review_parallel,omitempty"`
 	// ReviewRequestBytes and ReviewOutputTokens are the review request
 	// budget (codeye agent --review-request-bytes, --review-output-tokens);
 	// 0 means the default.
@@ -592,6 +595,9 @@ func (c *Config) validate(knownTools []string) error {
 		}
 		if m.ReviewMaxCalls != 0 && !record.ValidMaxCalls(m.ReviewMaxCalls) {
 			return errors.New("agent.model.review_max_calls must be between 15 and 2013")
+		}
+		if m.ReviewParallel != 0 && !record.ValidParallel(m.ReviewParallel) {
+			return fmt.Errorf("agent.model.review_parallel must be between 1 and %d", record.MaxParallel)
 		}
 		if !opencode.ValidRequestBytes(m.ReviewRequestBytes) {
 			return fmt.Errorf("agent.model.review_request_bytes must be between %d and %d", opencode.MinRequestBytes, opencode.MaxRequestBytes)

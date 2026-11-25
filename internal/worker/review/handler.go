@@ -504,33 +504,33 @@ func (s *roleStage) recordCall(reply opencode.Reply, size, attempt int) record.C
 		Usage: usage(reply.Usage), Attempt: attempt, OutputErrors: []string{}}
 }
 
-// reserveCall checks the attempt's ledger before recording a call. Tasks
-// within one attempt execute sequentially, so both operations see the same
-// call count.
+// reserveCall checks the attempt's call ceiling and records the call before
+// it is made (callsBelow: the check and the record are one step, in plan
+// order, also when pairs run concurrently).
 func (s *roleStage) reserveCall() *analysis.TaskResult {
-	used, err := callsUsed(s.j)
-	if err == nil {
-		reserve := 0
-		if s.slice != nil && s.role == record.StageInvestigate && s.sliceReserve == record.SliceMinCalls {
-			reserve = 1
-		}
-		// A triage retry keeps the call its verification needs.
-		if s.triage != "" && s.role == record.StageTriage {
-			reserve = 1
-		}
-		// The module slices and the contract follow-up leave the triage
-		// slots their held share.
-		if s.slice != nil || s.role == record.StageContract {
-			reserve += s.triageHold()
-		}
-		if used >= s.h.maxCalls(s.j.Scope)-reserve {
-			r := result(domain.TaskBudgetExhausted, reasonBudgetExhausted)
-			return &r
-		}
-		err = s.countCall()
+	reserve := 0
+	if s.slice != nil && s.role == record.StageInvestigate && s.sliceReserve == record.SliceMinCalls {
+		reserve = 1
 	}
-	if err != nil {
+	// A triage retry keeps the call its verification needs.
+	if s.triage != "" && s.role == record.StageTriage {
+		reserve = 1
+	}
+	// The module slices and the contract follow-up leave the triage
+	// slots their held share.
+	if s.slice != nil || s.role == record.StageContract {
+		reserve += s.triageHold()
+	}
+	ok, err := s.callsBelow(s.h.maxCalls(s.j.Scope)-reserve, true)
+	switch {
+	case errors.Is(err, errCallsCancelled):
+		r := result(domain.TaskCancelled, "cancelled")
+		return &r
+	case err != nil:
 		r := result(domain.TaskFailed, reasonCallCountFailed)
+		return &r
+	case !ok:
+		r := result(domain.TaskBudgetExhausted, reasonBudgetExhausted)
 		return &r
 	}
 	return nil
