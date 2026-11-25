@@ -333,7 +333,7 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 	for len(sent) > 0 {
 		body, err := build(sent, nil)
 		if err != nil {
-			return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+			return *s.inputUnavailable()
 		}
 		if _, ok := s.fits(instructions+triageRepairRules, body, true); ok {
 			break
@@ -464,7 +464,7 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 		}
 		body, err := build(list, repair)
 		if err != nil {
-			r := result(domain.TaskFailed, "review_input_unavailable")
+			r := s.unavailable()
 			failed = &r
 			break
 		}

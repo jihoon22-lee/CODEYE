@@ -118,7 +118,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		planner := roleStage{ctx: s.ctx, j: s.j}
 		slots, err = planner.coverageSlotPlan(groups)
 		if err != nil {
-			return result(domain.TaskFailed, "review_input_unavailable")
+			return s.unavailable()
 		}
 		maxSlots = record.MaxSlices
 	}
@@ -164,7 +164,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 				Rank: []string{record.RankEntryPoint, record.RankSource, record.RankTest}[groups.rank[e.Path]], PullRequest: groups.change(e.Path)}
 			text, reason, err := s.reviewSource(e)
 			if err != nil {
-				return result(domain.TaskFailed, "review_input_unavailable")
+				return s.unavailable()
 			}
 			if seg := groups.secondary[e.Path]; seg != "" {
 				f.Class, f.Secondary = record.ClassSecondary, record.ReasonSecondaryPath+":"+seg
@@ -200,7 +200,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 				row.State = record.FileCoveredByOverview
 				for k, w := range prior {
 					if w.Start < 1 || w.End > len(lines) {
-						return result(domain.TaskFailed, "review_input_unavailable")
+						return s.unavailable()
 					}
 					// A window inside another travels as a reference
 					// (requestExcerpts) and adds no bytes.

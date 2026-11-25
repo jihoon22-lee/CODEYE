@@ -75,7 +75,7 @@ func (s *roleStage) inputFailure(err error) analysis.TaskResult {
 	if errors.Is(err, errTooLarge) {
 		return *s.fail(result(domain.TaskFailed, reasonInputTooLarge))
 	}
-	return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+	return *s.inputUnavailable()
 }
 
 // ---- environment -----------------------------------------------------------
@@ -152,11 +152,11 @@ func (s *roleStage) environment() analysis.TaskResult {
 		}
 		e, ok := files[r.Source.Path]
 		if !ok || e.SHA256 != r.Source.SHA256 || r.EvidenceID != record.ExcerptID(s.j.Snapshot.Digest, r.Source.Path, r.Source.SHA256, r.Source.StartLine, r.Source.EndLine) {
-			return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+			return *s.inputUnavailable()
 		}
 		text, _, ok, err := s.readLines(e, r.Source.StartLine, r.Source.EndLine)
 		if err != nil {
-			return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+			return *s.inputUnavailable()
 		}
 		if !ok || len(text) > 600 {
 			s.rec.Limitations = addLim(s.rec.Limitations, "requirement_source_omitted")
@@ -416,11 +416,11 @@ func (s *roleStage) documents() analysis.TaskResult {
 	}
 	evidence, err := s.documentExcerpts(f.selected)
 	if err != nil {
-		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+		return *s.inputUnavailable()
 	}
 	s.rec.Limitations = addLim(s.rec.Limitations, evidence.limitations...)
 	if len(evidence.excerpts) == 0 {
-		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+		return *s.inputUnavailable()
 	}
 	in := docsInput{Snapshot: s.j.Snapshot.Digest, NotRead: []docNotRead{}, Modules: []envdoc.ModuleDocs{}, Overlapping: []envdoc.Overlap{}, Limitations: append([]string{}, f.doc.Limitations...)}
 	for _, it := range f.doc.Documents.Items {
@@ -906,11 +906,11 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		if s.ctx.Err() != nil {
 			return *s.fail(result(domain.TaskCancelled, "cancelled"))
 		}
-		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+		return *s.inputUnavailable()
 	}
 	s.rec.Limitations = addLim(s.rec.Limitations, lims...)
 	if len(code) == 0 {
-		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+		return *s.inputUnavailable()
 	}
 	docs := documentsHandoff{State: uDoc.State, Reason: uDoc.Reason, Contracts: []record.Contract{}, Conflicts: []record.Conflict{}, Questions: []record.Question{}, Evidence: []docEvidence{}}
 	var docEv []record.Excerpt
@@ -930,7 +930,7 @@ func (s *roleStage) investigate() analysis.TaskResult {
 			return e.DirectivePath != "" || e.IsJavaAPIDocument()
 		})
 		if len(code) == 0 {
-			return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+			return *s.inputUnavailable()
 		}
 	}
 	envh := environmentHandoff{State: uEnv.State, Reason: uEnv.Reason, Notes: []record.EnvironmentNote{}}
@@ -1274,7 +1274,7 @@ func (s *roleStage) interpret() analysis.TaskResult {
 	}
 	tools, obs, refs, windows, lims, err := s.observationWindows(docs)
 	if err != nil {
-		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+		return *s.inputUnavailable()
 	}
 	s.rec.Limitations = addLim(s.rec.Limitations, lims...)
 	s.rec.Observations = refs

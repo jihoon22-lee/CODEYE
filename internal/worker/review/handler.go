@@ -416,11 +416,8 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 			return s.fail(result(domain.TaskCancelled, "cancelled"))
 		}
 		query, err := input(repair)
-		if err != nil && s.ctx.Err() != nil {
-			return s.fail(result(domain.TaskCancelled, "cancelled"))
-		}
 		if err != nil {
-			return end(result(domain.TaskFailed, "review_input_unavailable"), limRepairNotSent)
+			return end(s.unavailable(), limRepairNotSent)
 		}
 		text := instructions
 		if repair != nil {
@@ -502,6 +499,22 @@ func (s *roleStage) recordCall(reply opencode.Reply, size, attempt int) record.C
 	return record.Call{Role: s.role, Model: reply.Model, Version: reply.Version, PackID: s.pack.ID, PackVersion: s.pack.Version,
 		PackDigest: s.pack.Digest, PackFiles: s.pack.Files, RequestDigest: reply.RequestDigest, RequestBytes: size,
 		Usage: usage(reply.Usage), Attempt: attempt, OutputErrors: []string{}}
+}
+
+// unavailable is the result of a task whose input could not be built:
+// cancelled when the attempt was cancelled meanwhile (the snapshot reads stop
+// with the context), failed (review_input_unavailable) otherwise.
+func (s *roleStage) unavailable() analysis.TaskResult {
+	if s.ctx != nil && s.ctx.Err() != nil {
+		return result(domain.TaskCancelled, "cancelled")
+	}
+	return result(domain.TaskFailed, "review_input_unavailable")
+}
+
+// inputUnavailable ends the stage whose input could not be built
+// (unavailable), keeping its record.
+func (s *roleStage) inputUnavailable() *analysis.TaskResult {
+	return s.fail(s.unavailable())
 }
 
 // reserveCall checks the attempt's call ceiling and records the call before
