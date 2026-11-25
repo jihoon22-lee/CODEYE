@@ -151,12 +151,20 @@ const defaultNpmRegistry = "https://registry.npmjs.org/"
 
 // npmRegistry asks the found npm for the registry of the user's real
 // configuration (`npm config get registry`, their ~/.npmrc and variables).
-func npmRegistry(ctx context.Context, node, npm, dir string) string {
+// HOME, the npm cache and the logs are in the probe directory (npmProbeEnv),
+// so the probe writes nothing in the user's home. Without a probe directory
+// it does not run and npm's default registry applies.
+func npmRegistry(ctx context.Context, node, npm, dir, home string) string {
+	if dir == "" {
+		return ""
+	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, node, npm, "config", "get", "registry")
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "NO_UPDATE_NOTIFIER=1", "npm_config_update_notifier=false")
+	isolated := probePath(dir, "npm-config")
+	defer os.RemoveAll(isolated)
+	cmd.Env = npmProbeEnv(os.Environ(), home, isolated)
 	cmd.WaitDelay = time.Second
 	var out bytes.Buffer
 	cmd.Stdout = &out

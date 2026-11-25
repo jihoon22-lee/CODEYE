@@ -23,7 +23,10 @@ func goModCache(ctx context.Context, env Env, goExe, dir string) string {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, goExe, "env", "GOMODCACHE")
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local", "GOWORK=off", "GOFLAGS=")
+	// The user's environment except the configuration directory (telemetry), goProbeEnv.
+	config := probePath(dir, "go-config")
+	defer os.RemoveAll(config)
+	cmd.Env = goProbeEnv(os.Environ(), config)
 	cmd.WaitDelay = time.Second
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -62,7 +65,10 @@ func goSettings(ctx context.Context, env Env, goExe, dir string) GoSettings {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, goExe, "env", "-json", "GOPROXY", "GOSUMDB", "GOPRIVATE", "GONOPROXY", "GONOSUMDB")
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local", "GOWORK=off", "GOFLAGS=")
+	// The user's environment except the configuration directory (telemetry), goProbeEnv.
+	config := probePath(dir, "go-config")
+	defer os.RemoveAll(config)
+	cmd.Env = goProbeEnv(os.Environ(), config)
 	cmd.WaitDelay = time.Second
 	var out bytes.Buffer
 	cmd.Stdout = &out

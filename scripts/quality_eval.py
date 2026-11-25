@@ -599,6 +599,60 @@ def tool_specs(values):
     return out
 
 
+# Names in a tool detection result that are no analyzer flag: git sources and the model are
+# configured elsewhere (the review condition passes --opencode itself), gh has no agent flag.
+NOT_AGENT_TOOLS = ("go", "git", "gh", "opencode")
+# go_settings keys of the detection result and the agent flags of the Go dependency fetch.
+GO_SETTING_FLAGS = (("goproxy", "go-proxy"), ("gosumdb", "go-sumdb"), ("goprivate", "go-private"),
+                    ("gonoproxy", "go-noproxy"), ("gonosumdb", "go-nosumdb"))
+
+
+def resolve_tools(doc, explicit, go=None, go_mod_cache=None, switches=()):
+    """The agent's tool configuration from a tool detection result (`codeye tools --json`, the
+    service's <state_dir>/tools.json; docs/ANALYZERS.md#도구-찾기) merged like toolfind.Resolve:
+    an explicit --tool / --go / --go-mod-cache wins, otherwise a `found` tool is used and any other
+    status is left out (the agent then reports the analyzer as not configured). Like the service,
+    --python-both-type-checkers is added when mypy and pyright are both configured, and with
+    --agent-flag dependency-fetch the user's npm registry and Go download settings of the result
+    become the fetch flags. Returns {"go", "go_mod_cache", "tools", "switches", "extra_args",
+    "discovery"} where discovery records what came from the file."""
+    if doc.get("schema_version") != "0.1" or not isinstance(doc.get("tools"), list):
+        raise SystemExit("--tools-json is not a codeye tools --json result (schema_version 0.1)")
+    found, missing = {}, {}
+    for t in doc["tools"]:
+        name = t.get("name")
+        if t.get("status") == "found" and t.get("path") and os.path.isabs(t["path"]):
+            found[name] = t["path"]
+        else:
+            missing[name] = t.get("status")
+    tools = {k: v for k, v in found.items() if k not in NOT_AGENT_TOOLS}
+    tools.update(explicit)
+    go = go or found.get("go")
+    if not go_mod_cache and go:
+        go_mod_cache = doc.get("go_mod_cache")
+    switches = set(switches)
+    if tools.get("mypy") and tools.get("pyright"):
+        switches.add("python-both-type-checkers")
+    extra = []
+    if "dependency-fetch" in switches:
+        if doc.get("npm_registry"):
+            extra += ["--npm-registry", doc["npm_registry"]]
+        for key, flag in GO_SETTING_FLAGS:
+            value = (doc.get("go_settings") or {}).get(key)
+            if value:
+                extra += ["--" + flag, value]
+    discovery = {"detected_at": doc.get("detected_at"),
+                 "used": sorted(k for k in found if k not in NOT_AGENT_TOOLS and k not in explicit)
+                 + (["go"] if found.get("go") and go == found.get("go") else []),
+                 "overridden": sorted(k for k in explicit if k in found),
+                 "not_used": sorted(k for k in NOT_AGENT_TOOLS if k in found and k != "go"),
+                 "missing": {k: v for k, v in sorted(missing.items())},
+                 "go_mod_cache": bool(go_mod_cache) and go_mod_cache == doc.get("go_mod_cache"),
+                 "fetch_settings": [a[2:] for a in extra if a.startswith("--")]}
+    return {"go": go, "go_mod_cache": go_mod_cache, "tools": tools, "switches": sorted(switches),
+            "extra_args": extra, "discovery": discovery}
+
+
 def help_flags(binary):
     """Option names in the usage lines of `codeye agent --help` (the agent itself rejects unknown ones)."""
     import re
@@ -724,10 +778,19 @@ def run_batch(args):
     if not (build_root / "cmd" / "codeye").is_dir():
         raise SystemExit(f"--build-root {build_root} is not a CODEYE checkout (no cmd/codeye)")
     review = args.condition == "review"
-    if not os.path.isabs(args.go) or not os.access(args.go, os.X_OK):
-        raise SystemExit("--go must be an absolute executable path")
     tools = tool_specs(args.tool)
     switches = agent_switches(args.agent_flag)
+    extra_args, discovery = [], None
+    if args.tools_json:
+        tools_json = Path(args.tools_json).resolve()
+        resolved = resolve_tools(json.loads(tools_json.read_text(encoding="utf-8")), tools, args.go,
+                                 args.go_mod_cache, switches)
+        args.go, args.go_mod_cache = resolved["go"], resolved["go_mod_cache"]
+        tools, switches, extra_args = resolved["tools"], resolved["switches"], resolved["extra_args"]
+        tool_specs([f"{k}={v}" for k, v in tools.items()])  # the same checks as an explicit --tool
+        discovery = {"file": home_relative(tools_json), "sha256": file_sha256(tools_json), **resolved["discovery"]}
+    if not args.go or not os.path.isabs(args.go) or not os.access(args.go, os.X_OK):
+        raise SystemExit("--go must be an absolute executable path (or found in --tools-json)")
     budget = agent_budget(args)
     if budget and not review:
         raise SystemExit("--review-request-bytes and --review-output-tokens apply to --condition review only")
@@ -787,7 +850,9 @@ def run_batch(args):
         labels, prior = holdout_labels(entries, pack["id"], pack["tree_digest"], corpus.digest)
         reg_entry = {"pack_id": pack["id"], "pack_version": pack["version"], "pack_digest": pack["tree_digest"]}
     else:
-        config = canonical(sorted((k, file_sha256(v)) for k, v in {**tools, "go": args.go}.items()) + switches)
+        # extra_args (fetch settings from --tools-json) is empty otherwise, which keeps earlier digests
+        config = canonical(sorted((k, file_sha256(v)) for k, v in {**tools, "go": args.go}.items()) + switches
+                           + extra_args)
         labels, prior = [], []
         reg_entry = {"pack_id": "analyzers", "pack_version": None, "pack_digest": hashlib.sha256(config.encode()).hexdigest()}
     if budget:
@@ -807,7 +872,8 @@ def run_batch(args):
         "os": {"platform": platform.platform(), "python": platform.python_version(), "machine": platform.machine()},
         "analyzers": {"go": {"path": home_relative(args.go), "sha256": file_sha256(args.go)},
                       "tools": {k: {"path": home_relative(v), "sha256": file_sha256(v)} for k, v in sorted(tools.items())},
-                      "agent_flags": switches,
+                      "agent_flags": switches, "agent_args": extra_args, "discovery": discovery,
+                      "artifacts_kept": bool(args.keep_analyzer_artifacts),
                       "repo_code_grant": not args.no_repo_code_grant, "go_mod_cache": bool(args.go_mod_cache),
                       "toolchain_path": args.toolchain_path, "observed": {}},
         "budget": ({"ledger_before": {k: report_before.get(k) for k in (
@@ -846,7 +912,7 @@ def run_batch(args):
                     out += ["--go-mod-cache", args.go_mod_cache]
                 for k, v in sorted(tools.items()):
                     out += ["--" + k, v]
-                out += ["--" + s for s in switches]
+                out += ["--" + s for s in switches] + extra_args
                 if not args.no_repo_code_grant:
                     out += ["--repo-code-source-root", root_id]
                 if review:
@@ -975,6 +1041,10 @@ def execute(cluster, corpus, plan, batch, args, review, source, concurrency, kee
             if report is not None:
                 (batch / "reports" / (key + ".json")).write_text(json.dumps(report, ensure_ascii=False, indent=1) + "\n")
                 keep_review_artifacts(report, cluster.work / "artifacts", batch / "records" / key)
+                if getattr(args, "keep_analyzer_artifacts", False):
+                    from eval_harness import keep_analyzer_artifacts
+                    (batch / "analyzers").mkdir(mode=0o700, exist_ok=True)
+                    keep_analyzer_artifacts(report, cluster.work / "artifacts", batch / "analyzers" / key)
                 records = records_of(batch, key)
                 row.update(summarize_report(report, records))
                 row["status"] = report["status"]
@@ -1109,9 +1179,15 @@ def main(argv=None):
                         "manifest records it and this runner's checkout separately")
     r.add_argument("--results-root", required=True, help="stable directory above every batch (holds the registry)")
     r.add_argument("--batch", help="batch directory name (default condition-UTC)")
-    r.add_argument("--go", required=True, help="absolute go toolchain (--go)")
+    r.add_argument("--go", help="absolute go toolchain (--go); required unless --tools-json found one")
     r.add_argument("--go-mod-cache")
+    r.add_argument("--tools-json", help="a tool detection result (`codeye tools --json`, the service's "
+                                        "<state_dir>/tools.json): its found tools configure the agent like the "
+                                        "service does; --go, --go-mod-cache and --tool override it")
     r.add_argument("--tool", action="append", help="analyzer tool or shared toolchain flag NAME=/abs/path (repeatable)")
+    r.add_argument("--keep-analyzer-artifacts", action="store_true",
+                   help="also keep each report's analyzer observations, result manifest, dependency records and "
+                        "raw tool streams under analyzers/<variant>/ (tool output, no model text)")
     r.add_argument("--agent-flag", action="append", help="boolean agent option NAME, passed as --NAME (repeatable), "
                                                           "e.g. python-both-type-checkers")
     r.add_argument("--toolchain-path", default="/usr/bin:/bin")
