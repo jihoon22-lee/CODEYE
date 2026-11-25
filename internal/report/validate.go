@@ -526,6 +526,11 @@ func Project(r Report, includeCode bool) Report {
 		g.Recommendation = Recommendation{Summary: safeText(f.Recommendation.Summary), Tradeoffs: safeTexts(f.Recommendation.Tradeoffs)}
 		g.Verification = safeTexts(f.Verification)
 		g.Limitations = safeTexts(f.Limitations)
+		for j, s := range f.Limitations {
+			if s == record.LimCandidateNotShipped {
+				g.Limitations[j] = s
+			}
+		}
 		g.Conditions = make([]Condition, len(f.Conditions))
 		for j, c := range f.Conditions {
 			c.Statement = safeText(c.Statement)

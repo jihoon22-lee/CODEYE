@@ -430,7 +430,7 @@ cron 문법과 시간대, 일광 절약 시간 처리, 겹침 정책(`coalesce_l
 | `observations[].path_class` | 생성기 23부터. 관찰 위치의 파일이 배포 코드가 아닐 때 그 종류(`test`·`example`·`benchmark`·`generated`·`vendored`). 파일 경로만으로 정하며 배포 코드, 위치 없는 관찰, 이전 리비전은 생략한다. 도구 finding의 기본 심각도와 도구 진단 접힘의 경로별 수가 이 값을 읽는다. [기본 심각도](ANALYZERS.md#기본-심각도) |
 | `observations[].related_locations` | C/C++ 도구가 원래 진단과 연결한 보조 위치·가정. 코드 미포함 응답은 위치와 유형을 남긴다. |
 | `metrics.go_package_dependencies` | Go 모듈의 import 관계와 줄 위치. 목록 조사가 끝나면 `unlisted_files`로 목록에 없던 후보 파일 수를 표시한다. |
-| `code_review.candidates_not_shipped` | 생성기 24부터. 인용한 코드·시험 근거가 모두 시험·예제·벤치마크·생성물·외부 코드 경로에 있어 검증하지 않고 발견에서 뺀 조사 후보의 수(1 이상일 때만 있다). 후보의 서술은 보고서에 없다. [모델 검토](REVIEW.md#검토-대상은-배포-코드다) |
+| `code_review.candidates_not_shipped` | 생성기 24부터. 인용한 코드·시험 근거가 모두 시험·예제·벤치마크·생성물·외부 코드 경로에 있어 검증하지 않은 조사 후보의 수(1 이상일 때만 있다). 그 후보는 검증 상태 `unreviewed`와 한계 `candidate_not_shipped`를 가진 발견으로 `findings`에 남으며 요약의 `pending_candidates`와 `priorities`에는 들지 않는다. [모델 검토](REVIEW.md#검토-대상은-배포-코드다) |
 | `code_review.diagnostic_triage` | 생성기 22부터 분류 slot이 계획된 실행의 도구 진단 분류. `diagnostics`(대상 진단 수), `triaged`(분류한 진단 수), `interpreted`(해석 후보가 다룬 진단 수)는 보고서의 관찰에서 센 값이고 나머지는 분류하지 않은 진단이다. `groups[]`는 묶음마다 `classification`(`problem`·`harmless`·`unclear`), `bucket`(`attention`·`refuted`·`harmless`), `observation_ids`, 모델의 `reason`(코드 미포함 응답은 생략 문구), 인용 위치 `locations`, 문제 묶음의 `finding_id`를 준다. [도구 진단 분류](REPORT.md#도구-진단-분류) |
 | `coverage.tools[].severity_table` | 생성기 22부터 그 도구 finding의 심각도를 정한 기본 심각도 표(`<규칙 팩>/<표 버전>`, 생성기 23부터 배포 코드가 아닌 경로를 낮추는 경로 규칙이 `+paths.1`처럼 붙는다). 표가 없으면 생략하고 finding은 `low`다. [기본 심각도](ANALYZERS.md#기본-심각도) |
 | `documents.quality`, `documents.comparisons`, `code_review.strengths` | 수락된 모델 해석과 근거 ID. 문서 비교의 `code_evidence_ids`를 따라가면 근거가 코드인지 테스트인지 구별할 수 있다. |

@@ -33,3 +33,20 @@ func TestChangedItemsRankValidationBeforeSeverity(t *testing.T) {
 		t.Fatalf("listed %v, want %v", got, want)
 	}
 }
+
+// A model candidate that was not sent to verification (its evidence is not
+// shipped code) is listed in the report, never in the comment's short list.
+func TestChangedItemsLeaveOutCandidatesNotSentToVerification(t *testing.T) {
+	r := &report.Report{}
+	s := &report.PullRequestSection{}
+	add := func(id string, limitations ...string) {
+		r.Findings = append(r.Findings, report.Finding{ID: id, Severity: "high", Validation: report.ValidationUnreviewed, Disposition: "open", Limitations: limitations})
+		s.Items = append(s.Items, report.PullRequestItem{Kind: "finding", ID: id, Path: "a_test.go", Line: 1})
+	}
+	add("review_s001_investigate_1", "candidate_not_shipped")
+	add("review_s001_investigate_2")
+	findings, _ := changedItems(r, s)
+	if len(findings) != 1 || findings[0].f.ID != "review_s001_investigate_2" {
+		t.Fatalf("listed %+v", findings)
+	}
+}

@@ -386,13 +386,12 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 // addFindings turns accepted candidates into findings; prefix is the slice
 // key part of a slice candidate's finding ID.
 func addFindings(r *Report, prefix string, candidates []record.Candidate, verdicts map[string]record.Verification, evidence map[string]record.Excerpt, obs map[string]Observation) {
-	notSent := record.NotShippedSet(slicesOfVerdicts(verdicts))
 	for _, c := range candidates {
-		if notSent[c.ID] {
-			// The platform did not send it to verification: its evidence is
-			// on paths that are not shipped code. The section counts it.
-			continue
-		}
+		// A candidate the platform did not send to verification (its evidence
+		// is on paths that are not shipped code) is a finding like any other
+		// unreviewed one: it carries the limitation candidate_not_shipped, the
+		// summary does not count it as pending and the report lists it with the
+		// items of secondary paths (FindingNotShipped).
 		f := reviewFinding(r.Inputs.SnapshotID, c.CandidateText, verdicts[c.ID], evidence)
 		f.ID = "review_" + prefix + c.ID
 		f.ObservationIDs = append([]string{}, c.ObservationIDs...)
@@ -462,12 +461,4 @@ func reviewFinding(snapshot string, c record.CandidateText, v record.Verificatio
 	}
 	setModelFingerprint(&f, c, catalog, nil)
 	return f
-}
-
-func slicesOfVerdicts(m map[string]record.Verification) []record.Verification {
-	out := make([]record.Verification, 0, len(m))
-	for _, v := range m {
-		out = append(out, v)
-	}
-	return out
 }

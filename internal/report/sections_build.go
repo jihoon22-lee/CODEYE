@@ -581,7 +581,7 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 		s.Ledger = c.ledger()
 	}
 	s.DiagnosticTriage = c.diagnosticTriage()
-	s.CandidatesNotShipped = c.candidatesNotShipped()
+	s.CandidatesNotShipped = c.candidatesNotShipped(s.FindingIDs)
 	c.addStrengths(s)
 	return s
 }
@@ -595,17 +595,14 @@ func roleOrder(key string) int {
 	return 99
 }
 
-// candidatesNotShipped counts the investigation candidates, of the whole run
-// and of every module slice, whose verification the platform skipped because
-// all their evidence is not shipped code (record.LimCandidateNotShipped).
-func (c sectionContext) candidatesNotShipped() int {
+// candidatesNotShipped counts the model candidates of the code review the
+// platform did not send to verification because all their evidence is on
+// paths that are not shipped code (FindingNotShipped).
+func (c sectionContext) candidatesNotShipped(ids []string) int {
 	n := 0
-	for _, k := range c.keys {
-		if k != "review.verify" && !(strings.HasPrefix(k, "review.verify.s") && !isTriageTask(k)) {
-			continue
-		}
-		if st := c.states[k]; st != nil && !st.rejected && verdictsUsable(k, st) {
-			n += len(record.NotShippedSet(st.reviewResult.Record.Verifications))
+	for _, f := range c.r.Findings {
+		if FindingNotShipped(f) && slices.Contains(ids, f.ID) {
+			n++
 		}
 	}
 	return n

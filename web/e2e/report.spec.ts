@@ -290,6 +290,11 @@ for (const surface of ['web panel', 'saved HTML']) {
       </div></article>
       <details class="report-more report-action-fold" open><summary>추가 확인이 필요한 후보 1건</summary><div class="report-more-body"><ul class="report-action-list"><li>
         <div class="report-action-list-head"><strong>${long('candidate')}</strong></div><code class="report-path-text">${long('candidate-path')}</code><p><strong>확인 방법</strong> ${long('candidate-check')}</p></li></ul></div></details>
+      <details class="card report-disclosure" id="secondary-findings" open><summary>예제·시험 입력 등에서 발견한 항목 2건 · 이 중 배포 코드를 인용하지 않아 검증하지 않은 모델 후보 1건</summary>
+        <p>제품 코드가 아닌 경로(예제·시험 입력 등)의 항목이다. 검증 상태는 항목마다 표시한다.</p>
+        <ul class="report-action-list"><li><div class="report-action-list-head"><strong>${long('not-shipped-title')}</strong><span class="report-status-badge" data-tone="attention">검증 전</span><span class="report-action-severity">심각도 낮음</span></div>
+          <code class="report-path-text">${long('not-shipped-path')}</code>
+          <p><strong>검증하지 않음</strong> 배포 코드가 아닌 경로의 줄만 인용한 조사 후보라 검증 요청에 보내지 않았다(검증 상태 unreviewed, 한계 candidate_not_shipped). ${long('not-shipped-text')}</p></li></ul></details>
       <details class="card report-disclosure" id="tool-diagnostics" open><summary>도구 진단 853건 중 238건 판정(문제·무해), 120건 판단 보류 (규칙 41종, 도구 3종)</summary>
         <p>모델의 분류는 결함 확인이 아니다.</p>
         <p class="report-diag-paths">${long('paths-total')} 경로별: 시험·예제 등 배포 코드가 아닌 경로 17건, 배포 코드 2건. 배포 코드가 아닌 경로의 진단은 기본 심각도를 낮춰 매긴다.</p>

@@ -51,6 +51,17 @@ func validateSections(r Report) error {
 	if cr := r.CodeReview; cr != nil && (cr.CandidatesNotShipped < 0 || (cr.CandidatesNotShipped > 0 && !builderAtLeast(r.Builder.Version, ShippedFocusSince))) {
 		return invalidf("candidates_not_shipped in a revision of builder %s", r.Builder.Version)
 	}
+	if cr := r.CodeReview; cr != nil && builderAtLeast(r.Builder.Version, ShippedFocusSince) {
+		n := 0
+		for _, f := range r.Findings {
+			if FindingNotShipped(f) && slices.Contains(cr.FindingIDs, f.ID) {
+				n++
+			}
+		}
+		if n != cr.CandidatesNotShipped {
+			return invalidf("candidates_not_shipped %d does not match the %d findings that were not sent to verification", cr.CandidatesNotShipped, n)
+		}
+	}
 	if !sectionsExpected(r.Builder.Version) {
 		if r.hasSections() {
 			return invalidf("sections in a revision of builder %s", r.Builder.Version)

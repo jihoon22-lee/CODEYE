@@ -5,7 +5,7 @@ import { Citations, FindingSourceLink, PinnedSourceLink, ReportPath, ReportPrevi
 import { ReportIcon } from './ReportLayout';
 import { inlineComparisonCode } from './ProjectOverview';
 import { actionPlan, COVERAGE_ATTENTION, DIAGNOSTIC_PLACES, MISMATCH_SHOWN, NOTICE_ATTENTION } from './reportActions';
-import { overviewFacts, regularStaticLanguages, ruleGroups, severityOf, type RuleGroup } from './reportGroups';
+import { findingNotShipped, overviewFacts, regularStaticLanguages, ruleGroups, severityOf, type RuleGroup } from './reportGroups';
 import { reportKo as t, diagnosticDescription } from './locales/report-ko';
 import { reportActionsKo as a } from './locales/report-actions-ko';
 import { ko } from './locales/ko';
@@ -98,7 +98,8 @@ function CandidateList({ title, note, findings, included, openFinding }: {
   return <Fold title={title}>
     <p>{note}</p>
     <ul className="report-action-list">{findings.map(f => {
-      const next = included ? f.verification.find(v => v.trim()) : undefined;
+      const notShipped = findingNotShipped(f);
+      const next = included && !notShipped ? f.verification.find(v => v.trim()) : undefined;
       return <li key={f.id}>
         <div className="report-action-list-head">
           <strong>{f.displayTitle ?? f.title}</strong>
@@ -106,6 +107,7 @@ function CandidateList({ title, note, findings, included, openFinding }: {
           <span className="report-action-severity">{a.severity(label(t.severity, f.severity))}</span>
         </div>
         {f.locations[0] && <ReportPath value={f.locations[0]} />}
+        {notShipped && <p><strong>{a.notShippedLabel}</strong> {a.notShippedText}</p>}
         {next && <p><strong>{a.verification}</strong> {next}</p>}
         <button type="button" className="btn btn-sm btn-ghost-primary report-action-link" onClick={() => openFinding(f.id)}>{a.openFinding}</button>
       </li>;
@@ -294,7 +296,7 @@ export function ReportActions({ report, sections, isDisposed, openFinding, openC
       </li>)}</ul>
     </div>}
     <CandidateList title={a.candidates(candidates.length)} note={a.candidatesNote} findings={candidates} included={included} openFinding={openFinding} />
-    <CandidateList title={a.secondary(secondary.length)} note={a.secondaryNote} findings={secondary} included={included} openFinding={openFinding} />
+    <CandidateList title={a.secondary(secondary.length) + (secondary.some(findingNotShipped) ? a.secondaryNotShipped(secondary.filter(findingNotShipped).length) : '')} note={a.secondaryNote} findings={secondary} included={included} openFinding={openFinding} />
     <Diagnostics report={report} sections={sections} openFinding={openFinding} />
   </section>;
 }
