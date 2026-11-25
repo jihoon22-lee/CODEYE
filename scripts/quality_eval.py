@@ -300,7 +300,7 @@ def holdout_labels(entries, pack_id, pack_digest, corpus_digest):
 def register(results_root, entry):
     """Append (pack id, pack digest, corpus digest, condition) once, with its first run time. Append-only."""
     entries = registry_entries(results_root)
-    key = ("pack_id", "pack_digest", "corpus_digest", "condition", "dry_run")
+    key = ("pack_id", "pack_digest", "corpus_digest", "condition", "dry_run", "agent_budget")
     if any(all(e.get(k) == entry.get(k) for k in key) for e in entries):
         return False
     path = Path(results_root) / REGISTRY
@@ -393,7 +393,7 @@ def history_profile(dirs):
 
 
 def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAULTS["repair_rate"],
-             max_calls=DEFAULTS["review_max_calls"], slices_unknown=False):
+             max_calls=DEFAULTS["review_max_calls"], slices_unknown=False, budget=None):
     """Calls and conservative ledger cost for a review batch.
 
     expected: per-role calls of the same variant in history (else history's per-variant average,
@@ -411,6 +411,9 @@ def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAU
     estimated as above (the constants are single-file inputs without slices); run the capture
     dry run with the same selection first. With slices_unknown (project-scale cases) a variant
     without history is treated as one that may plan slices: its upper is the per-attempt ceiling.
+    budget (agent_budget) only lowers the per-call input and output assumed when a cost comes from
+    history input sizes or constants; usage recorded in history and the number of calls stay as
+    measured, so a smaller request budget (more slices, more calls) is not predicted.
     """
     roles = PACK_ROLES
     base = CONSTANTS
@@ -425,8 +428,9 @@ def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAU
                 i, o = history["usage_mean"][r]
                 per_call[r] = int(i * PRICE_IN + o * PRICE_OUT)
             elif r in history["input_bytes_max"]:
-                tokens = history["input_bytes_max"][r] / DEFAULTS["bytes_per_token"]
-                per_call[r] = int(tokens * PRICE_IN + DEFAULTS["output_tokens_upper"] * PRICE_OUT)
+                size = min(history["input_bytes_max"][r], (budget or {}).get("review_request_bytes", float("inf")))
+                out_tokens = min(DEFAULTS["output_tokens_upper"], (budget or {}).get("review_output_tokens", float("inf")))
+                per_call[r] = int(size / DEFAULTS["bytes_per_token"] * PRICE_IN + out_tokens * PRICE_OUT)
     n = len(plan)
     expected_calls = 0.0
     expected_cost = 0.0
@@ -455,11 +459,14 @@ def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAU
         upper_cost += count * (1 + repair_rate) * (per_call["triage"] + per_call["verify"]) * margin
         upper_calls += 2
         upper_cost += 2 * per_call["contract"] * margin
-    return {"variants": n, "basis": basis, "margin": margin, "repair_rate": repair_rate, "max_calls": max_calls,
-            "slices_unknown": slices_unknown,
-            "per_call_microusd": per_call, "calls_per_variant": rates,
-            "expected": {"calls": round(expected_calls, 1), "ledger_microusd": int(expected_cost)},
-            "upper": {"calls": int(upper_calls + 0.999), "ledger_microusd": int(upper_cost)}}
+    out = {"variants": n, "basis": basis, "margin": margin, "repair_rate": repair_rate, "max_calls": max_calls,
+           "slices_unknown": slices_unknown,
+           "per_call_microusd": per_call, "calls_per_variant": rates,
+           "expected": {"calls": round(expected_calls, 1), "ledger_microusd": int(expected_cost)},
+           "upper": {"calls": int(upper_calls + 0.999), "ledger_microusd": int(upper_cost)}}
+    if budget:
+        out["agent_budget"] = budget
+    return out
 
 
 def budget_gate(est, report, reserve_microusd, request_reserve):
@@ -608,6 +615,29 @@ def help_flags(binary):
     return set(re.findall(r"--([a-z][a-z0-9-]*)", "\n".join(usage)))
 
 
+# Accepted ranges of codeye agent --review-request-bytes / --review-output-tokens. They mirror
+# MinRequestBytes..MaxRequestBytes and MinOutputTokens..MaxOutputTokens in
+# internal/worker/opencode/client.go; test_quality_eval fails when those constants change.
+REQUEST_BYTES_RANGE = (40000, 1 << 20)
+OUTPUT_TOKENS_RANGE = (1536, 65536)
+
+
+def agent_budget(args):
+    """The operator request budget given on the command line as {"review_request_bytes": N,
+    "review_output_tokens": N} (only the given ones), or None when neither was given (the product
+    default applies and nothing is passed or recorded)."""
+    out = {}
+    for name, (low, high) in (("review_request_bytes", REQUEST_BYTES_RANGE),
+                              ("review_output_tokens", OUTPUT_TOKENS_RANGE)):
+        value = getattr(args, name, None)
+        if value is None:
+            continue
+        if not low <= value <= high:
+            raise SystemExit(f"--{name.replace('_', '-')} must be {low}..{high}, got {value}")
+        out[name] = value
+    return out or None
+
+
 def agent_switches(values):
     """Boolean agent options given as --agent-flag NAME (e.g. python-both-type-checkers)."""
     import re
@@ -698,6 +728,9 @@ def run_batch(args):
         raise SystemExit("--go must be an absolute executable path")
     tools = tool_specs(args.tool)
     switches = agent_switches(args.agent_flag)
+    budget = agent_budget(args)
+    if budget and not review:
+        raise SystemExit("--review-request-bytes and --review-output-tokens apply to --condition review only")
     results_root = Path(args.results_root).resolve()
     results_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     chosen, selection = select(corpus, cases=set(args.cases.split(",")) if args.cases else None,
@@ -739,7 +772,7 @@ def run_batch(args):
         forbidden["allow_model_echo"] = bool(active[-1].get("allow_model_echo"))
         history = history_profile([Path(h) for h in args.history or []])
         est = estimate(plan, history=history, margin=args.margin, max_calls=args.review_max_calls,
-                       slices_unknown=corpus.project)
+                       slices_unknown=corpus.project, budget=budget)
         refusal = budget_gate(est, report_before, parse_usd(args.reserve_usd), args.request_reserve)
         write_json(batch / "plan.json", {"estimate": est, "refusal": refusal, "selection": selection})
         if refusal:
@@ -757,6 +790,8 @@ def run_batch(args):
         config = canonical(sorted((k, file_sha256(v)) for k, v in {**tools, "go": args.go}.items()) + switches)
         labels, prior = [], []
         reg_entry = {"pack_id": "analyzers", "pack_version": None, "pack_digest": hashlib.sha256(config.encode()).hexdigest()}
+    if budget:
+        reg_entry["agent_budget"] = budget
     reg_entry.update(corpus_digest=corpus.digest, condition=args.condition, first_run_at=now(), batch=name,
                      dry_run=bool(args.dry_run))
     manifest = {
@@ -783,6 +818,8 @@ def run_batch(args):
         "agents": args.agents, "max_workers": args.max_workers, "repeat": args.repeat,
         "planted_leak": args.plant_leak, "notes": [],
     }
+    if budget:
+        manifest["agent_budget"] = budget
     if args.dry_run:
         manifest["notes"].append("dry run: fake loopback upstream; results carry no quality information")
     write_json(batch / "manifest.json", manifest)
@@ -816,6 +853,8 @@ def run_batch(args):
                     out += ["--model-source-root", root_id, "--opencode", args.opencode, "--model", args.model,
                             "--model-relay-file", args.relay_file,
                             "--review-max-calls", str(args.review_max_calls)]
+                    for name, value in (budget or {}).items():
+                        out += ["--" + name.replace("_", "-"), str(value)]
                 return out
 
             concurrency = 1 if review else max(1, args.agents * args.max_workers)
@@ -872,7 +911,7 @@ def execute(cluster, corpus, plan, batch, args, review, source, concurrency, kee
     if review:
         est_one = estimate(plan[:1], history=history_profile([Path(h) for h in args.history or []]),
                            margin=args.margin, max_calls=args.review_max_calls,
-                           slices_unknown=corpus.project)["upper"]
+                           slices_unknown=corpus.project, budget=agent_budget(args))["upper"]
     deadline = time.monotonic() + args.timeout
     while queue or inflight:
         if not cluster.alive():
@@ -1054,6 +1093,13 @@ def main(argv=None):
     p.add_argument("--review-max-calls", type=int, default=DEFAULTS["review_max_calls"],
                    help="the agents' model call ceiling per attempt (codeye agent --review-max-calls)")
     p.add_argument("--reserve-usd", default=DEFAULTS["reserve_usd"])
+    p.add_argument("--review-request-bytes", type=int, help="operator request budget in bytes, 40000..1048576 "
+                     "(codeye agent --review-request-bytes); omitted: product default, nothing passed. Recorded in "
+                     "the manifest and holdout registry. The estimate only lowers its per-call input assumption to "
+                     "it; call counts come from --history, not from this size")
+    p.add_argument("--review-output-tokens", type=int, help="operator output budget per call, 1536..65536 "
+                     "(codeye agent --review-output-tokens); omitted: product default, nothing passed. The estimate "
+                     "only lowers its assumed output tokens to it")
     p.add_argument("--request-reserve", type=int, default=DEFAULTS["request_reserve"])
     r = sub.add_parser("run", help="run one batch through a real controller and agents")
     add_selection(r)
@@ -1083,6 +1129,13 @@ def main(argv=None):
     r.add_argument("--review-max-calls", type=int, default=DEFAULTS["review_max_calls"],
                    help="the agents' model call ceiling per attempt (codeye agent --review-max-calls)")
     r.add_argument("--reserve-usd", default=DEFAULTS["reserve_usd"])
+    r.add_argument("--review-request-bytes", type=int, help="operator request budget in bytes, 40000..1048576 "
+                     "(codeye agent --review-request-bytes); omitted: product default, nothing passed. Recorded in "
+                     "the manifest and holdout registry. The estimate only lowers its per-call input assumption to "
+                     "it; call counts come from --history, not from this size")
+    r.add_argument("--review-output-tokens", type=int, help="operator output budget per call, 1536..65536 "
+                     "(codeye agent --review-output-tokens); omitted: product default, nothing passed. The estimate "
+                     "only lowers its assumed output tokens to it")
     r.add_argument("--request-reserve", type=int, default=DEFAULTS["request_reserve"])
     r.add_argument("--dry-run", action="store_true", help="the relay uses --test-upstream (labelled, never evaluation)")
     r.add_argument("--plant-leak", metavar="CASE:VARIANT", help="dry-run self-test: put a label phrase in a comment near the top of that input")
@@ -1132,7 +1185,7 @@ def main(argv=None):
                             set(args.repeat_cases.split(",")) if args.repeat_cases else None)
         history = history_profile([Path(h) for h in args.history or []])
         est = estimate(plan, history=history, margin=args.margin, max_calls=args.review_max_calls,
-                       slices_unknown=corpus.project)
+                       slices_unknown=corpus.project, budget=agent_budget(args))
         out = {"corpus": corpus.describe(), "selection": selection,
                "variants": [key_of(c["id"], v, r) for c, v, r in plan], "estimate": est,
                "usd": {"expected": est["expected"]["ledger_microusd"] / 1e6, "upper": est["upper"]["ledger_microusd"] / 1e6}}

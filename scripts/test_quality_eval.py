@@ -352,6 +352,54 @@ class ReviewOutcomeTests(unittest.TestCase):
                 quality_eval.agent_switches([bad])
 
 
+class AgentBudgetTests(unittest.TestCase):
+    @staticmethod
+    def args(**kw):
+        import argparse
+        return argparse.Namespace(review_request_bytes=kw.get("b"), review_output_tokens=kw.get("t"))
+
+    def test_ranges_mirror_the_product_constants(self):
+        import re
+        go = (SCRIPTS.parent / "internal/worker/opencode/client.go").read_text(encoding="utf-8")
+
+        def const(name):
+            m = re.search(rf"^\s*{name}\s*=\s*(\d+)(?: << (\d+))?\s*$", go, re.M)
+            self.assertIsNotNone(m, name)
+            return int(m.group(1)) << int(m.group(2) or 0)
+        self.assertEqual(quality_eval.REQUEST_BYTES_RANGE, (const("MinRequestBytes"), const("MaxRequestBytes")))
+        self.assertEqual(quality_eval.OUTPUT_TOKENS_RANGE, (const("MinOutputTokens"), const("MaxOutputTokens")))
+
+    def test_omitted_is_none_and_given_is_validated(self):
+        self.assertIsNone(quality_eval.agent_budget(self.args()))
+        self.assertEqual(quality_eval.agent_budget(self.args(b=40000, t=65536)),
+                         {"review_request_bytes": 40000, "review_output_tokens": 65536})
+        self.assertEqual(quality_eval.agent_budget(self.args(t=2000)), {"review_output_tokens": 2000})
+        for kw in ({"b": 39999}, {"b": (1 << 20) + 1}, {"t": 1535}, {"t": 65537}, {"b": 0}):
+            with self.assertRaises(SystemExit):
+                quality_eval.agent_budget(self.args(**kw))
+
+    def test_estimate_is_unchanged_without_a_budget_and_lowered_with_one(self):
+        plan = [({"id": "c1"}, "v1", 1)]
+        history = {"calls_per_variant": {"investigate": 1.0}, "usage_mean": {}, "per_key": {},
+                   "input_bytes_max": {"investigate": 200000, "verify": 200000, "contract": 200000, "triage": 200000},
+                   "dirs": ["h"]}
+        base = quality_eval.estimate(plan, history=history)
+        self.assertNotIn("agent_budget", base)
+        self.assertEqual(base, quality_eval.estimate(plan, history=history, budget=None))
+        small = quality_eval.estimate(plan, history=history, budget={"review_request_bytes": 40000})
+        self.assertEqual(small["agent_budget"], {"review_request_bytes": 40000})
+        self.assertLess(small["per_call_microusd"]["investigate"], base["per_call_microusd"]["investigate"])
+
+    def test_registry_treats_another_budget_as_another_configuration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            entry = {"pack_id": "review", "pack_digest": "d", "corpus_digest": "c", "condition": "review", "dry_run": False}
+            self.assertTrue(quality_eval.register(tmp, dict(entry)))
+            self.assertFalse(quality_eval.register(tmp, dict(entry)))
+            self.assertTrue(quality_eval.register(tmp, {**entry, "agent_budget": {"review_request_bytes": 40000}}))
+            self.assertFalse(quality_eval.register(tmp, {**entry, "agent_budget": {"review_request_bytes": 40000}}))
+            self.assertTrue(quality_eval.register(tmp, {**entry, "agent_budget": {"review_request_bytes": 50000}}))
+
+
 class CaptureListTests(unittest.TestCase):
     def test_capture_list_is_a_valid_list_that_blocks_nothing(self):
         import model_budget_relay as gateway
