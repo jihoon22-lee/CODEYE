@@ -15,6 +15,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/builtin"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/severity"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
 // PolicyGoVet is the deterministic mapping from go vet analyzers to finding
@@ -122,6 +123,7 @@ func (GoVetDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 				return out, invalidf("observation location is malformed")
 			}
 			obs.Location = &ObservationLocation{SnapshotID: ctx.Snapshot.ID, Path: l.Path, StartLine: l.StartLine, EndLine: l.EndLine, StartCol: l.StartCol, EndCol: l.EndCol, ColumnUnit: l.ColumnUnit, BlobSHA256: l.BlobSHA256}
+			obs.PathClass = record.PathClass(l.Path)
 			if sha, ok := ctx.Source.Lookup(l.Path); ok && sha == l.BlobSHA256 {
 				obs.EvidenceState = EvidenceVerified
 				k := strings.Join([]string{o.RuleID, l.Path, itoa(l.StartLine), msg}, "\x00")
@@ -147,7 +149,7 @@ func (GoVetDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 	rc := GoVetRuleContext()
 	tc.RuleContext = &rc
 	if t, ok := severity.TableFor(builtin.SeverityTables(), govet.AnalyzerID, rc.RulePack, rc.RulePackVersion); ok {
-		tc.SeverityTable = t.ID()
+		tc.SeverityTable = t.RecordedID()
 	}
 	for k, v := range d.Coverage.Packages {
 		tc.Packages[k] = v
@@ -230,7 +232,7 @@ func goVetFinding(ctx DecodeContext, obs []Observation) Finding {
 	if category == "" {
 		category = "correctness"
 	}
-	def := builtin.DefaultSeverity(govet.AnalyzerID, GoVetRulePack, GoVetRulePackVersion, first.RuleID, "")
+	def := builtin.DefaultSeverity(govet.AnalyzerID, GoVetRulePack, GoVetRulePackVersion, first.RuleID, "", first.PathClass)
 	loc := Location{SnapshotID: ctx.Snapshot.ID, Path: l.Path, StartLine: l.StartLine, EndLine: l.EndLine}
 	codeID := "ev_" + id[4:] + "_code"
 	f := Finding{SchemaVersion: "0.1", ID: id, Title: truncateRunes("go vet "+first.RuleID+": "+msg, 160), Category: category, Severity: def.Severity, SeverityReason: severity.Reason(def),

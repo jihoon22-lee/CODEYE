@@ -89,15 +89,18 @@ type diagNote struct {
 // diagSection is one triage bucket of the fold.
 type diagSection struct {
 	ID, Label, Note string
-	Groups          []diagGroup
+	// Paths says how many of the section's diagnostics are on paths that
+	// are not shipped code (builder 23, see pathSplit).
+	Paths  string
+	Groups []diagGroup
 }
 
 // diagFold is the tool diagnostics: by analyzer and rule, and with the
 // diagnostic triage (builder 22) first by its result (Sections).
 type diagFold struct {
-	ID, Label, Note, Unplaced string
-	Groups                    []diagGroup
-	Sections                  []diagSection
+	ID, Label, Note, Unplaced, Paths string
+	Groups                           []diagGroup
+	Sections                         []diagSection
 }
 
 // actionBlock is the opening shown before the status tables.
@@ -518,6 +521,7 @@ func (v secView) diagnosticFold(findings map[string]Finding) diagFold {
 		tools[g.Analyzer] = true
 	}
 	fold := diagFold{ID: "tool-diagnostics", Note: l.Label("actions.diagnostics_note"), Label: tf(l, "actions.diagnostics", total, len(all), len(tools))}
+	fold.Paths = v.pathSplit(all)
 	unplaced := false
 	var triage *DiagnosticTriage
 	if v.R.CodeReview != nil {
@@ -550,7 +554,7 @@ func (v secView) diagnosticFold(findings map[string]Finding) diagFold {
 			}
 			name := cmp.Or(b, "not_triaged")
 			sec := diagSection{ID: "tool-diagnostics-" + name, Label: tf(l, "actions.diag_bucket."+name, n), Note: l.Label("actions.diag_bucket_note." + name),
-				Groups: v.diagGroups(groups, triage, anchors, &unplaced)}
+				Paths: v.pathSplit(groups), Groups: v.diagGroups(groups, triage, anchors, &unplaced)}
 			if b == "" && triage.Interpreted > 0 {
 				sec.Note += " " + tf(l, "actions.diag_interpreted", triage.Interpreted)
 			}
@@ -561,6 +565,35 @@ func (v secView) diagnosticFold(findings map[string]Finding) diagFold {
 		fold.Unplaced = l.Label("actions.diagnostics_unplaced")
 	}
 	return fold
+}
+
+// pathSplit says how many diagnostics of the rule groups are on paths that
+// are not shipped code and how many on shipped code, counted from the
+// observations' stored path class (builder 23: an earlier revision has no
+// class and is not split). It is empty when no diagnostic is off shipped
+// code.
+func (v secView) pathSplit(groups []ruleGroup) string {
+	if !builderAtLeast(v.R.Builder.Version, PathSeveritySince) {
+		return ""
+	}
+	class := make(map[string]string, len(v.R.Observations))
+	for _, o := range v.R.Observations {
+		class[o.ID] = o.PathClass
+	}
+	notShipped, shipped := 0, 0
+	for _, g := range groups {
+		for _, id := range g.ObservationIDs {
+			if class[id] != "" {
+				notShipped++
+			} else {
+				shipped++
+			}
+		}
+	}
+	if notShipped == 0 {
+		return ""
+	}
+	return tf(v.L, "actions.diag_paths", notShipped, shipped)
 }
 
 // diagGroups are the fold rows of rule groups, with the triage results of
@@ -742,6 +775,10 @@ func mdDiagnosticFold(p func(...string), fold diagFold) {
 		p(mdText(fold.Unplaced))
 		p()
 	}
+	if fold.Paths != "" {
+		p(mdText(fold.Paths))
+		p()
+	}
 	mdDiagGroups(p, fold.Groups)
 	for _, s := range fold.Sections {
 		mdReadingAnchor(p, s.ID)
@@ -749,6 +786,10 @@ func mdDiagnosticFold(p func(...string), fold diagFold) {
 		p()
 		p(mdText(s.Note))
 		p()
+		if s.Paths != "" {
+			p(mdText(s.Paths))
+			p()
+		}
 		mdDiagGroups(p, s.Groups)
 	}
 	p("</details>")

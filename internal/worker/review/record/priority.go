@@ -131,6 +131,57 @@ func (r SecondaryRule) ModuleClass(module string) string {
 	return ClassPrimary
 }
 
+// Path classes of a file that is not shipped code (PathClass).
+const (
+	PathTest      = "test"
+	PathExample   = "example"
+	PathBenchmark = "benchmark"
+	PathGenerated = "generated"
+	PathVendored  = "vendored"
+)
+
+// PathClasses lists the classes PathClass returns, in the order a reader
+// sees them.
+var PathClasses = []string{PathTest, PathExample, PathBenchmark, PathGenerated, PathVendored}
+
+// pathClassOfSegment maps the default secondary segments to a class: test
+// input and doubles are test code, the rest keep their own name.
+var pathClassOfSegment = map[string]string{
+	"fixtures": PathTest, "testdata": PathTest, "test-data": PathTest, "tests/data": PathTest, "mocks": PathTest, "__snapshots__": PathTest,
+	"examples": PathExample, "samples": PathExample, "demo": PathExample,
+	"vendor": PathVendored, "third_party": PathVendored, "node_modules": PathVendored,
+	"generated": PathGenerated, "gen": PathGenerated, "dist": PathGenerated, "build": PathGenerated,
+}
+
+// benchmarkDirs are the directories of benchmark code. They are not
+// secondary segments: the review priority and its scope artifact keep
+// ranking benchmark code as source.
+var benchmarkDirs = []string{"benchmark", "benchmarks", "benches"}
+
+// PathClass is the class of a snapshot-relative file path that is not
+// shipped code: a test file or a test-support directory (IsTestPath and the
+// secondary segments of DefaultSecondary), an example, benchmark, generated
+// or vendored directory. It is "" for shipped code. Only the path is read,
+// so the worker and the report builder agree: the first ten lines of a file
+// (GeneratedHeader) are not seen by the builder. The default tool severity
+// of a diagnostic and the order of the diagnostic triage follow this class
+// (docs/ANALYZERS.md#기본-심각도).
+func PathClass(p string) string {
+	if IsTestPath(p) {
+		return PathTest
+	}
+	if seg := DefaultSecondary.Match(p); seg != "" {
+		return pathClassOfSegment[seg]
+	}
+	dirs := strings.Split(strings.ToLower(p), "/")
+	for _, d := range dirs[:len(dirs)-1] {
+		if contains(benchmarkDirs, d) {
+			return PathBenchmark
+		}
+	}
+	return ""
+}
+
 func contains(list []string, s string) bool {
 	for _, x := range list {
 		if x == s {

@@ -479,9 +479,9 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "59be2adbafae772e4d9f75cec3b16a04f55bd17c9c30f9e5a98a56a4ea78ba89",
+    "input_digest": "888eadef7118fa448a1e0565e7d7508c789da761e35e770ecf241e174cc64a92",
     "result_manifest_artifact_id": null,
-    "version": "22"
+    "version": "23"
   },
   "code_review": {
     "accepted_calls": 14,
@@ -2842,7 +2842,7 @@
           "selection": [],
           "source_suppressions": "none"
         },
-        "severity_table": "codeye-go-vet-default/1",
+        "severity_table": "codeye-go-vet-default/1+paths.1",
         "stderr_failures": 0,
         "task_key": "go-vet.m01",
         "tool_version": "go1.27.4",
@@ -2902,7 +2902,7 @@
           "selection": [],
           "source_suppressions": "none"
         },
-        "severity_table": "codeye-go-vet-default/1",
+        "severity_table": "codeye-go-vet-default/1+paths.1",
         "stderr_failures": 0,
         "task_key": "go-vet.m02",
         "tool_version": "go1.27.4",

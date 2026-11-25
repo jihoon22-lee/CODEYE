@@ -337,6 +337,19 @@ func overviewOf(r Report) Overview {
 			// How many tool diagnostics the triage slots classified, out of
 			// how many (builder 22).
 			n["diagnostics"], n["diagnostics_triaged"] = d.Diagnostics, d.Triaged
+			// And how many of them are on paths that are not shipped code
+			// (builder 23), from the observations' stored path class.
+			if builderAtLeast(r.Builder.Version, PathSeveritySince) {
+				class := make(map[string]string, len(r.Observations))
+				for _, o := range r.Observations {
+					class[o.ID] = o.PathClass
+				}
+				for _, id := range diagnosticIDs(r) {
+					if class[id] != "" {
+						n["diagnostics_not_shipped"]++
+					}
+				}
+			}
 		}
 		line(SectionCodeReview, &cr.Stage, n)
 		need("0", SectionCodeReview, "actionable_findings", fs.ActionableFindings)

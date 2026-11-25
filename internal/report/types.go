@@ -22,11 +22,15 @@ const (
 	BuilderID     = "codeye-report"
 	// Stored revisions keep their original builder and schema. Bump this
 	// version when the same accepted inputs would produce a different report.
-	BuilderVersion             = "22"
+	BuilderVersion             = "23"
 	TestCaseResultsSince       = 19
 	AnalysisEvidenceSince      = 17
 	GoTestFailureEvidenceSince = 18
 	DocumentExcerptSince       = 18
+	// PathSeveritySince is the first builder that lowers the default severity
+	// of a tool finding on a path that is not shipped code and records the
+	// path class of every located observation.
+	PathSeveritySince = 23
 )
 
 // Report statuses (schemas/report.schema.json).
@@ -323,6 +327,13 @@ type Observation struct {
 	// never a defect: it is never a finding. Its numbers hold no code, so
 	// the code-free export keeps them.
 	Metric *ObservationMetric `json:"metric,omitempty"`
+	// PathClass is the class of the observation's file when it is not
+	// shipped code: test, example, benchmark, generated or vendored
+	// (record.PathClass, builder 23). Omitted for shipped code, an
+	// observation without a location and revisions before builder 23. The
+	// default severity of a tool finding and the shipped/not-shipped counts
+	// of the diagnostics fold read this one value.
+	PathClass string `json:"path_class,omitempty"`
 }
 
 // RelatedObservation carries a tool-reported position or note of one diagnostic.

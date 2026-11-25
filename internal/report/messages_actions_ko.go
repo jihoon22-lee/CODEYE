@@ -43,6 +43,7 @@ func init() {
 		"actions.diag_bucket_note.harmless":    "모델이 이 맥락에서는 해가 없다고 판단한 진단이며, 그 이유와 근거 코드 위치를 함께 적는다. 도구 진단을 숨기지 않는다.",
 		"actions.diag_bucket.not_triaged":      "분류하지 않은 진단 %d건",
 		"actions.diag_bucket_note.not_triaged": "호출 상한·요청 크기·위치나 코드 단위 없음·비밀값 보류 등으로 모델이 분류하지 않은 진단이다. 깨끗하다는 뜻이 아니다.",
+		"actions.diag_paths":                   "경로별: 시험·예제 등 배포 코드가 아닌 경로 %d건, 배포 코드 %d건. 배포 코드가 아닌 경로의 진단은 기본 심각도를 낮춰 매긴다.",
 		"actions.diag_interpreted":             "그중 %d건은 해석 역할의 후보가 다룬 진단이다.",
 		"actions.diag_default_severity":        "기본 심각도 %s",
 		"triage.classification.problem":        "실제 문제로 분류",
