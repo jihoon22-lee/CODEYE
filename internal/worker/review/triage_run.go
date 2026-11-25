@@ -461,21 +461,24 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 		if reply.Reason != "" {
 			call.Outcome, call.OutputErrors = callRejected, []string{"output_not_json"}
 			s.rec.Calls = append(s.rec.Calls, call)
-			if retried {
+			// An output that is not JSON is most often an answer the output
+			// token limit cut: each retry, within the role's calls, asks for
+			// the first half of the remaining groups and leaves the rest out
+			// as a fault of form. One group that still gets no JSON ends it.
+			if retried && (repair == nil || len(repair.Groups) <= 1) {
 				break
 			}
 			retried = true
 			if repair == nil {
 				repair = &triageRepair{Groups: pending()}
 			}
-			// An output that is not JSON is most often an answer the output
-			// token limit cut: the retry asks for the first half of the
-			// remaining groups and leaves the rest out as a fault of form.
 			if len(repair.Groups) > 1 {
 				keep := (len(repair.Groups) + 1) / 2
 				for _, id := range repair.Groups[keep:] {
 					dropped[id] = true
-					faults[id] = triageOutcome{form: true}
+					if _, held := faults[id]; !held {
+						faults[id] = triageOutcome{form: true}
+					}
 				}
 				repair.Groups = slices.Clone(repair.Groups[:keep])
 			}

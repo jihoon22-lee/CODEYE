@@ -685,7 +685,8 @@ def check_triage_examples(raw: dict, validators: dict) -> int:
         tools = {o["id"]: o["tool"] for o in triage["observations"]}
         candidates = {c["id"]: c for c in triage["candidates"]}
         seen, claimed = set(), set()
-        for g in triage["triage_groups"]:
+        # A failed record may hold no group (its request was never built).
+        for g in triage.get("triage_groups", []):
             ids = set(g["observation_ids"])
             ensure(ids <= set(tools), "triage group names a diagnostic the record does not carry: " + g["id"])
             ensure(not ids & seen, "triage groups share a diagnostic: " + g["id"])
@@ -710,6 +711,14 @@ def check_triage_examples(raw: dict, validators: dict) -> int:
         d = copy.deepcopy(docs)
         edit(d)
         return name, d
+
+    # The Go record check's rule: a failed triage record without groups,
+    # candidates or observations is storable (docs/REVIEW.md#요청과-출력).
+    failed = copy.deepcopy(docs["triage.t001"])
+    failed.update(outcome="failed", observations=[], calls=[], failure_reason="review_input_too_large")
+    failed.pop("candidates", None)
+    failed.pop("triage_groups")
+    record_v.validate(failed)
 
     def group(d, classification):
         return next(g for g in d["triage.t001"]["triage_groups"] if g.get("classification") == classification)

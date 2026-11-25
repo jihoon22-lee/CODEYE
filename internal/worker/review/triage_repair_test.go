@@ -137,6 +137,42 @@ func TestTriageCutAnswerRetriesWithHalfTheGroups(t *testing.T) {
 	}
 }
 
+// TestTriageCutAnswerTwiceHalvesAgain: a second answer that is not JSON
+// halves the groups once more within the role's three calls; the slot
+// succeeds with the quarter that came back.
+func TestTriageCutAnswerTwiceHalvesAgain(t *testing.T) {
+	script := triageReviewScript(t)
+	var sizes []int
+	script["triage"] = func(n int, q opencode.Request) opencode.Reply {
+		var in triageCall
+		if err := json.Unmarshal(q.Input, &in); err != nil {
+			t.Fatal(err)
+		}
+		sizes = append(sizes, len(in.Groups))
+		if len(sizes) < 3 {
+			return opencode.Reply{Reason: "model_output_invalid"}
+		}
+		answers, order := triageAnswers(t, n, q)
+		return reply(answers, order)
+	}
+	run := runTriageReport(t, script, 0, Budget{})
+	if len(sizes) != 3 || sizes[1] != (sizes[0]+1)/2 || sizes[2] != (sizes[1]+1)/2 {
+		t.Fatalf("request group counts %v", sizes)
+	}
+	if res := run.results["review.triage.t001"]; res.Status != "succeeded" {
+		t.Fatalf("triage %+v", res)
+	}
+	omitted := 0
+	for _, g := range triageRecord(t, run).TriageGroups {
+		if g.Omitted == record.TriageItemOmitted {
+			omitted++
+		}
+	}
+	if omitted != sizes[0]-sizes[2] {
+		t.Fatalf("%d groups left out as form, want %d", omitted, sizes[0]-sizes[2])
+	}
+}
+
 // TestTriageDuplicateAnswerIsReported: a second answer for a group in one
 // output is a fault even when the first was accepted.
 func TestTriageDuplicateAnswerIsReported(t *testing.T) {

@@ -149,7 +149,14 @@ func (r admissionRun) linesSent() (sent, total int) {
 // whole-run roles left; the triage takes what the slices did not use.
 func TestTriageAdmissionLeavesSlicesWhatTheyNeed(t *testing.T) {
 	tree, files, diags := admissionTree(8, 40)
-	run := runAdmission(t, tree, files, diags, 20, nil)
+	var first []string
+	run := runAdmission(t, tree, files, diags, 20, func(in triageInput) {
+		if first == nil {
+			for _, g := range in.Groups {
+				first = append(first, g.DefaultSeverity)
+			}
+		}
+	})
 	done, exhausted, triage := run.counts(t)
 	sent, total := run.linesSent()
 	if hold, _ := os.ReadFile(triageHoldPath(run.j)); string(hold) != "0" {
@@ -160,6 +167,10 @@ func TestTriageAdmissionLeavesSlicesWhatTheyNeed(t *testing.T) {
 	}
 	if len(triage) == 0 || triage["review.triage.t001"] != domain.TaskSucceeded {
 		t.Fatalf("triage slots after the slices: %v", triage)
+	}
+	// The first slot opens with the high-severity groups.
+	if len(first) == 0 || first[0] != "high" {
+		t.Fatalf("first slot severities %v", first)
 	}
 }
 
