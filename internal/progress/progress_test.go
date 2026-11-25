@@ -417,7 +417,7 @@ func TestReviewSlicesInCodeReviewStage(t *testing.T) {
 	}
 }
 
-// TC-307 (docs/REVIEW.md#호출-상한과-승인): review pairs run concurrently, so
+// TC-309 (docs/REVIEW.md#호출-상한과-승인): review pairs run concurrently, so
 // several code_review tasks are running at once and a later slice may end
 // before an earlier one. The stage stays running with every running task
 // counted as unfinished, its start is the earliest task start, and the

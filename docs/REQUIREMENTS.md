@@ -145,7 +145,7 @@ API 권한·프로젝트 소유권·노드 식별·lease는 처음부터 여러 
 | REQ-014 | 정적 검사와 Go 모듈·Rust crate·JS/TS 패키지·Python 패키지(wheel만) 의존성 받기(분석 전, 저장소 코드 실행 없음, Rust는 저장소 코드 실행 허가가 있을 때만)는 구현([의존성 준비](ARCHITECTURE.md#의존성-준비)). 승인된 `with-tests` 실행은 작업 사본에서 발견한 기존 테스트 명령을 수행한다. C/C++ 의존성 받기와 전용 빌드 단계는 후속 작업이다 |
 | REQ-016 | 단계·상태·대기 사유·경과 표시는 구현. 개별 task 로그 조회 API는 설계 계약(미구현)([API](API.md)) |
 | REQ-017 | 가중 진행률은 구현. 잔여 시간 범위는 제공하지 않음 |
-| REQ-018 | 작업·노드·pool·전역 자원 상한과 relay의 모델 예산은 구현. endpoint별 모델 동시 요청 상한(`model_max_inflight`)과 전역 모델 semaphore는 설계 계약(미구현)([실행](EXECUTION.md)) |
+| REQ-018 | 작업·노드·pool·전역 자원 상한, relay의 모델 예산, attempt 안 검토 쌍의 병렬도(`review_parallel`, [호출 상한과 승인](REVIEW.md#호출-상한과-승인))는 구현. endpoint별 모델 동시 요청 상한(`model_max_inflight`)과 전역 모델 semaphore는 설계 계약(미구현)([실행](EXECUTION.md)) |
 | REQ-019 | 등록·능력 배정은 구현. 한 머신에서 노드 신원 8개로 확인했고 여러 물리 머신은 미검증이다. [다중 노드 시험](EXECUTION.md#여러-노드에서-확인한-것) |
 | REQ-022 | durable queue·lease/fencing·취소·복구·다시 시도(`POST /runs/{id}/retry`)는 구현. `recovery_required` run의 다시 시도는 미구현([API](API.md#다시-시도)) |
 | REQ-024 | GitHub.com·GHES 플랫폼 계정으로 저장소·PR을 읽고 선택적으로 결과 댓글을 게시한다. 서명된 PR 이벤트와 권한 있는 작성자의 플랫폼 계정 멘션으로 자동 분석을 요청할 수 있다. GitHub App과 실제 웹훅 전달 및 GHES 설치 검증이 남아 있다 |
