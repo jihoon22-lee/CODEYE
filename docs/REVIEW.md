@@ -225,7 +225,7 @@
 - 기존 Go 확장 기록에는 `caller_expansion_go_only`나 `caller_expansion_package_functions_only`가 남을 수 있다. 적격 선언을 찾지 못하면 `no_symbol_for_expansion`, 호출을 찾지 못하면 `no_callers_found`, 읽기 또는 발췌 예산을 넘기면 `callers_outside_review_context`를 남긴다. 파일 사이의 호출 근거를 얻으면 이전 Go 확장 실패 사유를 적용하지 않는다.
 
 - 검증 지침은 코드로 확인한 프로그램 상태, 근거로 확인한 런타임 동작, 실제 호출 경로에서 선택 가능한 지원 입력·설정을 유효 조건으로 쓸 수 있게 한다. 후보의 발동이나 영향에 필요한 외부 동작이 아직 확인되지 않았으면 `inconclusive`를 반환하고 미확인 전제를 적는다.
-- verify 요청의 발췌는 인용 발췌, 감싸는 선언, 확장(호출자·테스트·직접 호출), 인용한 파일의 긴 단위, 그 밖의 80줄 이하 문맥 순이다. 개수는 요청 크기에서 정한다(최소 예산 40개, 기본·최대 128개). 인용 발췌는 항상 남는다. 요청이 한도를 넘으면 확장·비인용 문맥·문서 계약을 먼저 줄인다(`review_input_trimmed`, `callers_outside_review_context`, `contracts_outside_verify_input`). 이어서 발췌의 SHA-256을 요청에서만 생략할 수 있다(`verification_excerpt_hashes_omitted`). 근거 ID와 경로·줄·코드 원문은 유지하고 검토 기록에는 스냅샷과 대조한 해시를 저장한다. 그래도 넘으면 후보를 앞에서부터(investigate 다음 interpret) 보낼 수 있는 만큼만 보낸다. 보내지 못한 후보는 `unreviewed`(`verification_budget_exceeded`)로 남고 task는 `failed`(`review_input_incomplete`)다.
+- verify 요청의 발췌는 인용 발췌, 감싸는 선언, 확장(호출자·테스트·직접 호출), 인용한 파일의 긴 단위, 그 밖의 80줄 이하 문맥 순이다. 개수는 요청 크기에서 정한다(최소 예산 40개, 기본·최대 128개). 인용 발췌는 항상 남는다. 요청이 한도를 넘으면 확장·비인용 문맥·문서 계약을 먼저 줄인다(`review_input_trimmed`, `callers_outside_review_context`, `contracts_outside_verify_input`). 후보 하나가 진단 8개보다 많은 관찰에 기대면(분류 문제 묶음은 64개까지) 요청은 그 후보의 앞 진단 8개와 그 참조만 싣는다(`verification_observations_trimmed`). 검토 기록과 발견은 진단을 모두 가진다. 이어서 발췌의 SHA-256을 요청에서만 생략할 수 있다(`verification_excerpt_hashes_omitted`). 근거 ID와 경로·줄·코드 원문은 유지하고 검토 기록에는 스냅샷과 대조한 해시를 저장한다. 그래도 넘으면 후보를 앞에서부터(investigate 다음 interpret) 보낼 수 있는 만큼만 보낸다. 보내지 못한 후보는 `unreviewed`(`verification_budget_exceeded`)로 남고 task는 `failed`(`review_input_incomplete`)다.
 
 - Go 입력의 요청 바이트는 `TestGoReviewInputsUnchanged`가 역할마다 지침 해시와 입력 해시로 고정한다.
 
@@ -317,23 +317,43 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 
 ### 계획과 묶음
 
-- **slot 수.** manifest의 적격 소스 파일 12개마다 한 slot, 최소 2개, 최대 24개다(적격 파일이 없으면 0). 계획은 manifest·범위·상수로만 정한다(A37 2). slot 쌍은 전체 역할 다섯 개 뒤, `review.scope`와 모듈 slice 앞에 온다.
+- **slot 수.** manifest의 적격 소스 파일 12개마다 한 slot, 최소 2개, 최대 24개다(적격 파일이 없으면 0). 계획은 manifest·범위·상수로만 정한다(A37 2). slot 쌍은 계획의 끝, 모듈 slice와 `review.contract` 뒤에 온다. 호출 몫은 [호출 비용](#호출-비용)이 정한다.
 - **대상.** 수락된 분석기 산출물의 진단 중 소스에서 억제된 진단, 구조 지표, 비밀값 탐지를 뺀 것이다. 다음은 분류하지 않고 각 slot 기록의 한계로 남긴다. 수락된 해석 후보가 이미 다룬 진단(`diagnostics_interpreted`), 위치 없는 진단(`diagnostics_without_location`), 비밀값 선별이 보류한 파일의 진단(`secret_files_withheld`), 읽을 수 있는 소스 단위가 없는 진단(`diagnostic_context_unavailable`).
-- **묶음.** 같은 분석기·같은 규칙·같은 [검토 단위](#검토-단위)(단위보다 작은 파일은 파일 전체)의 진단을 한 묶음으로 한다. 서로 다른 두 도구가 같은 단위의 같은 줄에서 병합 계열([기본 심각도](ANALYZERS.md#기본-심각도))이 같은 규칙을 보고하면 두 묶음을 합치고 `cross_tool`로 표시한다. 진단은 합치지 않는다. 64개를 넘는 묶음은 64개씩 나눈다.
+- **묶음.** 같은 분석기·같은 규칙·같은 [검토 단위](#검토-단위)(단위보다 작은 파일은 파일 전체)의 진단을 한 묶음으로 한다. 서로 다른 두 도구가 같은 단위의 같은 줄에서 병합 계열([기본 심각도](ANALYZERS.md#기본-심각도))이 같은 규칙을 보고하면 두 묶음을 합치고 `cross_tool`로 표시한다. 진단은 합치지 않는다. 64개를 넘는 묶음은 64개씩 나누고, 나뉜 조각은 도구가 둘 이상일 때만 `cross_tool`이다(기록 검사가 확인한다).
 - **순서.** 기본 심각도가 높은 묶음, 진단이 많은 묶음, 경로, 줄, 도구, 규칙 순이다.
 - **요청에 담기.** 순서대로 첫 번째로 맞는 slot에 넣는다. 한 요청은 묶음 수(출력 토큰에서 1,024를 빼고 1,024로 나눈 값, 2~24), 소스 원문 합계(요청 예산의 원문 한도), 진단 1,024개, 묶음 설명 바이트(요청 바이트의 1/16, 최소 8,000)를 넘지 않는다. 한 요청 안에서 같은 단위는 한 번만 보내고 비용도 한 번만 센다. slot을 다 쓰고 남은 묶음은 `diagnostics_outside_triage_slots`로 남는다.
 
 ### 요청과 출력
 
 - 묶음마다 도구·규칙 ID·기본 심각도·진단 수·`cross_tool`·경로·줄 목록, 메시지를 붙인 진단 예시 최대 8개, 문맥 발췌 ID(묶음의 단위, 단위가 파일 처음이 아니면 그 파일의 머리 한 번)를 보낸다. 메시지 규칙은 해석 창과 하나다([도구 관찰과 해석 창](#도구-관찰과-해석-창interpret)). 발췌 원문은 다른 역할과 같은 읽기 검사(비밀값 선별, 민감값 패턴, 크기)를 거친다. 요청이 예산을 넘으면 뒤쪽 묶음부터 빼고 `review_input_trimmed`를 남긴다.
-- slot은 분류와 검증에 쓸 호출 두 번이 남아 있을 때 시작한다. 분류 재시도는 검증에 쓸 호출 하나를 남긴다. 결정은 호출 계수 옆 파일에 쓰고 같은 slot의 검증이 따른다.
+- slot은 분류와 검증에 쓸 호출 두 번이 남아 있을 때 시작한다(모듈 slice 뒤이므로 남은 호출은 slice가 쓰고 남긴 것과 분류 몫이다). 분류 재시도는 검증에 쓸 호출 하나를 남긴다. 결정은 호출 계수 옆 파일에 쓰고 같은 slot의 검증이 따른다.
 - 출력은 묶음마다 `problem`(조건·영향·고칠 방향과 묶음 문맥 안의 줄 인용), `harmless`(무해하게 만드는 코드 근거와 그 줄 인용), `unclear`(무엇이 더 필요한지) 중 하나다. 의존성·타입·헤더를 찾지 못해 생긴 진단은 분석 공백으로 보고 `unclear`로 둔다. 모델은 도구 상태·진단 수·원시 등급·규칙·기본 심각도를 바꾸지 못하고 심각도를 정하지 않는다.
-- 출력 오류는 [출력 오류 분류](#출력-오류-분류)를 따른다. 형식 오류가 있으면 남은 묶음만 담은 복구를 한 번 보낸다. 복구 뒤에도 남은 형식 오류는 그 묶음만 분류하지 않고(`triage_item_omitted`), 무결성 오류는 그 답을 거부한다(`triage_item_rejected`). 답이 없는 묶음은 `triage_answer_missing`이다. 분류하지 않은 묶음이 있으면 `diagnostic_groups_not_triaged`를 남긴다. 분류한 묶음이 하나도 없으면 task가 실패한다.
+- 출력 오류는 [출력 오류 분류](#출력-오류-분류)를 따른다. 형식 오류가 있으면 남은 묶음과 그 발췌만 담은 복구를 한 번 보낸다. 복구 뒤에도 남은 형식 오류는 그 묶음만 분류하지 않고(`triage_item_omitted`; 첫 답에 형식 오류가 있었는데 복구 답이 그 묶음을 빠뜨린 경우도 같다), 무결성 오류는 그 답을 거부한다(`triage_item_rejected`). 답이 없는 묶음은 `triage_answer_missing`이다. 한 출력에 같은 묶음의 답이 둘이면 앞 답을 받아들였어도 `triage_group_duplicate`를 남긴다. `problem`·`harmless`·`unclear` 모두 자기 묶음의 발췌만 인용한다. 다른 묶음의 발췌를 인용하면 형식 오류(`triage_evidence_not_at_group`)이고, 복구 뒤에는 자기 묶음의 인용만 남겨 검사한다. 분류하지 않은 묶음이 있으면 `diagnostic_groups_not_triaged`를 남긴다. 분류한 묶음이 하나도 없으면 task가 실패한다.
+- **출력 한도.** 한 요청의 묶음 수는 묶음당 출력 1,024 토큰을 가정해 정한다. 실제 모델이 그보다 길게 써서 출력 토큰 한도에 답이 잘리면 출력은 JSON이 아니다(`output_not_json`). 이것은 형식 오류다. 재시도는 남은 묶음의 앞 절반(우선순위가 높은 쪽)만 묻고 나머지는 `triage_item_omitted`로 둔다. 재시도 답에서 하나라도 받아들이면 slot은 성공하고 빠진 묶음은 `diagnostic_groups_not_triaged`로 보인다. 재시도도 JSON이 아니면 분류한 묶음이 없어 task가 실패한다(`review_output_invalid`).
+- 요청을 만들 수 없었거나(`review_input_too_large`) 호출 뒤에 취소된 slot도 실패 기록을 남긴다. 기록은 한 호출과 보낸 묶음을 모두 분류하지 않은 것으로 담아, 보고서가 무엇이 모델에 갔는지 안다. 요청을 만들기 전에 실패한 기록에는 묶음이 없다.
 - 문제로 분류한 묶음은 후보 `triage_N`(origin `triage`, 묶음의 관찰 ID)이 되고 `review.verify.tNNN`이 검증한다. 검증은 문서 기록과 그 slot의 분류 기록을 상류로 읽는다. 도구 진단, 모델 후보, 검증 판정은 서로 다른 기록이며 관찰 ID로 연결된다. 무해 판단은 도구 finding을 숨기지 않는다.
 
 ### 호출 비용
 
-분류 slot은 같은 attempt 호출 상한을 쓴다. 묶음이 배정된 slot은 보통 분류 한 번과(문제가 있으면) 검증 한 번을 부르고, 형식 복구와 재시도를 포함하면 각각 세 번까지다. 배정된 묶음이 없는 slot은 부르지 않는다. 분류 slot이 모듈 slice보다 먼저 실행되므로, 진단이 많은 프로젝트에서는 같은 상한 아래 모듈 slice가 받는 호출이 줄어든다. 범위 산출물의 `calls_before_slices`는 전체 역할의 호출만 세고, 보고서 장부는 분류 slot 기록의 호출을 slice처럼 더한다. 실제 비용과 품질 변화는 측정하지 않았다.
+분류 slot은 같은 attempt 호출 상한을 쓴다. 묶음이 배정된 slot은 보통 분류 한 번과(문제가 있으면) 검증 한 번을 부르고, 형식 복구와 재시도를 포함하면 각각 세 번까지다. 배정된 묶음이 없는 slot은 부르지 않는다.
+
+모듈 slice가 먼저다. 분류 쌍은 계획의 끝에 있고, 분류 몫은 실행 때 한 번 정한다.
+
+- 전체 역할이 남긴 호출을 L, 아직 보낼 줄이 있는 slice 수 × slice 입장 예비(호출 2)를 필요량으로 한다.
+- 필요량이 L 이하이면 몫은 0이다. slice는 전처럼 모든 줄을 보내고 분류는 slice가 쓰고 남긴 호출을 쓴다.
+- 필요량이 L을 넘으면 L 16회마다 분류 쌍 하나(호출 2)를 몫으로 둔다. 최소 한 쌍이고 묶음이 배정된 slot 수를 넘지 않는다. slice와 `review.contract`는 이 몫을 쓰지 않는다. 첫 slot이 심각도가 가장 높은 묶음을 담으므로 몫이 한 쌍이어도 가장 심각한 진단부터 분류된다.
+- 16은 평가 실행의 상한 20에서 한 쌍, 기본 상한 99에서 다섯 쌍이 되는 값이다. 지금까지 측정한 품질 향상은 slice가 상한 20 안에서 모든 줄을 보낸 데서 나왔으므로 slice가 양보하는 양을 작게 정했다. slice가 다 쓰지 않은 호출은 분류가 쓴다.
+
+몫은 attempt마다 처음 slice 입장 때 정해 scratch의 `review.triage.hold`에 둔다. 범위 산출물이 없거나 모델·진단이 없으면 몫은 0이다. 범위 산출물의 `calls_before_slices`는 전체 역할의 호출만 세고, 보고서 장부는 분류 slot 기록의 호출을 slice처럼 더한다.
+
+이 저장소를 가짜 upstream으로 검토한 결과(실제 분석기, 진단 853개)는 다음과 같다. 실제 모델의 비용·품질은 측정하지 않았다.
+
+| 상한 | 규칙 | 들어간 slice | 새로 보낸 줄 | 분류한 slot | 분류한 진단 |
+|---|---|---|---|---|---|
+| 20 | 분류 먼저(이전) | 0 | 0 | 6 | 523 |
+| 20 | slice 먼저, 몫 한 쌍 | 5 | 441 | 1 | 238 |
+| 99 | 분류 먼저(이전) | 30 | 102,410 | 16 | 851 |
+| 99 | slice 먼저, 몫 다섯 쌍 | 41 | 155,009 | 5 | 493 |
 
 ## 문서 계약 후속 검토
 
@@ -632,7 +652,11 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 
 모델은 관리형 로컬 OpenCode CLI로 호출한다([`client.go`](../internal/worker/opencode/client.go), [`executor/opencode.go`](../internal/worker/executor/opencode.go)). 실행 규칙(argv, 제한시간, 프로세스 트리 정리)은 [실행](EXECUTION.md)을 따른다. 원격 OpenCode attach나 별도 serve 연결은 구현하지 않았다. 추가할 때는 인증·버전·취소·workspace marker/digest를 대상 환경에서 검증한다.
 
-- **버전.** 시험한 버전은 OpenCode 1.19.5다(`opencode.Version`). 호출마다 먼저 `--version`을 실행하며 확인에는 설정한 호출 제한시간과 30초 중 짧은 값을 적용한다. 실행 중인 버전 확인이 제한시간을 넘기면 모델 호출 전에 `opencode_version_timeout`을 기록한다. 확인과 요청은 호출당 전체 제한시간을 함께 사용한다. 다른 릴리스(`MAJOR.MINOR.PATCH[-…]`)도 실행하고 그 단계 기록에 `opencode_version_untested`를 남긴다. 릴리스 형식이 아닌 응답만 `opencode_version_unsupported`다. `codeye doctor`의 버전 확인은 모델 비용을 쓰지 않는다.
+- **버전.** 시험한 릴리스는 목록이다(`opencode.TestedVersions`). 릴리스마다 근거가 다르다.
+  - 1.19.5: 고정 시험·예시가 쓰는 기준 릴리스(`opencode.Version`)다. 관리 설정의 권한 차단(`scripts/test_opencode_policy.py`), 시작 때의 npm 레지스트리 조회, 응답 대기 시간 기본값, 오프라인 모델 목록을 이 릴리스로 측정했다.
+  - 1.19.6: 이 머신의 OpenCode가 2026-11-24 08:26(KST)에 스스로 갱신된 릴리스다. 그 뒤 소유자 예산의 실모델 실행(프로젝트 규모 5사례, 48회 호출의 회귀 실행)이 이 릴리스를 거쳤고 모든 호출이 수락됐다. 같은 머신에서 권한 차단 검사, `scripts/test_postgres.py --smokes-only --instance-model`, 가짜 upstream dry run을 통과했다.
+  - 갱신은 CODEYE 밖에서 일어났다. CODEYE의 호출(`--version` 확인 포함)은 관리 설정의 `autoupdate: false`와 `OPENCODE_DISABLE_AUTOUPDATE=1`로 실행하므로 바이너리를 바꾸지 않는다. 운영자가 같은 바이너리를 자기 설정으로 띄우면(`opencode serve` 등) OpenCode 기본값으로 갱신될 수 있다. 목록에 없는 릴리스로 바뀌면 다음 호출부터 `opencode_version_untested`가 남는다.
+  - 호출마다 먼저 `--version`을 실행하며 확인에는 설정한 호출 제한시간과 30초 중 짧은 값을 적용한다. 실행 중인 버전 확인이 제한시간을 넘기면 모델 호출 전에 `opencode_version_timeout`을 기록한다. 확인과 요청은 호출당 전체 제한시간을 함께 사용한다. 다른 릴리스(`MAJOR.MINOR.PATCH[-…]`)도 실행하고 그 단계 기록에 `opencode_version_untested`를 남긴다. 릴리스 형식이 아닌 응답만 `opencode_version_unsupported`다. `codeye doctor`의 버전 확인은 모델 비용을 쓰지 않는다.
 - **운영자 설정.** 실행 파일은 절대 경로다. 모델 ID는 `PROVIDER/MODEL`이다. provider는 소문자·숫자·`._-`, 모델 부분은 영숫자와 `._:@+-/`이고 `.`·`..` 경로 조각은 받지 않는다(라우터식 `vendor/model`은 받는다). 평가용 `codeye-gateway`의 Sol·Terra·Luna 모델은 relay 파일이 있을 때만 쓴다. relay 모델의 출력·문맥 한도는 요청 예산에서 정한다([요청 크기](#요청-크기)). 호출당 제한시간은 `--model-timeout`(기본 600초, 1초~30분)이다. 설정이 없거나 형식이 틀리면 요청을 보내지 않는다(`model_not_configured`). 공급자 변경은 운영자 선택이다([모델 설정](#모델-설정)).
 - **작업 디렉터리와 workspace digest.** 요청마다 attempt scratch 아래 새 디렉터리를 만든다. 그 안의 `identity.txt`에 snapshot digest, 요청 digest, 무작위 32바이트 nonce에 묶인 확인값을 쓰고 첨부로 준다. 응답의 `workspace_proof`가 이 값과 다르면 `workspace_unreachable`이다. 프롬프트와 선택된 데이터는 표준 입력으로만 전달한다. 요청 digest는 정확한 메시지 텍스트의 SHA-256이다.
 - **권한 차단.** `run --pure`로 실행하고, 실행별 HOME/TMP와 플랫폼이 만든 설정(`OPENCODE_CONFIG_CONTENT`)만 쓴다. 설정은 `permission: deny`, 모든 도구 `false`, share·snapshot·autoupdate·LSP·formatter·plugin 끔, 허용 provider 하나다. 프로젝트 설정, 기본 플러그인, 외부 skill, 모델 목록 조회, LSP 다운로드는 환경변수로 끈다. 사용자 설정과 대상 프로젝트 설정을 읽는 경로를 분리한다. 스냅샷 디렉터리는 보호 루트로 넘긴다.

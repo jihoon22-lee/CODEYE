@@ -140,7 +140,7 @@ builder 22부터 분류 slot(`review.triage.tNNN`·`review.verify.tNNN`, [검토
 - `bucket`은 분류와 발견에서 정한다. `harmless`는 무해, 검증이 `refuted`로 판정한 문제는 `refuted`, 그 밖의 문제와 `unclear`는 `attention`이다. 검증은 이 규칙을 다시 계산해 대조한다.
 - 문제 묶음은 발견 `review_tNNN_triage_N`(코드 분석 절)이 되고 그 slot 검증의 판정을 싣는다. 도구 발견은 바뀌지 않으며 묶음의 관찰마다 도구 발견이 그대로 남는다. 두 도구가 함께 든 묶음(`cross_tool`)도 도구 발견은 도구마다 남는다(TC-102).
 - 코드 미포함 내보내기는 `reason`을 생략 문구로 바꾸고 위치·수·코드는 남긴다.
-- 종합의 코드 분석 수에 `diagnostics`(분류 대상 도구 진단)와 `diagnostics_triaged`(그중 모델이 분류한 진단)가 더해진다.
+- 종합의 코드 분석 수에 `diagnostics`(분류 대상 도구 진단)와 `diagnostics_triaged`(그중 모델이 답한 진단, 판단 보류 포함)가 더해진다. 도구 진단 접힘의 제목은 `problem`·`harmless`로 판정한 진단과 `unclear`로 판단을 보류한 진단을 따로 센다.
 
 ### 의존성 목록
 
@@ -342,7 +342,9 @@ builder 9부터 pull request run([pull request 분석](GITHUB.md#pull-request-�
 | `refuted` | 반대 근거로 기각했다. |
 | `inconclusive` | 판단할 근거가 부족하다. |
 
-도구 진단·모델 후보·재현된 결함·사람의 판단은 서로 다른 기록이다. 도구가 보고했다는 사실은 실제 결함 확정과 같지 않다. 검증 상태와 검토 우선순위는 별개다. 영향이 클 수 있지만 미확정인 후보도 우선 확인 목록에 들 수 있다. 모델의 숫자 confidence를 정확도처럼 표시하지 않는다. 검증 상태와 근거 종류로 정성적 근거 수준을 보여준다.
+도구 진단·모델 후보·재현된 결함·사람의 판단은 서로 다른 기록이다. 도구가 보고했다는 사실은 실제 결함 확정과 같지 않다. 검증 상태와 검토 우선순위는 별개다. 영향이 클 수 있지만 미확정인 후보도 우선 확인 목록에 들 수 있다.
+
+발견을 줄 세우거나 개수로 자르는 목록(요약의 `priorities`, PR 댓글의 발견, 보조 경로 발견 목록)은 검증 상태를 먼저 본다. 순서는 `reproduced`, `supported`, 아직 확인하지 않은 분류 문제(`review_tNNN_…`의 `unreviewed`·`inconclusive`), 그 밖의 `unreviewed`·`inconclusive`(도구 finding·모델 후보), `refuted`이고 심각도는 같은 상태 안에서만 본다. 도구 finding은 기본 심각도 표로 `high`일 수 있지만 검토 전이므로, 지지된 발견을 짧은 목록 밖으로 밀어내지 않는다. 조치 카드와 확인 필요 후보 목록은 이미 한 상태만 담으므로 심각도 순이다. 모델의 숫자 confidence를 정확도처럼 표시하지 않는다. 검증 상태와 근거 종류로 정성적 근거 수준을 보여준다.
 
 ## 코드 미포함 내보내기
 
@@ -508,8 +510,9 @@ move_key    = 같은 식에서 첫 값을 "codeye-move-key"로, paths를 빈 값
 
 ### 차이 목록과 집계
 
-- `differences`는 값이 다른 항목만 싣는다. 키는 `source_variant`, `source_revision`(커밋 SHA 또는 manifest digest), `profile`, `scope`, `builder_version`, `tool:<analyzer>:version|rule_context|result|processed_files`, `ai_review`, `review:<role>`(모델·지침 digest)다. 화면은 비교 대상의 환경·규칙·범위 차이를 이 목록으로 상단에 보인다. 문서 대조 호출의 차이는 `review:contract`에 기록한다. 발견의 비교는 발견을 만드는 역할들의 모델과 지침을 사용한다.
+- `differences`는 값이 다른 항목만 싣는다. 키는 `source_variant`, `source_revision`(커밋 SHA 또는 manifest digest), `profile`, `scope`, `builder_version`, `tool:<analyzer>:version|rule_context|severity_table|result|processed_files`, `ai_review`, `review:<role>`(모델·지침 digest)다. 화면은 비교 대상의 환경·규칙·범위 차이를 이 목록으로 상단에 보인다. 문서 대조 호출의 차이는 `review:contract`에 기록한다. 발견의 비교는 발견을 만드는 역할들의 모델과 지침을 사용한다.
 - `rule_context` 차이 값은 `pack@version [선택] config=<모드>[:설정 digest 앞 12자|:unrecorded] suppressions=<모드>[ unreported=<규칙,…>]`이고 문맥이 없는 행은 `unknown`이다. 설정 digest 앞부분은 코드 미포함 내보내기에서 빼는 값이지만, 비교 응답은 코드 포함 보고서를 읽을 수 있는 같은 프로젝트 읽기 권한자에게만 가고 이미 fp2 식별을 싣는다.
+- `severity_table` 차이 값은 분석기 행이 적용한 기본 심각도 표 ID이고 표가 없는 행(builder 21 이전)은 `none`이다. 두 쪽의 표가 다르면 도구 발견의 심각도 차이는 이 표 차이 하나로 보고 발견별 `changes`에 `severity`를 넣지 않는다. 같은 식별의 도구 발견은 `persisting`으로 남는다. 모델 발견과 같은 표를 쓴 두 쪽의 심각도 차이는 그대로 변경이다.
 - `counts`는 entry(식별) 단위 상태 수다. `unidentified`는 fp2 식별이 없어 비교하지 않은 발견 수(현재·기준)다.
 - 비교는 두 리비전 사이만 본다. 첫 발견 시각과 run 사이 연속 이력은 계산하지 않는다.
 
