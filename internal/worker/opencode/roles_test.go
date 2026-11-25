@@ -22,3 +22,19 @@ func TestEveryPackRoleIsAReviewRole(t *testing.T) {
 		}
 	}
 }
+
+// Every tested release is tested and the reference Version is one of them;
+// another release and an unreported version are told apart.
+func TestTestedVersions(t *testing.T) {
+	if !VersionTested(Version) || VersionUntested(Version) {
+		t.Fatalf("reference %s is not tested", Version)
+	}
+	for _, v := range TestedVersions {
+		if VersionUntested(v) {
+			t.Errorf("%s is untested", v)
+		}
+	}
+	if !VersionUntested("1.20.0") || VersionUntested("") || TestedVersionList() != "1.19.5, 1.19.6" {
+		t.Fatalf("untested 1.20.0 %v, empty %v, list %q", VersionUntested("1.20.0"), VersionUntested(""), TestedVersionList())
+	}
+}

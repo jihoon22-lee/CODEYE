@@ -191,7 +191,7 @@ def run(base, root, env, probe_env):
         cli("start", "--config", cfg)
         session = Session(state, origin)
         untested = cli("model", "probe", "--config", cfg).stdout
-        assert "1.99.0 (not the tested" in untested and "OK" in untested, untested
+        assert "1.99.0 (not a tested release" in untested and "OK" in untested, untested
         view, report = analyze(session, project["id"])
         assert report["coverage"]["ai_review"]["status"] == "performed", report["coverage"]["ai_review"]
         assert "opencode_version_untested" in report["limitations"], report["limitations"]

@@ -288,7 +288,7 @@ func (d *detector) validate(name string, sp spec, path string) outcome {
 		if m == nil {
 			return outcome{reason: "version output not recognized"}
 		}
-		return outcome{ok: true, version: m[1], tested: m[1] == opencode.Version, series: opencode.Version}
+		return outcome{ok: true, version: m[1], tested: opencode.VersionTested(m[1]), series: opencode.TestedVersionList()}
 	}
 	if out, ok := d.validateManager(name, path); ok {
 		return out

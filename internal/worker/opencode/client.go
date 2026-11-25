@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -21,9 +22,21 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 )
 
-// Version is the OpenCode release this build was tested with. Other
-// releases run too; their calls carry the opencode_version_untested limitation.
+// Version is the OpenCode release the scripted fixtures and examples name;
+// it is one of TestedVersions.
 const Version = "1.19.5"
+
+// TestedVersions are the OpenCode releases CODEYE was exercised with. The
+// evidence for each is in docs/REVIEW.md (OpenCode 어댑터 계약, 버전). Other
+// releases run too; their calls carry the opencode_version_untested
+// limitation.
+var TestedVersions = []string{"1.19.5", "1.19.6"}
+
+// VersionTested reports whether v is one of TestedVersions.
+func VersionTested(v string) bool { return slices.Contains(TestedVersions, v) }
+
+// TestedVersionList is TestedVersions for display ("1.19.5, 1.19.6").
+func TestedVersionList() string { return strings.Join(TestedVersions, ", ") }
 
 // The review request budget (codeye agent --review-request-bytes,
 // --review-output-tokens; docs/REVIEW.md#요청-크기). MaxRequestBytes is
@@ -171,9 +184,9 @@ func (cfg Config) valid() bool {
 	return !gateway
 }
 
-// VersionUntested reports whether v, a release OpenCode reported, is not
-// the tested one.
-func VersionUntested(v string) bool { return v != "" && v != Version }
+// VersionUntested reports whether v, a release OpenCode reported, is not a
+// tested one.
+func VersionUntested(v string) bool { return v != "" && !VersionTested(v) }
 
 // provider reads this call's credential; nil when the model needs none.
 func (cfg Config) provider() (*executor.ModelProvider, string) {
