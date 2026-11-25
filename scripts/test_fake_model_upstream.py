@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TC-309: tests of the dry-run upstream's concurrency and seeded delays
+"""TC-314: tests of the dry-run upstream's concurrency and seeded delays
 (scripts/fake_model_upstream.py). Loopback only; no model and no key."""
 from __future__ import annotations
 

@@ -241,7 +241,7 @@ func TestManagedWorkerLoadsModelBeforeSourceAndProtectsFiles(t *testing.T) {
 	}
 }
 
-// TC-308: in the service the agent has no model flags; the attempt resolves
+// TC-313: in the service the agent has no model flags; the attempt resolves
 // agent.model from the configuration file. An attempt whose model is a
 // budget relay runs its review pairs one at a time, the next attempt with a
 // key file runs them at the configured degree, and an attempt the caller did

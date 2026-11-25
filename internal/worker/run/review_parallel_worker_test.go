@@ -60,7 +60,7 @@ func (c *overlapCaller) Review(ctx context.Context, r executor.Runner, q opencod
 	return c.inner.Review(ctx, r, q)
 }
 
-// TC-308 (docs/REVIEW.md#호출-상한과-승인): through the real worker, the
+// TC-313 (docs/REVIEW.md#호출-상한과-승인): through the real worker, the
 // module slice pairs run concurrently at the hello's degree of parallelism
 // and every task ends as it does one at a time.
 func TestReviewSlicesRunConcurrentlyThroughTheWorker(t *testing.T) {
@@ -97,7 +97,7 @@ func TestReviewSlicesRunConcurrentlyThroughTheWorker(t *testing.T) {
 	}
 }
 
-// TC-308: the degree of parallelism is the hello's; a hello without one (an
+// TC-313: the degree of parallelism is the hello's; a hello without one (an
 // older agent) runs the pairs one at a time, and so does an attempt whose
 // model is a budget relay, which serves one request at a time: the relay of
 // codeye agent --model-relay-file (in the hello) or the one the attempt
@@ -157,7 +157,7 @@ func (c *inFlightCaller) Review(ctx context.Context, r executor.Runner, q openco
 	return c.inner.Review(ctx, r, q)
 }
 
-// TC-308: cancelling the attempt while several pairs wait on the model stops
+// TC-313: cancelling the attempt while several pairs wait on the model stops
 // every in-flight request: each request's process group is gone, the
 // attempt ends cancelled with cleanup confirmed and no call over the
 // ceiling.

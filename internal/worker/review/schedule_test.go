@@ -416,7 +416,7 @@ func limitUnitTasks(n int) func(*Schedule) {
 	}
 }
 
-// TC-307: the bound the schedule assumes for an unfinished pair is enforced,
+// TC-312: the bound the schedule assumes for an unfinished pair is enforced,
 // not assumed. With the bound lowered to one call per task, every role that
 // would repair or retry asks for a call past it: that call is refused
 // (review_call_cap_exceeded), no task is counted past its bound, and the
@@ -456,7 +456,7 @@ func TestPairsTaskCallBoundIsEnforced(t *testing.T) {
 	}
 }
 
-// TC-307: a task's call past its own bound (record.TaskMaxCalls) is refused
+// TC-312: a task's call past its own bound (record.TaskMaxCalls) is refused
 // with errCallCapExceeded and not counted, with and without a schedule.
 func TestTaskCallBoundRefusesTheNextCall(t *testing.T) {
 	keys := []string{"review.investigate.s001", "review.verify.s001", record.TaskContract}
@@ -493,7 +493,7 @@ func countedCallsBefore(t *testing.T, f *pairsFixture) []string {
 	return countedCalls(t, f.j)
 }
 
-// TC-307: plenty of calls: every slice fits, the triage takes what the
+// TC-312: plenty of calls: every slice fits, the triage takes what the
 // slices leave and runs beside them; the result does not depend on the
 // degree of parallelism or the order answers arrive in.
 func TestPairsPlentyOfCalls(t *testing.T) {
@@ -505,7 +505,7 @@ func TestPairsPlentyOfCalls(t *testing.T) {
 	}
 }
 
-// TC-307: the ceiling is reached mid-way: some slices are admitted and the
+// TC-312: the ceiling is reached mid-way: some slices are admitted and the
 // rest refused, the triage holds its share; the same slots are admitted at
 // every degree of parallelism.
 func TestPairsCeilingReachedMidway(t *testing.T) {
@@ -547,7 +547,7 @@ func repairFault(q opencode.Request) (opencode.Reply, bool) {
 	return opencode.Reply{}, false
 }
 
-// TC-307: format repairs and retries compete for the last calls near the
+// TC-312: format repairs and retries compete for the last calls near the
 // ceiling; the calls a pair is granted are those sequential execution
 // grants.
 func TestPairsRepairsCompeteNearTheCeiling(t *testing.T) {
@@ -560,7 +560,7 @@ func TestPairsRepairsCompeteNearTheCeiling(t *testing.T) {
 	}
 }
 
-// TC-307: one pair times out; the others do not stop and the result is the
+// TC-312: one pair times out; the others do not stop and the result is the
 // same at every degree of parallelism.
 func TestPairsOnePairTimesOut(t *testing.T) {
 	t.Parallel()
@@ -584,6 +584,51 @@ func TestPairsOnePairTimesOut(t *testing.T) {
 	}
 }
 
+// TC-312: units whose verification makes no call and triage retries that
+// halve the groups settle the same at every degree of parallelism. Every
+// other slice's investigation finds no candidate, so its verification ends
+// without a call and must still release the units after it; the first
+// answer of each triage slot is not JSON, so the slot asks again for half of
+// its groups within its own calls.
+func TestPairsVerifyWithoutCallsAndTriageRetries(t *testing.T) {
+	t.Parallel()
+	f := newPairsFixture(t, 8, 40, 99)
+	f.caller.fault = func(q opencode.Request) (opencode.Reply, bool) {
+		var in struct {
+			Repair *json.RawMessage `json:"repair"`
+		}
+		if json.Unmarshal(q.Input, &in) != nil {
+			return opencode.Reply{}, false
+		}
+		h := fnv.New32a()
+		h.Write(q.Input)
+		switch {
+		case q.Role == "investigate" && in.Repair == nil && h.Sum32()%2 == 0:
+			return asJSON(map[string]any{"candidates": []map[string]any{}}), true
+		case q.Role == "triage" && in.Repair == nil:
+			return opencode.Reply{Reason: "model_output_invalid"}, true
+		}
+		return opencode.Reply{}, false
+	}
+	ref, _ := checkPairs(t, f, nil)
+	per := map[string]int{}
+	for _, k := range ref.counts {
+		per[k]++
+	}
+	silent, retried := 0, 0
+	for key, r := range ref.results {
+		switch {
+		case strings.HasPrefix(key, "review.verify.s") && r.Status == domain.TaskSucceeded && per[key] == 0:
+			silent++
+		case strings.HasPrefix(key, "review.triage.") && per[key] >= 2:
+			retried++
+		}
+	}
+	if silent == 0 || retried == 0 {
+		t.Fatalf("%d slice verifications without a call, %d triage slots that asked again (statuses %v, calls %v): want both", silent, retried, statusOf(ref), per)
+	}
+}
+
 // scopeOf is the scope artifact review.scope wrote.
 func scopeOf(t *testing.T, j analysis.Job) record.ScopeDoc {
 	t.Helper()
@@ -598,7 +643,7 @@ func scopeOf(t *testing.T, j analysis.Job) record.ScopeDoc {
 	return doc
 }
 
-// TC-307: a count that cannot be written fails that call alone
+// TC-312: a count that cannot be written fails that call alone
 // (review_call_count_failed); the other pairs go on.
 func TestPairsCountWriteFailure(t *testing.T) {
 	t.Parallel()
@@ -618,7 +663,7 @@ func TestPairsCountWriteFailure(t *testing.T) {
 	}
 }
 
-// TC-307: cancelling the attempt while requests are in flight ends every
+// TC-312: cancelling the attempt while requests are in flight ends every
 // pair: Run returns, no task succeeds after the cancel, every waiting pair
 // is released, the ceiling holds and no goroutine is left behind.
 func TestPairsCancelledMidFlight(t *testing.T) {
@@ -671,7 +716,7 @@ func TestPairsCancelledMidFlight(t *testing.T) {
 	}
 }
 
-// TC-307: a pair waits only while the earlier unfinished pairs could change
+// TC-312: a pair waits only while the earlier unfinished pairs could change
 // its decision. With every earlier pair's worst case inside the ceiling it
 // decides at once; at the ceiling it waits for them and decides as
 // sequential execution does.

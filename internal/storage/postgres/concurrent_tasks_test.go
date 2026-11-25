@@ -11,7 +11,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/nodeproto"
 )
 
-// TC-308 (docs/REVIEW.md#호출-상한과-승인): the worker's concurrent review
+// TC-313 (docs/REVIEW.md#호출-상한과-승인): the worker's concurrent review
 // pairs post task status changes of one attempt at the same time, while the
 // user cancels the run. Every writer locks project -> run -> attempt -> task
 // rows (lockAttempt, authorizeRun, closeTasks after the run), so the changes
