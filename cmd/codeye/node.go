@@ -314,6 +314,7 @@ func runWorker(ctx context.Context, in io.Reader, out, stderr io.Writer) int {
 	tools := &workerRuntimePaths{caller: model}
 	return workerrun.Main(ctx, workerrun.Config{In: in, Out: out, Stderr: stderr,
 		PrepareAttempt:  model.prepareAttempt,
+		SerialModel:     model.servesOneAtATime,
 		RefreshHandlers: tools.refresh,
 		Handlers: func(ctx context.Context, h *workerproto.Hello, runner executor.Runner) ([]analysis.Handler, []string, error) {
 			tools.hello, tools.current = h, helloPaths(h)

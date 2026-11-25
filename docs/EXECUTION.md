@@ -230,7 +230,7 @@ codeye worker      # agent가 실행한다. 옵션 없음.
 | `--opencode`, `--model`, `--model-config-file`, `--model-credential-file`, `--model-relay-file`, `--model-timeout`, `--model-source-root` | 모델 실행, OpenCode JSON·JSONC 설정과 인증 파일(경로만 받고 워커가 읽는다), 호출당 제한시간(기본 600초, 1초~30분), root별 모델 전송 승인([검토](REVIEW.md#모델-설정)). 키 파일과 relay 파일은 함께 쓰지 않는다. |
 | `--review-request-bytes N`, `--review-output-tokens N` | 모델 검토 요청 하나의 메시지 바이트(기본 262,144, 40,000~1,048,576)와 호출당 출력 토큰(기본 16,384, 1,536~65,536). 모든 역할의 코드 원문·단위·서술·후보 상한을 이 둘에서 계산한다. 범위 밖이면 사용 오류다. Hello `review_request_bytes`·`review_output_tokens`로 워커에 간다([검토](REVIEW.md#요청-크기)). |
 | `--review-max-calls N` | attempt당 모델 검토 호출 상한(기본 99, 15~207). 상한을 다 쓰면 기본값 33일 때의 약 세 배 비용이 든다([안내서](GUIDE.md)). 범위 밖이면 사용 오류다. 전체 역할 다섯 개가 최대 15회를 쓰고 남은 호출로 모듈 단위 slice를 차례로 허용한다. Hello `review_max_calls`로 워커에 전달되고 run 요청으로는 바꿀 수 없다([검토](REVIEW.md#모듈-단위-검토-분할)). |
-| `--review-parallel N` | attempt 안에서 함께 실행할 독립 검토 단위 수(slice 쌍, `review.contract`, 분류 쌍. 기본 4, 1~16). 1이면 하나씩 실행한다. 범위 밖이면 사용 오류다. Hello `review_parallel`로 워커에 가고, 이 필드가 없는 hello는 1이다. `--model-relay-file`을 쓰면 relay가 요청을 하나씩 처리하므로 1로 실행한다. 호출 수·비용·보고서는 병렬도와 관계없이 같다([호출 상한과 승인](REVIEW.md#호출-상한과-승인)). |
+| `--review-parallel N` | attempt 안에서 함께 실행할 독립 검토 단위 수(slice 쌍, `review.contract`, 분류 쌍. 기본 4, 1~16). 1이면 하나씩 실행한다. 범위 밖이면 사용 오류다. Hello `review_parallel`로 워커에 가고, 이 필드가 없는 hello는 1이다. `--model-relay-file`을 쓰거나, 서비스에서 attempt가 읽은 `agent.model.relay_file`이 relay를 고르면 1로 실행한다. relay가 요청을 하나씩 처리하기 때문이다. 호출 수·비용·보고서는 병렬도와 관계없이 같다([호출 상한과 승인](REVIEW.md#호출-상한과-승인)). |
 | `--storage-quota AREA=BYTES`, `--storage-log-dir` | 노드 저장 영역 상한(`snapshot`, `workspace`, `cache`, `logs`, 영역마다 한 번)([운영](OPERATIONS.md)). |
 
 - 거부된 인자 값은 출력하지 않는다(자격증명이 들어 있을 수 있다).

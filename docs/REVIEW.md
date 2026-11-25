@@ -301,7 +301,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 **함께 실행하는 단위.** 전체 역할 다섯 개와 `review.scope`는 계획 순서대로 하나씩 실행한다. 그 뒤의 독립 단위는 정해진 병렬도까지 함께 실행한다. 단위는 모듈 slice 쌍(`review.investigate.sNNN` → `review.verify.sNNN`), `review.contract`, 분류 쌍(`review.triage.tNNN` → `review.verify.tNNN`)이다. 병렬도는 `codeye agent --review-parallel N`과 서비스 설정 `agent.model.review_parallel`로 정한다(기본 4, 1~16). [병렬 실행](../internal/worker/review/schedule.go)
 
 - 단위는 계획 순서로 꺼낸다. 쌍의 두 작업은 차례대로 실행한다. 다른 단위의 출력을 읽는 단위는 `review.contract`뿐이다. 이 작업은 slice 기록을 읽으므로 앞의 단위가 모두 끝난 뒤 시작한다.
-- 병렬도 1은 지금까지처럼 하나씩 실행한다. 예산 relay(`--model-relay-file`)는 요청을 하나씩 처리하므로 relay를 쓰는 노드는 설정과 관계없이 1로 실행한다. 대기열에서 기다린 시간이 모델 제한시간을 쓰지 않게 하려는 것이다. 유료 평가 실행은 relay를 거치므로 직렬이다.
+- 병렬도 1은 지금까지처럼 하나씩 실행한다. 예산 relay는 요청을 하나씩 처리한다. 그래서 attempt의 모델이 relay이면 설정과 관계없이 1로 실행한다. 에이전트의 `--model-relay-file`이든, attempt마다 서비스 설정에서 읽는 `agent.model.relay_file`이든 같다. 대기열에서 기다린 시간이 모델 제한시간을 쓰지 않게 하려는 것이다. 유료 평가 실행은 relay를 거치므로 직렬이다.
 - 기본값 4는 보통 상한(99)에서 slice 약 40쌍의 대기 시간을 줄이면서 공급자 동시 요청과 OpenCode 프로세스 메모리를 작게 유지하는 값이다. 동시 요청은 노드의 worker 수 × 병렬도까지 늘어난다.
 
 **결정 규칙.** 상한의 모든 판단은 순차 실행과 같은 결론을 낸다. 쌍의 입장과, 형식 복구·재시도를 포함한 각 호출이 여기에 해당한다. 판단은 "계획 순서에서 이 단위 앞에 있는 단위들의 호출 + 이 단위 자신의 호출 < 문턱"을 묻는다. 문턱은 순차 실행과 같다(입장 예비, 조사 재시도의 확인 예비, 분류 몫).

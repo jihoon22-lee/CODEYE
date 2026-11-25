@@ -379,7 +379,7 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 	for i := 0; i < len(tasks); i++ {
 		if i == start && end > start {
 			job := ajob
-			schedule.Run(taskContext, w.reviewParallel(), func(k int) bool {
+			schedule.Run(taskContext, w.reviewParallel(a), func(k int) bool {
 				if a.ctx.Err() != nil || a.stopNew.Load() {
 					return false
 				}
@@ -434,13 +434,16 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 	return outcome, reason, &cid
 }
 
-// reviewParallel is how many independent review pairs run at once: the
-// agent's setting (1 when the hello has none). A budget relay serves one
-// request at a time, so with a relay the pairs run one after another and no
-// request waits in the relay's queue against its own model timeout.
-func (w *worker) reviewParallel() int {
+// reviewParallel is how many independent review pairs of attempt a run at
+// once: the agent's setting (1 when the hello has none). A budget relay
+// serves one request at a time, so with a relay the pairs run one after
+// another and no request waits in the relay's queue against its own model
+// timeout. The relay is the hello's (codeye agent --model-relay-file) or the
+// one the attempt resolved from the service configuration
+// (agent.model.relay_file, Config.SerialModel).
+func (w *worker) reviewParallel(a *attempt) int {
 	n := w.hello.ReviewParallel
-	if n < 1 || w.hello.ModelRelayFile != "" {
+	if n < 1 || w.hello.ModelRelayFile != "" || (w.cfg.SerialModel != nil && w.cfg.SerialModel(a.scratch)) {
 		return 1
 	}
 	return n

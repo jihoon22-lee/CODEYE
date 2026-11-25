@@ -98,22 +98,34 @@ func TestReviewSlicesRunConcurrentlyThroughTheWorker(t *testing.T) {
 }
 
 // TC-308: the degree of parallelism is the hello's; a hello without one (an
-// older agent) runs the pairs one at a time, and so does a node with a
-// budget relay, which serves one request at a time.
+// older agent) runs the pairs one at a time, and so does an attempt whose
+// model is a budget relay, which serves one request at a time: the relay of
+// codeye agent --model-relay-file (in the hello) or the one the attempt
+// resolved from the service configuration (Config.SerialModel, asked for
+// that attempt's scratch).
 func TestReviewParallelFromHello(t *testing.T) {
+	const scratch = "/scratch/attempt-1"
+	relayFor := func(want string) func(string) bool {
+		return func(s string) bool { return s == want }
+	}
 	for _, c := range []struct {
-		hello workerproto.Hello
-		want  int
+		hello  workerproto.Hello
+		serial func(string) bool
+		want   int
 	}{
-		{workerproto.Hello{}, 1},
-		{workerproto.Hello{ReviewParallel: 1}, 1},
-		{workerproto.Hello{ReviewParallel: 4}, 4},
-		{workerproto.Hello{ReviewParallel: 16}, 16},
-		{workerproto.Hello{ReviewParallel: 4, ModelRelayFile: "/srv/relay.json"}, 1},
+		{workerproto.Hello{}, nil, 1},
+		{workerproto.Hello{ReviewParallel: 1}, nil, 1},
+		{workerproto.Hello{ReviewParallel: 4}, nil, 4},
+		{workerproto.Hello{ReviewParallel: 16}, nil, 16},
+		{workerproto.Hello{ReviewParallel: 4, ModelRelayFile: "/srv/relay.json"}, nil, 1},
+		// The service path: no model flags in the hello, the relay comes
+		// from agent.model.relay_file for this attempt only.
+		{workerproto.Hello{ReviewParallel: 4}, relayFor(scratch), 1},
+		{workerproto.Hello{ReviewParallel: 4}, relayFor("/scratch/other"), 4},
 	} {
-		w := &worker{hello: &c.hello}
-		if got := w.reviewParallel(); got != c.want {
-			t.Errorf("hello parallel %d relay %q: %d, want %d", c.hello.ReviewParallel, c.hello.ModelRelayFile, got, c.want)
+		w := &worker{hello: &c.hello, cfg: Config{SerialModel: c.serial}}
+		if got := w.reviewParallel(&attempt{scratch: scratch}); got != c.want {
+			t.Errorf("hello parallel %d relay %q serial %v: %d, want %d", c.hello.ReviewParallel, c.hello.ModelRelayFile, c.serial != nil, got, c.want)
 		}
 	}
 }

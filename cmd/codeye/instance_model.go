@@ -148,6 +148,15 @@ func (c *instanceModelCaller) prepareAttempt(scratch string) []string {
 	return c.protected
 }
 
+// servesOneAtATime reports whether the model the attempt in scratch resolved
+// (prepareAttempt) is a budget relay, which serves one request at a time.
+// An attempt it did not prepare counts as one: the pairs then run in order.
+func (c *instanceModelCaller) servesOneAtATime(scratch string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.scratch != scratch || c.caller.RelayFile != ""
+}
+
 func (c *instanceModelCaller) pinNative(path, model, home string) {
 	if path != c.nativePath {
 		c.nativePath, c.nativeRefs = path, nil
