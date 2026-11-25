@@ -834,3 +834,55 @@ dev 분할의 Python·Rust 사례 4개를 현재 빌드로 실행했다. 어떤 
 - 이 측정의 정성적 관찰 셋(현재 빌드가 찾지 못하는 결함이 남아 있음, 오탐이 줄지 않음, 섞인 진단 분류 묶음이 통째로 무해로 분류될 수 있음)을 로드맵으로 옮겼다. 수치와 사례 내용은 옮기지 않았다.
 - `fixtures/project-defects/`는 holdout 분할을 담고 있다. 앞선 개정 기간에 지침 작성자의 저장소 검색이 이 디렉터리를 지나갔고, 출력은 걸러졌으며 작성자는 내용을 읽지 않았다고 보고했다([앞선 공개](#모듈-단위-검토-입력의-전후-비교와-회귀-기록)). 이 사실은 이번 비교의 독립성을 낮추는 요인으로 남는다.
 - 판정자는 모델 둘(Claude Opus 5.5, Claude Sonnet 5.5)이다. 진단 분류와 손대지 않은 dev 사례의 판정은 Claude Sonnet 5.5 하나가 했다. 사람의 판정은 받지 않았다.
+
+## 분석기 실행 범위(도구만 조건)
+
+정적 분석기가 실제 프로젝트에서 실행되는지와 어느 파일을 처리하는지를 모델 호출 없이 잰다. 프로젝트 규모 집합의 두 분할(dev 11, holdout 9)의 수정 전 변형 20개를 `quality_eval.py run --condition tools`로 실행했다. holdout 봉인은 2026-11-26에 소진됐으므로 이 측정은 두 분할을 모두 쓴다. 판정과 라벨은 읽지 않았고, 라벨과의 관계는 채점기의 집계 "lines: tool diagnostic hits label, before"만 본다. 수치는 집계이며 사례 내용은 적지 않는다.
+
+**공통 조건.** Linux x86-64(WSL2), 도구는 아래 한 목록을 모든 batch에 고정했다. go1.27.4, Staticcheck 2026.2.2, errcheck 1.30.0, gitleaks 8.30.1, cargo·clippy 1.99.1, cppcheck 2.22.0, clang-tidy 23.1.5, GCC 15.2.0, ruff 0.16.3, mypy 2.4.1, pyright 1.1.414, bandit 1.9.4, Import Linter 2.17, lizard 1.26.1, jscpd 5.4.3, node 24.18.0, ESLint 10.15.0, TypeScript 6.0.3, dependency-cruiser 18.8.0, JDK 21, PMD 7.29.0, SpotBugs 4.10.5, 패키지 관리자 npm 11.16·pnpm 11.28·yarn 1.22·uv 0.12.5·Python 3.14. Opengrep은 설치하지 않았다. `--agent-flag python-both-type-checkers --agent-flag dependency-fetch`, 저장소 코드 실행 허가 기본, `--go-mod-cache` 없음, `--max-workers 3`. 처리 파일과 범위 파일의 경로 종류는 보고서와 같은 규칙(`record.PathClass`)으로 나눴다. 진단은 억제되지 않은 진단 분석기 관찰이다.
+
+### 서비스와 같은 도구 설정의 효과
+
+패키지 관리자를 주지 않은 이전 runner 설정과 서비스 탐색과 같은 설정(패키지 관리자 포함)을 같은 빌드(`cad0271`)로 JS·Python 변형 7개에서 비교했다.
+
+| 분석기 | 패키지 관리자 없음 | 서비스와 같은 설정 |
+|---|---|---|
+| `deps.javascript` | unsupported `package_manager_not_configured` 3, 소비자 없음 1 | succeeded 3, 소비자 없음 1 |
+| `deps.python` | unsupported `package_manager_not_configured` 4 | succeeded 2, 받을 것 없음 1, failed `no_binary_distribution` 1 |
+| tsc | failed `dependency_unavailable` 2, succeeded 1 | succeeded 2, skipped_policy `node_modules_outside_snapshot` 1 |
+| type-aware ESLint | failed `dependency_unavailable` 2, 입력 예산 초과 1, succeeded 1 | succeeded 2, 입력 예산 초과 1, skipped_policy `node_modules_outside_snapshot` 1 |
+| mypy 단위의 해석하지 못한 import | 19(stub 없음 3) | 0 |
+| pyright 단위의 해석하지 못한 import | 18 | 0 |
+| pyright 진단(배포 코드) | 303 | 215 |
+
+pyright 진단이 준 것은 대부분 해석하지 못한 import와 그 뒤의 타입 오류였다. `node_modules_outside_snapshot`은 설치가 성공한 하위 모듈에서 tsc·type-aware ESLint가 그 트리를 받아들이지 않은 경우이고, 이 측정에서 원인을 찾지 않았다.
+
+### 기준 측정(현재 main `cad0271`, 서비스와 같은 설정)
+
+범위 안 소스 파일(사례 언어)은 Go 배포 63·시험 64·예제 16, Python 배포 46, JS/TS 배포 76·시험 201·예제 37·벤치마크 6, Rust 배포 11·시험 1, Java 배포 68, C/C++ 번역 단위 배포 9·시험 82였다.
+
+| 분석기 | 작업 상태 | 처리 파일(배포 / 배포 아님) | 범위 파일 | 배포 코드 진단 |
+|---|---|---|---|---|
+| go vet | succeeded 10 | 62 / 76 | 143 | 0 |
+| Staticcheck | succeeded 10 | 62 / 76 | 143 | 5 |
+| errcheck | succeeded 9, failed `errcheck_packages_unavailable` 1 | 50 / 58 | 143 | 10 |
+| cppcheck | succeeded 3 | 6 / 19 | 91 | 17 |
+| clang-tidy | succeeded 3 | 6 / 19 | 91 | 30 |
+| GCC 분석 | failed `gcc_analyzer_too_complex` 3 | 0 / 0 | 91 | 0 |
+| ruff | succeeded 5 | 46 / 2 | 48 | 29 |
+| mypy | succeeded 5 | 46 / 2 | 48 | 31 |
+| pyright | succeeded 5 | 46 / 2 | 48 | 215 |
+| bandit | succeeded 5 | 46 / 2 | 48 | 6 |
+| ESLint | succeeded 4 | 76 / 244 | 320 | 16 |
+| tsc | succeeded 2, `node_modules_outside_snapshot` 1 | 18 / 2 | 189 | 0 |
+| type-aware ESLint | succeeded 2, `node_modules_outside_snapshot` 1, 입력 예산 초과 1 | 9 / 2 | 135 | 4 |
+| cargo check | failed `package_errors` 2, succeeded 1 | 3 / 0 | 12 | 72 |
+| clippy | failed `package_errors` 2, succeeded 1 | 3 / 0 | 12 | 126 |
+| rustdoc | succeeded 2, failed `doc_output_collision` 1 | 2 / 0 | 12 | 2 |
+| PMD | succeeded 3 | 68 / 0 | 68 | 2 |
+| SpotBugs | succeeded 2, failed `java_compilation_failed` 1 | 34 / 0 | 68 | 13 |
+
+- 실패한 작업은 처리 파일을 주장하지 않으므로 그 작업의 파일은 처리 0이다. 실패한 cargo check·clippy·SpotBugs 작업도 성공한 부분의 진단은 남는다.
+- C/C++: 범위 안 번역 단위 91개 중 compile DB에 있는 것은 25개다. 나머지 66개 중 배포 코드 경로는 3개이고 하나는 프로젝트의 기본 build에서 빠지는 선택 라이브러리 소스, 둘은 fuzz harness와 시험 프로그램(경로 규칙으로는 배포 코드)이다. 63개는 시험 경로다.
+- GCC 분석은 세 사례 모두 단위 대부분이 `-Wanalyzer-too-complex`(탐색 한도)를 내어 작업 전체가 실패했고, 끝까지 분석한 단위가 있어도 처리 파일 0이었다.
+- 채점기 집계 "tool diagnostic hits label, before": dev 1/11, holdout 2/9.
