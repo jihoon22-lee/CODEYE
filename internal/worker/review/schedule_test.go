@@ -593,19 +593,26 @@ func TestPairsOnePairTimesOut(t *testing.T) {
 func TestPairsVerifyWithoutCallsAndTriageRetries(t *testing.T) {
 	t.Parallel()
 	f := newPairsFixture(t, 8, 40, 99)
+	// The investigations of the first, third, ... filled slots (by the file
+	// each one carries last) find nothing.
+	var empty, emptied []string
+	for i, sl := range scopeOf(t, f.j).Slices {
+		if i%2 == 0 {
+			empty = append(empty, `"path":"`+sl.Files[len(sl.Files)-1].Path+`"`)
+			emptied = append(emptied, "review.verify."+sl.Key)
+		}
+	}
 	f.caller.fault = func(q opencode.Request) (opencode.Reply, bool) {
 		var in struct {
 			Repair *json.RawMessage `json:"repair"`
 		}
-		if json.Unmarshal(q.Input, &in) != nil {
+		if json.Unmarshal(q.Input, &in) != nil || in.Repair != nil {
 			return opencode.Reply{}, false
 		}
-		h := fnv.New32a()
-		h.Write(q.Input)
 		switch {
-		case q.Role == "investigate" && in.Repair == nil && h.Sum32()%2 == 0:
+		case q.Role == "investigate" && slices.ContainsFunc(empty, func(p string) bool { return strings.Contains(string(q.Input), p) }):
 			return asJSON(map[string]any{"candidates": []map[string]any{}}), true
-		case q.Role == "triage" && in.Repair == nil:
+		case q.Role == "triage":
 			return opencode.Reply{Reason: "model_output_invalid"}, true
 		}
 		return opencode.Reply{}, false
@@ -615,17 +622,19 @@ func TestPairsVerifyWithoutCallsAndTriageRetries(t *testing.T) {
 	for _, k := range ref.counts {
 		per[k]++
 	}
-	silent, retried := 0, 0
-	for key, r := range ref.results {
-		switch {
-		case strings.HasPrefix(key, "review.verify.s") && r.Status == domain.TaskSucceeded && per[key] == 0:
-			silent++
-		case strings.HasPrefix(key, "review.triage.") && per[key] >= 2:
+	for _, key := range emptied {
+		if ref.results[key].Status != domain.TaskSucceeded || per[key] != 0 {
+			t.Fatalf("%s: %v with %d calls, want succeeded without a call", key, ref.results[key], per[key])
+		}
+	}
+	retried := 0
+	for key := range ref.results {
+		if strings.HasPrefix(key, "review.triage.") && per[key] >= 2 {
 			retried++
 		}
 	}
-	if silent == 0 || retried == 0 {
-		t.Fatalf("%d slice verifications without a call, %d triage slots that asked again (statuses %v, calls %v): want both", silent, retried, statusOf(ref), per)
+	if len(emptied) < 2 || retried == 0 {
+		t.Fatalf("%d emptied slots, %d triage slots that asked again (calls %v): want both", len(emptied), retried, per)
 	}
 }
 
