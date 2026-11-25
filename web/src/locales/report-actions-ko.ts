@@ -43,7 +43,7 @@ export const reportActionsKo = {
   noPlace: '없음',
   diagnosticCount: (n: number) => `${n}건`,
   diagnosticMore: (n: number) => `외 ${n}곳은 정적 분석 탭과 JSON에 있습니다.`,
-  diagnosticsTriaged: (diagnostics: number, triaged: number, rules: number, tools: number) => `도구 진단 ${diagnostics}건 중 ${triaged}건 분류 (규칙 ${rules}종, 도구 ${tools}종)`,
+  diagnosticsTriaged: (diagnostics: number, decided: number, unclear: number, rules: number, tools: number) => `도구 진단 ${diagnostics}건 중 ${decided}건 판정(문제·무해), ${unclear}건 판단 보류 (규칙 ${rules}종, 도구 ${tools}종)`,
   diagnosticsTriageNote: '정적 분석 도구가 보고한 진단을 모델이 코드 단위로 묶어 분류한 결과입니다. 분류는 결함 확인이 아니며, 문제로 분류한 묶음은 검증을 거쳐 조치 항목이나 추가 확인 후보가 됩니다. 분류 결과별, 분석기와 규칙별로 묶었고 기본 심각도는 분석기 팩의 규칙 계열 표가 정합니다.',
   diagnosticBucket: {
     attention: (n: number) => `확인이 필요한 진단 ${n}건`,

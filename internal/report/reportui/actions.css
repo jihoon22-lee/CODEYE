@@ -52,7 +52,7 @@
 .review-theme .report-diag-name { min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
 .review-theme .report-diag-count { font-variant-numeric: tabular-nums; font-weight: 700; }
 .review-theme .report-diag-severity { color: var(--report-muted); font-size: .82rem; }
-.review-theme .report-diag-description { flex-basis: 100%; color: var(--report-muted); font-size: .86rem; font-weight: 500; }
+.review-theme .report-diag-description { flex-basis: 100%; min-width: 0; overflow-wrap: anywhere; color: var(--report-muted); font-size: .86rem; font-weight: 500; }
 .review-theme .report-diag-group ul { margin: .2rem 0 .5rem; padding-inline-start: 1.1rem; }
 .review-theme .report-diag-group li { min-width: 0; overflow-wrap: anywhere; }
 .review-theme .report-diag-bucket { margin-block: .8rem; }

@@ -58,6 +58,20 @@ func triageScript(t *testing.T, classOf func(g triageGroupInput) string) func(in
 	}
 }
 
+// triageHeadline is the start of the diagnostics fold's title: the decided
+// (problem or harmless) and unclear diagnostics counted apart.
+func triageHeadline(d *report.DiagnosticTriage) string {
+	decided, unclear := 0, 0
+	for _, g := range d.Groups {
+		if g.Classification == record.TriageUnclear {
+			unclear += len(g.ObservationIDs)
+		} else {
+			decided += len(g.ObservationIDs)
+		}
+	}
+	return fmt.Sprintf("도구 진단 %d건 중 %d건 판정&#40;문제·무해&#41;, %d건 판단 보류", d.Diagnostics, decided, unclear)
+}
+
 // triageFixture is fixtures/modules/triage/input: a module of six files
 // with three functions each (function k at line 3+6k, its body 4+6k..7+6k).
 const triageFixture = "../../../fixtures/modules/triage/input"
@@ -337,7 +351,7 @@ func TestDiagnosticTriageReachesTheReport(t *testing.T) {
 		t.Fatalf("buckets %v, cross %d", buckets, cross)
 	}
 	md := string(report.RenderMarkdownAt(r, "", report.Korean, report.DetailSummary))
-	for _, want := range []string{"도구 진단 20건 중 19건 분류", "무해하다고 판단한 진단 3건", "검증에서 반증된 진단 3건", "분류하지 않은 진단 1건", "함수 앞부분의 검사가"} {
+	for _, want := range []string{triageHeadline(d), "무해하다고 판단한 진단 3건", "검증에서 반증된 진단 3건", "분류하지 않은 진단 1건", "함수 앞부분의 검사가"} {
 		if !strings.Contains(md, want) {
 			t.Fatalf("markdown lacks %q", want)
 		}
@@ -398,7 +412,7 @@ func TestDiagnosticsLeftUntriagedByTheCeiling(t *testing.T) {
 		}
 	}
 	md := string(report.RenderMarkdownAt(run.report, "", report.Korean, report.DetailSummary))
-	if !strings.Contains(md, fmt.Sprintf("도구 진단 20건 중 %d건 분류", d.Triaged)) || !strings.Contains(md, "깨끗하다는 뜻이 아니다") {
+	if !strings.Contains(md, triageHeadline(d)) || !strings.Contains(md, "깨끗하다는 뜻이 아니다") {
 		t.Fatal("markdown does not say the diagnostics were not triaged")
 	}
 }

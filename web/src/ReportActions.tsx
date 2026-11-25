@@ -152,7 +152,9 @@ function Diagnostics({ report, sections, openFinding }: { report: AnalysisReport
     </Fold>;
   }
   const bucket = new Map<string, string>(triage.groups.flatMap(g => g.observations.map(id => [id, g.bucket] as [string, string])));
-  return <Fold id="report-tool-diagnostics" title={a.diagnosticsTriaged(total, triage.triaged, rows.length, tools.size)}>
+  // What was decided (problem or harmless) apart from what the model left unclear.
+  const answered = (unclear: boolean) => triage.groups.filter(g => (g.classification === 'unclear') === unclear).reduce((n, g) => n + g.observations.length, 0);
+  return <Fold id="report-tool-diagnostics" title={a.diagnosticsTriaged(total, answered(false), answered(true), rows.length, tools.size)}>
     <p>{a.diagnosticsTriageNote}</p>
     {unplaced && <p>{a.diagnosticsUnplaced}</p>}
     {TRIAGE_BUCKETS.map(b => {

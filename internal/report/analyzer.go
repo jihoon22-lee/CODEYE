@@ -198,12 +198,18 @@ func (AnalyzerDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (
 	}
 	sort.Strings(order)
 	for _, k := range order {
-		first := groups[k][0]
-		grade := ""
-		if first.RawSeverity != nil {
-			grade = *first.RawSeverity
+		// The key has no grade: diagnostics at one position with different
+		// tool grades are one finding with the highest default severity.
+		var def severity.Result
+		for i, o := range groups[k] {
+			grade := ""
+			if o.RawSeverity != nil {
+				grade = *o.RawSeverity
+			}
+			if x := builtin.DefaultSeverity(d.Analyzer.ID, d.RulePack.ID, d.RulePack.Version, o.RuleID, grade); i == 0 || severity.Rank(x.Severity) > severity.Rank(def.Severity) {
+				def = x
+			}
 		}
-		def := builtin.DefaultSeverity(d.Analyzer.ID, d.RulePack.ID, d.RulePack.Version, first.RuleID, grade)
 		out.Findings = append(out.Findings, toolFinding(ctx, d.Analyzer.ID, categories[k], def, groups[k]))
 	}
 	tc := ToolCoverage{TaskKey: ctx.Task.Key, Analyzer: d.Analyzer.ID, ToolVersion: d.Tool.Version, ExitClass: d.Outcome.ExitClass, PartialParse: d.Outcome.PartialParse,

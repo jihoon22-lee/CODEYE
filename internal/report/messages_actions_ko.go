@@ -33,7 +33,7 @@ func init() {
 		"actions.diagnostics_note":             "정적 분석 도구가 보고한 진단이며 결함으로 확인된 것이 아니다. 분석기와 규칙별로 묶었고 규칙을 펼치면 위치가 나온다.",
 		"actions.diagnostics_unplaced":         "위치를 확인하지 못한 진단은 위치 대신 \"없음\"으로 적는다.",
 		"actions.diag_count":                   "%d건",
-		"actions.diagnostics_triaged":          "도구 진단 %d건 중 %d건 분류 (규칙 %d종, 도구 %d종)",
+		"actions.diagnostics_triaged":          "도구 진단 %d건 중 %d건 판정(문제·무해), %d건 판단 보류 (규칙 %d종, 도구 %d종)",
 		"actions.diagnostics_triage_note":      "정적 분석 도구가 보고한 진단을 모델이 코드 단위로 묶어 분류한 결과다. 분류는 결함 확인이 아니며, 문제로 분류한 묶음은 검증을 거쳐 조치 항목이나 추가 확인 후보가 된다. 분류 결과별, 분석기와 규칙별로 묶었고 기본 심각도는 분석기 팩의 규칙 계열 표가 정한다.",
 		"actions.diag_bucket.attention":        "확인이 필요한 진단 %d건",
 		"actions.diag_bucket_note.attention":   "모델이 이 코드에서 실제 문제로 분류했거나 판단할 수 없다고 한 진단이다. 문제로 분류한 묶음의 검증 결과는 연결된 항목에 있다.",

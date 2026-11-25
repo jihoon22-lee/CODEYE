@@ -107,7 +107,7 @@ describe('action-first overview', () => {
     const fold = (title: string) => within(overview).getByText(title).closest('details')!;
     expect(fold(a.candidates(1)).open).toBe(false);
     expect(fold(a.secondary(1)).open).toBe(false);
-    const diagnostics = fold(a.diagnosticsTriaged(2, 1, 2, 1));
+    const diagnostics = fold(a.diagnosticsTriaged(2, 0, 1, 2, 1));
     expect(diagnostics.open).toBe(false);
     expect(within(diagnostics).getAllByText(a.diagnosticCount(1))).toHaveLength(2);
     expect(diagnostics.textContent).toContain('SA4006');
@@ -177,6 +177,14 @@ describe('action-first overview', () => {
     expect(plan.assessed).toBe(true);
     expect(plan.mismatches.map(m => m.comparison.status)).toEqual(['mismatch', 'partial']);
   });
+  it('lists the confirmed secondary findings before an unconfirmed more severe one', () => {
+    const report = scenario();
+    const fixture = report.findings.find(f => f.id === 'review_fixture')!;
+    fixture.severity = 'low';
+    report.findings.push({ ...structuredClone(fixture), id: 'review_fixture_pending', severity: 'critical', validation: 'unreviewed', observations: [] });
+    report.sections!.codeReview.findings.push('review_fixture_pending');
+    expect(actionPlan(report, report.sections!).secondary.map(f => f.id)).toEqual(['review_fixture', 'review_fixture_pending']);
+  });
   it('opens the evidence of a card in the code analysis tab and names the document comparison', () => {
     const { overview } = overviewOf(scenario());
     fireEvent.click(within(overview.querySelector<HTMLElement>('[data-finding-card="review_second"]')!).getByRole('button', { name: a.evidenceLink(1, 0) }));
@@ -192,7 +200,7 @@ describe('action-first overview', () => {
 
   it('splits the diagnostics by triage result with the default severity, the reason and what was not triaged', () => {
     const { overview } = overviewOf(parsed('report.json'));
-    const diagnostics = within(overview).getByText(a.diagnosticsTriaged(2, 1, 2, 1)).closest('details')!;
+    const diagnostics = within(overview).getByText(a.diagnosticsTriaged(2, 0, 1, 2, 1)).closest('details')!;
     expect(diagnostics.textContent).toContain(a.diagnosticsTriageNote);
     const buckets = [...diagnostics.querySelectorAll<HTMLElement>('.report-diag-bucket')];
     expect(buckets.map(b => b.dataset.bucket)).toEqual(['attention', 'not_triaged']);

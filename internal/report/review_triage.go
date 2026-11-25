@@ -139,6 +139,19 @@ type TriageResult struct {
 	FindingID      *string    `json:"finding_id"`
 }
 
+// triageDecided counts the diagnostics of the groups classified as problem
+// or harmless, and those of the groups left unclear.
+func triageDecided(d *DiagnosticTriage) (decided, unclear int) {
+	for _, g := range d.Groups {
+		if g.Classification == record.TriageUnclear {
+			unclear += len(g.ObservationIDs)
+		} else {
+			decided += len(g.ObservationIDs)
+		}
+	}
+	return decided, unclear
+}
+
 // diagnosticIDs are the report's triage-eligible observations in section
 // order.
 func diagnosticIDs(r Report) []string {
