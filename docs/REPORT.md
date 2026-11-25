@@ -344,7 +344,7 @@ builder 9부터 pull request run([pull request 분석](GITHUB.md#pull-request-�
 
 도구 진단·모델 후보·재현된 결함·사람의 판단은 서로 다른 기록이다. 도구가 보고했다는 사실은 실제 결함 확정과 같지 않다. 검증 상태와 검토 우선순위는 별개다. 영향이 클 수 있지만 미확정인 후보도 우선 확인 목록에 들 수 있다.
 
-발견을 줄 세우거나 개수로 자르는 목록(요약의 `priorities`, PR 댓글의 발견, 보조 경로 발견 목록)은 검증 상태를 먼저 본다. 순서는 `reproduced`, `supported`, 아직 확인하지 않은 분류 문제(`review_tNNN_…`의 `unreviewed`·`inconclusive`), 그 밖의 `unreviewed`·`inconclusive`(도구 finding·모델 후보), `refuted`이고 심각도는 같은 상태 안에서만 본다. 도구 finding은 기본 심각도 표로 `high`일 수 있지만 검토 전이므로, 지지된 발견을 짧은 목록 밖으로 밀어내지 않는다. 조치 카드와 확인 필요 후보 목록은 이미 한 상태만 담으므로 심각도 순이다. 모델의 숫자 confidence를 정확도처럼 표시하지 않는다. 검증 상태와 근거 종류로 정성적 근거 수준을 보여준다.
+발견을 줄 세우거나 개수로 자르는 목록(요약의 `priorities`, PR 댓글의 발견, 보조 경로 발견 목록)은 검증 상태를 먼저 본다. 순서는 `reproduced`, `supported`(요약의 `priorities`는 이 둘을 한 상태로 보고 심각도로 줄 세운다. 저장된 이전 보고서의 요약을 검사가 다시 계산하기 때문이다), 아직 확인하지 않은 분류 문제(`review_tNNN_…`의 `unreviewed`·`inconclusive`), 그 밖의 `unreviewed`·`inconclusive`(도구 finding·모델 후보), `refuted`이고 심각도는 같은 상태 안에서만 본다. 도구 finding은 기본 심각도 표로 `high`일 수 있지만 검토 전이므로, 지지된 발견을 짧은 목록 밖으로 밀어내지 않는다. 조치 카드와 확인 필요 후보 목록은 이미 한 상태만 담으므로 심각도 순이다. 모델의 숫자 confidence를 정확도처럼 표시하지 않는다. 검증 상태와 근거 종류로 정성적 근거 수준을 보여준다.
 
 ## 코드 미포함 내보내기
 

@@ -329,7 +329,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - slot은 분류와 검증에 쓸 호출 두 번이 남아 있을 때 시작한다(모듈 slice 뒤이므로 남은 호출은 slice가 쓰고 남긴 것과 분류 몫이다). 분류 재시도는 검증에 쓸 호출 하나를 남긴다. 결정은 호출 계수 옆 파일에 쓰고 같은 slot의 검증이 따른다.
 - 출력은 묶음마다 `problem`(조건·영향·고칠 방향과 묶음 문맥 안의 줄 인용), `harmless`(무해하게 만드는 코드 근거와 그 줄 인용), `unclear`(무엇이 더 필요한지) 중 하나다. 의존성·타입·헤더를 찾지 못해 생긴 진단은 분석 공백으로 보고 `unclear`로 둔다. 모델은 도구 상태·진단 수·원시 등급·규칙·기본 심각도를 바꾸지 못하고 심각도를 정하지 않는다.
 - 출력 오류는 [출력 오류 분류](#출력-오류-분류)를 따른다. 형식 오류가 있으면 남은 묶음과 그 발췌만 담은 복구를 한 번 보낸다. 복구 뒤에도 남은 형식 오류는 그 묶음만 분류하지 않고(`triage_item_omitted`; 첫 답에 형식 오류가 있었는데 복구 답이 그 묶음을 빠뜨린 경우도 같다), 무결성 오류는 그 답을 거부한다(`triage_item_rejected`). 답이 없는 묶음은 `triage_answer_missing`이다. 한 출력에 같은 묶음의 답이 둘이면 앞 답을 받아들였어도 `triage_group_duplicate`를 남긴다. `problem`·`harmless`·`unclear` 모두 자기 묶음의 발췌만 인용한다. 다른 묶음의 발췌를 인용하면 형식 오류(`triage_evidence_not_at_group`)이고, 복구 뒤에는 자기 묶음의 인용만 남겨 검사한다. 분류하지 않은 묶음이 있으면 `diagnostic_groups_not_triaged`를 남긴다. 분류한 묶음이 하나도 없으면 task가 실패한다.
-- **출력 한도.** 한 요청의 묶음 수는 묶음당 출력 1,024 토큰을 가정해 정한다. 실제 모델이 그보다 길게 써서 출력 토큰 한도에 답이 잘리면 출력은 JSON이 아니다(`output_not_json`). 이것은 형식 오류다. 재시도는 남은 묶음의 앞 절반(우선순위가 높은 쪽)만 묻고 나머지는 `triage_item_omitted`로 둔다. 재시도 답에서 하나라도 받아들이면 slot은 성공하고 빠진 묶음은 `diagnostic_groups_not_triaged`로 보인다. 재시도도 JSON이 아니면 분류한 묶음이 없어 task가 실패한다(`review_output_invalid`).
+- **출력 한도.** 한 요청의 묶음 수는 묶음당 출력 1,024 토큰을 가정해 정한다. 실제 모델이 그보다 길게 써서 출력 토큰 한도에 답이 잘리면 출력은 JSON이 아니다(`output_not_json`). 이것은 형식 오류다. JSON이 아닌 답마다 재시도는 남은 묶음의 앞 절반(우선순위가 높은 쪽)만 묻고 나머지는 `triage_item_omitted`로 둔다(역할 호출 세 번 안에서, 7개면 7→4→2). 재시도 답에서 하나라도 받아들이면 slot은 성공하고 빠진 묶음은 `diagnostic_groups_not_triaged`로 보인다. 세 번 모두 JSON이 아니거나 묶음 하나만 남아도 JSON이 아니면 분류한 묶음이 없어 task가 실패한다(`review_output_invalid`). 그때도 호출과 묶음을 담은 실패 기록은 남는다.
 - 요청을 만들 수 없었거나(`review_input_too_large`) 호출 뒤에 취소된 slot도 실패 기록을 남긴다. 기록은 한 호출과 보낸 묶음을 모두 분류하지 않은 것으로 담아, 보고서가 무엇이 모델에 갔는지 안다. 요청을 만들기 전에 실패한 기록에는 묶음이 없다.
 - 문제로 분류한 묶음은 후보 `triage_N`(origin `triage`, 묶음의 관찰 ID)이 되고 `review.verify.tNNN`이 검증한다. 검증은 문서 기록과 그 slot의 분류 기록을 상류로 읽는다. 도구 진단, 모델 후보, 검증 판정은 서로 다른 기록이며 관찰 ID로 연결된다. 무해 판단은 도구 finding을 숨기지 않는다.
 
@@ -340,7 +340,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 모듈 slice가 먼저다. 분류 쌍은 계획의 끝에 있고, 분류 몫은 실행 때 한 번 정한다.
 
 - 전체 역할이 남긴 호출을 L, 아직 보낼 줄이 있는 slice 수 × slice 입장 예비(호출 2)를 필요량으로 한다.
-- 필요량이 L 이하이면 몫은 0이다. slice는 전처럼 모든 줄을 보내고 분류는 slice가 쓰고 남긴 호출을 쓴다.
+- 필요량이 L 이하이면 몫은 0이다. slice는 전처럼 모든 줄을 보내고 분류는 slice가 쓰고 남긴 호출을 쓴다. 남은 호출이 둘 미만이면 분류는 실행되지 않고 모든 진단이 분류하지 않음으로 남는다.
 - 필요량이 L을 넘으면 L 16회마다 분류 쌍 하나(호출 2)를 몫으로 둔다. 최소 한 쌍이고 묶음이 배정된 slot 수를 넘지 않는다. slice와 `review.contract`는 이 몫을 쓰지 않는다. 첫 slot이 심각도가 가장 높은 묶음을 담으므로 몫이 한 쌍이어도 가장 심각한 진단부터 분류된다.
 - 16은 평가 실행의 상한 20에서 한 쌍, 기본 상한 99에서 다섯 쌍이 되는 값이다. 지금까지 측정한 품질 향상은 slice가 상한 20 안에서 모든 줄을 보낸 데서 나왔으므로 slice가 양보하는 양을 작게 정했다. slice가 다 쓰지 않은 호출은 분류가 쓴다.
 
@@ -655,7 +655,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 - **버전.** 시험한 릴리스는 목록이다(`opencode.TestedVersions`). 릴리스마다 근거가 다르다.
   - 1.19.5: 고정 시험·예시가 쓰는 기준 릴리스(`opencode.Version`)다. 관리 설정의 권한 차단(`scripts/test_opencode_policy.py`), 시작 때의 npm 레지스트리 조회, 응답 대기 시간 기본값, 오프라인 모델 목록을 이 릴리스로 측정했다.
   - 1.19.6: 이 머신의 OpenCode가 2026-11-24 08:26(KST)에 스스로 갱신된 릴리스다. 그 뒤 소유자 예산의 실모델 실행(프로젝트 규모 5사례, 48회 호출의 회귀 실행)이 이 릴리스를 거쳤고 모든 호출이 수락됐다. 같은 머신에서 권한 차단 검사, `scripts/test_postgres.py --smokes-only --instance-model`, 가짜 upstream dry run을 통과했다.
-  - 갱신은 CODEYE 밖에서 일어났다. CODEYE의 호출(`--version` 확인 포함)은 관리 설정의 `autoupdate: false`와 `OPENCODE_DISABLE_AUTOUPDATE=1`로 실행하므로 바이너리를 바꾸지 않는다. 운영자가 같은 바이너리를 자기 설정으로 띄우면(`opencode serve` 등) OpenCode 기본값으로 갱신될 수 있다. 목록에 없는 릴리스로 바뀌면 다음 호출부터 `opencode_version_untested`가 남는다.
+  - 갱신을 일으킨 CODEYE 경로는 찾지 못했다. 바이너리의 바뀐 시각(ctime 2026-11-24 08:26:28 KST)에 CODEYE 실행 기록이 없고, 같은 머신에서 사용자 설정(autoupdate 기본값 켬)으로 띄운 `opencode serve`가 그때 실행 중이었다. 모델 호출과 `codeye doctor`의 버전 확인은 관리 설정의 `autoupdate: false`와 `OPENCODE_DISABLE_AUTOUPDATE=1`로 실행한다. `codeye tools`의 버전 확인은 실행별 HOME에서 `--version`만 실행했지만 이 환경변수가 없었다. 2026-11-25부터 이 확인도 같은 변수를 준다. 운영자가 같은 바이너리를 자기 설정으로 띄우면(`opencode serve` 등) OpenCode 기본값으로 갱신될 수 있다. 목록에 없는 릴리스로 바뀌면 다음 호출부터 `opencode_version_untested`가 남는다.
   - 호출마다 먼저 `--version`을 실행하며 확인에는 설정한 호출 제한시간과 30초 중 짧은 값을 적용한다. 실행 중인 버전 확인이 제한시간을 넘기면 모델 호출 전에 `opencode_version_timeout`을 기록한다. 확인과 요청은 호출당 전체 제한시간을 함께 사용한다. 다른 릴리스(`MAJOR.MINOR.PATCH[-…]`)도 실행하고 그 단계 기록에 `opencode_version_untested`를 남긴다. 릴리스 형식이 아닌 응답만 `opencode_version_unsupported`다. `codeye doctor`의 버전 확인은 모델 비용을 쓰지 않는다.
 - **운영자 설정.** 실행 파일은 절대 경로다. 모델 ID는 `PROVIDER/MODEL`이다. provider는 소문자·숫자·`._-`, 모델 부분은 영숫자와 `._:@+-/`이고 `.`·`..` 경로 조각은 받지 않는다(라우터식 `vendor/model`은 받는다). 평가용 `codeye-gateway`의 Sol·Terra·Luna 모델은 relay 파일이 있을 때만 쓴다. relay 모델의 출력·문맥 한도는 요청 예산에서 정한다([요청 크기](#요청-크기)). 호출당 제한시간은 `--model-timeout`(기본 600초, 1초~30분)이다. 설정이 없거나 형식이 틀리면 요청을 보내지 않는다(`model_not_configured`). 공급자 변경은 운영자 선택이다([모델 설정](#모델-설정)).
 - **작업 디렉터리와 workspace digest.** 요청마다 attempt scratch 아래 새 디렉터리를 만든다. 그 안의 `identity.txt`에 snapshot digest, 요청 digest, 무작위 32바이트 nonce에 묶인 확인값을 쓰고 첨부로 준다. 응답의 `workspace_proof`가 이 값과 다르면 `workspace_unreachable`이다. 프롬프트와 선택된 데이터는 표준 입력으로만 전달한다. 요청 digest는 정확한 메시지 텍스트의 SHA-256이다.
