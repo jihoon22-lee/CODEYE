@@ -464,6 +464,11 @@ func Validate(r Record, want Expect) error {
 	if err := checkStageContent(r, catalog, observations, b); err != nil {
 		return err
 	}
+	// The marker of a candidate that was not sent to verification is the
+	// platform's decision from its evidence and the scope.
+	if r.Stage == StageVerify && PackSetsAside(r.Pack.Version) && want.ShippedSource != nil && !NotShippedMatches(r.Candidates, r.Verifications, catalog, *want.ShippedSource) {
+		return invalid("candidate_not_shipped does not match the evidence of the candidates")
+	}
 	if err := checkTriage(r, catalog, observations, b); err != nil {
 		return err
 	}
@@ -819,9 +824,6 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 			if v.Verdict != VerdictUnreviewed {
 				reviewed++
 			}
-		}
-		if PackSetsAside(r.Pack.Version) && !NotShippedMatches(r.Candidates, r.Verifications, catalog) {
-			return invalid("candidate_not_shipped does not match the evidence of the candidates")
 		}
 		// Candidates the platform did not send (LimCandidateNotShipped) are
 		// not a verification the stage did or failed to complete.

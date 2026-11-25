@@ -1,6 +1,12 @@
 package record
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+	"strings"
+
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
+)
 
 // OnlyNotShipped reports an investigation candidate about material that is
 // not shipped code: it cites code or test lines, and every one of them lies
@@ -39,15 +45,59 @@ func PackSetsAside(version string) bool {
 	return major > 2 || major == 2 && minor >= 10
 }
 
+// ShippedSourceIn reports whether the reviewable scope holds at least one
+// source file that is shipped code (by PathClass). It is a pure function of
+// the snapshot's included file paths, the run scope and, for a pull request,
+// the changed files the review is judged by, so the worker, the record
+// validation and the report builder compute the same value. When it is false
+// the non-shipped code is the subject of the review (an examples-only
+// repository, a pull request that changes only tests): nothing is set aside
+// and the requests say so.
+func ShippedSourceIn(paths []string, scope domain.Scope, pullRequest bool, changed []string) bool {
+	if scope.Kind == "" {
+		scope = domain.Scope{Kind: "full"}
+	}
+	for _, p := range paths {
+		if pullRequest && !slices.Contains(changed, p) {
+			continue
+		}
+		if SourceKind(p) == "code" && PathClass(p) == "" && scopeHas(scope, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// scopeHas reports whether a snapshot path lies in the run scope.
+func scopeHas(scope domain.Scope, name string) bool {
+	switch scope.Kind {
+	case "full":
+		return true
+	case "paths":
+		for _, prefix := range scope.Paths {
+			if name == prefix || strings.HasPrefix(name, prefix+"/") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// SubjectNonShipped is the value of the request's scope.subject, and of the
+// report's code_review.subject, when the reviewable scope holds no shipped
+// code (ShippedSourceIn is false). It is absent otherwise.
+const SubjectNonShipped = "non_shipped"
+
 // NotShippedMatches reports whether the verifications of a verify record carry
 // LimCandidateNotShipped for exactly the candidates whose recorded evidence is
-// all on paths that are not shipped code (OnlyNotShipped): the marker is the
-// platform's decision from the evidence, so neither a forged marker nor a
-// missing one is a valid record.
-func NotShippedMatches(candidates []Candidate, verifications []Verification, catalog map[string]Excerpt) bool {
+// all on paths that are not shipped code (OnlyNotShipped), unless the scope
+// holds no shipped code (shipped false), when none is marked: the marker is
+// the platform's decision from the evidence and the scope, so neither a forged
+// marker nor a missing one is a valid record.
+func NotShippedMatches(candidates []Candidate, verifications []Verification, catalog map[string]Excerpt, shipped bool) bool {
 	marked := NotShippedSet(verifications)
 	for _, c := range candidates {
-		if c.OnlyNotShipped(catalog) != marked[c.ID] {
+		if (shipped && c.OnlyNotShipped(catalog)) != marked[c.ID] {
 			return false
 		}
 	}

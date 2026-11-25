@@ -114,7 +114,7 @@ func (ReviewDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Co
 
 func decodeWholeReview(ctx DecodeContext, body []byte, stage string) (Contribution, error) {
 	r, err := record.Decode(body, record.Expect{Snapshot: ctx.Snapshot.ManifestDigest,
-		RunID: ctx.RunID, AttemptID: ctx.AttemptID, Stage: stage, Lookup: ctx.Source.Lookup})
+		RunID: ctx.RunID, AttemptID: ctx.AttemptID, Stage: stage, Lookup: ctx.Source.Lookup, ShippedSource: ctx.Source.shippedSource()})
 	if err != nil {
 		return Contribution{}, err
 	}
@@ -342,7 +342,7 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 	if v := states["review.verify"]; verdictsUsable("review.verify", v) {
 		rec := v.reviewResult.Record
 		candidates = rec.Candidates
-		aside = record.PackSetsAside(rec.Pack.Version)
+		aside = record.PackSetsAside(rec.Pack.Version) && !r.scopeNonShipped
 		for _, x := range rec.Verifications {
 			verdicts[x.CandidateID] = x
 		}
@@ -353,7 +353,7 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 		for _, stage := range []string{record.StageInvestigate, record.StageInterpret} {
 			if st := states["review."+stage]; reviewAccepted(st) {
 				candidates = append(candidates, st.reviewResult.Record.Candidates...)
-				aside = aside || stage == record.StageInvestigate && record.PackSetsAside(st.reviewResult.Record.Pack.Version)
+				aside = aside || stage == record.StageInvestigate && record.PackSetsAside(st.reviewResult.Record.Pack.Version) && !r.scopeNonShipped
 				for _, e := range st.reviewResult.Record.Evidence {
 					evidence[e.ID] = e
 				}
@@ -381,7 +381,7 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 		for _, e := range from.Evidence {
 			evidence[e.ID] = e
 		}
-		addFindings(r, key+"_", from.Candidates, verdicts, evidence, obs, record.PackSetsAside(from.Pack.Version))
+		addFindings(r, key+"_", from.Candidates, verdicts, evidence, obs, record.PackSetsAside(from.Pack.Version) && !r.scopeNonShipped)
 	}
 	composeTriage(r, states, obs)
 }

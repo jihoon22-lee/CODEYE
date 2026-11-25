@@ -387,3 +387,103 @@ func inconclusiveVerification(id, evidence string) record.Verification {
 		ValidConditions: []string{}, InvalidConditions: []string{}, SupportingEvidence: []string{evidence}, Counterevidence: []string{}, UnresolvedAssumptions: []string{"호출자를 확인하지 못했다."},
 		NextVerification: []string{"호출자를 읽는다."}, Limitations: []string{}}
 }
+
+// A scope without shipped code (a pull request that changes only tests, an
+// examples-only repository, a scope inside the tests) has that code as its
+// subject: the requests say so and name it, nothing is set aside, the
+// candidates are verified and the report lists them as ordinary findings; the
+// records and the report reject a marker that scope cannot have. A scope with
+// shipped code gets requests without that flag.
+func TestScopeWithoutShippedCodeIsTheSubject(t *testing.T) {
+	run := func(t *testing.T, scope domain.Scope) (report.Report, *scriptedCaller, analysis.Job) {
+		j := coverageJob(t)
+		j.Scope = scope
+		script := coverageScript(t)
+		script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
+			in := decodeAs[investigateInput](t, q)
+			e := in.Scope.Excerpts[0]
+			return asJSON(map[string]any{"candidates": []map[string]any{{"title": "시험 코드의 단언 누락", "condition": "주소가 비어 있는 경우", "mechanism": "단언이 없다.", "impact": "시험이 통과한다.",
+				"improvement": "단언을 더한다.", "counterpoint": "다른 시험이 덮을 수 있다.", "evidence_ids": []string{e.ID}}}})
+		}
+		caller := &scriptedCaller{script: script}
+		r, _ := reportAt(t, &j, sliceExampleStatic(t), caller, smallBudget, &exampleIDs{n: 0xd00})
+		return r, caller, j
+	}
+	flagged := func(c *scriptedCaller, role string) (with, without int) {
+		for _, q := range c.requests {
+			if q.Role != role {
+				continue
+			}
+			if strings.Contains(string(q.Input), `"subject":"non_shipped"`) && strings.Contains(q.Instructions, "input.scope.subject is non_shipped") {
+				with++
+			} else if !strings.Contains(string(q.Input), `"subject"`) && !strings.Contains(q.Instructions, "input.scope.subject") {
+				without++
+			}
+		}
+		return
+	}
+	for name, scope := range map[string]domain.Scope{
+		"tests only":    {Kind: "paths", Paths: []string{"api/handler_test.go", "web/src/client.test.ts"}},
+		"examples only": {Kind: "paths", Paths: []string{"worker/tests"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r, caller, _ := run(t, scope)
+			if with, without := flagged(caller, "investigate"); with == 0 || without != 0 {
+				t.Fatalf("investigate requests: %d flagged, %d plain", with, without)
+			}
+			if with, without := flagged(caller, "verify"); with == 0 || without != 0 {
+				t.Fatalf("verify requests: %d flagged, %d plain", with, without)
+			}
+			if r.CodeReview.Subject != record.SubjectNonShipped || r.CodeReview.CandidatesNotShipped != 0 {
+				t.Fatalf("section %+v", r.CodeReview)
+			}
+			for _, f := range r.Findings {
+				if report.FindingNotShipped(f) {
+					t.Fatalf("a candidate is set aside: %s", f.ID)
+				}
+			}
+			// A marker that this scope cannot have is rejected.
+			for i, f := range r.Findings {
+				if !investigateFindingIDForTest(f.ID) {
+					continue
+				}
+				bad := r
+				bad.Findings = slices.Clone(r.Findings)
+				bad.Findings[i].Validation, bad.Findings[i].Limitations = report.ValidationUnreviewed, []string{record.LimCandidateNotShipped}
+				if err := report.ValidateReport(bad); err == nil {
+					t.Fatalf("a marker on %s was accepted in a scope without shipped code", f.ID)
+				}
+				break
+			}
+		})
+	}
+	t.Run("scope with shipped code", func(t *testing.T) {
+		r, caller, _ := run(t, domain.Scope{Kind: "full"})
+		for _, q := range caller.requests {
+			if strings.Contains(string(q.Input), `"subject"`) || strings.Contains(q.Instructions, "input.scope.subject") {
+				t.Fatalf("a request of an ordinary scope carries the flag (role %s)", q.Role)
+			}
+		}
+		if r.CodeReview.Subject != "" {
+			t.Fatalf("subject %q", r.CodeReview.Subject)
+		}
+	})
+}
+
+// shippedSourceOf follows the pull request's changed files.
+func TestShippedSourceOfAPullRequestJob(t *testing.T) {
+	tree := map[string]string{"go.mod": "module x\n", "a.go": "package x\n", "a_test.go": "package x\n"}
+	for name, c := range map[string]struct {
+		changed []string
+		want    bool
+	}{"tests only": {[]string{"a_test.go"}, false}, "shipped and tests": {[]string{"a.go", "a_test.go"}, true}} {
+		j := treeJob(t, tree)
+		j.PullRequest = &domain.PullRequestJob{Number: 7, Changed: c.changed}
+		if got := shippedSourceOf(j); got != c.want {
+			t.Errorf("%s: %v", name, got)
+		}
+	}
+	if !shippedSourceOf(treeJob(t, tree)) {
+		t.Error("an ordinary run of this tree has shipped code")
+	}
+}

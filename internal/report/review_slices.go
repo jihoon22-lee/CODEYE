@@ -50,7 +50,7 @@ func (SliceReviewDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte
 		return Contribution{}, invalidf("review slice record attached to unexpected task or role")
 	}
 	r, err := record.Decode(body, record.Expect{Snapshot: ctx.Snapshot.ManifestDigest,
-		RunID: ctx.RunID, AttemptID: ctx.AttemptID, Stage: stage, Slice: key, Lookup: ctx.Source.Lookup})
+		RunID: ctx.RunID, AttemptID: ctx.AttemptID, Stage: stage, Slice: key, Lookup: ctx.Source.Lookup, ShippedSource: ctx.Source.shippedSource()})
 	if err != nil {
 		return Contribution{}, err
 	}
@@ -90,7 +90,7 @@ func (ScopeDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byte) (Con
 	if ctx.Task.Key != record.TaskScope || art.Role != "other" {
 		return Contribution{}, invalidf("review scope artifact attached to unexpected task or role")
 	}
-	d, err := record.DecodeScope(body, record.Expect{Snapshot: ctx.Snapshot.ManifestDigest, RunID: ctx.RunID, AttemptID: ctx.AttemptID, Lookup: ctx.Source.Lookup})
+	d, err := record.DecodeScope(body, record.Expect{Snapshot: ctx.Snapshot.ManifestDigest, RunID: ctx.RunID, AttemptID: ctx.AttemptID, Lookup: ctx.Source.Lookup, ShippedSource: ctx.Source.shippedSource()})
 	if err != nil {
 		return Contribution{}, err
 	}

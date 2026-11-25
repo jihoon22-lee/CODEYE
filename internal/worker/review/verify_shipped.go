@@ -26,6 +26,11 @@ import (
 // does not send.
 func (s *roleStage) notShippedCandidates(candidates []record.Candidate, evidence []record.Excerpt) map[string]bool {
 	var out map[string]bool
+	if !shippedSourceOf(s.j) {
+		// The reviewed scope holds no shipped code: its non-shipped code is the
+		// subject, nothing is set aside.
+		return nil
+	}
 	catalog := catalogOf(evidence)
 	for _, c := range candidates {
 		if c.OnlyNotShipped(catalog) {
@@ -36,4 +41,24 @@ func (s *roleStage) notShippedCandidates(candidates []record.Candidate, evidence
 		}
 	}
 	return out
+}
+
+// subject is the request's scope.subject: non_shipped when the reviewed scope
+// holds no shipped code, empty (and absent from the request) otherwise, so a
+// request of an ordinary scope does not change.
+func (s *roleStage) subject() string {
+	if shippedSourceOf(s.j) {
+		return ""
+	}
+	return record.SubjectNonShipped
+}
+
+// subjectContract is the sentence a request with scope.subject non_shipped
+// adds to the role contract: the code on the paths path_class names is the
+// subject, so the rule that candidates concern shipped code does not apply.
+func (s *roleStage) subjectContract() string {
+	if s.subject() == "" {
+		return ""
+	}
+	return " input.scope.subject is non_shipped: the reviewed scope holds no shipped code, so the code on the paths path_class names is the subject of this review and the rule that candidates concern shipped code does not apply."
 }

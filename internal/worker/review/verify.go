@@ -69,6 +69,7 @@ type verifyInput struct {
 	ObservedTests []observedTestCase `json:"observed_test_cases,omitempty"`
 	Scope         struct {
 		Snapshot    string      `json:"snapshot_manifest_digest"`
+		Subject     string      `json:"subject,omitempty"`
 		Excerpts    excerptList `json:"excerpts"`
 		Limitations []string    `json:"limitations"`
 	} `json:"scope"`
@@ -308,8 +309,8 @@ func (s *roleStage) verify() analysis.TaskResult {
 	// the rest stay unreviewed with a limitation. Every sent candidate keeps
 	// all excerpts it cites.
 	in := verifyInput{Observations: s.rec.Observations}
-	in.Scope.Snapshot = s.j.Snapshot.Digest
-	contract := verifyContract
+	in.Scope.Snapshot, in.Scope.Subject = s.j.Snapshot.Digest, s.subject()
+	contract := verifyContract + s.subjectContract()
 	if len(s.j.TestEvidence) > 0 {
 		contract += " Use an observed test to assess its cited assertion. State the code inference only; CODEYE reports the recorded outcome separately."
 	}

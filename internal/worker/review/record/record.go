@@ -223,6 +223,10 @@ type Expect struct {
 	// 0.3); empty for every other record, which then must carry no slice.
 	Slice  string
 	Lookup func(path string) (sha256 string, ok bool)
+	// ShippedSource is ShippedSourceIn of the run (nil when the caller does
+	// not know it; the marker of a candidate that was not sent to
+	// verification is then not checked against the scope).
+	ShippedSource *bool
 }
 
 var errInvalid = errors.New("review record invalid")

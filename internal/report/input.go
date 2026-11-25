@@ -190,7 +190,13 @@ type ExecutionRef struct {
 type SourceIndex struct {
 	entries map[string]string // path -> sha256 of included file/lfs_pointer entries
 	files   int
+	// shipped is record.ShippedSourceIn of the run: its reviewable scope holds
+	// shipped code.
+	shipped bool
 }
+
+// shippedSource is the expectation of a review record decoder.
+func (s *SourceIndex) shippedSource() *bool { return &s.shipped }
 
 // Lookup returns the manifest sha256 of an included file entry.
 func (s *SourceIndex) Lookup(path string) (string, bool) {

@@ -48,6 +48,9 @@ func validateSections(r Report) error {
 	if err := validateLedger(r); err != nil {
 		return err
 	}
+	if cr := r.CodeReview; cr != nil && cr.Subject != "" && (cr.Subject != record.SubjectNonShipped || !builderAtLeast(r.Builder.Version, ShippedFocusSince)) {
+		return invalidf("code_review.subject %q in a revision of builder %s", cr.Subject, r.Builder.Version)
+	}
 	if cr := r.CodeReview; cr != nil && (cr.CandidatesNotShipped < 0 || (cr.CandidatesNotShipped > 0 && !builderAtLeast(r.Builder.Version, ShippedFocusSince))) {
 		return invalidf("candidates_not_shipped in a revision of builder %s", r.Builder.Version)
 	}
@@ -684,7 +687,8 @@ func validateNotShipped(r Report) error {
 			cited = true
 			shipped = shipped || record.PathClass(e.Location.Path) == ""
 		}
-		if want := cited && !shipped; want != marked && (known || marked) {
+		// A scope without shipped code sets nothing aside.
+		if want := cited && !shipped && !(r.CodeReview != nil && r.CodeReview.Subject == record.SubjectNonShipped); want != marked && (known || marked) {
 			return invalidf("finding %s: the candidate_not_shipped marker does not match the places it cites", f.ID)
 		}
 	}

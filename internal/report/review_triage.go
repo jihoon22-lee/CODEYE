@@ -47,7 +47,7 @@ func (TriageReviewDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byt
 		return Contribution{}, invalidf("triage record attached to unexpected task or role")
 	}
 	r, err := record.Decode(body, record.Expect{Snapshot: ctx.Snapshot.ManifestDigest,
-		RunID: ctx.RunID, AttemptID: ctx.AttemptID, Stage: stage, Slice: key, Lookup: ctx.Source.Lookup})
+		RunID: ctx.RunID, AttemptID: ctx.AttemptID, Stage: stage, Slice: key, Lookup: ctx.Source.Lookup, ShippedSource: ctx.Source.shippedSource()})
 	if err != nil {
 		return Contribution{}, err
 	}
