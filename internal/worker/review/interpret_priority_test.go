@@ -181,3 +181,28 @@ func TestInterpretAndTriageShareOneOrderAndSplit(t *testing.T) {
 		t.Fatalf("triaged %d diagnostics, want %d", len(seen), len(all)-len(interpreted))
 	}
 }
+
+// The ranking only orders: the observations an interpretation reads are the
+// ones it read before. A diagnostic of a secrets scanner is still read (its
+// message is withheld by the same rule as before), a structure metric and a
+// suppressed diagnostic never reach the role (they are dropped when the
+// analyzer's document is read), and neither changes where the others go.
+func TestInterpretRankingKeepsTheObservationSet(t *testing.T) {
+	s := interpretOf(t, "svc/a.go", "x/a_test.go")
+	secrets := triageDocOf("gitleaks", "gitleaks", triageObs("secret-1", "gitleaks", "generic-api-key", "a secret", "x/a_test.go", 4), triageObs("secret-2", "gitleaks", "generic-api-key", "a secret", "svc/a.go", 4))
+	secrets.doc.Purpose = obsdoc.PurposeSecrets
+	diagnostics := staticcheckDoc(triagePathDiags("SA1019", 1, "x/a_test.go", "svc/a.go")...)
+	_, obs, _, _, _, err := s.observationWindows([]toolDoc{secrets, diagnostics})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := observationIDs(obs)
+	slices.Sort(ids)
+	if want := []string{"SA1019-svc_a.go-0", "SA1019-x_a_test.go-0", "secret-1", "secret-2"}; !slices.Equal(ids, want) {
+		t.Fatalf("observations %v, want %v", ids, want)
+	}
+	// Shipped code before the test path, whatever the analyzer.
+	if first := obs[0]; first.Path != "svc/a.go" {
+		t.Fatalf("first observation %+v", first)
+	}
+}

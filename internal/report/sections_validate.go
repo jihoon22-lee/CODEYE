@@ -732,11 +732,8 @@ func countHypothesesNotShipped(findings []Finding, ids []string) int {
 // missing one would rank a test-only hypothesis among them.
 func validateHypothesisNotShipped(r Report) error {
 	if !builderAtLeast(r.Builder.Version, HypothesisNotShippedSince) {
-		for _, f := range r.Findings {
-			if FindingHypothesisNotShipped(f) {
-				return invalidf("finding %s: hypothesis_not_shipped in a revision of builder %s", f.ID, r.Builder.Version)
-			}
-		}
+		// Not a marker before builder 25 (ValidateReport has taken the string
+		// out of such a revision as model text).
 		return nil
 	}
 	paths := map[string]string{}

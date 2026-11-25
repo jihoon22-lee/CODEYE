@@ -9,6 +9,7 @@ import { improvementHints } from './improve';
 import { ko } from './locales/ko';
 import { reportKo as t } from './locales/report-ko';
 import { ReportDocument } from './ReportPanel';
+import { actionPlan } from './reportActions';
 import { SECONDARY_NOT_FOR_GO, SECONDARY_SEGMENTS, gapGroups, overviewFacts, places, projectReadings, readingSummary, ruleGroups, secondaryPath, secondaryReviewPath, severityOf, slotRuns } from './reportGroups';
 
 afterEach(cleanup);
@@ -98,6 +99,35 @@ describe('summary grouping', () => {
     const rows = projectReadings(report, sections);
     expect(rows.actions.map(r => r.finding.id)).toEqual(['reproduced', supported.id]);
     expect(rows.followups).toHaveLength(0);
+  });
+
+  // The project opening reads the report's own decision, not a second path
+  // guess: a hypothesis the report marked is no action whatever evidence the
+  // verification added or whatever the path heuristic says, and a candidate
+  // that was not sent to verification is no follow-up.
+  it('keeps findings the report held back out of the project opening', () => {
+    const report = load(sectioned);
+    const sections = report.sections!;
+    const supported = report.findings.find(f => f.validation === 'supported')!;
+    const alternate = (id: string, fields: Partial<typeof supported>) => ({ ...supported, id, ...fields });
+    // Its own citations are on test paths, the verification added shipped code.
+    const verifiedWithShipped = alternate('hypothesis-shipped-support', { limitations: ['hypothesis_not_shipped'], severity: 'high' });
+    // benches/ is not shipped code by the report's rule; the screen's guess does not know it.
+    const benchmark = alternate('hypothesis-benchmark', { limitations: ['hypothesis_not_shipped'], severity: 'high',
+      evidence: supported.evidence.map(e => ({ ...e, path: 'benches/charges.go' })) });
+    const followup = alternate('candidate-not-shipped', { validation: 'unreviewed', limitations: ['candidate_not_shipped'] });
+    const pending = alternate('hypothesis-pending', { validation: 'inconclusive', limitations: ['hypothesis_not_shipped'] });
+    const ordinary = alternate('ordinary', { severity: 'low' });
+    report.findings.push(verifiedWithShipped, benchmark, followup, pending, ordinary);
+    sections.codeReview.findings.push(verifiedWithShipped.id, benchmark.id, followup.id, pending.id, ordinary.id);
+    const rows = projectReadings(report, sections);
+    expect(rows.actions.map(r => r.finding.id)).toContain(supported.id);
+    expect(rows.actions.map(r => r.finding.id)).not.toContain('hypothesis-shipped-support');
+    expect(rows.actions.map(r => r.finding.id)).not.toContain('hypothesis-benchmark');
+    expect(rows.followups.map(r => r.finding.id)).not.toContain('candidate-not-shipped');
+    expect(rows.followups.map(r => r.finding.id)).not.toContain('hypothesis-pending');
+    // The same findings never rank among the actions of the action plan or the reading summary.
+    expect(actionPlan(report, sections).actions.map(f => f.id)).not.toContain('hypothesis-benchmark');
   });
 
   it('labels example and test findings together in the code review section', () => {

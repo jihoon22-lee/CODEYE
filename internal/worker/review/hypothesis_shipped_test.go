@@ -41,8 +41,14 @@ func runHypothesis(t *testing.T, observed string, line int, mode string) hypothe
 	script["interpret"] = func(_ int, q opencode.Request) opencode.Reply {
 		in := decodeAs[interpretInput](t, q)
 		o := in.Observations[0]
+		cited := o.EvidenceIDs
+		if mode == "supported_ranged" {
+			// A ranged citation of the window: the narrowed range is an excerpt of its own.
+			window := in.Scope.Excerpts[slices.IndexFunc(in.Scope.Excerpts, func(e record.Excerpt) bool { return e.ID == o.EvidenceIDs[0] })]
+			cited = []string{fmt.Sprintf("%s:%d-%d", window.ID, window.Start+1, window.Start+3)}
+		}
 		return asJSON(map[string]any{"hypotheses": []map[string]any{{"observation_ids": []string{o.ID}, "title": "값이 버려져 보정이 빠질 수 있음", "condition": "보정이 반복되는 경우",
-			"mechanism": "앞의 값이 덮어써진다.", "impact": "보정이 빠질 수 있다.", "improvement": "값을 쓴다.", "counterpoint": "의도일 수 있다.", "evidence_ids": o.EvidenceIDs}}, "limits": []any{}})
+			"mechanism": "앞의 값이 덮어써진다.", "impact": "보정이 빠질 수 있다.", "improvement": "값을 쓴다.", "counterpoint": "의도일 수 있다.", "evidence_ids": cited}}, "limits": []any{}})
 	}
 	script["verify"] = func(_ int, q opencode.Request) opencode.Reply {
 		in := decodeAs[verifyInput](t, q)
@@ -103,6 +109,7 @@ func TestHypothesisAboutNonShippedPathsIsNoActionItem(t *testing.T) {
 	}{
 		{"verified", "supported", report.ValidationSupported},
 		{"the verification also cites shipped code", "supported_shipped", report.ValidationSupported},
+		{"a ranged citation", "supported_ranged", report.ValidationSupported},
 		{"refuted", "refuted", report.ValidationRefuted},
 		{"verification fails", "fail", report.ValidationUnreviewed},
 		{"verification leaves it out", "incomplete", report.ValidationUnreviewed},
@@ -294,8 +301,7 @@ func TestInterpretReordersObservationsAndTheRecordsStayValid(t *testing.T) {
 
 // The marker is tied to the recorded observations and evidence: a marked
 // hypothesis of shipped code, an unmarked one about a test path, a marker on
-// another kind of finding and a marker in an earlier builder's revision are
-// not valid reports.
+// another kind of finding and a wrong count are not valid reports.
 func TestForgedHypothesisMarkerIsRejected(t *testing.T) {
 	marked := runHypothesis(t, "a_test.go", 6, "supported")
 	shipped := runHypothesis(t, "a.go", 13, "supported")
@@ -324,16 +330,63 @@ func TestForgedHypothesisMarkerIsRejected(t *testing.T) {
 			t.Fatalf("%s was accepted", name)
 		}
 	}
-	older := marked.report
-	older.Builder.Version = "24"
-	if err := report.ValidateReport(older); err == nil {
-		t.Fatal("a marker in a revision of builder 24 was accepted")
-	}
 	counted := marked.report
 	section := *marked.report.CodeReview
 	section.HypothesesNotShipped++
 	counted.CodeReview = &section
 	if err := report.ValidateReport(counted); err == nil {
 		t.Fatal("a wrong count was accepted")
+	}
+}
+
+// An earlier builder wrote model sentences into a finding's limitations
+// without stripping them, so a stored revision may hold a sentence that is
+// the code of a later marker. The string has no meaning there: the revision
+// stays valid, and neither the summary, the lists nor a render act on it.
+func TestEarlierRevisionTreatsLaterMarkersAsModelText(t *testing.T) {
+	shipped := runHypothesis(t, "a.go", 13, "supported")
+	failed := runHypothesis(t, "a.go", 13, "fail")
+	for _, c := range []struct {
+		name, version, marker string
+		run                   hypothesisRun
+	}{
+		{"hypothesis marker, builder 24", "24", record.LimHypothesisNotShipped, shipped},
+		{"hypothesis marker, builder 23", "23", record.LimHypothesisNotShipped, shipped},
+		{"candidate marker on an unreviewed finding, builder 23", "23", record.LimCandidateNotShipped, failed},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			old := c.run.report
+			old.Builder.Version = c.version
+			old.Findings = slices.Clone(old.Findings)
+			for i, f := range old.Findings {
+				if f.ID == c.run.finding.ID {
+					old.Findings[i].Limitations = append(slices.Clone(f.Limitations), c.marker)
+				}
+			}
+			if err := report.ValidateReport(old); err != nil {
+				t.Fatalf("the revision became invalid: %v", err)
+			}
+			raw, err := report.Marshal(old)
+			if err != nil {
+				t.Fatal(err)
+			}
+			read, err := report.Unmarshal(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range read.Findings {
+				if report.FindingHypothesisNotShipped(f) || report.FindingNotShipped(f) {
+					t.Fatalf("finding %s acts on a marker of a later builder: %v", f.ID, f.Limitations)
+				}
+			}
+			// The stored summary is the earlier builder's: the finding still counts.
+			if read.Summary.ActionableFindings != old.Summary.ActionableFindings || read.Summary.PendingCandidates != old.Summary.PendingCandidates || !slices.Equal(read.Summary.Priorities, old.Summary.Priorities) {
+				t.Fatalf("summary changed: %+v", read.Summary)
+			}
+			md := string(report.RenderMarkdownAt(read, report.Digest(raw), report.Korean, report.DetailFull))
+			if strings.Contains(md, report.Korean.Label("actions.hypothesis_not_shipped_label")) || strings.Contains(md, report.Korean.Label("actions.not_shipped_label")+"**") {
+				t.Fatal("a render acted on the string")
+			}
+		})
 	}
 }
