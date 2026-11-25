@@ -894,6 +894,7 @@ func (s *roleStage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput,
 	var tools []toolInput
 	var all []toolObservation
 	keyOf := map[string]string{}
+	rank := map[string]diagnosticPriority{}
 	var lims []string
 	for _, d := range docs {
 		if d.upstream.State != record.UpstreamAccepted {
@@ -914,10 +915,20 @@ func (s *roleStage) observationWindows(docs []toolDoc) ([]toolInput, []obsInput,
 		for _, o := range d.doc.Observations {
 			all = append(all, o)
 			keyOf[o.ID] = d.key
+			_, effective := diagnosticSeverity(d.doc, o)
+			rank[o.ID] = diagnosticPriority{shipped: o.Location != nil && record.PathClass(o.Location.Path) == "", effective: effective, count: 1}
 		}
 	}
+	// The observations the request carries, and the order they come in (the
+	// code windows go to the first ones), are chosen by the one priority
+	// order the diagnostic triage uses (comparePriority): shipped code
+	// before other paths, then the severity of the finding. An observation
+	// without a location is not on shipped code and sorts last among equals.
 	sort.SliceStable(all, func(a, b int) bool {
 		x, y := all[a], all[b]
+		if c := comparePriority(rank[x.ID], rank[y.ID]); c != 0 {
+			return c < 0
+		}
 		px, py := "\xff", "\xff"
 		lx, ly := 0, 0
 		if x.Location != nil {

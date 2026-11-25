@@ -146,15 +146,7 @@ func (s *roleStage) planTriage(docs []toolDoc, interpreted map[string]bool, slot
 		}
 		for _, o := range d.doc.Observations {
 			plan.eligible++
-			grade := ""
-			if o.Severity != nil {
-				grade = *o.Severity
-			}
-			def := builtin.DefaultSeverity(o.Tool, d.doc.RulePack, d.doc.RulePackVersion, o.RuleID, grade, "")
-			effective := def.Severity
-			if o.Location != nil {
-				effective = builtin.DefaultSeverity(o.Tool, d.doc.RulePack, d.doc.RulePackVersion, o.RuleID, grade, record.PathClass(o.Location.Path)).Severity
-			}
+			def, effective := diagnosticSeverity(d.doc, o)
 			switch {
 			case interpreted[o.ID]:
 				plan.lims = addLim(plan.lims, limDiagnosticsInterpreted)
@@ -226,18 +218,58 @@ func (s *roleStage) planTriage(docs []toolDoc, interpreted map[string]bool, slot
 		}
 	}
 	slices.SortStableFunc(chunks, func(a, b *triageGroup) int {
-		// Every group on shipped code goes before any group on a test,
-		// example, benchmark, generated or vendored path, whatever their
-		// severities: the triage share of the call ceiling is limited, and a
-		// diagnostic outside shipped code is rarely a defect of the project.
-		// A request has room for both, so the first-fit packing still gives
-		// the groups of other paths the room the shipped groups leave.
-		return cmp.Or(cmp.Compare(boolRank(!a.shipped()), boolRank(!b.shipped())), cmp.Compare(severity.Rank(b.effective), severity.Rank(a.effective)), cmp.Compare(len(b.diags), len(a.diags)),
+		return cmp.Or(comparePriority(a.priority(), b.priority()),
 			cmp.Compare(a.unit.entry.Path, b.unit.entry.Path), cmp.Compare(a.diags[0].obs.Location.StartLine, b.diags[0].obs.Location.StartLine),
 			cmp.Compare(a.diags[0].obs.Tool, b.diags[0].obs.Tool), cmp.Compare(a.diags[0].obs.RuleID, b.diags[0].obs.RuleID))
 	})
 	plan.bins = s.packTriage(chunks, slots, &plan.lims)
 	return plan
+}
+
+// diagnosticSeverity is the table's default severity of a diagnostic as the
+// model is told it (def) and the severity the report gives its finding,
+// lowered on a path that is not shipped code (effective).
+func diagnosticSeverity(doc toolSummary, o toolObservation) (def severity.Result, effective string) {
+	grade := ""
+	if o.Severity != nil {
+		grade = *o.Severity
+	}
+	def = builtin.DefaultSeverity(o.Tool, doc.RulePack, doc.RulePackVersion, o.RuleID, grade, "")
+	effective = def.Severity
+	if o.Location != nil {
+		effective = builtin.DefaultSeverity(o.Tool, doc.RulePack, doc.RulePackVersion, o.RuleID, grade, record.PathClass(o.Location.Path)).Severity
+	}
+	return def, effective
+}
+
+// diagnosticPriority is what ranks a diagnostic, or a group of them, for the
+// roles that can read only some of the diagnostics: whether it lies on
+// shipped code, the severity its finding gets after the path rule, and how
+// many diagnostics it stands for (a single diagnostic stands for one).
+type diagnosticPriority struct {
+	shipped   bool
+	effective string
+	count     int
+}
+
+// priority is the group's place in the order comparePriority defines.
+func (g *triageGroup) priority() diagnosticPriority {
+	return diagnosticPriority{shipped: g.shipped(), effective: g.effective, count: len(g.diags)}
+}
+
+// comparePriority orders diagnostics, the one to read first first. Every
+// diagnostic on shipped code goes before any on a test, example, benchmark,
+// generated or vendored path, whatever their severities: the share of the
+// call ceiling and the observations an interpretation request carries are
+// limited, and a diagnostic outside shipped code is rarely a defect of the
+// project. Within each, the more severe first (the severity the report gives
+// the finding, lowered on such a path), then the larger count. The triage
+// plan orders its groups and the interpretation request chooses its
+// observations by this one function. A triage request has room for both
+// kinds, so its first-fit packing still gives the groups of other paths the
+// room the shipped groups leave.
+func comparePriority(a, b diagnosticPriority) int {
+	return cmp.Or(cmp.Compare(boolRank(!a.shipped), boolRank(!b.shipped)), cmp.Compare(severity.Rank(b.effective), severity.Rank(a.effective)), cmp.Compare(b.count, a.count))
 }
 
 func boolRank(b bool) int {
