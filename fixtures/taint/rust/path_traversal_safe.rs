@@ -25,3 +25,15 @@ pub async fn download(path: web::Path<String>) -> HttpResponse {
         Err(_) => HttpResponse::NotFound().finish(),
     }
 }
+
+pub async fn remove(path: web::Path<String>) -> HttpResponse {
+    let root = PathBuf::from("/srv/files");
+    // The project's own checked join, defined in another module.
+    match crate::util::safe_path_join(&root, &path.into_inner()) {
+        Some(p) => match fs::remove_file(&p) {
+            Ok(_) => HttpResponse::Ok().finish(),
+            Err(_) => HttpResponse::NotFound().finish(),
+        },
+        None => HttpResponse::NotFound().finish(),
+    }
+}

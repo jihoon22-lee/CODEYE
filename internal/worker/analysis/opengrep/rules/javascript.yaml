@@ -4,8 +4,12 @@
 # third-party rule set. Every rule is an intra-file taint rule: the source
 # and the sink must be in the same file (calls between functions of that
 # file are followed). Sources are HTTP request input of an Express-style
-# handler (req.query, req.body, req.params, req.headers, req.cookies) and,
-# for HTML output in the browser, the page URL (location, document.URL).
+# handler (req.query, req.body, req.params, req.headers, req.cookies,
+# req.get(), req.header()), a Koa context (ctx.query, ctx.params,
+# ctx.request.body, ctx.headers, ctx.cookies.get()), the arguments of a
+# socket.io message handler (socket.on) and, for HTML output in the browser,
+# the page URL (location, document.URL). NestJS parameter decorators are not
+# sources: a pattern with them does not parse as JavaScript.
 rules:
   - id: codeye.javascript.command-injection
     mode: taint
@@ -23,6 +27,34 @@ rules:
           - metavariable-regex:
               metavariable: $ATTR
               regex: ^(query|body|params|headers|cookies|originalUrl|url|path)$
+      # Express header accessors.
+      - patterns:
+          - pattern-either:
+              - pattern: req.get(...)
+              - pattern: req.header(...)
+              - pattern: request.get(...)
+              - pattern: request.header(...)
+      # Koa context.
+      - patterns:
+          - pattern-either:
+              - pattern: ctx.$ATTR
+              - pattern: ctx.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|querystring|params|body|headers|header|url|path|originalUrl)$
+      - pattern: ctx.cookies.get(...)
+      # A socket.io message from a connected client.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  socket.on($EVENT, (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, function (..., $PARAM, ...) { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async function (..., $PARAM, ...) { ... })
+          - pattern: $PARAM
     pattern-sanitizers:
       - pattern: parseInt(...)
       - pattern: parseFloat(...)
@@ -60,6 +92,34 @@ rules:
           - metavariable-regex:
               metavariable: $ATTR
               regex: ^(query|body|params|headers|cookies|originalUrl|url|path)$
+      # Express header accessors.
+      - patterns:
+          - pattern-either:
+              - pattern: req.get(...)
+              - pattern: req.header(...)
+              - pattern: request.get(...)
+              - pattern: request.header(...)
+      # Koa context.
+      - patterns:
+          - pattern-either:
+              - pattern: ctx.$ATTR
+              - pattern: ctx.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|querystring|params|body|headers|header|url|path|originalUrl)$
+      - pattern: ctx.cookies.get(...)
+      # A socket.io message from a connected client.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  socket.on($EVENT, (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, function (..., $PARAM, ...) { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async function (..., $PARAM, ...) { ... })
+          - pattern: $PARAM
     pattern-sanitizers:
       - pattern: parseInt(...)
       - pattern: Number(...)
@@ -104,6 +164,34 @@ rules:
           - metavariable-regex:
               metavariable: $ATTR
               regex: ^(query|body|params|headers|cookies|originalUrl|url|path)$
+      # Express header accessors.
+      - patterns:
+          - pattern-either:
+              - pattern: req.get(...)
+              - pattern: req.header(...)
+              - pattern: request.get(...)
+              - pattern: request.header(...)
+      # Koa context.
+      - patterns:
+          - pattern-either:
+              - pattern: ctx.$ATTR
+              - pattern: ctx.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|querystring|params|body|headers|header|url|path|originalUrl)$
+      - pattern: ctx.cookies.get(...)
+      # A socket.io message from a connected client.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  socket.on($EVENT, (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, function (..., $PARAM, ...) { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async function (..., $PARAM, ...) { ... })
+          - pattern: $PARAM
     pattern-sanitizers:
       - pattern: parseInt(...)
       - pattern: parseFloat(...)
@@ -135,6 +223,34 @@ rules:
           - metavariable-regex:
               metavariable: $ATTR
               regex: ^(query|body|params|headers|cookies|originalUrl|url|path)$
+      # Express header accessors.
+      - patterns:
+          - pattern-either:
+              - pattern: req.get(...)
+              - pattern: req.header(...)
+              - pattern: request.get(...)
+              - pattern: request.header(...)
+      # Koa context.
+      - patterns:
+          - pattern-either:
+              - pattern: ctx.$ATTR
+              - pattern: ctx.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|querystring|params|body|headers|header|url|path|originalUrl)$
+      - pattern: ctx.cookies.get(...)
+      # A socket.io message from a connected client.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  socket.on($EVENT, (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, function (..., $PARAM, ...) { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async function (..., $PARAM, ...) { ... })
+          - pattern: $PARAM
     pattern-sanitizers:
       - pattern: parseInt(...)
       - pattern: Number(...)
@@ -178,6 +294,34 @@ rules:
           - metavariable-regex:
               metavariable: $ATTR
               regex: ^(query|body|params|headers|cookies|originalUrl|url|path)$
+      # Express header accessors.
+      - patterns:
+          - pattern-either:
+              - pattern: req.get(...)
+              - pattern: req.header(...)
+              - pattern: request.get(...)
+              - pattern: request.header(...)
+      # Koa context.
+      - patterns:
+          - pattern-either:
+              - pattern: ctx.$ATTR
+              - pattern: ctx.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|querystring|params|body|headers|header|url|path|originalUrl)$
+      - pattern: ctx.cookies.get(...)
+      # A socket.io message from a connected client.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  socket.on($EVENT, (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, function (..., $PARAM, ...) { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async function (..., $PARAM, ...) { ... })
+          - pattern: $PARAM
     pattern-sanitizers:
       - pattern: parseInt(...)
       - pattern: parseFloat(...)
@@ -210,6 +354,34 @@ rules:
           - metavariable-regex:
               metavariable: $ATTR
               regex: ^(query|body|params|headers|cookies|originalUrl|url|path)$
+      # Express header accessors.
+      - patterns:
+          - pattern-either:
+              - pattern: req.get(...)
+              - pattern: req.header(...)
+              - pattern: request.get(...)
+              - pattern: request.header(...)
+      # Koa context.
+      - patterns:
+          - pattern-either:
+              - pattern: ctx.$ATTR
+              - pattern: ctx.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|querystring|params|body|headers|header|url|path|originalUrl)$
+      - pattern: ctx.cookies.get(...)
+      # A socket.io message from a connected client.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  socket.on($EVENT, (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, function (..., $PARAM, ...) { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async function (..., $PARAM, ...) { ... })
+          - pattern: $PARAM
     pattern-sinks:
       - patterns:
           - pattern-inside: |
@@ -234,6 +406,34 @@ rules:
           - metavariable-regex:
               metavariable: $ATTR
               regex: ^(query|body|params|headers|cookies|originalUrl|url|path)$
+      # Express header accessors.
+      - patterns:
+          - pattern-either:
+              - pattern: req.get(...)
+              - pattern: req.header(...)
+              - pattern: request.get(...)
+              - pattern: request.header(...)
+      # Koa context.
+      - patterns:
+          - pattern-either:
+              - pattern: ctx.$ATTR
+              - pattern: ctx.request.$ATTR
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(query|querystring|params|body|headers|header|url|path|originalUrl)$
+      - pattern: ctx.cookies.get(...)
+      # A socket.io message from a connected client.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  socket.on($EVENT, (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async (..., $PARAM, ...) => { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, function (..., $PARAM, ...) { ... })
+              - pattern-inside: |
+                  socket.on($EVENT, async function (..., $PARAM, ...) { ... })
+          - pattern: $PARAM
       - pattern: location.$ATTR
       - pattern: window.location.$ATTR
       - pattern: document.location.$ATTR

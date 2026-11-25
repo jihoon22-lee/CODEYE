@@ -112,6 +112,12 @@ rules:
     pattern-sanitizers:
       - pattern: $X.parse::<$T>()
       - pattern: $P.file_name()
+      # A project's own safe join, often in another module, by its name.
+      - patterns:
+          - pattern: $JOIN(...)
+          - metavariable-regex:
+              metavariable: $JOIN
+              regex: ^(.*::)?(safe_\w*(path|join)\w*|\w*sanitize_\w*(path|filename)\w*)$
       # A containment check (if !p.starts_with(&root) { return ... }) makes
       # the checked value trusted afterwards.
       - by-side-effect: true

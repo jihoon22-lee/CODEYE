@@ -2,7 +2,11 @@
 # Flask, Django, Starlette and standard library APIs; not derived from any
 # third-party rule set. Every rule is an intra-file taint rule: the source and
 # the sink must be in the same file (calls between functions of that file are
-# followed). Sources are HTTP request input only.
+# followed). Sources are HTTP request input only: Flask's request and the
+# parameters of a Flask view (its URL variables), a Django, Django REST
+# framework, Starlette or aiohttp request named request or req (including the
+# decoded body of request.json(), form() and body()), and the request of a
+# BaseHTTPRequestHandler. The content of a file is not request input.
 rules:
   - id: codeye.python.command-injection
     mode: taint
@@ -26,7 +30,23 @@ rules:
               regex: ^(request|req)$
           - metavariable-regex:
               metavariable: $ATTR
-              regex: ^(GET|POST|body|COOKIES|FILES|META|query_params|path_params|match_info)$
+              regex: ^(GET|POST|body|COOKIES|FILES|META|data|headers|cookies|query_params|path_params|match_info)$
+      # Starlette and FastAPI: the decoded body of the request.
+      - patterns:
+          - pattern: $REQ.$READ(...)
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $READ
+              regex: ^(json|form|body)$
+      # A Flask view's parameters are the variables of its URL rule.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(..., $PARAM, ...):
+                ...
+          - pattern: $PARAM
       - patterns:
           - pattern-inside: |
               class $HANDLER(..., BaseHTTPRequestHandler, ...):
@@ -36,6 +56,13 @@ rules:
               - pattern: self.headers
               - pattern: self.rfile.read(...)
     pattern-sanitizers:
+      # The content of a file is not request input, even when its name is.
+      - pattern: open(...).read(...)
+      - patterns:
+          - pattern-inside: |
+              with open(...) as $F:
+                ...
+          - pattern: $F.read(...)
       - pattern: int(...)
       - pattern: float(...)
       - pattern: shlex.quote(...)
@@ -77,7 +104,23 @@ rules:
               regex: ^(request|req)$
           - metavariable-regex:
               metavariable: $ATTR
-              regex: ^(GET|POST|body|COOKIES|FILES|META|query_params|path_params|match_info)$
+              regex: ^(GET|POST|body|COOKIES|FILES|META|data|headers|cookies|query_params|path_params|match_info)$
+      # Starlette and FastAPI: the decoded body of the request.
+      - patterns:
+          - pattern: $REQ.$READ(...)
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $READ
+              regex: ^(json|form|body)$
+      # A Flask view's parameters are the variables of its URL rule.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(..., $PARAM, ...):
+                ...
+          - pattern: $PARAM
       - patterns:
           - pattern-inside: |
               class $HANDLER(..., BaseHTTPRequestHandler, ...):
@@ -91,8 +134,17 @@ rules:
       - pattern: os.path.basename(...)
       - pattern: werkzeug.utils.secure_filename(...)
       - pattern: werkzeug.security.safe_join(...)
+      - pattern: werkzeug.utils.safe_join(...)
+      - pattern: werkzeug.utils.secure_filename(...)
       - pattern: flask.safe_join(...)
-      - pattern: $P.name
+      # The final component of a path object (pathlib.Path(name).name).
+      - pattern: pathlib.Path(...).name
+      - pattern: pathlib.PurePath(...).name
+      - patterns:
+          - pattern-inside: |
+              $P = pathlib.Path(...)
+              ...
+          - pattern: $P.name
       # A containment check on the path (if not p.startswith(root): abort)
       # makes the checked value trusted afterwards.
       - by-side-effect: true
@@ -160,7 +212,23 @@ rules:
               regex: ^(request|req)$
           - metavariable-regex:
               metavariable: $ATTR
-              regex: ^(GET|POST|body|COOKIES|FILES|META|query_params|path_params|match_info)$
+              regex: ^(GET|POST|body|COOKIES|FILES|META|data|headers|cookies|query_params|path_params|match_info)$
+      # Starlette and FastAPI: the decoded body of the request.
+      - patterns:
+          - pattern: $REQ.$READ(...)
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $READ
+              regex: ^(json|form|body)$
+      # A Flask view's parameters are the variables of its URL rule.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(..., $PARAM, ...):
+                ...
+          - pattern: $PARAM
       - patterns:
           - pattern-inside: |
               class $HANDLER(..., BaseHTTPRequestHandler, ...):
@@ -170,6 +238,13 @@ rules:
               - pattern: self.headers
               - pattern: self.rfile.read(...)
     pattern-sanitizers:
+      # The content of a file is not request input, even when its name is.
+      - pattern: open(...).read(...)
+      - patterns:
+          - pattern-inside: |
+              with open(...) as $F:
+                ...
+          - pattern: $F.read(...)
       - pattern: int(...)
       - pattern: float(...)
       - pattern: bool(...)
@@ -205,7 +280,23 @@ rules:
               regex: ^(request|req)$
           - metavariable-regex:
               metavariable: $ATTR
-              regex: ^(GET|POST|body|COOKIES|FILES|META|query_params|path_params|match_info)$
+              regex: ^(GET|POST|body|COOKIES|FILES|META|data|headers|cookies|query_params|path_params|match_info)$
+      # Starlette and FastAPI: the decoded body of the request.
+      - patterns:
+          - pattern: $REQ.$READ(...)
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $READ
+              regex: ^(json|form|body)$
+      # A Flask view's parameters are the variables of its URL rule.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(..., $PARAM, ...):
+                ...
+          - pattern: $PARAM
       - patterns:
           - pattern-inside: |
               class $HANDLER(..., BaseHTTPRequestHandler, ...):
@@ -215,6 +306,13 @@ rules:
               - pattern: self.headers
               - pattern: self.rfile.read(...)
     pattern-sanitizers:
+      # The content of a file is not request input, even when its name is.
+      - pattern: open(...).read(...)
+      - patterns:
+          - pattern-inside: |
+              with open(...) as $F:
+                ...
+          - pattern: $F.read(...)
       - pattern: int(...)
       # A constant scheme, host and path prefix leaves only the path or query
       # to the input.
@@ -266,7 +364,23 @@ rules:
               regex: ^(request|req)$
           - metavariable-regex:
               metavariable: $ATTR
-              regex: ^(GET|POST|body|COOKIES|FILES|META|query_params|path_params|match_info)$
+              regex: ^(GET|POST|body|COOKIES|FILES|META|data|headers|cookies|query_params|path_params|match_info)$
+      # Starlette and FastAPI: the decoded body of the request.
+      - patterns:
+          - pattern: $REQ.$READ(...)
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $READ
+              regex: ^(json|form|body)$
+      # A Flask view's parameters are the variables of its URL rule.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(..., $PARAM, ...):
+                ...
+          - pattern: $PARAM
       - patterns:
           - pattern-inside: |
               class $HANDLER(..., BaseHTTPRequestHandler, ...):
@@ -275,6 +389,14 @@ rules:
               - pattern: self.path
               - pattern: self.headers
               - pattern: self.rfile.read(...)
+    pattern-sanitizers:
+      # The content of a file is not request input, even when its name is.
+      - pattern: open(...).read(...)
+      - patterns:
+          - pattern-inside: |
+              with open(...) as $F:
+                ...
+          - pattern: $F.read(...)
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -312,7 +434,23 @@ rules:
               regex: ^(request|req)$
           - metavariable-regex:
               metavariable: $ATTR
-              regex: ^(GET|POST|body|COOKIES|FILES|META|query_params|path_params|match_info)$
+              regex: ^(GET|POST|body|COOKIES|FILES|META|data|headers|cookies|query_params|path_params|match_info)$
+      # Starlette and FastAPI: the decoded body of the request.
+      - patterns:
+          - pattern: $REQ.$READ(...)
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $READ
+              regex: ^(json|form|body)$
+      # A Flask view's parameters are the variables of its URL rule.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(..., $PARAM, ...):
+                ...
+          - pattern: $PARAM
       - patterns:
           - pattern-inside: |
               class $HANDLER(..., BaseHTTPRequestHandler, ...):
@@ -322,6 +460,13 @@ rules:
               - pattern: self.headers
               - pattern: self.rfile.read(...)
     pattern-sanitizers:
+      # The content of a file is not request input, even when its name is.
+      - pattern: open(...).read(...)
+      - patterns:
+          - pattern-inside: |
+              with open(...) as $F:
+                ...
+          - pattern: $F.read(...)
       - pattern: int(...)
       - pattern: float(...)
       - pattern: bool(...)
@@ -355,7 +500,23 @@ rules:
               regex: ^(request|req)$
           - metavariable-regex:
               metavariable: $ATTR
-              regex: ^(GET|POST|body|COOKIES|FILES|META|query_params|path_params|match_info)$
+              regex: ^(GET|POST|body|COOKIES|FILES|META|data|headers|cookies|query_params|path_params|match_info)$
+      # Starlette and FastAPI: the decoded body of the request.
+      - patterns:
+          - pattern: $REQ.$READ(...)
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(request|req)$
+          - metavariable-regex:
+              metavariable: $READ
+              regex: ^(json|form|body)$
+      # A Flask view's parameters are the variables of its URL rule.
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(..., $PARAM, ...):
+                ...
+          - pattern: $PARAM
       - patterns:
           - pattern-inside: |
               class $HANDLER(..., BaseHTTPRequestHandler, ...):
@@ -365,12 +526,24 @@ rules:
               - pattern: self.headers
               - pattern: self.rfile.read(...)
     pattern-sanitizers:
+      # The content of a file is not request input, even when its name is.
+      - pattern: open(...).read(...)
+      - patterns:
+          - pattern-inside: |
+              with open(...) as $F:
+                ...
+          - pattern: $F.read(...)
       - pattern: int(...)
       - pattern: html.escape(...)
       - pattern: markupsafe.escape(...)
       - pattern: flask.escape(...)
       - pattern: django.utils.html.escape(...)
       - pattern: markupsafe.Markup.escape(...)
+      # URL encoding leaves no HTML markup.
+      - pattern: urllib.parse.urlencode(...)
+      - pattern: urllib.parse.quote(...)
+      - pattern: urllib.parse.quote_plus(...)
+      - pattern: $QUERY.urlencode(...)
       # A project's own HTML escaper, often in another module, by its name.
       - patterns:
           - pattern: $ESCAPE(...)

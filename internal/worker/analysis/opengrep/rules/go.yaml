@@ -4,7 +4,9 @@
 # Every rule is an intra-file taint rule: the source and the sink must be in
 # the same file (calls between functions of that file are followed).
 # Sources are HTTP request input read from a *http.Request, *gin.Context or
-# echo.Context whose type is declared in the file. Go has no rule for
+# echo.Context whose type is declared in the file, gorilla/mux and chi route
+# variables, and a variable that a request body, form or query is decoded
+# into (json.NewDecoder(r.Body).Decode, gin Bind*/ShouldBind*, echo Bind). Go has no rule for
 # unsafe deserialization or code evaluation: the standard decoders do not
 # run code and the language has no eval.
 rules:
@@ -53,12 +55,49 @@ rules:
           - metavariable-type:
               metavariable: $C
               type: echo.Context
+      # Route variables of gorilla/mux and chi.
+      - pattern-either:
+          - pattern: mux.Vars(...)
+          - pattern: chi.URLParam(...)
+          - pattern: chi.URLParamFromCtx(...)
+      # A request body, form or query decoded into a variable makes the
+      # variable request input.
+      - by-side-effect: true
+        patterns:
+          - pattern: json.NewDecoder($R.Body).Decode(&$V)
+          - metavariable-type:
+              metavariable: $R
+              type: "*http.Request"
+          - focus-metavariable: $V
+      - by-side-effect: true
+        patterns:
+          - pattern: $C.$BIND(&$V)
+          - metavariable-regex:
+              metavariable: $BIND
+              regex: ^(Bind|BindJSON|BindQuery|BindUri|ShouldBind|ShouldBindJSON|ShouldBindQuery|ShouldBindUri)$
+          - metavariable-type:
+              metavariable: $C
+              type: "*gin.Context"
+          - focus-metavariable: $V
+      - by-side-effect: true
+        patterns:
+          - pattern: $C.Bind(&$V)
+          - metavariable-type:
+              metavariable: $C
+              type: echo.Context
+          - focus-metavariable: $V
     pattern-sanitizers:
       - pattern: strconv.Atoi(...)
       - pattern: strconv.ParseInt(...)
       - pattern: strconv.ParseUint(...)
       - pattern: strconv.ParseFloat(...)
       - pattern: strconv.ParseBool(...)
+      # A number or boolean formatted as text has no path, shell or SQL syntax.
+      - pattern: strconv.Itoa(...)
+      - pattern: strconv.FormatInt(...)
+      - pattern: strconv.FormatUint(...)
+      - pattern: strconv.FormatFloat(...)
+      - pattern: strconv.FormatBool(...)
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -119,9 +158,43 @@ rules:
           - metavariable-type:
               metavariable: $C
               type: echo.Context
+      # Route variables of gorilla/mux and chi.
+      - pattern-either:
+          - pattern: mux.Vars(...)
+          - pattern: chi.URLParam(...)
+          - pattern: chi.URLParamFromCtx(...)
+      # A request body, form or query decoded into a variable makes the
+      # variable request input.
+      - by-side-effect: true
+        patterns:
+          - pattern: json.NewDecoder($R.Body).Decode(&$V)
+          - metavariable-type:
+              metavariable: $R
+              type: "*http.Request"
+          - focus-metavariable: $V
+      - by-side-effect: true
+        patterns:
+          - pattern: $C.$BIND(&$V)
+          - metavariable-regex:
+              metavariable: $BIND
+              regex: ^(Bind|BindJSON|BindQuery|BindUri|ShouldBind|ShouldBindJSON|ShouldBindQuery|ShouldBindUri)$
+          - metavariable-type:
+              metavariable: $C
+              type: "*gin.Context"
+          - focus-metavariable: $V
+      - by-side-effect: true
+        patterns:
+          - pattern: $C.Bind(&$V)
+          - metavariable-type:
+              metavariable: $C
+              type: echo.Context
+          - focus-metavariable: $V
     pattern-sanitizers:
       - pattern: strconv.Atoi(...)
       - pattern: strconv.ParseInt(...)
+      - pattern: strconv.Itoa(...)
+      - pattern: strconv.FormatInt(...)
+      - pattern: strconv.FormatUint(...)
       - pattern: filepath.Base(...)
       - pattern: path.Base(...)
       # A containment check (if !strings.HasPrefix(p, root) { return })
@@ -187,12 +260,49 @@ rules:
           - metavariable-type:
               metavariable: $C
               type: echo.Context
+      # Route variables of gorilla/mux and chi.
+      - pattern-either:
+          - pattern: mux.Vars(...)
+          - pattern: chi.URLParam(...)
+          - pattern: chi.URLParamFromCtx(...)
+      # A request body, form or query decoded into a variable makes the
+      # variable request input.
+      - by-side-effect: true
+        patterns:
+          - pattern: json.NewDecoder($R.Body).Decode(&$V)
+          - metavariable-type:
+              metavariable: $R
+              type: "*http.Request"
+          - focus-metavariable: $V
+      - by-side-effect: true
+        patterns:
+          - pattern: $C.$BIND(&$V)
+          - metavariable-regex:
+              metavariable: $BIND
+              regex: ^(Bind|BindJSON|BindQuery|BindUri|ShouldBind|ShouldBindJSON|ShouldBindQuery|ShouldBindUri)$
+          - metavariable-type:
+              metavariable: $C
+              type: "*gin.Context"
+          - focus-metavariable: $V
+      - by-side-effect: true
+        patterns:
+          - pattern: $C.Bind(&$V)
+          - metavariable-type:
+              metavariable: $C
+              type: echo.Context
+          - focus-metavariable: $V
     pattern-sanitizers:
       - pattern: strconv.Atoi(...)
       - pattern: strconv.ParseInt(...)
       - pattern: strconv.ParseUint(...)
       - pattern: strconv.ParseFloat(...)
       - pattern: strconv.ParseBool(...)
+      # A number or boolean formatted as text has no path, shell or SQL syntax.
+      - pattern: strconv.Itoa(...)
+      - pattern: strconv.FormatInt(...)
+      - pattern: strconv.FormatUint(...)
+      - pattern: strconv.FormatFloat(...)
+      - pattern: strconv.FormatBool(...)
     pattern-sinks:
       - patterns:
           - pattern: $DB.$FN($SQL, ...)
@@ -255,6 +365,37 @@ rules:
           - metavariable-type:
               metavariable: $C
               type: echo.Context
+      # Route variables of gorilla/mux and chi.
+      - pattern-either:
+          - pattern: mux.Vars(...)
+          - pattern: chi.URLParam(...)
+          - pattern: chi.URLParamFromCtx(...)
+      # A request body, form or query decoded into a variable makes the
+      # variable request input.
+      - by-side-effect: true
+        patterns:
+          - pattern: json.NewDecoder($R.Body).Decode(&$V)
+          - metavariable-type:
+              metavariable: $R
+              type: "*http.Request"
+          - focus-metavariable: $V
+      - by-side-effect: true
+        patterns:
+          - pattern: $C.$BIND(&$V)
+          - metavariable-regex:
+              metavariable: $BIND
+              regex: ^(Bind|BindJSON|BindQuery|BindUri|ShouldBind|ShouldBindJSON|ShouldBindQuery|ShouldBindUri)$
+          - metavariable-type:
+              metavariable: $C
+              type: "*gin.Context"
+          - focus-metavariable: $V
+      - by-side-effect: true
+        patterns:
+          - pattern: $C.Bind(&$V)
+          - metavariable-type:
+              metavariable: $C
+              type: echo.Context
+          - focus-metavariable: $V
     pattern-sanitizers:
       - pattern: strconv.Atoi(...)
       - pattern: url.PathEscape(...)
@@ -333,6 +474,37 @@ rules:
           - metavariable-type:
               metavariable: $C
               type: echo.Context
+      # Route variables of gorilla/mux and chi.
+      - pattern-either:
+          - pattern: mux.Vars(...)
+          - pattern: chi.URLParam(...)
+          - pattern: chi.URLParamFromCtx(...)
+      # A request body, form or query decoded into a variable makes the
+      # variable request input.
+      - by-side-effect: true
+        patterns:
+          - pattern: json.NewDecoder($R.Body).Decode(&$V)
+          - metavariable-type:
+              metavariable: $R
+              type: "*http.Request"
+          - focus-metavariable: $V
+      - by-side-effect: true
+        patterns:
+          - pattern: $C.$BIND(&$V)
+          - metavariable-regex:
+              metavariable: $BIND
+              regex: ^(Bind|BindJSON|BindQuery|BindUri|ShouldBind|ShouldBindJSON|ShouldBindQuery|ShouldBindUri)$
+          - metavariable-type:
+              metavariable: $C
+              type: "*gin.Context"
+          - focus-metavariable: $V
+      - by-side-effect: true
+        patterns:
+          - pattern: $C.Bind(&$V)
+          - metavariable-type:
+              metavariable: $C
+              type: echo.Context
+          - focus-metavariable: $V
     pattern-sanitizers:
       - pattern: strconv.Atoi(...)
       - pattern: html.EscapeString(...)
