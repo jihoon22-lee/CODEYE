@@ -548,7 +548,20 @@ func TestDryRunUpstreamTriage(t *testing.T) {
 				if res := run.results["review.verify.t001"]; res.Status != domain.TaskSucceeded {
 					t.Fatalf("verify %+v", res)
 				}
+				// A harmless group of several diagnostics is answered part by
+				// part: its first diagnostic alone is harmless, the others unclear.
+				split := slices.ContainsFunc(rec.TriageGroups, func(g record.TriageGroup) bool {
+					return g.Classification == record.TriageHarmless && len(g.ObservationIDs) == 1
+				})
+				if !split || len(rec.Calls[0].OutputErrors) != 0 {
+					t.Fatalf("part answer not stored: %+v, errors %v", rec.TriageGroups, rec.Calls[0].OutputErrors)
+				}
 			case "form":
+				// The new shapes of the answer fail too: a diagnostic listed in two
+				// parts, and a function the request holds named as missing.
+				if !slices.Contains(rec.Calls[0].OutputErrors, errTriageDiagnostics) || !slices.Contains(rec.Calls[0].OutputErrors, errTriageUnclearPresent) {
+					t.Fatalf("calls %+v", rec.Calls)
+				}
 				if omitted[record.TriageItemOmitted] != classes[""] || classes[""] == 0 || classes[record.TriageProblem]+classes[record.TriageHarmless] == 0 ||
 					!slices.Contains(rec.Limitations, record.LimTriageGroupsNotTriaged) || !slices.Contains(rec.Calls[0].OutputErrors, errTriageClassInvalid) ||
 					!slices.Contains(rec.Calls[0].OutputErrors, "evidence_id_duplicate") || d.Triaged == 0 || d.Triaged+d.Interpreted >= d.Diagnostics {
