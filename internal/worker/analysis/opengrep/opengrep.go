@@ -41,7 +41,7 @@ const (
 	ParserID        = "opengrep-sarif"
 	ParserVersion   = "1"
 	RulePackID      = "codeye-taint"
-	RulePackVersion = "1"
+	RulePackVersion = "2"
 	TestedSeries    = "2.0"
 )
 

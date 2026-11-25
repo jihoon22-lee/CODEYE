@@ -23,4 +23,21 @@ public class HtmlInjection {
     public void welcome(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         greet(resp, req.getParameter("name"));
     }
+
+    public void status(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        String state = req.getParameter("state");
+        resp.getWriter().printf(java.util.Locale.ROOT, "<p>State: %s</p>", state); // expect: codeye.java.html-injection
+    }
+
+    public void raw(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        char[] text = req.getHeader("X-Title").toCharArray();
+        resp.getWriter().write(text, 0, text.length); // expect: codeye.java.html-injection
+    }
+
+    public void fields(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        java.util.Enumeration<String> names = req.getParameterNames();
+        while (names.hasMoreElements()) {
+            resp.getWriter().println("<li>" + names.nextElement() + "</li>"); // expect: codeye.java.html-injection
+        }
+    }
 }

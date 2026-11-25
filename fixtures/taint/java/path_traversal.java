@@ -26,6 +26,20 @@ public class PathTraversal {
         }
     }
 
+    public void upload(HttpServletRequest req) throws IOException {
+        String target = ROOT + "/" + req.getHeader("X-File-Name");
+        new java.io.FileOutputStream(target, false).close(); // expect: codeye.java.path-traversal
+    }
+
+    public byte[] report(HttpServletRequest req) throws IOException {
+        Path p = Paths.get(req.getParameter("report"));
+        return Files.readAllBytes(p); // expect: codeye.java.path-traversal
+    }
+
+    public byte[] export(HttpServletRequest req) throws IOException {
+        return java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(req.getParameter("export"))); // expect: codeye.java.path-traversal
+    }
+
     @DeleteMapping("/files/{name}")
     public boolean delete(@PathVariable String name) {
         File f = new File(ROOT, name);

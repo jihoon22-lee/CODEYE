@@ -20,7 +20,7 @@ rules:
           - pattern: (HttpServletRequest $REQ).$METHOD(...)
           - metavariable-regex:
               metavariable: $METHOD
-              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
+              regex: ^(getParameter|getParameterValues|getParameterMap|getParameterNames|getHeader|getHeaders|getHeaderNames|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
       - patterns:
           - pattern-either:
               - pattern-inside: |
@@ -76,11 +76,17 @@ rules:
     metadata: {cwe: ["CWE-22"], codeye_family: path-traversal}
     options: {taint_intrafile: true}
     pattern-sources:
+      # A Path built straight from an accessor (Paths.get(req.getParameter(..)))
+      # is request input too: the engine does not carry the accessor's taint
+      # out of a one-argument get call.
       - patterns:
-          - pattern: (HttpServletRequest $REQ).$METHOD(...)
+          - pattern-either:
+              - pattern: (HttpServletRequest $REQ).$METHOD(...)
+              - pattern: Paths.get(..., (HttpServletRequest $REQ).$METHOD(...), ...)
+              - pattern: java.nio.file.Paths.get(..., (HttpServletRequest $REQ).$METHOD(...), ...)
           - metavariable-regex:
               metavariable: $METHOD
-              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
+              regex: ^(getParameter|getParameterValues|getParameterMap|getParameterNames|getHeader|getHeaders|getHeaderNames|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
       - patterns:
           - pattern-either:
               - pattern-inside: |
@@ -95,15 +101,30 @@ rules:
       - pattern: Integer.parseInt(...)
       - pattern: Long.parseLong(...)
       - pattern: FilenameUtils.getName(...)
+      - pattern: org.apache.commons.io.FilenameUtils.getName(...)
       - pattern: (Path $P).getFileName()
+      - pattern: (java.nio.file.Path $P).getFileName()
+      - pattern: Paths.get(...).getFileName()
+      - pattern: java.nio.file.Paths.get(...).getFileName()
       - pattern: (File $F).getName()
+      - pattern: (java.io.File $F).getName()
       - pattern: new File(...).getName()
+      - pattern: new java.io.File(...).getName()
       # A containment check (if (!p.startsWith(root)) throw ...) makes the
       # checked value trusted afterwards.
       - by-side-effect: true
         patterns:
           - pattern: $P.startsWith(...)
           - focus-metavariable: $P
+    # The engine reads a call named get with one argument (Paths.get(name))
+    # as a lookup whose result does not carry the key's taint; these carry it.
+    pattern-propagators:
+      - patterns:
+          - pattern-either:
+              - pattern: $TO = Paths.get($FROM)
+              - pattern: $TO = java.nio.file.Paths.get($FROM)
+        from: $FROM
+        to: $TO
     # Building a File or Path is not itself a sink; the operations that
     # open, write, list or delete it are.
     pattern-sinks:
@@ -114,15 +135,26 @@ rules:
               - pattern: new FileReader($PATH, ...)
               - pattern: new FileWriter($PATH, ...)
               - pattern: new RandomAccessFile($PATH, ...)
+              - pattern: new java.io.FileInputStream($PATH)
+              - pattern: new java.io.FileOutputStream($PATH, ...)
+              - pattern: new java.io.FileReader($PATH, ...)
+              - pattern: new java.io.FileWriter($PATH, ...)
+              - pattern: new java.io.RandomAccessFile($PATH, ...)
           - focus-metavariable: $PATH
       - patterns:
-          - pattern: Files.$OP($PATH, ...)
+          - pattern-either:
+              - pattern: Files.$OP($PATH, ...)
+              - pattern: java.nio.file.Files.$OP($PATH, ...)
+              - pattern: Files.$OP(Paths.get($PATH), ...)
+              - pattern: java.nio.file.Files.$OP(java.nio.file.Paths.get($PATH), ...)
           - metavariable-regex:
               metavariable: $OP
               regex: ^(readAllBytes|readAllLines|readString|lines|newInputStream|newOutputStream|newBufferedReader|newBufferedWriter|write|writeString|delete|deleteIfExists|createFile|createDirectories|list|walk|newDirectoryStream)$
           - focus-metavariable: $PATH
       - patterns:
-          - pattern: (File $PATH).$OP(...)
+          - pattern-either:
+              - pattern: (File $PATH).$OP(...)
+              - pattern: (java.io.File $PATH).$OP(...)
           - metavariable-regex:
               metavariable: $OP
               regex: ^(delete|createNewFile|mkdir|mkdirs|renameTo|listFiles)$
@@ -140,7 +172,7 @@ rules:
           - pattern: (HttpServletRequest $REQ).$METHOD(...)
           - metavariable-regex:
               metavariable: $METHOD
-              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
+              regex: ^(getParameter|getParameterValues|getParameterMap|getParameterNames|getHeader|getHeaders|getHeaderNames|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
       - patterns:
           - pattern-either:
               - pattern-inside: |
@@ -168,6 +200,8 @@ rules:
               - pattern: $CONN.prepareCall($SQL, ...)
               - pattern: (Statement $STMT).execute($SQL, ...)
               - pattern: (Statement $STMT).addBatch($SQL)
+              - pattern: (java.sql.Statement $STMT).execute($SQL, ...)
+              - pattern: (java.sql.Statement $STMT).addBatch($SQL)
               - pattern: $EM.createQuery($SQL, ...)
               - pattern: $EM.createNativeQuery($SQL, ...)
           - focus-metavariable: $SQL
@@ -192,7 +226,7 @@ rules:
           - pattern: (HttpServletRequest $REQ).$METHOD(...)
           - metavariable-regex:
               metavariable: $METHOD
-              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
+              regex: ^(getParameter|getParameterValues|getParameterMap|getParameterNames|getHeader|getHeaders|getHeaderNames|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
       - patterns:
           - pattern-either:
               - pattern-inside: |
@@ -246,7 +280,7 @@ rules:
           - pattern: (HttpServletRequest $REQ).$METHOD(...)
           - metavariable-regex:
               metavariable: $METHOD
-              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
+              regex: ^(getParameter|getParameterValues|getParameterMap|getParameterNames|getHeader|getHeaders|getHeaderNames|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
       - patterns:
           - pattern-either:
               - pattern-inside: |
@@ -286,7 +320,7 @@ rules:
           - pattern: (HttpServletRequest $REQ).$METHOD(...)
           - metavariable-regex:
               metavariable: $METHOD
-              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
+              regex: ^(getParameter|getParameterValues|getParameterMap|getParameterNames|getHeader|getHeaders|getHeaderNames|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
       - patterns:
           - pattern-either:
               - pattern-inside: |
@@ -327,7 +361,7 @@ rules:
           - pattern: (HttpServletRequest $REQ).$METHOD(...)
           - metavariable-regex:
               metavariable: $METHOD
-              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
+              regex: ^(getParameter|getParameterValues|getParameterMap|getParameterNames|getHeader|getHeaders|getHeaderNames|getQueryString|getPathInfo|getRequestURI|getCookies|getInputStream|getReader)$
       - patterns:
           - pattern-either:
               - pattern-inside: |
@@ -346,10 +380,24 @@ rules:
       - pattern: Encode.forHtmlAttribute(...)
       - pattern: StringEscapeUtils.escapeHtml4(...)
       - pattern: HtmlUtils.htmlEscape(...)
+      - pattern: org.owasp.encoder.Encode.forHtml(...)
+      - pattern: org.owasp.encoder.Encode.forHtmlContent(...)
+      - pattern: org.owasp.encoder.Encode.forHtmlAttribute(...)
+      - pattern: org.apache.commons.text.StringEscapeUtils.escapeHtml4(...)
+      - pattern: org.apache.commons.lang3.StringEscapeUtils.escapeHtml4(...)
+      - pattern: StringEscapeUtils.escapeHtml(...)
+      - pattern: org.apache.commons.lang.StringEscapeUtils.escapeHtml(...)
+      - pattern: org.springframework.web.util.HtmlUtils.htmlEscape(...)
+      - pattern: ESAPI.encoder().encodeForHTML(...)
+      - pattern: ESAPI.encoder().encodeForHTMLAttribute(...)
+      - pattern: org.owasp.esapi.ESAPI.encoder().encodeForHTML(...)
+      - pattern: org.owasp.esapi.ESAPI.encoder().encodeForHTMLAttribute(...)
+    # print, println, write and append write their first argument; printf and
+    # format write the format string and every argument.
     pattern-sinks:
       - patterns:
           - pattern-either:
-              - pattern: (HttpServletResponse $RESP).getWriter().$PRINT($TEXT)
+              - pattern: (HttpServletResponse $RESP).getWriter().$PRINT($TEXT, ...)
               - patterns:
                   - pattern-either:
                       - pattern-inside: |
@@ -358,10 +406,30 @@ rules:
                       - pattern-inside: |
                           $WT $W = (HttpServletResponse $RESP).getWriter();
                           ...
-                  - pattern: $W.$PRINT($TEXT)
+                  - pattern: $W.$PRINT($TEXT, ...)
           - metavariable-regex:
               metavariable: $PRINT
               regex: ^(print|println|write|append)$
+          # A response declared as JSON or plain text is not parsed as HTML.
+          - pattern-not-inside: |
+              $R.setContentType("=~/^(application/json|text/plain)/");
+              ...
+          - focus-metavariable: $TEXT
+      - patterns:
+          - pattern-either:
+              - pattern: (HttpServletResponse $RESP).getWriter().$PRINT(..., $TEXT, ...)
+              - patterns:
+                  - pattern-either:
+                      - pattern-inside: |
+                          $W = (HttpServletResponse $RESP).getWriter();
+                          ...
+                      - pattern-inside: |
+                          $WT $W = (HttpServletResponse $RESP).getWriter();
+                          ...
+                  - pattern: $W.$PRINT(..., $TEXT, ...)
+          - metavariable-regex:
+              metavariable: $PRINT
+              regex: ^(printf|format)$
           # A response declared as JSON or plain text is not parsed as HTML.
           - pattern-not-inside: |
               $R.setContentType("=~/^(application/json|text/plain)/");

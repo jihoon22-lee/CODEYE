@@ -27,4 +27,11 @@ public class SqlInjection {
         String sql = String.format("SELECT * FROM users ORDER BY %s", sort);
         return jdbc.queryForList(sql); // expect: codeye.java.sql-injection
     }
+
+    public boolean audit(HttpServletRequest req) throws SQLException {
+        java.util.Enumeration<String> names = req.getHeaderNames();
+        String first = names.hasMoreElements() ? names.nextElement() : "";
+        java.sql.Statement st = conn.createStatement();
+        return st.execute("INSERT INTO audit (header) VALUES ('" + first + "')"); // expect: codeye.java.sql-injection
+    }
 }
