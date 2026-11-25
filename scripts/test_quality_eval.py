@@ -376,6 +376,57 @@ class ReviewOutcomeTests(unittest.TestCase):
                 quality_eval.agent_switches([bad])
 
 
+class ToolDiscoveryTests(unittest.TestCase):
+    """--tools-json configures the agent from the service's detection result (toolfind.Resolve)."""
+
+    @staticmethod
+    def doc(**extra):
+        tools = [{"name": "go", "status": "found", "path": "/opt/go/bin/go", "version_tested": True},
+                 {"name": "git", "status": "found", "path": "/usr/bin/git", "version_tested": True},
+                 {"name": "opencode", "status": "found", "path": "/opt/opencode", "version_tested": True},
+                 {"name": "mypy", "status": "found", "path": "/opt/mypy", "version_tested": True},
+                 {"name": "pyright", "status": "found", "path": "/opt/pyright/index.js", "version_tested": True},
+                 {"name": "npm", "status": "found", "path": "/opt/npm-cli.js", "version_tested": True},
+                 {"name": "uv", "status": "found", "path": "/snap/bin/uv", "version_tested": True},
+                 {"name": "opengrep", "status": "not_found", "version_tested": False},
+                 {"name": "cppcheck", "status": "unusable", "path": "/opt/cppcheck", "version_tested": False}]
+        return {"schema_version": "0.1", "detected_at": "2026-11-26T00:00:00Z", "python_both_type_checkers": True,
+                "go_mod_cache": "/home/u/go/pkg/mod", "tools": tools, **extra}
+
+    def test_found_tools_become_agent_flags_and_explicit_ones_win(self):
+        r = quality_eval.resolve_tools(self.doc(), {"uv": "/home/u/.local/bin/uv"})
+        self.assertEqual(r["go"], "/opt/go/bin/go")
+        self.assertEqual(r["go_mod_cache"], "/home/u/go/pkg/mod")
+        self.assertEqual(r["tools"], {"mypy": "/opt/mypy", "pyright": "/opt/pyright/index.js",
+                                      "npm": "/opt/npm-cli.js", "uv": "/home/u/.local/bin/uv"})
+        self.assertEqual(r["switches"], ["python-both-type-checkers"])
+        self.assertEqual(r["extra_args"], [])
+        d = r["discovery"]
+        self.assertEqual(d["overridden"], ["uv"])
+        self.assertEqual(d["missing"], {"cppcheck": "unusable", "opengrep": "not_found"})
+        self.assertEqual(d["not_used"], ["git", "opencode"])
+        self.assertIn("go", d["used"])
+        # an explicit --go and --go-mod-cache win
+        r = quality_eval.resolve_tools(self.doc(), {}, "/other/go", "/cache")
+        self.assertEqual((r["go"], r["go_mod_cache"]), ("/other/go", "/cache"))
+        self.assertNotIn("go", r["discovery"]["used"])
+
+    def test_fetch_settings_only_with_dependency_fetch(self):
+        doc = self.doc(npm_registry="https://npm.example/", go_settings={"goproxy": "https://proxy.example"})
+        self.assertEqual(quality_eval.resolve_tools(doc, {})["extra_args"], [])
+        r = quality_eval.resolve_tools(doc, {}, switches=["dependency-fetch"])
+        self.assertEqual(r["extra_args"], ["--npm-registry", "https://npm.example/", "--go-proxy", "https://proxy.example"])
+        self.assertEqual(r["switches"], ["dependency-fetch", "python-both-type-checkers"])
+
+    def test_one_type_checker_adds_no_switch_and_bad_files_stop(self):
+        doc = self.doc()
+        doc["tools"] = [t for t in doc["tools"] if t["name"] != "pyright"]
+        self.assertEqual(quality_eval.resolve_tools(doc, {})["switches"], [])
+        for bad in ({"schema_version": "0.2", "tools": []}, {"schema_version": "0.1"}):
+            with self.assertRaises(SystemExit):
+                quality_eval.resolve_tools(bad, {})
+
+
 class AgentBudgetTests(unittest.TestCase):
     @staticmethod
     def args(**kw):

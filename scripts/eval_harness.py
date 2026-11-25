@@ -64,6 +64,31 @@ def keep_review_artifacts(report, artifacts, destination):
     return kept
 
 
+ANALYZER_MEDIA = ("application/vnd.codeye.observations+json", "application/vnd.codeye.result-manifest+json",
+                  "application/vnd.codeye.source-manifest+json",
+                  "application/vnd.codeye.dependencies+json", "text/plain")
+
+
+def keep_analyzer_artifacts(report, artifacts, destination):
+    """Copy the analyzer artifacts a report references: observation envelopes, the source and result manifests,
+    dependency records and the raw tool streams. They hold tool output and paths of the snapshot,
+    no model text. Returns the number kept."""
+    index = {f.name: f for f in artifacts.rglob("*") if f.is_file()}
+    destination.mkdir(mode=0o700)
+    kept = 0
+    for a in report["artifacts"]:
+        if a["media_type"] not in ANALYZER_MEDIA:
+            continue
+        found = index.get(a["sha256"])
+        if found is None or hashlib.sha256(found.read_bytes()).hexdigest() != a["sha256"]:
+            raise RuntimeError("the report references an analyzer artifact that is missing or changed")
+        suffix = ".txt" if a["media_type"] == "text/plain" else ".json"
+        name = f"{a['task_key'] or a['role']}-{a['role']}-{a['sha256'][:12]}{suffix}"
+        shutil.copyfile(found, destination / name)
+        kept += 1
+    return kept
+
+
 def child_env(env):
     """The controller's environment without any model key."""
     return {k: v for k, v in env.items() if k != "OPENAI_API_KEY"}
