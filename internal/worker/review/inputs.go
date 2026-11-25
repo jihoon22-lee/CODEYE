@@ -13,6 +13,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/govet"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/opengrep"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/pack"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery/envdoc"
@@ -348,7 +349,7 @@ func (s *roleStage) readToolDoc(key string, files map[string]source.Entry) (tool
 			if o.Location != nil {
 				to.Location = &toolLocation{Path: o.Location.Path, StartLine: o.Location.StartLine, EndLine: o.Location.EndLine}
 			}
-			if d.Analyzer.ID == "cpp.cppcheck" || d.Analyzer.ID == "cpp.clang_tidy" {
+			if relatedForModel(d.Analyzer.ID) {
 				for _, r := range o.Related {
 					if r.LocationState == obsdoc.LocationResolved && r.Location != nil && r.RawSpan != nil &&
 						obsdoc.ValidRelatedKind(r.Kind) && !slices.Contains(d.WorkspaceDrift, r.Location.Path) {
@@ -806,6 +807,20 @@ func (s *roleStage) additionalWitnesses(out []record.Excerpt, candidates []contr
 		}
 	}
 	return out, nil
+}
+
+// relatedForModel reports whether the related locations of the analyzer's
+// observations reach model inputs (interpretation and diagnostic triage):
+// the notes of cppcheck and clang-tidy and the taint flow steps of Opengrep.
+// They carry no text of their own (a flow step's message is a fixed
+// sentence), and shownMessage withholds the message of an observation with a
+// related location in a file the secrets screen withholds.
+func relatedForModel(analyzerID string) bool {
+	switch analyzerID {
+	case "cpp.cppcheck", "cpp.clang_tidy", opengrep.AnalyzerID:
+		return true
+	}
+	return false
 }
 
 const (

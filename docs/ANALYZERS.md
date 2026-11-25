@@ -480,7 +480,13 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 | `style` | info | 아니오 | 명명·단순화 제안이다 |
 | `formatting` | info | 아니오 | 서식 차이다 |
 
-팩별 표: go vet(합성 규칙 팩 `codeye-go-vet-default`@1), Staticcheck(`SA5011` 널 역참조, `SA1019` 사용 중단, `SA1*` API 오용, `SA2*` 동시성, `SA4*`·`SA5*` 논리, `SA6*` 성능, `S1*`·`ST1*`·`QF*` 스타일 등), errcheck(오류 무시), gofmt(서식), cppcheck(규칙 ID와 cppcheck 등급 대응), clang-tidy(검사 이름 접두사), GCC 파일 디스크립터 검사(자원 누수), ruff·mypy·pyright·bandit, import-linter·dependency-cruiser(유지보수), ESLint 세 구성과 tsc, cargo check·clippy·rustdoc, PMD·SpotBugs다. 표 목록은 [`builtin.SeverityTables`](../internal/worker/analysis/builtin/severity.go)가 한곳에 모은다.
+팩별 표: go vet(합성 규칙 팩 `codeye-go-vet-default`@1), Staticcheck(`SA5011` 널 역참조, `SA1019` 사용 중단, `SA1*` API 오용, `SA2*` 동시성, `SA4*`·`SA5*` 논리, `SA6*` 성능, `S1*`·`ST1*`·`QF*` 스타일 등), errcheck(오류 무시), gofmt(서식), cppcheck(규칙 ID와 cppcheck 등급 대응), clang-tidy(검사 이름 접두사), GCC 파일 디스크립터 검사(자원 누수), ruff·mypy·pyright·bandit, import-linter·dependency-cruiser(유지보수), ESLint 세 구성과 tsc, cargo check·clippy·rustdoc, PMD·SpotBugs, Opengrep다. 표 목록은 [`builtin.SeverityTables`](../internal/worker/analysis/builtin/severity.go)가 한곳에 모은다.
+
+- **Opengrep**(`codeye-taint` v2, 표 1). 규칙마다 요청 입력이 위험한 호출에 닿는 흐름이라 스타일 지적인 규칙은 없다.
+  - 명령·SQL·경로·코드 평가·역직렬화·HTML 출력은 요청 바이트가 명령·질의·파일 이름·코드·페이지가 되므로 `injection`(high)이다. 같은 구성을 보고하는 bandit(셸·SQL·Markup), SpotBugs(SQL·경로·서블릿 XSS), clang-tidy(`bugprone-command-processor`), ESLint(eval 계열)와 같은 계열이어서, 같은 줄의 두 보고는 한 분류 묶음이 된다.
+  - SSRF는 요청이 나가는 요청의 대상을 고르게 한다. 무엇이 드러나는지는 서버가 닿을 수 있는 곳에 달려 있어 `security_weakness`(medium)이고 다른 도구 보고와 합치지 않는다.
+  - 규칙을 더하면 계열을 정해야 한다(`TestSeverityCoversEveryRule`).
+- SpotBugs 표 2는 [엔진 중복](#엔진-중복-1)에서 taint 팩과 같은 줄을 보고한 경로(`PT_*`)·서블릿 XSS(`XSS_*`) 검출기를 `SQL_*`처럼 `injection`으로 더했다.
 
 ### 규칙 문맥과 소스 안 억제
 
@@ -1533,7 +1539,7 @@ gitleaks 탐지는 미검토 낮음 보안 finding이다. 비밀값 엔진은 gi
 - 일부만 해석한 파일은 수준 `warn`, 유형 `["PartialParsing", [범위…]]`다. 끝나지 않은 JS 문자열, 본문 앞의 모르는 C 매크로에서 나왔다.
 - 전혀 해석하지 못한 파일은 수준 `warn`, 유형이 문자열 `"Syntax error"`다. 1 MB 가까운 C 파일(civetweb.c, sqlite3.c)에서 나왔다.
 - 이 두 경우에도 SARIF의 `executionSuccessful`은 true이고 종료 코드는 0이다. Python 2 `print` 문, 일부 깨진 JS·Go·C 파일은 오류 없이 지나갔다. 오류가 없는 파일이 끝까지 해석됐다는 보장은 도구가 주지 않는다.
-- 유형의 모양을 모르면 유형 이름을 `unknown`으로 적는다. 오류가 있다는 사실만으로 그 파일을 불완전으로 센다(TC-292).
+- 유형의 모양을 모르면 유형 이름을 `unknown`으로 적는다. 오류가 있다는 사실만으로 그 파일을 불완전으로 센다(TC-301).
 
 ### 관찰
 
@@ -1567,7 +1573,7 @@ gitleaks 탐지는 미검토 낮음 보안 finding이다. 비밀값 엔진은 gi
 
 ### Opengrep 규칙 측정
 
-모델 호출 없이 규칙 팩 그대로(`TestRealOpengrepMeasureDirectory`, TC-293) 레이블 벤치마크와 공개 웹 애플리케이션을 실행해 쟀다. Opengrep 2.0.0, Linux x86-64. 제3자 소스는 저장소에 넣지 않았고 아래는 집계와 공개 프로젝트 이름뿐이다.
+모델 호출 없이 규칙 팩 그대로(`TestRealOpengrepMeasureDirectory`, TC-303) 레이블 벤치마크와 공개 웹 애플리케이션을 실행해 쟀다. Opengrep 2.0.0, Linux x86-64. 제3자 소스는 저장소에 넣지 않았고 아래는 집계와 공개 프로젝트 이름뿐이다.
 
 **분할과 오염.** 결과를 보기 전에 개발 부분과 보고 전용 부분을 정했다.
 

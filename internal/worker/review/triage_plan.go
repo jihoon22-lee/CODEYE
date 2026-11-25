@@ -339,7 +339,7 @@ func (s *roleStage) triageGroupInputBytes(g *triageGroup) int {
 	for i, d := range g.diags {
 		if i < triageShownDiagnostics {
 			m, _ := s.shownMessage(d.obs)
-			n += 160 + len(m)
+			n += 160 + len(m) + 112*min(len(d.obs.Related), triageRelatedShown)
 		}
 	}
 	return n

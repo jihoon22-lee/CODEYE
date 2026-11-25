@@ -209,6 +209,9 @@ type exampleDiag struct {
 	path, rule, category, message string
 	line, endLine                 int
 	metric                        *obsdoc.Metric
+	// flow is the lines of the diagnostic's tool flow steps (related
+	// locations of kind tool_flow_step), first the source, last the sink.
+	flow []int
 }
 
 // envelope writes an analyzer envelope for task with a version execution and
@@ -252,11 +255,27 @@ func exampleEnvelope(t *testing.T, j analysis.Job, d pack.Descriptor, task pack.
 			end = x.line
 		}
 		ref := obsdoc.RawRef{Execution: runExec.Name, Stream: "stdout", StreamSHA256: obsdoc.SHA256Hex([]byte(stdout.String())), RecordIndex: i, ByteStart: spans[i].start, ByteEnd: spans[i].end}
+		related := []obsdoc.Related{}
+		for n, line := range x.flow {
+			role := "propagation"
+			switch n {
+			case 0:
+				role = "source"
+			case len(x.flow) - 1:
+				role = "sink"
+			}
+			// Consecutive pieces of the diagnostic's own stdout line.
+			width := (spans[i].end - spans[i].start) / int64(len(x.flow))
+			piece := &obsdoc.ByteSpan{Start: spans[i].start + int64(n)*width, End: spans[i].start + int64(n+1)*width}
+			related = append(related, obsdoc.Related{Kind: obsdoc.RelatedFlowStep, RawSpan: piece,
+				RawMessage: fmt.Sprintf("taint flow step %d of %d: %s", n+1, len(x.flow), role), Path: &p, LocationState: obsdoc.LocationResolved,
+				Location: &obsdoc.Location{Path: p, StartLine: line, EndLine: line, ColumnUnit: "byte", BlobSHA256: exampleSHA(t, j, p)}})
+		}
 		doc.Observations = append(doc.Observations, obsdoc.Observation{
 			ID:     obsdoc.ObservationID(d.ID, doc.Module.Dir, "", x.rule, fmt.Sprintf("%s:%d", x.path, x.line), fmt.Sprintf("%d", end), x.message, 0),
 			RuleID: x.rule, Category: x.category, RawMessage: x.message, Path: &p, LocationState: obsdoc.LocationResolved,
 			Location: &obsdoc.Location{Path: p, StartLine: x.line, EndLine: end, ColumnUnit: "byte", BlobSHA256: exampleSHA(t, j, p)},
-			Related:  []obsdoc.Related{}, RawRef: ref, Metric: x.metric})
+			Related:  related, RawRef: ref, Metric: x.metric})
 	}
 	doc.Outcome = obsdoc.Outcome{TaskStatus: domain.TaskSucceeded, ExitClass: obsdoc.ExitSuccessWithoutFindings}
 	doc.Parse = obsdoc.Parse{OK: true, Records: len(diags)}
