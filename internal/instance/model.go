@@ -129,6 +129,9 @@ type ResolvedModel struct {
 	RelayFile      string
 	Timeout        time.Duration
 	ReviewMaxCalls int
+	// ReviewParallel is the degree of parallelism of the review pairs (0: the
+	// default).
+	ReviewParallel int
 	// ReviewRequestBytes and ReviewOutputTokens are the review request
 	// budget (0: the default).
 	ReviewRequestBytes int
@@ -171,7 +174,7 @@ func ResolveModel(cfg *Config, layout Layout, env ModelEnv) (*ResolvedModel, err
 	if m == nil {
 		m = &Model{}
 	}
-	res := &ResolvedModel{RelayFile: m.RelayFile, Timeout: opencode.DefaultTimeout, ReviewMaxCalls: m.ReviewMaxCalls,
+	res := &ResolvedModel{RelayFile: m.RelayFile, Timeout: opencode.DefaultTimeout, ReviewMaxCalls: m.ReviewMaxCalls, ReviewParallel: m.ReviewParallel,
 		ReviewRequestBytes: m.ReviewRequestBytes, ReviewOutputTokens: m.ReviewOutputTokens,
 		Offline: cfg.Offline, CABundle: cfg.CABundle}
 	if m.TimeoutSeconds > 0 {

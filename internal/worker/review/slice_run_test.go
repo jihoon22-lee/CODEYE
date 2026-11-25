@@ -187,6 +187,7 @@ func taskKeys(plan []analysis.TaskSpec) []string {
 
 // TC-165: fixed plan keys and a live call ceiling, including retries.
 func TestSliceAdmissionKeepsTheCeiling(t *testing.T) {
+	t.Parallel()
 	var basePlan []string
 	for _, n := range []int{15, record.DefaultMaxCalls, 207} {
 		for _, upstream := range []string{"one", "three"} {
@@ -428,6 +429,7 @@ func overviewContext(t *testing.T, j analysis.Job) []string {
 // maximal role outputs and every slice admitted. Every slice request fits
 // PromptBudget and carries the six language guides.
 func TestSliceRequestSizeWorstCaseAllLanguages(t *testing.T) {
+	t.Parallel()
 	j := worstCaseJob(t, func(root string) { polyglotWorstCase(t, root) })
 	f := &scriptedCaller{script: maxScript(t)}
 	plan, res := runRoleWith(t, j, Handler{Static: secretsStub{obs: polyglotObservations}, Caller: f, MaxCalls: record.MaxMaxCalls, Budget: smallBudget}, "1.27.4")
@@ -482,6 +484,7 @@ func TestSliceRequestSizeWorstCaseAllLanguages(t *testing.T) {
 // carries it; a slot left without files ends no_review_scope even when the
 // budget is spent (precedence: policy, scope, nothing to review, budget).
 func TestSliceSecretGating(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name   string
 		static analysis.Handler

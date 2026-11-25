@@ -58,6 +58,9 @@ type Config struct {
 	// ReviewMaxCalls is the model call ceiling per review attempt
 	// (--review-max-calls); 0 means record.DefaultMaxCalls.
 	ReviewMaxCalls int
+	// ReviewParallel is how many independent review pairs of an attempt
+	// run at once (--review-parallel); 0 means record.DefaultParallel.
+	ReviewParallel int
 	// ReviewRequestBytes and ReviewOutputTokens are the review request
 	// budget (--review-request-bytes, --review-output-tokens); 0 means the
 	// default.
@@ -257,6 +260,11 @@ func New(cfg Config) (*Agent, error) {
 		cfg.ReviewMaxCalls = record.DefaultMaxCalls
 	} else if !record.ValidMaxCalls(cfg.ReviewMaxCalls) {
 		return nil, &ExitError{ExitUsage, "--review-max-calls must be between 15 and 2013"}
+	}
+	if cfg.ReviewParallel == 0 {
+		cfg.ReviewParallel = record.DefaultParallel
+	} else if !record.ValidParallel(cfg.ReviewParallel) {
+		return nil, &ExitError{ExitUsage, fmt.Sprintf("--review-parallel must be between 1 and %d", record.MaxParallel)}
 	}
 	if !opencode.ValidRequestBytes(cfg.ReviewRequestBytes) {
 		return nil, &ExitError{ExitUsage, fmt.Sprintf("--review-request-bytes must be between %d and %d", opencode.MinRequestBytes, opencode.MaxRequestBytes)}

@@ -270,6 +270,7 @@ func worstCaseObservations(j analysis.Job) []govet.Observation {
 // verification_budget_exceeded and verify fails with
 // review_input_incomplete.
 func TestReviewRequestSizeWorstCase(t *testing.T) {
+	t.Parallel()
 	for _, b := range []Budget{smallBudget, {RequestBytes: MinRequestBytes}, {}, {RequestBytes: MaxRequestBytes, OutputTokens: MaxOutputTokens}} {
 		t.Run(fmt.Sprintf("%d-%d", b.limits().request, b.OutputTokens), func(t *testing.T) {
 			j := worstCaseJob(t, nil)
@@ -419,6 +420,7 @@ func allLanguagesRun(t *testing.T, j analysis.Job, obs func(analysis.Job) []gove
 // observation, so code excerpts, windows and candidates of several languages
 // reach the roles.
 func TestReviewRequestSizeWorstCaseAllLanguages(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		tree func(root string)

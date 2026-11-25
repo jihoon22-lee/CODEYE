@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -237,5 +238,47 @@ func TestManagedWorkerLoadsModelBeforeSourceAndProtectsFiles(t *testing.T) {
 		if err := source.CheckProtected(root, name, protected); !errors.Is(err, source.ErrHoldsProtected) {
 			t.Fatalf("invalid native config cleared %s protection: %v", name, err)
 		}
+	}
+}
+
+// TC-313: in the service the agent has no model flags; the attempt resolves
+// agent.model from the configuration file. An attempt whose model is a
+// budget relay runs its review pairs one at a time, the next attempt with a
+// key file runs them at the configured degree, and an attempt the caller did
+// not prepare counts as serial.
+func TestServiceRelayRunsReviewPairsOneAtATime(t *testing.T) {
+	root := t.TempDir()
+	state, service := filepath.Join(root, "state"), filepath.Join(root, "service.json")
+	credential := filepath.Join(root, "model.json")
+	write := func(path, content string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const config = `{"schema_version":"0.1","database":{"mode":"external"}`
+	opencodeExe := filepath.Join(root, "opencode")
+	write(service, config+fmt.Sprintf(`,"agent":{"model":{"opencode":%q,"name":"codeye-gateway/gpt-6.2-sol","relay_file":%q,"review_parallel":4}}}`, opencodeExe, filepath.Join(root, "relay.json")))
+	cfg, err := instance.LoadForStateDir(service, knownTools(), state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if args := modelAgentArgs(cfg, instance.Layout{Root: state}); slices.Contains(args, "--model-relay-file") || !slices.Contains(args, "--model-instance-config") {
+		t.Fatalf("service agent args: %v", args)
+	}
+	worker := &instanceModelCaller{settings: localModelSettings(service, state, instance.ModelEnv{})}
+	first, next := filepath.Join(root, "first"), filepath.Join(root, "next")
+	worker.prepareAttempt(first)
+	if worker.caller.RelayFile == "" || !worker.servesOneAtATime(first) {
+		t.Fatalf("relay attempt: caller relay %q, serial %v", worker.caller.RelayFile, worker.servesOneAtATime(first))
+	}
+	write(credential, `{"schema_version":"0.1","provider":"openai","api_key":"sk-fixture","base_url":"http://127.0.0.1:9/v1"}`)
+	write(service, config+fmt.Sprintf(`,"agent":{"model":{"opencode":%q,"credential_file":%q,"review_parallel":4}}}`, opencodeExe, credential))
+	worker.prepareAttempt(next)
+	if worker.caller.CredentialFile != credential || worker.servesOneAtATime(next) {
+		t.Fatalf("key attempt: caller %q, serial %v", worker.caller.CredentialFile, worker.servesOneAtATime(next))
+	}
+	if !worker.servesOneAtATime(first) {
+		t.Fatal("an attempt the caller does not hold counts as parallel")
 	}
 }

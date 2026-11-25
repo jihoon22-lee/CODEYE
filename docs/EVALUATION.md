@@ -514,6 +514,7 @@ python3 scripts/model_budget_relay.py \
 - 상한은 장부 하나에 걸린다(`HARD_CAP_MICROUSD = 25_000_000`, 모든 relay 프로세스 합계 최대 USD 25). 더 큰 금액을 지정해 재시작해도 기존 장부의 상한과 잔액은 그대로 적용한다. 장부를 잃거나 새 경로를 쓰면 별도 예산이 생기므로, 예산 보장은 같은 장부 파일을 유지하는 운영 절차에 의존한다. 예산 기간마다 영구 경로의 장부 하나를 쓰고(`/tmp` 같은 휘발 경로 금지), 소유자 승인 없이 새 장부를 만들지 않는다.
 - ready file은 반드시 새 경로여야 한다(이미 있으면 종료 코드 2). 0600으로 원자적으로 만들고 내용은 `{"base_url":"http://127.0.0.1:PORT/v1","token":"...","model":"gpt-6.2-sol","pid":N}`이다. SIGTERM/SIGINT 정상 종료 시 삭제한다. SIGKILL 뒤 남은 파일은 무효 token을 담으므로 지운 뒤 새 경로로 다시 시작한다.
 - OpenCode는 OpenAI 호환 provider의 `baseURL`·`apiKey`에 ready file의 `base_url`·`token`을, 모델 ID에 `model`을 쓴다. CODEYE에서는 `--model codeye-gateway/<model> --model-relay-file READY`로 고른다.
+- relay는 상위 요청을 하나씩 보낸다. relay를 쓰는 노드는 `--review-parallel`과 관계없이 검토 쌍을 하나씩 실행하므로, 유료 평가 실행은 직렬이다. 대기열에서 기다린 시간이 모델 제한시간을 쓰지 않게 하려는 것이다([호출 상한과 승인](REVIEW.md#호출-상한과-승인)). 같은 응답에서는 병렬도가 요청·호출 수·보고서를 바꾸지 않으므로, 직렬로 잰 평가 결과가 병렬 실행에도 적용된다(사용량 제한으로 실패한 호출은 예외다).
 - 보고: `python3 scripts/model_budget_relay.py --ledger PATH --report`(키 불필요).
 - 정지 해제: `python3 scripts/model_budget_relay.py --ledger PATH --clear-halt "검토 내용"`. 장부에 감사 기록을 더할 뿐 상한·청구액은 바꾸지 않는다. 원인을 확인한 사람만 실행한다. 원인을 고치지 않고 해제하면 실패 차감이 계속 쌓인다.
 - 실행이 끝나면 정산 대기 0건을 확인한 뒤 relay를 종료한다. 공급자 청구서는 장부와 별개다.

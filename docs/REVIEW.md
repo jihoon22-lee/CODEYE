@@ -4,7 +4,7 @@
 
 - 구현 위치: [`internal/worker/review`](../internal/worker/review), [`internal/worker/review/record`](../internal/worker/review/record), [`internal/worker/opencode`](../internal/worker/opencode), [`prompts/review`](../prompts/review)
 - 요구사항: REQ-004/005/009/010/011/012/013/026/027/030, NFR-007/008/010([요구사항](REQUIREMENTS.md))
-- 수용 시험: TC-05, TC-10~12, TC-16, TC-18, TC-33, TC-34, TC-76~79, TC-85~89, TC-97, TC-100, TC-123, TC-128, TC-129, TC-287, TC-288, TC-307~311([시험](TESTING.md))
+- 수용 시험: TC-05, TC-10~12, TC-16, TC-18, TC-33, TC-34, TC-76~79, TC-85~89, TC-97, TC-100, TC-123, TC-128, TC-129, TC-287, TC-288, TC-307~314([시험](TESTING.md))
 - 품질 평가와 지침 개정 절차: [평가](EVALUATION.md)
 
 ## 공통 경계
@@ -302,9 +302,42 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 
 ### 호출 상한과 승인
 
-- `codeye agent --review-max-calls N`과 서비스 설정 `agent.model.review_max_calls`는 attempt당 호출 수를 제한한다(기본 99, 15~2,013). 일반 검토에는 최대 207회가 적용된다. `scope.review_coverage: "extended"`를 선택하고 노드 상한이 207회를 넘을 때 96개 이후의 후속 조사도 실행할 수 있다. 전체 역할 다섯 개의 최대 호출은 15회이며 후속 조사보다 먼저 실행된다. [도구 진단 분류](#도구-진단-분류) slot은 전체 역할 뒤, 후속 조사 앞에서 같은 상한의 나머지를 쓴다.
+- `codeye agent --review-max-calls N`과 서비스 설정 `agent.model.review_max_calls`는 attempt당 호출 수를 제한한다(기본 99, 15~2,013). 일반 검토에는 최대 207회가 적용된다. `scope.review_coverage: "extended"`를 선택하고 노드 상한이 207회를 넘을 때 96개 이후의 후속 조사도 실행할 수 있다. 전체 역할 다섯 개의 최대 호출은 15회이며 후속 조사보다 먼저 실행된다. [도구 진단 분류](#도구-진단-분류) slot은 계획의 끝, 후속 조사와 `review.contract` 뒤에서 같은 상한의 나머지와 분류 몫을 쓴다.
 - slice는 조사와 확인을 위해 두 호출이 남아 있을 때 시작한다. 조사 재시도는 확인에 쓸 한 호출을 보존한다. 후보가 없는 slot은 검증 호출 없이 완료된다. 형식 복구도 같은 상한을 쓰며, 호출을 남김없이 써야 하는 검토는 기존 복구 횟수보다 일찍 종료할 수 있다. 승인되지 않은 slot은 `budget_exhausted`(`review_budget_exhausted`)로 기록한다. 선택적 `review.contract`도 같은 계수의 잔여 호출을 사용한다.
-- 계수 파일은 attempt의 scratch에 둔다. 순서대로 실행하는 모든 모델 요청은 호출 전에 계수를 확인하고 한 줄을 기록한다. 계수를 읽거나 쓰지 못하면 해당 호출은 `review_call_count_failed`로 끝난다.
+- 계수 파일(`review.calls`)은 attempt의 scratch에 둔다. 모든 모델 요청은 호출 전에 상한을 판단하고, 승인되면 task 키 한 줄을 기록한 뒤 호출한다. 계수를 읽거나 쓰지 못하면 해당 호출은 `review_call_count_failed`로 끝난다.
+
+**함께 실행하는 단위.** 전체 역할 다섯 개와 `review.scope`는 계획 순서대로 하나씩 실행한다. 그 뒤의 독립 단위는 정해진 병렬도까지 함께 실행한다. 단위는 모듈 slice 쌍(`review.investigate.sNNN` → `review.verify.sNNN`), `review.contract`, 분류 쌍(`review.triage.tNNN` → `review.verify.tNNN`)이다. 병렬도는 `codeye agent --review-parallel N`과 서비스 설정 `agent.model.review_parallel`로 정한다(기본 4, 1~16). [병렬 실행](../internal/worker/review/schedule.go)
+
+- 단위는 계획 순서로 꺼낸다. 쌍의 두 작업은 차례대로 실행한다. 다른 단위의 출력을 읽는 단위는 `review.contract`뿐이다. 이 작업은 slice 기록을 읽으므로 앞의 단위가 모두 끝난 뒤 시작한다.
+- 병렬도 1은 지금까지처럼 하나씩 실행한다. 예산 relay는 요청을 하나씩 처리한다. 그래서 attempt의 모델이 relay이면 설정과 관계없이 1로 실행한다. 에이전트의 `--model-relay-file`이든, attempt마다 서비스 설정에서 읽는 `agent.model.relay_file`이든 같다. 대기열에서 기다린 시간이 모델 제한시간을 쓰지 않게 하려는 것이다. 유료 평가 실행은 relay를 거치므로 직렬이다.
+- 기본값 4는 보통 상한(99)에서 slice 약 40쌍의 대기 시간을 줄이면서 공급자 동시 요청과 OpenCode 프로세스 메모리를 작게 유지하는 값이다. 동시 요청은 노드의 worker 수 × 병렬도까지 늘어난다.
+
+**결정 규칙.** 상한의 모든 판단은 순차 실행과 같은 결론을 낸다. 쌍의 입장과, 형식 복구·재시도를 포함한 각 호출이 여기에 해당한다. 판단은 "계획 순서에서 이 단위 앞에 있는 단위들의 호출 + 이 단위 자신의 호출 < 문턱"을 묻는다. 문턱은 순차 실행과 같다(입장 예비, 조사 재시도의 확인 예비, 분류 몫).
+
+- 각 단위의 호출 수에는 task 상한이 있다. slice·분류 쌍은 6회, `review.contract`는 2회다. 계수 파일의 줄로 앞 단위의 호출을 센다. 끝나지 않은 앞 단위는 자기 상한까지 더 부를 수 있다고 본다. 이 상한은 역할이 호출을 반복하는 횟수와 같은 상수에서 나온다. 계수는 작업이 자기 상한을 넘는 호출을 거절한다(`review_call_cap_exceeded`, 호출하지 않음). 그래서 역할이 나중에 호출을 더 하게 바뀌어도 이 가정은 깨지지 않는다.
+- 가장 적게 셀 때도 문턱 이상이면 거절하고, 가장 많이 셀 때도 문턱 미만이면 승인한다. 그 사이이면 앞 단위가 끝날 때까지 기다린다. 계획 순서에서 뒤에 있는 단위의 호출은 세지 않는다. 가장 앞의 끝나지 않은 단위는 기다리지 않으므로 실행은 언제나 진행한다.
+- 이 판단은 앞 단위의 최종 호출 수로 내린 판단과 같다. 따라서 계획 순서에 대한 귀납으로, 모든 단위의 요청·응답·task 상태가 순차 실행과 같다. 보고서, 검토 기록, 범위 산출물, 장부의 숫자도 같다. 상한을 넘는 호출은 없다. 순차 실행이 승인했을 호출을 거절하지 않으므로 쓰지 못하고 남는 상한도 없다. 그 대가로, 상한 근처에서는 뒤 단위가 앞 단위를 기다린다.
+- 완료 순서에 따라 달라지는 것은 계수 파일의 줄 순서와 공급자가 요청을 받은 순서뿐이다. 분류 몫은 attempt에서 처음 한 번만 정하고 기록한다.
+
+**실패와 취소.** 한 단위의 실패, timeout, 상한 도달은 다른 단위를 멈추지 않는다. attempt를 취소하면 진행 중인 모든 요청이 멈춘다. 그때 각 요청의 프로세스 그룹이 정리됐는지 확인하고, 확인하지 못하면 `recovery_required`로 남긴다. 판단을 기다리던 작업과 스냅샷에서 입력을 만들던 작업도 `cancelled`로 끝난다. 입력을 만들지 못한 모든 역할이 한 판단을 쓴다. 취소된 뒤이면 `cancelled`이고, 아니면 `review_input_unavailable` 실패다. 이전에는 입력을 만들던 작업이 기록에 `review_input_unavailable` 실패로 남을 수 있었다.
+
+**공급자 한도.** 호출 수와 비용은 병렬도와 관계없이 같고, 같은 비용을 더 짧은 시간에 쓴다. HTTP 429는 지금처럼 `model_rate_limited`로 해당 task를 실패시키며, CODEYE가 다시 보내지 않는다. OpenCode·AI SDK 안의 재시도는 확인하지 않았다. 공급자 사용량 제한에 걸리면 병렬도를 낮춘다. 사용량 제한은 실행 환경의 조건이므로, 그 실패는 순차 실행과 다른 task 결과를 만들 수 있다.
+
+이 저장소의 Go 소스(`cmd`, `internal`, 파일 1,626개)를 `codeye start`와 가짜 upstream(답마다 5초 지연, `base_url` 직접 연결)으로 검토한 결과는 아래와 같다. 비교 대상은 변경 전 제품(main)과 병렬도 1·4다. 실제 공급자의 응답 시간과 사용량 제한은 측정하지 않았다.
+
+| 상한 | 실행 | 전체 시간 | 검토 쌍 구간 | 요청 |
+|---|---|---|---|---|
+| 20 | 변경 전 | 194초 | 125초 | 20 |
+| 20 | 병렬도 1 | 193초 | 123초 | 20 |
+| 20 | 병렬도 4 | 143초 | 76초 | 20 |
+| 99 | 변경 전 | 776초 | 706초 | 100 |
+| 99 | 병렬도 1 | 827초 | 752초 | 100 |
+| 99 | 병렬도 4 | 346초 | 264초 | 100 |
+
+- 요청은 연결 확인 한 번을 포함한다. 검토 쌍 구간은 첫 slice 요청이 도착한 때부터 마지막 답까지다.
+- 같은 상한의 세 실행은 받은 요청의 multiset(`scripts/regression_pilot.py --compare-dumps`), task 상태, 정규화한 보고서가 같다. 정규화는 실행 ID, 시각, 산출물 크기, gitleaks 출력 안의 줄 위치를 지운다. gitleaks는 실행마다 탐지를 다른 순서로 쓴다. 목록 순서는 정렬하지 않고 비교했다. 순서만 다른 목록은 `artifacts`(무작위 산출물 ID 순) 하나였고, 변경 전 제품과 병렬도 1 사이에서도 같았다.
+- 상한 20에서는 slice 일곱 쌍이 상한 바로 아래에서 승인되므로, 뒤 쌍이 앞 쌍을 기다려 거의 차례대로 실행됐다.
+- 상한 99에서 병렬도 1이 변경 전보다 늦은 차이(요청당 약 0.5초)는 다시 재어 확인했다. 지연 0으로 변경 전 제품과 병렬도 1을 번갈아 두 번씩 실행했다. 요청 간격의 중앙값은 변경 전 2.61초·2.53초, 병렬도 1 2.52초·2.63초였다. 검토 쌍 구간은 실행마다 245~300초로 흔들렸다. 따라서 이 차이는 계수 판단의 비용이 아니라 실행 사이의 변동으로 본다.
 
 ### 범위 산출물과 모델 기록
 
@@ -637,6 +670,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 | slice에 보낼 파일이 없음 | `skipped_policy`(`no_review_scope`) |
 | 호출 상한으로 slice 거절 | `budget_exhausted`(`review_budget_exhausted`) |
 | 호출 계수를 쓰거나 읽지 못함 | `failed`(`review_call_count_failed`) |
+| 작업 하나의 호출 상한(역할 3회, `review.contract` 2회)을 넘는 호출 | `failed`(`review_call_cap_exceeded`), 호출하지 않음 |
 | 앞 역할 미수락 | `skipped_policy`(`dependency_failed`) |
 | 모델 미설정 | `unsupported`(`model_not_configured`) |
 | 오프라인 모드인데 사내 endpoint(`base_url`)가 없는 키·키 없는 공급자 모델 | `unsupported`(`model_endpoint_not_configured`) |

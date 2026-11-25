@@ -240,7 +240,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 	withText, err := s.withText(context)
 	if err != nil {
 		s.setEvidence(context)
-		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+		return *s.inputUnavailable()
 	}
 	plain := make([]CandidateText, len(candidates))
 	cited := map[string]bool{}
@@ -266,12 +266,12 @@ func (s *roleStage) verify() analysis.TaskResult {
 		expansionCaps{s.limit().expansion, s.limit().expansionBytes})
 	if err != nil {
 		s.setEvidence(context)
-		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+		return *s.inputUnavailable()
 	}
 	declarations, err := s.enclosingDeclarations(anchors)
 	if err != nil {
 		s.setEvidence(context)
-		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+		return *s.inputUnavailable()
 	}
 	budget := s.limit().expansionBytes
 	for _, x := range extra {
@@ -280,7 +280,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 	linked, err := s.sourceCallContext(".", anchors, append(slices.Clone(anchors), extra...), s.limit().expansion-len(extra), budget)
 	if err != nil {
 		s.setEvidence(context)
-		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+		return *s.inputUnavailable()
 	}
 	if len(linked) != 0 {
 		extra = append(extra, linked...)
@@ -477,7 +477,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 		x.Repair = repair
 		query, err := marshalVerifyInput(x, omitHashes)
 		if err != nil {
-			return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+			return *s.inputUnavailable()
 		}
 		text := instructions
 		if repair != nil {
@@ -496,7 +496,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 			break
 		}
 		if r := s.reserveCall(); r != nil {
-			if len(accepted)+len(held) == 0 {
+			if len(accepted)+len(held) == 0 || r.Status == domain.TaskCancelled || r.Reason == reasonCallCapExceeded {
 				return *s.fail(*r)
 			}
 			s.rec.Limitations = addLim(s.rec.Limitations, limRepairNotSent)

@@ -104,6 +104,11 @@ func TestWorkerHandlersComposeReview(t *testing.T) {
 			t.Fatalf("call ceiling %d accepted", n)
 		}
 	}
+	for _, n := range []int{-1, 17} {
+		if _, _, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), ReviewParallel: n}, &executor.Executor{}); err == nil {
+			t.Fatalf("review parallelism %d accepted", n)
+		}
+	}
 	hs, _, err := workerHandlers(context.Background(), &workerproto.Hello{GoExecutable: goExe, ScratchRoot: t.TempDir(), ReviewMaxCalls: 600}, &executor.Executor{})
 	if err != nil || len(hs) != 2 {
 		t.Fatal(err)

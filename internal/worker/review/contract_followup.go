@@ -2,6 +2,7 @@ package review
 
 import (
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 
@@ -57,11 +58,14 @@ func (s *roleStage) contractFollowup() analysis.TaskResult {
 	if !ok {
 		return result(domain.TaskSkippedPolicy, domain.ReasonNoReviewScope)
 	}
-	used, err := callsUsed(s.j)
+	left, err := s.callsBelow(s.h.maxCalls(s.j.Scope), false)
+	if errors.Is(err, errCallsCancelled) {
+		return result(domain.TaskCancelled, "cancelled")
+	}
 	if err != nil {
 		return result(domain.TaskFailed, reasonCallCountFailed)
 	}
-	if used >= s.h.maxCalls(s.j.Scope) {
+	if !left {
 		return result(domain.TaskBudgetExhausted, reasonBudgetExhausted)
 	}
 	if r := s.begin([]record.Upstream{uDoc, uInv}); r != nil {

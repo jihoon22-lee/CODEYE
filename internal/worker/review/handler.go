@@ -382,10 +382,7 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 	instructions := s.instructions(contract)
 	var repair *outputRepair
 	repaired, retried, proofRetried := false, false, false
-	maxCalls := record.RoleMaxCalls
-	if s.role == record.StageContract {
-		maxCalls = record.ContractMaxCalls
-	}
+	maxCalls := record.TaskMaxCalls(s.task)
 	// fallback is the latest rejected output whose faults are all of form
 	// (s.repairable after its parse) and fallbackCall its call: once no
 	// further repair can arrive, it is accepted with those faults resolved
@@ -409,7 +406,7 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 	}
 	// end fails the stage unless the form-only fallback can stand.
 	end := func(res analysis.TaskResult, lim string) *analysis.TaskResult {
-		if res.Status != domain.TaskCancelled && s.ctx.Err() == nil && degrade(lim) {
+		if res.Status != domain.TaskCancelled && res.Reason != reasonCallCapExceeded && s.ctx.Err() == nil && degrade(lim) {
 			return nil
 		}
 		return s.fail(res)
@@ -420,7 +417,7 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 		}
 		query, err := input(repair)
 		if err != nil {
-			return end(result(domain.TaskFailed, "review_input_unavailable"), limRepairNotSent)
+			return end(s.unavailable(), limRepairNotSent)
 		}
 		text := instructions
 		if repair != nil {
@@ -504,33 +501,52 @@ func (s *roleStage) recordCall(reply opencode.Reply, size, attempt int) record.C
 		Usage: usage(reply.Usage), Attempt: attempt, OutputErrors: []string{}}
 }
 
-// reserveCall checks the attempt's ledger before recording a call. Tasks
-// within one attempt execute sequentially, so both operations see the same
-// call count.
-func (s *roleStage) reserveCall() *analysis.TaskResult {
-	used, err := callsUsed(s.j)
-	if err == nil {
-		reserve := 0
-		if s.slice != nil && s.role == record.StageInvestigate && s.sliceReserve == record.SliceMinCalls {
-			reserve = 1
-		}
-		// A triage retry keeps the call its verification needs.
-		if s.triage != "" && s.role == record.StageTriage {
-			reserve = 1
-		}
-		// The module slices and the contract follow-up leave the triage
-		// slots their held share.
-		if s.slice != nil || s.role == record.StageContract {
-			reserve += s.triageHold()
-		}
-		if used >= s.h.maxCalls(s.j.Scope)-reserve {
-			r := result(domain.TaskBudgetExhausted, reasonBudgetExhausted)
-			return &r
-		}
-		err = s.countCall()
+// unavailable is the result of a task whose input could not be built:
+// cancelled when the attempt was cancelled meanwhile (the snapshot reads stop
+// with the context), failed (review_input_unavailable) otherwise.
+func (s *roleStage) unavailable() analysis.TaskResult {
+	if s.ctx != nil && s.ctx.Err() != nil {
+		return result(domain.TaskCancelled, "cancelled")
 	}
-	if err != nil {
+	return result(domain.TaskFailed, "review_input_unavailable")
+}
+
+// inputUnavailable ends the stage whose input could not be built
+// (unavailable), keeping its record.
+func (s *roleStage) inputUnavailable() *analysis.TaskResult {
+	return s.fail(s.unavailable())
+}
+
+// reserveCall checks the attempt's call ceiling and records the call before
+// it is made (callsBelow: the check and the record are one step, in plan
+// order, also when pairs run concurrently).
+func (s *roleStage) reserveCall() *analysis.TaskResult {
+	reserve := 0
+	if s.slice != nil && s.role == record.StageInvestigate && s.sliceReserve == record.SliceMinCalls {
+		reserve = 1
+	}
+	// A triage retry keeps the call its verification needs.
+	if s.triage != "" && s.role == record.StageTriage {
+		reserve = 1
+	}
+	// The module slices and the contract follow-up leave the triage
+	// slots their held share.
+	if s.slice != nil || s.role == record.StageContract {
+		reserve += s.triageHold()
+	}
+	ok, err := s.callsBelow(s.h.maxCalls(s.j.Scope)-reserve, true)
+	switch {
+	case errors.Is(err, errCallsCancelled):
+		r := result(domain.TaskCancelled, "cancelled")
+		return &r
+	case errors.Is(err, errCallCapExceeded):
+		r := result(domain.TaskFailed, reasonCallCapExceeded)
+		return &r
+	case err != nil:
 		r := result(domain.TaskFailed, reasonCallCountFailed)
+		return &r
+	case !ok:
+		r := result(domain.TaskBudgetExhausted, reasonBudgetExhausted)
 		return &r
 	}
 	return nil

@@ -70,7 +70,7 @@ SQLite·PostgreSQL 이중 저장 계층, Redis, Kafka, Kubernetes, 벡터 DB를 
 1. 워커는 DB를 직접 수정하지 않는다. API가 권한·lease epoch·상태를 검사한다.
 2. run은 프로젝트 설정 revision과 소스 snapshot을 참조한다. 소스 확보 전 snapshot은 null이다.
 3. 한 attempt는 한 노드에 고정한다. 한 run의 task를 여러 노드에 나누지 않는다. 서로 다른 run은 병렬로 분산한다.
-4. 워커 내부의 병렬 도구도 attempt 자원 예산을 따른다. 전역 모델 semaphore는 설계 계약(미구현)이다.
+4. 워커 내부의 병렬 도구도 attempt 자원 예산을 따른다. 한 attempt 안의 모델 요청은 검토 쌍의 병렬도(`review_parallel`)까지 함께 실행한다([호출 상한과 승인](REVIEW.md#호출-상한과-승인)). 노드·endpoint 전체에 걸친 모델 semaphore는 설계 계약(미구현)이다.
 5. 최소 워커가 0이어도 관리 서버·에이전트는 살아 있고, 새 요청이 오면 워커를 다시 만든다.
 6. 증거용 입력 snapshot과 도구가 수정할 수 있는 workspace를 분리한다. snapshot 경로를 분석 프로세스의 쓰기 대상으로 주지 않는다.
 7. 네트워크 분할에서 exactly-once 실행을 주장하지 않는다. fencing으로 오래된 결과의 게시를 막는다.
@@ -547,7 +547,7 @@ task key와 단계의 대응:
 
 필수 여부는 계획 때 정한다. 역할별 필수 규칙은 [검토](REVIEW.md)에 있다. 호출 상한으로 거절된 slice는 `budget_exhausted`(`review_budget_exhausted`)이고 다른 성공 task와 함께 있으면 단계를 `partial`로 남긴다. slice는 판정 필수가 아니므로 run 상태에는 영향이 없다.
 
-모듈 단위 slice는 한 attempt 안에서 호출 상한을 나눠 쓴다. 계수는 attempt scratch의 파일 하나이고 worker가 task를 차례로 실행한다는 전제에 기댄다. 전역·프로세스 간 상태가 없으므로 다중 노드 확장에 영향이 없다. 한 attempt 안에서 slice를 병렬로 실행하려면 그 attempt의 task가 공유하는 계수가 필요하다.
+모듈 단위 slice는 한 attempt 안에서 호출 상한을 나눠 쓴다. 계수는 attempt scratch의 파일 하나다. 함께 실행하는 검토 쌍은 이 파일과 attempt 안의 결정 규칙을 공유한다. 이 규칙은 계획 순서에서 앞선 쌍의 호출만 세고, 앞 쌍이 결과를 바꿀 수 있는 동안 기다린다. 그래서 판단은 차례로 실행할 때와 같다([호출 상한과 승인](REVIEW.md#호출-상한과-승인)). 전역·프로세스 간 상태가 없으므로 다중 노드 확장에 영향이 없다.
 
 ### 단계 기록 규칙
 

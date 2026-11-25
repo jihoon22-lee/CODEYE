@@ -416,3 +416,45 @@ func TestReviewSlicesInCodeReviewStage(t *testing.T) {
 		t.Fatal("nothing-to-review set")
 	}
 }
+
+// TC-314 (docs/REVIEW.md#호출-상한과-승인): review pairs run concurrently, so
+// several code_review tasks are running at once and a later slice may end
+// before an earlier one. The stage stays running with every running task
+// counted as unfinished, its start is the earliest task start, and the
+// estimate counts finished weight whatever order the tasks ended in.
+func TestConcurrentReviewTasksInCodeReviewStage(t *testing.T) {
+	cr := domain.StageCodeReview
+	started := func(status domain.TaskStatus, sec int) Task {
+		x := Task{Stage: cr, Status: status, Weight: weight(2), CreatedSeq: seq(4), StartedAt: at(sec)}
+		if status.Terminal() {
+			x.FinishedAt = at(sec + 5)
+		}
+		return x
+	}
+	queued := Task{Stage: cr, Status: domain.TaskQueued, Weight: weight(2), CreatedSeq: seq(4)}
+	orders := [][]Task{
+		// s001 and s002 in flight, s003 done first, s004 waiting.
+		{started(domain.TaskRunning, 12), started(domain.TaskRunning, 11), started(domain.TaskSucceeded, 13), queued},
+		// The same tasks ended in another order: the earlier slice later.
+		{started(domain.TaskRunning, 11), started(domain.TaskSucceeded, 13), started(domain.TaskRunning, 12), queued},
+	}
+	for i, tasks := range orders {
+		run := Run{Status: domain.RunRunning, SnapshotFixed: true, RunningAt: at(5), RunningSeq: seq(5), Tasks: tasks}
+		v := Compute(run)
+		s := find(t, v, string(cr))
+		if s.State != Running || s.Finished != 1 || s.Succeeded != 1 || *s.Planned != 4 || !s.StartedAt.Equal(*at(11)) || s.FinishedAt != nil {
+			t.Fatalf("order %d: stage %+v", i, s)
+		}
+		if p := v.Plan; *p.PlannedWeight != 8 || p.FinishedWeight != 2 || *p.EstimatedPercent != 25 {
+			t.Fatalf("order %d: plan %+v", i, p)
+		}
+	}
+	// Once every concurrent task has ended the stage settles as it would
+	// one task at a time.
+	done := []Task{started(domain.TaskSucceeded, 11), started(domain.TaskBudgetExhausted, 12), started(domain.TaskSucceeded, 13), started(domain.TaskSucceeded, 14)}
+	done[1].Reason = "review_budget_exhausted"
+	s := find(t, Compute(Run{Status: domain.RunRunning, SnapshotFixed: true, RunningAt: at(5), RunningSeq: seq(5), Tasks: done}), string(cr))
+	if s.State != Partial || s.Finished != 4 || !s.FinishedAt.Equal(*at(19)) {
+		t.Fatalf("settled %+v", s)
+	}
+}

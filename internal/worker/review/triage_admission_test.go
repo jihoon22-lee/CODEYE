@@ -178,6 +178,7 @@ func TestTriageAdmissionLeavesSlicesWhatTheyNeed(t *testing.T) {
 // cannot all fit at ceiling 20, they get every call but the held share of one
 // pair, and the first slot triages the high-severity groups.
 func TestTriageAdmissionHoldsAShareForTheHighestSeverity(t *testing.T) {
+	t.Parallel()
 	tree, files, diags := admissionTree(30, 40)
 	var sent []triageGroupInput
 	run := runAdmission(t, tree, files, diags, 20, func(in triageInput) { sent = append(sent, in.Groups...) })

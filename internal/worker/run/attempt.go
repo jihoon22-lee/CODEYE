@@ -49,7 +49,8 @@ type attempt struct {
 	workspace  string // attempt workspace to remove after the attempt
 	// guard restores the workspace to the snapshot after every task; nil
 	// when it could not record the clone (tasks then check drift alone).
-	guard *source.WorkspaceGuard
+	guard     *source.WorkspaceGuard
+	restoreMu sync.Mutex
 
 	recMu    sync.Mutex
 	recorded map[string][]executor.Result // task key → runner results
@@ -365,12 +366,37 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 		return nodeproto.OutcomeFailed, nodeproto.ReasonHandlerError, nil
 	}
 
-	for _, t := range tasks {
+	keys := make([]string, len(tasks))
+	for i, t := range tasks {
+		keys[i] = t.spec.Key
+	}
+	// The independent review pairs after the whole-run roles may run
+	// concurrently; their call ceiling stays the sequential one
+	// (review.Schedule, docs/REVIEW.md#호출-상한과-승인).
+	schedule := review.NewSchedule(keys)
+	taskContext = review.WithSchedule(taskContext, schedule)
+	start, end := schedule.Region()
+	for i := 0; i < len(tasks); i++ {
+		if i == start && end > start {
+			job := ajob
+			schedule.Run(taskContext, w.reviewParallel(a), func(k int) bool {
+				if a.ctx.Err() != nil || a.stopNew.Load() {
+					return false
+				}
+				w.runTask(taskContext, a, handler, job, tasks[k])
+				return true
+			})
+			for _, t := range tasks[start:end] {
+				collectTestEvidence(&ajob, t)
+			}
+			i = end - 1
+			continue
+		}
 		if a.ctx.Err() != nil || a.stopNew.Load() {
 			break
 		}
-		w.runTask(taskContext, a, handler, ajob, t)
-		collectTestEvidence(&ajob, t)
+		w.runTask(taskContext, a, handler, ajob, tasks[i])
+		collectTestEvidence(&ajob, tasks[i])
 	}
 	if a.ctx.Err() != nil {
 		return nodeproto.OutcomeCancelled, nodeproto.ReasonCancelled, nil
@@ -406,6 +432,21 @@ func (w *worker) execute(a *attempt) (string, string, *string) {
 	}
 	cid := a.manifestClientID
 	return outcome, reason, &cid
+}
+
+// reviewParallel is how many independent review pairs of attempt a run at
+// once: the agent's setting (1 when the hello has none). A budget relay
+// serves one request at a time, so with a relay the pairs run one after
+// another and no request waits in the relay's queue against its own model
+// timeout. The relay is the hello's (codeye agent --model-relay-file) or the
+// one the attempt resolved from the service configuration
+// (agent.model.relay_file, Config.SerialModel).
+func (w *worker) reviewParallel(a *attempt) int {
+	n := w.hello.ReviewParallel
+	if n < 1 || w.hello.ModelRelayFile != "" || (w.cfg.SerialModel != nil && w.cfg.SerialModel(a.scratch)) {
+		return 1
+	}
+	return n
 }
 
 // decideOutcome derives the attempt outcome from structured task states.
@@ -511,6 +552,10 @@ func (w *worker) restoreWorkspace(a *attempt) []string {
 	if a.guard == nil || a.ctx.Err() != nil {
 		return nil
 	}
+	// Review pairs that run concurrently end at different times; one
+	// restore runs at a time on the shared copy.
+	a.restoreMu.Lock()
+	defer a.restoreMu.Unlock()
 	res, err := a.guard.Restore(a.ctx)
 	var lims []string
 	if len(res.Restored) > 0 {

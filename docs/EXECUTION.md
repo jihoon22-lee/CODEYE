@@ -209,7 +209,7 @@ codeye agent --controller URL --state-dir DIR [--name NAME] [--enroll-token-file
              [--opencode /abs/opencode --model PROVIDER/MODEL
               [--model-config-file PATH] [--model-credential-file PATH | --model-relay-file PATH]]
              [--model-timeout 180s] [--model-source-root ID ...]
-             [--review-max-calls 15..207]
+             [--review-max-calls 15..207] [--review-parallel 1..16]
              [--storage-quota AREA=BYTES ...] [--storage-log-dir DIR]
 codeye worker      # agent가 실행한다. 옵션 없음.
 ```
@@ -230,6 +230,7 @@ codeye worker      # agent가 실행한다. 옵션 없음.
 | `--opencode`, `--model`, `--model-config-file`, `--model-credential-file`, `--model-relay-file`, `--model-timeout`, `--model-source-root` | 모델 실행, OpenCode JSON·JSONC 설정과 인증 파일(경로만 받고 워커가 읽는다), 호출당 제한시간(기본 600초, 1초~30분), root별 모델 전송 승인([검토](REVIEW.md#모델-설정)). 키 파일과 relay 파일은 함께 쓰지 않는다. |
 | `--review-request-bytes N`, `--review-output-tokens N` | 모델 검토 요청 하나의 메시지 바이트(기본 262,144, 40,000~1,048,576)와 호출당 출력 토큰(기본 16,384, 1,536~65,536). 모든 역할의 코드 원문·단위·서술·후보 상한을 이 둘에서 계산한다. 범위 밖이면 사용 오류다. Hello `review_request_bytes`·`review_output_tokens`로 워커에 간다([검토](REVIEW.md#요청-크기)). |
 | `--review-max-calls N` | attempt당 모델 검토 호출 상한(기본 99, 15~207). 상한을 다 쓰면 기본값 33일 때의 약 세 배 비용이 든다([안내서](GUIDE.md)). 범위 밖이면 사용 오류다. 전체 역할 다섯 개가 최대 15회를 쓰고 남은 호출로 모듈 단위 slice를 차례로 허용한다. Hello `review_max_calls`로 워커에 전달되고 run 요청으로는 바꿀 수 없다([검토](REVIEW.md#모듈-단위-검토-분할)). |
+| `--review-parallel N` | attempt 안에서 함께 실행할 독립 검토 단위 수(slice 쌍, `review.contract`, 분류 쌍. 기본 4, 1~16). 1이면 하나씩 실행한다. 범위 밖이면 사용 오류다. Hello `review_parallel`로 워커에 가고, 이 필드가 없는 hello는 1이다. `--model-relay-file`을 쓰거나, 서비스에서 attempt가 읽은 `agent.model.relay_file`이 relay를 고르면 1로 실행한다. relay가 요청을 하나씩 처리하기 때문이다. 호출 수·비용·보고서는 병렬도와 관계없이 같다([호출 상한과 승인](REVIEW.md#호출-상한과-승인)). |
 | `--storage-quota AREA=BYTES`, `--storage-log-dir` | 노드 저장 영역 상한(`snapshot`, `workspace`, `cache`, `logs`, 영역마다 한 번)([운영](OPERATIONS.md)). |
 
 - 거부된 인자 값은 출력하지 않는다(자격증명이 들어 있을 수 있다).
@@ -516,11 +517,13 @@ claim 응답의 job:
 - 순서는 프로젝트의 마지막 배정 시각 오름차순(배정된 적 없는 프로젝트가 먼저) → run 생성 시각 → run ID다. 프로젝트 사이 round-robin이고, 프로젝트 안에서는 오래 기다린 요청부터다.
 - 프로세스 실행 중 DB 행 잠금을 유지하지 않는다.
 - 우선순위 등급, 대기 시간 aging, resource-fit 실패 횟수 노출, 대형 작업의 예약 슬롯은 설계 계약(미구현)이다. PR이 예약 작업을 늘 굶기는 정책을 기본으로 두지 않는다.
-- endpoint별 동시 모델 요청 상한(`model_max_inflight`)과 전역 모델 semaphore는 설계 계약(미구현)이다.
+- 한 노드의 동시 모델 요청은 많아야 워커 수 × `--review-parallel`이다. 전체 역할 다섯 개와 `review.scope`는 하나씩 실행하고 그 뒤의 검토 쌍만 함께 실행한다.
+- endpoint별 동시 모델 요청 상한(`model_max_inflight`)과 노드·endpoint 전체의 모델 semaphore는 설계 계약(미구현)이다.
 
 ### 자원 회계
 
 - 예약 수요는 attempt마다 고정값(CPU 1000m, 메모리 1 GiB, disk 1 GiB)이다. OS 제한이 아니라 admission 회계다.
+- 예약 수요는 `--review-parallel`과 관계없이 같다. 함께 실행하는 모델 요청마다 OpenCode 프로세스가 하나씩 뜬다. 이 저장소를 가짜 upstream으로 검토할 때 프로세스 하나가 약 0.5 GiB를 썼다. 병렬도 4에서 OpenCode 프로세스 전체의 최대 RSS는 2.0~3.1 GiB였다. 이 값은 0.5초마다 호스트의 모든 OpenCode 프로세스를 표본으로 센 대략값이며, 버전 확인과 끝나는 중인 프로세스가 섞인다. 메모리가 작은 노드는 병렬도를 낮춘다.
 - CPU는 노드가 보고한 core 수를 정책 예산으로 보고 활성 예약 전체를 뺀다.
 - 메모리·disk는 OS가 실행 중 사용량을 이미 뺀 관측 여유다. 그래서 마지막 heartbeat 이후 만들어져 아직 관측에 반영되지 않은 예약만 뺀다. 관측 여유에서 모든 예약을 다시 빼는 이중 계산을 하지 않는다.
 - 관측 직후 아직 메모리를 쓰지 않은 워커는 다음 관측에서 과소 반영될 수 있다. 메모리·disk 관측은 heartbeat 간격만큼 늦다.

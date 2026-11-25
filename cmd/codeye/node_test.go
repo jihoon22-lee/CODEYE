@@ -30,6 +30,9 @@ func TestRunNodeDispatchAndUsage(t *testing.T) {
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-max-calls", "14"},
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-max-calls", "2014"},
 		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-max-calls", "0"},
+		// The review pairs run 1..16 at once.
+		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-parallel", "0"},
+		{"agent", "--controller", "http://127.0.0.1:1", "--state-dir", t.TempDir(), "--review-parallel", "17"},
 	}
 	for _, args := range cases {
 		var stderr bytes.Buffer

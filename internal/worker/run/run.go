@@ -33,6 +33,11 @@ type Config struct {
 	// PrepareAttempt fixes local adapter settings before source acquisition
 	// and returns any additional host paths local projects must not contain.
 	PrepareAttempt func(scratch string) []string
+	// SerialModel reports whether the model the attempt in scratch resolved
+	// (PrepareAttempt) serves one request at a time, as a budget relay does;
+	// the attempt's review pairs then run one after another. Nil: only the
+	// hello's relay counts.
+	SerialModel func(scratch string) bool
 	// RefreshHandlers selects local toolchains once before acquiring the source.
 	RefreshHandlers func(context.Context, executor.Runner) (*analysis.Registry, error)
 	// Runner executes processes; default is a zero executor.Executor.
