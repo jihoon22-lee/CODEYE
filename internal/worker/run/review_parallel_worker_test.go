@@ -97,6 +97,27 @@ func TestReviewSlicesRunConcurrentlyThroughTheWorker(t *testing.T) {
 	}
 }
 
+// TC-308: the degree of parallelism is the hello's; a hello without one (an
+// older agent) runs the pairs one at a time, and so does a node with a
+// budget relay, which serves one request at a time.
+func TestReviewParallelFromHello(t *testing.T) {
+	for _, c := range []struct {
+		hello workerproto.Hello
+		want  int
+	}{
+		{workerproto.Hello{}, 1},
+		{workerproto.Hello{ReviewParallel: 1}, 1},
+		{workerproto.Hello{ReviewParallel: 4}, 4},
+		{workerproto.Hello{ReviewParallel: 16}, 16},
+		{workerproto.Hello{ReviewParallel: 4, ModelRelayFile: "/srv/relay.json"}, 1},
+	} {
+		w := &worker{hello: &c.hello}
+		if got := w.reviewParallel(); got != c.want {
+			t.Errorf("hello parallel %d relay %q: %d, want %d", c.hello.ReviewParallel, c.hello.ModelRelayFile, got, c.want)
+		}
+	}
+}
+
 // slowOpenCode is a stand-in OpenCode: it answers --version and keeps a
 // model request running in a child process until it is stopped.
 const slowOpenCode = "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 1.19.5; exit 0; fi\n/bin/sleep 120 &\nwait\n"

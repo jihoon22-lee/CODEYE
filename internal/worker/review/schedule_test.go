@@ -328,9 +328,15 @@ func statusOf(r pairsRun) map[domain.TaskStatus]int {
 	return out
 }
 
-var pairsParallel = []int{1, 2, 4, 8}
-
-const pairsSeeds = 3
+// The harness matrix: degrees of parallelism × seeds. Under -race each run
+// is several times slower, so the race build checks the shared state with
+// three degrees and one seed and the plain build runs the whole matrix.
+var pairsParallel, pairsSeeds = func() ([]int, int) {
+	if raceDetector {
+		return []int{1, 4, 8}, 1
+	}
+	return []int{1, 2, 4, 8}, 3
+}()
 
 // checkPairs runs the region of f one after another without a schedule
 // (the earlier execution) and then at every degree of parallelism with

@@ -327,7 +327,7 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 | 99 | 병렬도 4 | 346초 | 264초 | 100 |
 
 - 요청은 연결 확인 한 번을 포함한다. 검토 쌍 구간은 첫 slice 요청이 도착한 때부터 마지막 답까지다.
-- 같은 상한의 세 실행은 받은 요청의 multiset(`scripts/regression_pilot.py --compare-dumps`), task 상태, 정규화한 보고서가 같다. 정규화는 실행 ID, 시각, 산출물 크기, gitleaks 출력 안의 줄 위치를 지운다. gitleaks는 실행마다 탐지를 다른 순서로 쓴다.
+- 같은 상한의 세 실행은 받은 요청의 multiset(`scripts/regression_pilot.py --compare-dumps`), task 상태, 정규화한 보고서가 같다. 정규화는 실행 ID, 시각, 산출물 크기, gitleaks 출력 안의 줄 위치를 지운다. gitleaks는 실행마다 탐지를 다른 순서로 쓴다. 목록 순서는 정렬하지 않고 비교했다. 순서만 다른 목록은 `artifacts`(무작위 산출물 ID 순) 하나였고, 변경 전 제품과 병렬도 1 사이에서도 같았다.
 - 상한 20에서는 slice 일곱 쌍이 상한 바로 아래에서 승인되므로, 뒤 쌍이 앞 쌍을 기다려 거의 차례대로 실행됐다.
 - 병렬도 1이 변경 전보다 늦은 차이(요청당 약 0.5초)는 원인을 확인하지 않았다.
 
