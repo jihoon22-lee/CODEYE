@@ -307,9 +307,18 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 			// go-vet.m02 (svc/b, go 1.30) fails on a node older than go1.30,
 			// as in TestDiscoveryTasksThroughTheWorker.
 			want := []string{"env.discover=succeeded", "docs.discover=succeeded", "go-vet=succeeded", "go-vet.m01=succeeded", "go-vet.m02=failed:" + govet.ReasonToolchain,
-				"review.environment=succeeded", "review.documents=succeeded", "review.investigate=succeeded", tc.interpret, "review.verify=succeeded",
-				"review.scope=succeeded",
-				"review.contract=skipped_policy:no_review_scope"}
+				"review.environment=succeeded", "review.documents=succeeded", "review.investigate=succeeded", tc.interpret, "review.verify=succeeded"}
+			want = append(want, "review.scope=succeeded", "review.contract=skipped_policy:no_review_scope")
+			// The two diagnostic triage slots, last in the plan, have
+			// nothing to classify: no diagnostic, or the one the
+			// interpretation already carries.
+			triage := "skipped_policy:" + domain.ReasonNoReviewScope
+			if strings.HasSuffix(tc.interpret, "no_tool_observations") {
+				triage = "skipped_policy:no_tool_observations"
+			}
+			for _, slot := range []string{"t001", "t002"} {
+				want = append(want, "review.triage."+slot+"="+triage, "review.verify."+slot+"="+triage)
+			}
 			if !slices.Equal(got, want) {
 				t.Fatalf("tasks\n got %v\nwant %v", got, want)
 			}
@@ -344,7 +353,7 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				if x.Reason != nil {
 					row += ":" + *x.Reason
 				}
-				if x.Key == "review.scope" || strings.HasPrefix(x.Key, "review.investigate.s") || strings.HasPrefix(x.Key, "review.verify.s") {
+				if x.Key == "review.scope" || strings.HasPrefix(x.Key, "review.investigate.s") || strings.HasPrefix(x.Key, "review.verify.s") || strings.HasPrefix(x.Key, "review.triage.t") || strings.HasPrefix(x.Key, "review.verify.t") {
 					continue
 				}
 				optional = append(optional, row)
@@ -357,7 +366,7 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatalf("calls %+v exposed %v", r.Coverage.ReviewCalls, r.Coverage.LLMExposedFiles)
 			}
 			for _, call := range r.Coverage.ReviewCalls {
-				if call.PackID != "review" || call.PackVersion != "2.8.0" {
+				if call.PackID != "review" || call.PackVersion != "2.9.0" {
 					t.Fatalf("call %+v", call)
 				}
 			}
@@ -438,7 +447,7 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				t.Fatal(err)
 			}
 			md := string(report.RenderMarkdown(r, strings.Repeat("0", 64), report.Korean))
-			if !strings.Contains(md, "review@2.8.0") || !strings.Contains(md, "`review.interpret`") || (tc.extra == nil && !strings.Contains(md, "`no_tool_observations`")) {
+			if !strings.Contains(md, "review@2.9.0") || !strings.Contains(md, "`review.interpret`") || (tc.extra == nil && !strings.Contains(md, "`no_tool_observations`")) {
 				t.Fatalf("markdown lacks the pack or the optional row:\n%s", md)
 			}
 		})

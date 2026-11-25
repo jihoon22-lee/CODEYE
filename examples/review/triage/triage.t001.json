@@ -1,0 +1,403 @@
+{
+  "schema_version": "0.8",
+  "pack": {
+    "id": "review",
+    "version": "2.9.0"
+  },
+  "snapshot_manifest_digest": "840681d09d3bb73dce858521d38c9e5a92fed83224e675c8f629d617110adfc7",
+  "run_id": "0195f3a0-0000-7000-8000-000000000a01",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000a02",
+  "stage": "triage",
+  "slice": {
+    "key": "t001",
+    "modules": []
+  },
+  "outcome": "accepted",
+  "upstream": [
+    {
+      "source": "go-vet",
+      "state": "accepted",
+      "sha256": "1756b2bc851f9cc43724489909c394d30b00d4cb8558dc40d182023aa2590d0b"
+    },
+    {
+      "source": "staticcheck",
+      "state": "accepted",
+      "sha256": "9ddaef9f22b98a927745228b579c3f8a8855b6cac1c99b2320b78505654d36b7"
+    },
+    {
+      "source": "review.interpret",
+      "state": "accepted",
+      "sha256": "9d195c5e611fd398ea4a4d7f764f2f13df01ac6e586a9ae39fa079fc139d092f"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_65b7cfb225a766c9acf2ce74",
+      "path": "a.go",
+      "sha256": "025a7faed81d5d7cb3f69a99744a80f6f81329676931eb28746b41f7c4ccfc75",
+      "start_line": 1,
+      "end_line": 19,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_57128abbe6dae07c7bf1e4c2",
+      "path": "b.go",
+      "sha256": "cbbdd512949f840329a153286408c3cf5056b23ca18e761216ddd78d83a189e9",
+      "start_line": 1,
+      "end_line": 19,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_fa50fc330a513ea33cfdffad",
+      "path": "c.go",
+      "sha256": "8607231f59e65d153c6540814a3b39e12d045db518d108b50e8ef00417ec7e3c",
+      "start_line": 1,
+      "end_line": 19,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_267090da47dd7034e2c8ce70",
+      "path": "d.go",
+      "sha256": "12da08ec82b21918f455fdb94500cca4483d4132c57a8f8d2c9ff33d94328898",
+      "start_line": 1,
+      "end_line": 19,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_4cb4e084eb0f834538dbc81c",
+      "path": "e.go",
+      "sha256": "62956cc91763cc4435a52604ba9faf6cf84ec22a2a0af8b03d2be2ed2cd761fd",
+      "start_line": 1,
+      "end_line": 19,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_135408264c43e59808fd049e",
+      "path": "f.go",
+      "sha256": "90bfe87d58da20d5d6fe5b7953cb0f22b069765c293b5690522e96b2d3d197fc",
+      "start_line": 1,
+      "end_line": 19,
+      "kind": "code",
+      "origin": "context"
+    }
+  ],
+  "observations": [
+    {
+      "id": "obs_bb86f70a01992b10fa52",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA5011",
+      "path": "a.go",
+      "start_line": 4
+    },
+    {
+      "id": "obs_00000000000000000001",
+      "task_key": "go-vet",
+      "tool": "go.vet",
+      "rule_id": "nilness",
+      "path": "a.go",
+      "start_line": 4
+    },
+    {
+      "id": "obs_c029a00888bedc6ccdac",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "b.go",
+      "start_line": 5
+    },
+    {
+      "id": "obs_c4f81b37437fc47d763c",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "b.go",
+      "start_line": 11
+    },
+    {
+      "id": "obs_f9efd5386c31ca5cefb0",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "b.go",
+      "start_line": 17
+    },
+    {
+      "id": "obs_7994bc73932025e8434b",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "c.go",
+      "start_line": 5
+    },
+    {
+      "id": "obs_01423b14db8b7f0b31cb",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "c.go",
+      "start_line": 11
+    },
+    {
+      "id": "obs_0a921e3776ab02f7ad92",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "c.go",
+      "start_line": 17
+    },
+    {
+      "id": "obs_e5f02a8df21befdbca00",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "d.go",
+      "start_line": 5
+    },
+    {
+      "id": "obs_524ff689488934fb6c9a",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "d.go",
+      "start_line": 11
+    },
+    {
+      "id": "obs_f210203f5e9ff1ae1432",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "d.go",
+      "start_line": 17
+    },
+    {
+      "id": "obs_d8bd67b50977fd2fc2a3",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "e.go",
+      "start_line": 5
+    },
+    {
+      "id": "obs_a2f30804a0ac25ff7f0f",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "e.go",
+      "start_line": 11
+    },
+    {
+      "id": "obs_77c1e01b5f8b20dd3b9c",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "e.go",
+      "start_line": 17
+    },
+    {
+      "id": "obs_63949e417c22f3891357",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "f.go",
+      "start_line": 5
+    },
+    {
+      "id": "obs_567c1e921b5e55bdf6ca",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "f.go",
+      "start_line": 11
+    },
+    {
+      "id": "obs_e95cc87808cccb698143",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "f.go",
+      "start_line": 17
+    },
+    {
+      "id": "obs_8cdc2a8682cbbfa10679",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "a.go",
+      "start_line": 11
+    },
+    {
+      "id": "obs_1dba41e77a3eae4091f7",
+      "task_key": "staticcheck",
+      "tool": "go.staticcheck",
+      "rule_id": "SA4006",
+      "path": "a.go",
+      "start_line": 17
+    }
+  ],
+  "candidates": [
+    {
+      "id": "triage_1",
+      "title": "SA5011,nilness 진단 위치에서 값이 잘못 쓰인다",
+      "condition": "진단이 가리키는 분기에 들어오는 경우",
+      "impact": "호출자가 잘못된 결과를 받는다.",
+      "improvement": "진단 위치 앞에서 값을 검사한다.",
+      "counterpoint": "호출자가 항상 유효한 값을 넘기면 무해하다.",
+      "evidence_ids": [
+        "ev_65b7cfb225a766c9acf2ce74"
+      ],
+      "origin": "triage",
+      "observation_ids": [
+        "obs_bb86f70a01992b10fa52",
+        "obs_00000000000000000001"
+      ]
+    },
+    {
+      "id": "triage_2",
+      "title": "SA4006 진단 위치에서 값이 잘못 쓰인다",
+      "condition": "진단이 가리키는 분기에 들어오는 경우",
+      "impact": "호출자가 잘못된 결과를 받는다.",
+      "improvement": "진단 위치 앞에서 값을 검사한다.",
+      "counterpoint": "호출자가 항상 유효한 값을 넘기면 무해하다.",
+      "evidence_ids": [
+        "ev_fa50fc330a513ea33cfdffad"
+      ],
+      "origin": "triage",
+      "observation_ids": [
+        "obs_7994bc73932025e8434b",
+        "obs_01423b14db8b7f0b31cb",
+        "obs_0a921e3776ab02f7ad92"
+      ]
+    }
+  ],
+  "triage_groups": [
+    {
+      "id": "g1",
+      "observation_ids": [
+        "obs_bb86f70a01992b10fa52",
+        "obs_00000000000000000001"
+      ],
+      "context_evidence_ids": [
+        "ev_65b7cfb225a766c9acf2ce74"
+      ],
+      "cross_tool": true,
+      "classification": "problem",
+      "candidate_id": "triage_1"
+    },
+    {
+      "id": "g2",
+      "observation_ids": [
+        "obs_c029a00888bedc6ccdac",
+        "obs_c4f81b37437fc47d763c",
+        "obs_f9efd5386c31ca5cefb0"
+      ],
+      "context_evidence_ids": [
+        "ev_57128abbe6dae07c7bf1e4c2"
+      ],
+      "classification": "harmless",
+      "reason": "함수 앞부분의 검사가 이 경로를 막아 진단이 가리키는 값은 쓰이지 않는다.",
+      "evidence_ids": [
+        "ev_57128abbe6dae07c7bf1e4c2"
+      ]
+    },
+    {
+      "id": "g3",
+      "observation_ids": [
+        "obs_7994bc73932025e8434b",
+        "obs_01423b14db8b7f0b31cb",
+        "obs_0a921e3776ab02f7ad92"
+      ],
+      "context_evidence_ids": [
+        "ev_fa50fc330a513ea33cfdffad"
+      ],
+      "classification": "problem",
+      "candidate_id": "triage_2"
+    },
+    {
+      "id": "g4",
+      "observation_ids": [
+        "obs_e5f02a8df21befdbca00",
+        "obs_524ff689488934fb6c9a",
+        "obs_f210203f5e9ff1ae1432"
+      ],
+      "context_evidence_ids": [
+        "ev_267090da47dd7034e2c8ce70"
+      ],
+      "classification": "unclear",
+      "reason": "호출자 코드가 입력에 없어 진단의 영향을 판단할 수 없다."
+    },
+    {
+      "id": "g5",
+      "observation_ids": [
+        "obs_d8bd67b50977fd2fc2a3",
+        "obs_a2f30804a0ac25ff7f0f",
+        "obs_77c1e01b5f8b20dd3b9c"
+      ],
+      "context_evidence_ids": [
+        "ev_4cb4e084eb0f834538dbc81c"
+      ],
+      "classification": "unclear",
+      "reason": "호출자 코드가 입력에 없어 진단의 영향을 판단할 수 없다."
+    },
+    {
+      "id": "g6",
+      "observation_ids": [
+        "obs_63949e417c22f3891357",
+        "obs_567c1e921b5e55bdf6ca",
+        "obs_e95cc87808cccb698143"
+      ],
+      "context_evidence_ids": [
+        "ev_135408264c43e59808fd049e"
+      ],
+      "classification": "unclear",
+      "reason": "호출자 코드가 입력에 없어 진단의 영향을 판단할 수 없다."
+    },
+    {
+      "id": "g7",
+      "observation_ids": [
+        "obs_8cdc2a8682cbbfa10679",
+        "obs_1dba41e77a3eae4091f7"
+      ],
+      "context_evidence_ids": [
+        "ev_65b7cfb225a766c9acf2ce74"
+      ],
+      "classification": "unclear",
+      "reason": "호출자 코드가 입력에 없어 진단의 영향을 판단할 수 없다."
+    }
+  ],
+  "limitations": [
+    "diagnostics_interpreted",
+    "model_input_not_secret_screened"
+  ],
+  "calls": [
+    {
+      "role": "triage",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_id": "review",
+      "pack_version": "2.9.0",
+      "pack_sha256": "ead8df9ed695a66132a9beb004a55718804cc0da546db120672171e4c67aa4dc",
+      "pack_files": [
+        "00-core.md",
+        "domains.md",
+        "languages/go.md",
+        "pack.yaml",
+        "triage.md"
+      ],
+      "request_sha256": "54a3850217aaccde29e6f28b8c7fce4dbdf086e39ec3bfca2c25026b438d40f1",
+      "request_bytes": 18871,
+      "usage": {
+        "input": 7640,
+        "output": 50
+      },
+      "attempt": 1,
+      "outcome": "accepted",
+      "output_errors": []
+    }
+  ]
+}

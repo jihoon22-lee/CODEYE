@@ -103,7 +103,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 	if err != nil {
 		return result(domain.TaskFailed, "review_instructions_invalid")
 	}
-	used, err := callsUsed(s.j)
+	used, err := wholeRunCallsUsed(s.j)
 	if err != nil {
 		return result(domain.TaskFailed, reasonCallCountFailed)
 	}

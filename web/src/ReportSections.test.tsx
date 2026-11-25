@@ -40,6 +40,13 @@ function example(name: 'report.json' | 'report-go-vet.json' | 'report-slices.jso
   return doc;
 }
 
+// olderBuilder relabels doc as a revision of an earlier builder. Builder 22
+// added the diagnostic triage, which an older revision does not carry.
+function olderBuilder(doc: Record<string, any>, version: string) {
+  doc.builder.version = version;
+  if (Number(version) < 22 && doc.code_review) delete doc.code_review.diagnostic_triage;
+}
+
 describe('code-derived documentation coverage', () => {
   it('pairs a declared selector with its exact searched guides and omits the section when there are no gaps', () => {
     const doc = example('report.json');
@@ -77,7 +84,7 @@ describe('existing test results', () => {
   const commit = '9'.repeat(40);
   function testReport() {
     const doc = example('report.json');
-    doc.builder.version = '18';
+    olderBuilder(doc, '18');
     doc.inputs = { ...doc.inputs, profile: 'with-tests', source_kind: 'git', commit_sha: commit };
     doc.project = { name: 'Billing', source: 'https://github.com/example/billing' };
     doc.coverage.test_status = 'failed';
@@ -164,7 +171,7 @@ describe('existing test results', () => {
     run.cleanup = 'unconfirmed';
     expect(() => parseAnalysisReport(doc, doc.run_id)).toThrow('invalid report');
     run.cleanup = 'confirmed';
-    doc.builder.version = '17';
+    olderBuilder(doc, '17');
     expect(() => parseAnalysisReport(doc, doc.run_id)).toThrow('invalid report');
     delete run.go_test_failures;
     expect(parseAnalysisReport(doc, doc.run_id).testResults?.tasks[0].failures).toEqual([]);
@@ -197,7 +204,7 @@ describe('existing test results', () => {
 describe('analysis sections', () => {
   it('labels a legacy clipped document excerpt beside its whole pinned citation', () => {
     const doc = example('report.json');
-    doc.builder.version = '17';
+    olderBuilder(doc, '17');
     const sha = '9'.repeat(40);
     doc.inputs = { ...doc.inputs, source_kind: 'git', commit_sha: sha };
     doc.project = { name: 'Billing', source: 'https://github.com/example/billing' };
@@ -229,11 +236,11 @@ describe('analysis sections', () => {
     const full = { start_line: start, end_line: end, text: lines.join('\n') };
     match.end_line = end;
     match.excerpt = full;
-    doc.builder.version = '18';
+    olderBuilder(doc, '18');
     expect(parseAnalysisReport(doc, doc.run_id).sections!.documents.citations.find(c => c.id === match.id)?.excerpt?.end).toBe(end);
-    doc.builder.version = '17';
+    olderBuilder(doc, '17');
     expect(() => parseAnalysisReport(doc, doc.run_id)).toThrow('invalid report');
-    doc.builder.version = '18';
+    olderBuilder(doc, '18');
     const model = doc.findings.find((f: Record<string, unknown>) => doc.code_review.finding_ids.includes(f.id));
     const witness = model.evidence.find((e: Record<string, unknown>) => e.kind === 'code' && e.location);
     witness.kind = 'document';
@@ -246,7 +253,7 @@ describe('analysis sections', () => {
     match.excerpt = { ...full, end_line: end - 1, text: lines.slice(0, -1).join('\n') };
     expect(() => parseAnalysisReport(doc, doc.run_id)).toThrow('invalid report');
     match.excerpt = { ...full, end_line: start + 11, text: lines.slice(0, 12).join('\n') };
-    doc.builder.version = '17';
+    olderBuilder(doc, '17');
     delete witness.excerpt;
     expect(parseAnalysisReport(doc, doc.run_id).sections!.documents.citations.find(c => c.id === match.id)?.excerpt?.end).toBe(start + 11);
   });
@@ -520,7 +527,7 @@ describe('analysis sections', () => {
 
   it('shows one published follow-up result and one independent high priority action', () => {
     const doc = example('report.json');
-    doc.builder.version = '16';
+    olderBuilder(doc, '16');
     doc.project = { name: 'Billing', source: '/srv/billing' };
     const key = 'review.contract';
     const forOtherTask = (row: { key: string }) => row.key !== key;
@@ -575,7 +582,7 @@ describe('analysis sections', () => {
 
   it('keeps a scoped new source observation with an unresolved comparison', () => {
     const doc = example('report.json');
-    doc.builder.version = '16';
+    olderBuilder(doc, '16');
     doc.project = { name: 'Callbacks' };
     const key = 'review.contract';
     const keep = (entry: {key: string}) => entry.key !== key;

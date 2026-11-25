@@ -42,6 +42,9 @@ var gapCode = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 // to the summary, an overview equal to its recomputation, resolvable
 // evidence and the code-free rules for model text.
 func validateSections(r Report) error {
+	if err := validateDiagnosticTriage(r); err != nil {
+		return err
+	}
 	if err := validateLedger(r); err != nil {
 		return err
 	}
@@ -489,6 +492,7 @@ func projectSections(out *Report, r Report) {
 			}
 			c.Ledger = &l
 		}
+		c.DiagnosticTriage = projectTriage(cr.DiagnosticTriage)
 		out.CodeReview = &c
 	}
 }

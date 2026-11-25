@@ -37,7 +37,8 @@ describe('summary grouping', () => {
   });
 
   it.each(['16', '17'])('distinguishes detections from successful screening in builder %s reports', version => {
-    const report = load({ ...sectioned, builder: { ...sectioned.builder, version } });
+    // Builder 22 added the diagnostic triage; an older revision has none.
+    const report = load({ ...sectioned, builder: { ...sectioned.builder, version }, code_review: { ...sectioned.code_review, diagnostic_triage: undefined } });
     const secrets = report.sections!.secrets;
     const row = () => readingSummary(report).find(result => result.section === 'secrets');
     expect(row()).toMatchObject({ status: t.reading.secretsDetected, tone: 'attention', count: '1',

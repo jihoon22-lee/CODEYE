@@ -87,6 +87,41 @@ const limVerifyBudget = "verification_budget_exceeded"
 const reasonLineageMismatch = "review_lineage_mismatch"
 const limVerifyHashesOmitted = "verification_excerpt_hashes_omitted"
 
+// limVerifyObservationsTrimmed: a candidate standing on more diagnostics
+// than verifyObservationsShown named only its first ones in the request;
+// the record keeps them all.
+const limVerifyObservationsTrimmed = "verification_observations_trimmed"
+
+// verifyObservationsShown is how many of one candidate's observations a
+// verify request names (a triage problem group holds up to 64, about 170
+// bytes each as a reference).
+const verifyObservationsShown = 8
+
+// requestObservations are the candidates as a request carries them, each
+// with at most verifyObservationsShown observation IDs, and the references
+// of the observations they still name, in the record's order.
+func requestObservations(candidates []record.Candidate, all []record.ObservationRef) ([]record.Candidate, []record.ObservationRef, bool) {
+	out := make([]record.Candidate, len(candidates))
+	named := map[string]bool{}
+	trimmed := false
+	for i, c := range candidates {
+		if len(c.ObservationIDs) > verifyObservationsShown {
+			c.ObservationIDs, trimmed = c.ObservationIDs[:verifyObservationsShown], true
+		}
+		for _, id := range c.ObservationIDs {
+			named[id] = true
+		}
+		out[i] = c
+	}
+	refs := []record.ObservationRef{}
+	for _, o := range all {
+		if named[o.ID] {
+			refs = append(refs, o)
+		}
+	}
+	return out, refs, trimmed
+}
+
 func marshalVerifyInput(in verifyInput, omitHashes bool) ([]byte, error) {
 	if omitHashes {
 		// The worker already verifies the blobs. Keep citable IDs, paths,
@@ -116,11 +151,16 @@ func (s *roleStage) verify() analysis.TaskResult {
 	var invRec, intRec record.Record
 	var uInv, uInt record.Upstream
 	var upstream []record.Upstream
-	if s.slice == nil {
+	switch {
+	case s.triage != "":
+		// A triage slot's verify checks its problems (origin triage).
+		invRec, uInv = s.prior(record.StageTriage + "." + s.triage)
+		upstream = []record.Upstream{uDoc, uInv}
+	case s.slice == nil:
 		invRec, uInv = s.prior(record.StageInvestigate)
 		intRec, uInt = s.prior(record.StageInterpret)
 		upstream = []record.Upstream{uDoc, uInv, uInt}
-	} else {
+	default:
 		invRec, uInv = s.prior(record.StageInvestigate + "." + s.slice.Key)
 		upstream = []record.Upstream{uDoc, uInv, s.scopeUp}
 	}
@@ -145,6 +185,19 @@ func (s *roleStage) verify() analysis.TaskResult {
 	if uInv.State == record.UpstreamAccepted {
 		candidates = append(candidates, invRec.Candidates...)
 		addEvidence(invRec.Evidence)
+		if s.triage != "" {
+			used := map[string]bool{}
+			for _, c := range invRec.Candidates {
+				for _, id := range c.ObservationIDs {
+					used[id] = true
+				}
+			}
+			for _, o := range invRec.Observations {
+				if used[o.ID] {
+					s.rec.Observations = append(s.rec.Observations, o)
+				}
+			}
+		}
 	}
 	if uInt.State == record.UpstreamAccepted {
 		candidates = append(candidates, intRec.Candidates...)
@@ -305,7 +358,8 @@ func (s *roleStage) verify() analysis.TaskResult {
 			{true, false}, {false, false}, {true, true}, {false, true},
 		} {
 			x := in
-			x.Candidates, x.Contracts = candidates[:n], []record.Contract{}
+			x.Contracts = []record.Contract{}
+			x.Candidates, x.Observations, _ = requestObservations(candidates[:n], s.rec.Observations)
 			if variant.withContracts {
 				x.Contracts = contracts
 			}
@@ -346,6 +400,9 @@ func (s *roleStage) verify() analysis.TaskResult {
 		s.setEvidence(context)
 		return *s.fail(result(domain.TaskFailed, reasonInputTooLarge))
 	}
+	if _, _, trimmed := requestObservations(candidates[:verified], s.rec.Observations); trimmed {
+		s.rec.Limitations = addLim(s.rec.Limitations, limVerifyObservationsTrimmed)
+	}
 	in.Scope.Excerpts, in.Scope.Limitations = sent, s.rec.Limitations
 	in.ObservedTests = observedTests(sent, s.j.TestEvidence)
 	// The record keeps every candidate (its lineage) with the excerpts they
@@ -374,7 +431,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 	// Observation IDs are in the request but are not evidence; an entry that
 	// cites one beside valid evidence may be trimmed (verifyEntry).
 	observationIDs := map[string]bool{}
-	for _, o := range in.Observations {
+	for _, o := range s.rec.Observations {
 		observationIDs[o.ID] = true
 	}
 	// hints are each candidate's own citations: a verdict citing a long
@@ -397,7 +454,8 @@ func (s *roleStage) verify() analysis.TaskResult {
 			return *s.fail(result(domain.TaskCancelled, "cancelled"))
 		}
 		x := in
-		x.Candidates, x.Repair = pending, repair
+		x.Candidates, x.Observations, _ = requestObservations(pending, s.rec.Observations)
+		x.Repair = repair
 		query, err := marshalVerifyInput(x, omitHashes)
 		if err != nil {
 			return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))

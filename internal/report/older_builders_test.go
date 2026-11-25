@@ -3,6 +3,7 @@ package report
 import (
 	"bytes"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,6 +15,9 @@ import (
 // wrote: the ledger of its version and, before CitedLinesSince, the review
 // artifacts under the decoders of the earlier record schemas.
 func fileOnlyLedgerForTest(r *Report) {
+	if version, err := strconv.Atoi(r.Builder.Version); err == nil && version < TriageSince {
+		withoutTriageForTest(r)
+	}
 	if version, err := strconv.Atoi(r.Builder.Version); err == nil && version < CitedLinesSince {
 		cited := (CitedReviewDecoder{}).Key().String()
 		for i := range r.Artifacts {
@@ -45,6 +49,33 @@ func fileOnlyLedgerForTest(r *Report) {
 	}
 	overview := overviewOf(*r)
 	r.Overview = &overview
+}
+
+// withoutTriageForTest removes what the diagnostic triage slots added to a
+// current report: an earlier builder's plan had no triage tasks. The
+// example reports' triage made no finding.
+func withoutTriageForTest(r *Report) {
+	triage := func(key *string) bool { return key != nil && isTriageTask(*key) }
+	r.Tasks = slices.DeleteFunc(r.Tasks, func(t Task) bool { return isTriageTask(t.Key) })
+	r.Artifacts = slices.DeleteFunc(r.Artifacts, func(a Artifact) bool { return triage(a.TaskKey) })
+	calls := len(r.Coverage.ReviewCalls)
+	r.Coverage.ReviewCalls = slices.DeleteFunc(r.Coverage.ReviewCalls, func(c ReviewCall) bool { return isTriageTask(c.TaskKey) })
+	removed := calls - len(r.Coverage.ReviewCalls)
+	r.Coverage.AIReview.OptionalTasks = slices.DeleteFunc(r.Coverage.AIReview.OptionalTasks, func(t AIReviewTask) bool { return isTriageTask(t.Key) })
+	if cr := r.CodeReview; cr != nil {
+		cr.DiagnosticTriage = nil
+		cr.Calls, cr.AcceptedCalls = 0, 0
+		for _, c := range r.Coverage.ReviewCalls {
+			cr.Calls++
+			if c.Outcome == record.OutcomeAccepted {
+				cr.AcceptedCalls++
+			}
+		}
+		if l := cr.Ledger; l != nil && l.CallsUsed != nil {
+			n := *l.CallsUsed - removed
+			l.CallsUsed = &n
+		}
+	}
 }
 
 func countAddedCallForTest(r *Report) {

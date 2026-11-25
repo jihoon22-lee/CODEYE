@@ -124,12 +124,17 @@ func sliceKeys(states map[string]*taskState) []string {
 }
 
 // reviewRecordKeys are the review tasks that may hold a role record, in the
-// order their lineage is checked: the whole-run roles, then each slice's
-// investigate before its verify.
+// order their lineage is checked: the whole-run roles, then each triage
+// slot's triage before its verify, then each slice's investigate before its
+// verify.
 func reviewRecordKeys(states map[string]*taskState) []string {
 	var out []string
 	for _, stage := range record.Stages {
 		out = append(out, "review."+stage)
+	}
+	// The diagnostic triage slots run before review.scope.
+	for _, key := range triageKeys(states) {
+		out = append(out, "review."+record.StageTriage+"."+key, "review."+record.StageVerify+"."+key)
 	}
 	for _, key := range sliceKeys(states) {
 		out = append(out, "review."+record.StageInvestigate+"."+key, "review."+record.StageVerify+"."+key)
@@ -211,7 +216,10 @@ func (c sectionContext) ledger() *ReviewLedger {
 		if st == nil {
 			continue
 		}
-		whole := !isSliceTask(k) && k != record.TaskContract
+		// A triage slot's calls are not in the scope artifact's count
+		// (calls_before_slices): they are counted from its records like a
+		// slice's.
+		whole := !isSliceTask(k) && !isTriageTask(k) && k != record.TaskContract
 		switch {
 		case reviewAccepted(st), verifyIncomplete(k, st), k == record.TaskContract && contractCallRecord(st),
 			doc != nil && doc.LineCoverage() && !st.rejected && st.reviewResult != nil && st.reviewResult.Record != nil:
@@ -489,6 +497,9 @@ func validateLedger(r Report) error {
 			continue
 		}
 		stage, _, slice := record.SliceTask(c.TaskKey)
+		if tStage, _, triage := record.TriageTask(c.TaskKey); triage {
+			stage, slice = tStage, true
+		}
 		if !slice {
 			stage = strings.TrimPrefix(c.TaskKey, "review.")
 		}

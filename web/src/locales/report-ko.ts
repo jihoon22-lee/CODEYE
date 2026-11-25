@@ -243,6 +243,7 @@ export const reportKo = {
     review_lineage_mismatch:
       '검토 단계 사이의 후보 또는 호출 기록이 일치하지 않습니다.',
     verification_excerpt_hashes_omitted: '요청 크기를 맞추기 위해 검증 요청에서 발췌 해시를 생략했습니다. 근거 ID와 발췌는 유지했습니다.',
+    verification_observations_trimmed: '진단이 많은 후보는 검증 요청에 앞의 진단 8개만 이름으로 실었습니다. 검토 기록과 발견은 진단을 모두 가집니다.',
     model_source_not_approved: '이 소스의 모델 전송을 승인하지 않았습니다.',
     model_review_not_offered: '관리자가 다른 사용자의 모델 검토를 허용하지 않아 모델 검토를 하지 않았습니다.',
     analysis_artifact_missing: '확인에 필요한 분석 산출물이 누락됐습니다.',
@@ -579,6 +580,8 @@ export const reportKo = {
       'code_review.primary_files_sent_to_model': '그중 모델에 보낸 파일',
       'code_review.secondary_files': '부차 경로 파일',
       'code_review.secondary_files_not_reached': '그중 예산 안에서 보내지 못한 파일',
+      'code_review.diagnostics': '분류 대상 도구 진단',
+      'code_review.diagnostics_triaged': '그중 모델이 답한 진단(판단 보류 포함)',
       'gaps.gaps': '공백',
     } as Record<string, string>,
     countOrder: {
@@ -587,7 +590,7 @@ export const reportKo = {
       static_analysis: ['tools', 'succeeded', 'not_succeeded', 'observations', 'findings', 'actionable', 'pending'],
       metrics: ['tools', 'observations', 'metrics'],
       secrets: ['tools', 'detections', 'files'],
-      code_review: ['calls', 'files_sent_to_model', 'files_not_sent_to_model', 'primary_modules', 'primary_files', 'primary_files_sent_to_model', 'secondary_files', 'secondary_files_not_reached', 'findings', 'actionable', 'pending', 'refuted'],
+      code_review: ['calls', 'files_sent_to_model', 'files_not_sent_to_model', 'primary_modules', 'primary_files', 'primary_files_sent_to_model', 'secondary_files', 'secondary_files_not_reached', 'diagnostics', 'diagnostics_triaged', 'findings', 'actionable', 'pending', 'refuted'],
       gaps: ['gaps'],
     } as Record<string, string[]>,
     discovery: {

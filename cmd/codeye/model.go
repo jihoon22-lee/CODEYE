@@ -57,7 +57,7 @@ func probeModel(ctx context.Context, cfg opencode.Config) modelProbeResult {
 	if reply.Reason == "" && (json.Unmarshal(reply.Output, &result) != nil || result.Sum != 5) {
 		reply.Reason = "model_output_invalid"
 	}
-	r.Version, r.VersionTested = reply.Version, reply.Version == opencode.Version
+	r.Version, r.VersionTested = reply.Version, opencode.VersionTested(reply.Version)
 	r.Verified, r.Reason, r.Cleanup = reply.Reason == "", reply.Reason, reply.Cleanup
 	if !r.Verified {
 		r.Stage = probeStage(reply)
@@ -115,7 +115,7 @@ func (r modelProbeResult) text() string {
 	case version == "":
 		version = "unknown version"
 	case !r.VersionTested:
-		version += " (not the tested " + opencode.Version + "; results are marked opencode_version_untested)"
+		version += " (not a tested release: " + opencode.TestedVersionList() + "; results are marked opencode_version_untested)"
 	}
 	fmt.Fprintf(&b, "model probe: provider %s, model %s, OpenCode %s\n", r.Provider, r.Model, version)
 	if r.Verified {

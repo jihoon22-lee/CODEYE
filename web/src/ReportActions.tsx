@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
 import type { AnalysisReport, Finding, Observation } from './analysisReport';
-import type { Sections } from './parseReportSections';
+import type { DiagnosticTriage, Sections } from './parseReportSections';
 import { Citations, FindingSourceLink, PinnedSourceLink, ReportPath, ReportPreview, label, sourceLocation } from './ReportParts';
 import { ReportIcon } from './ReportLayout';
 import { inlineComparisonCode } from './ProjectOverview';
 import { actionPlan, COVERAGE_ATTENTION, DIAGNOSTIC_PLACES, MISMATCH_SHOWN, NOTICE_ATTENTION } from './reportActions';
-import { overviewFacts, regularStaticLanguages, ruleGroups, severityOf } from './reportGroups';
+import { overviewFacts, regularStaticLanguages, ruleGroups, severityOf, type RuleGroup } from './reportGroups';
 import { reportKo as t, diagnosticDescription } from './locales/report-ko';
 import { reportActionsKo as a } from './locales/report-actions-ko';
 import { ko } from './locales/ko';
@@ -113,44 +113,90 @@ function CandidateList({ title, note, findings, included, openFinding }: {
   </Fold>;
 }
 
-function Diagnostics({ report, sections }: { report: AnalysisReport; sections: Sections }) {
+// TRIAGE_BUCKETS is the order of the triage results in the diagnostics fold;
+// '' holds the diagnostics no triage group classified.
+const TRIAGE_BUCKETS = ['attention', 'refuted', 'harmless', ''] as const;
+
+function Diagnostics({ report, sections, openFinding }: { report: AnalysisReport; sections: Sections; openFinding: (id: string) => void }) {
   const byID = new Map<string, Observation>(report.observations.map(o => [o.id, o]));
   const staticIDs = sections.staticAnalysis.languages.flatMap(language => language.tools.flatMap(tool => tool.findings));
   const severity = severityOf(report.findings, staticIDs);
-  const groups = new Map<string, ReturnType<typeof ruleGroups>[number]>();
-  for (const language of regularStaticLanguages(sections)) {
-    for (const g of ruleGroups(language.tools, byID, severity)) {
-      const key = g.analyzer + '\u0000' + g.rule;
-      const known = groups.get(key);
-      if (!known) { groups.set(key, { ...g, primary: [...g.primary], secondary: [...g.secondary] }); continue; }
-      known.count += g.count;
-      known.primary.push(...g.primary);
-      known.secondary.push(...g.secondary);
+  // merged is the rule groups across languages of the diagnostics keep accepts.
+  const merged = (keep: (id: string) => boolean = () => true) => {
+    const groups = new Map<string, RuleGroup>();
+    for (const language of regularStaticLanguages(sections)) {
+      const tools = language.tools.map(tool => ({ ...tool, observations: tool.observations.filter(keep) }));
+      for (const g of ruleGroups(tools, byID, severity)) {
+        const key = g.analyzer + '\u0000' + g.rule;
+        const known = groups.get(key);
+        if (!known) { groups.set(key, { ...g, primary: [...g.primary], secondary: [...g.secondary], observations: [...g.observations] }); continue; }
+        known.count += g.count;
+        known.primary.push(...g.primary);
+        known.secondary.push(...g.secondary);
+        known.observations.push(...g.observations);
+      }
     }
-  }
-  if (groups.size === 0) return null;
-  const rows = [...groups.values()];
+    return [...groups.values()];
+  };
+  const rows = merged();
+  if (rows.length === 0) return null;
   const total = rows.reduce((sum, g) => sum + g.count, 0);
   const tools = new Set(rows.map(g => g.analyzer));
   const unplaced = rows.some(g => [...g.primary, ...g.secondary].includes('—'));
-  return <Fold id="report-tool-diagnostics" title={a.diagnostics(total, rows.length, tools.size)}>
-    <p>{a.diagnosticsNote}</p>
+  const triage = sections.codeReview.triage;
+  if (!triage) {
+    return <Fold id="report-tool-diagnostics" title={a.diagnostics(total, rows.length, tools.size)}>
+      <p>{a.diagnosticsNote}</p>
+      {unplaced && <p>{a.diagnosticsUnplaced}</p>}
+      <DiagnosticRows rows={rows} triage={null} report={report} openFinding={openFinding} />
+    </Fold>;
+  }
+  const bucket = new Map<string, string>(triage.groups.flatMap(g => g.observations.map(id => [id, g.bucket] as [string, string])));
+  // What was decided (problem or harmless) apart from what the model left unclear.
+  const answered = (unclear: boolean) => triage.groups.filter(g => (g.classification === 'unclear') === unclear).reduce((n, g) => n + g.observations.length, 0);
+  return <Fold id="report-tool-diagnostics" title={a.diagnosticsTriaged(total, answered(false), answered(true), rows.length, tools.size)}>
+    <p>{a.diagnosticsTriageNote}</p>
     {unplaced && <p>{a.diagnosticsUnplaced}</p>}
-    <div className="report-diag-groups">{rows.map(g => {
-      const places = [...g.primary, ...g.secondary].map(place => place === '—' ? a.noPlace : place);
-      const description = diagnosticDescription(g.analyzer, g.rule, g.message);
-      return <details key={g.analyzer + g.rule} className="report-diag-group">
-        <summary>
-          <span className="report-diag-name"><code>{g.analyzer}</code> <code>{g.rule}</code></span>
-          <span className="report-diag-count">{a.diagnosticCount(g.count)}</span>
-          {g.severity && <span className="report-diag-severity">{label(t.severity, g.severity)}</span>}
-          {description && <span className="report-diag-description">{description}</span>}
-        </summary>
-        <ul>{places.slice(0, DIAGNOSTIC_PLACES).map((place, i) => <li key={i}><code className="report-path-text">{place}</code></li>)}</ul>
-        {places.length > DIAGNOSTIC_PLACES && <p><small>{a.diagnosticMore(places.length - DIAGNOSTIC_PLACES)}</small></p>}
-      </details>;
-    })}</div>
+    {TRIAGE_BUCKETS.map(b => {
+      const groups = merged(id => (bucket.get(id) ?? '') === b);
+      if (groups.length === 0) return null;
+      const name = b || 'not_triaged';
+      const n = groups.reduce((sum, g) => sum + g.count, 0);
+      return <section key={name} className="report-diag-bucket" data-bucket={name}>
+        <h6>{a.diagnosticBucket[name](n)}</h6>
+        <p><small>{a.diagnosticBucketNote[name]}{b === '' && triage.interpreted > 0 ? ' ' + a.diagnosticInterpreted(triage.interpreted) : ''}</small></p>
+        <DiagnosticRows rows={groups} triage={triage} report={report} openFinding={openFinding} />
+      </section>;
+    })}
   </Fold>;
+}
+
+// DiagnosticRows are the rule rows of the fold, each with the triage results
+// of its diagnostics when the run triaged them.
+function DiagnosticRows({ rows, triage, report, openFinding }: {
+  rows: RuleGroup[]; triage: DiagnosticTriage | null; report: AnalysisReport; openFinding: (id: string) => void;
+}) {
+  const findings = new Set(report.findings.map(f => f.id));
+  return <div className="report-diag-groups">{rows.map(g => {
+    const places = [...g.primary, ...g.secondary].map(place => place === '—' ? a.noPlace : place);
+    const description = diagnosticDescription(g.analyzer, g.rule, g.message);
+    const notes = triage ? triage.groups.filter(x => x.observations.some(id => g.observations.includes(id))) : [];
+    return <details key={g.analyzer + g.rule} className="report-diag-group">
+      <summary>
+        <span className="report-diag-name"><code>{g.analyzer}</code> <code>{g.rule}</code></span>
+        <span className="report-diag-count">{a.diagnosticCount(g.count)}</span>
+        {g.severity && <span className="report-diag-severity">{triage ? a.defaultSeverity(label(t.severity, g.severity)) : label(t.severity, g.severity)}</span>}
+        {description && <span className="report-diag-description">{description}</span>}
+      </summary>
+      {notes.length > 0 && <ul className="report-diag-notes">{notes.map(x => <li key={x.task + x.id} data-classification={x.classification} data-bucket={x.bucket}>
+        <strong>{x.bucket === 'refuted' ? a.triageRefuted : a.triageClassification[x.classification]}</strong>{x.reason && ' ' + x.reason}
+        {x.locations.map((l, i) => <span key={i}> <code className="report-path-text">{sourceLocation(l.path, l.start, l.end)}</code></span>)}
+        {x.finding && findings.has(x.finding) && <> <button type="button" className="report-plain-action" onClick={() => openFinding(x.finding!)}>{a.openFinding}</button></>}
+      </li>)}</ul>}
+      <ul>{places.slice(0, DIAGNOSTIC_PLACES).map((place, i) => <li key={i}><code className="report-path-text">{place}</code></li>)}</ul>
+      {places.length > DIAGNOSTIC_PLACES && <p><small>{a.diagnosticMore(places.length - DIAGNOSTIC_PLACES)}</small></p>}
+    </details>;
+  })}</div>;
 }
 
 // The line under the verdict that says what was not analysed.
@@ -238,6 +284,6 @@ export function ReportActions({ report, sections, isDisposed, openFinding, openC
     </div>}
     <CandidateList title={a.candidates(candidates.length)} note={a.candidatesNote} findings={candidates} included={included} openFinding={openFinding} />
     <CandidateList title={a.secondary(secondary.length)} note={a.secondaryNote} findings={secondary} included={included} openFinding={openFinding} />
-    <Diagnostics report={report} sections={sections} />
+    <Diagnostics report={report} sections={sections} openFinding={openFinding} />
   </section>;
 }

@@ -56,7 +56,7 @@ func TestAnalyzerDecoderCppPack(t *testing.T) {
 	// two findings, never merged across tools.
 	ring12 := 0
 	for _, x := range r.Findings {
-		if x.Validation != "unreviewed" || x.Severity != "low" || x.FingerprintBasis == nil {
+		if x.Validation != "unreviewed" || !defaultSeverityOK(x) || x.FingerprintBasis == nil {
 			t.Fatalf("tool finding %+v", x)
 		}
 		if x.Locations[0].Path == "src/ring.c" && x.Locations[0].StartLine == 12 {

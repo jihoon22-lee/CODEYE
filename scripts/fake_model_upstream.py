@@ -30,10 +30,19 @@ the items carry a fault of form on every call, the format repair included, so
 the product's repair-then-resolve path runs: a verdict cites the long excerpt
 holding its candidate's range without a range (`citation_range_missing`), a
 candidate, document contract or environment note repeats an ID, an
-interpretation limit repeats its observation ID. `--integrity-errors RATE`
-makes a share of the verdicts cite an evidence ID the request did not hold
-(`evidence_id_unknown`), which the product keeps rejecting: the candidate is
-quarantined and the verify task ends incomplete. The choice of an item depends
+interpretation limit repeats its observation ID, a triage answer for a
+problem or harmless group repeats its citation and one for an unclear group
+names a classification that does not exist (`triage_classification_invalid`,
+the group is left out). `--integrity-errors RATE` makes a share of the
+verdicts cite an evidence ID the request did not hold (`evidence_id_unknown`),
+which the product keeps rejecting: the candidate is quarantined and the
+verify task ends incomplete. In a triage answer the chosen group cites such
+an ID (problem or harmless; the group is rejected) and the answer adds an
+entry for a group the request did not offer (`triage_group_unknown`).
+
+The triage role classifies the offered diagnostic groups in turn as problem,
+harmless and unclear, citing each group's first context excerpt (as a range
+when it is longer than the citation limit). The choice of an item depends
 on its role, the snapshot digest and the item (candidate ID or position), not
 on the repair block, so the repair of an item gets the same fault.
 
@@ -275,6 +284,30 @@ def result_for(role: str, review_input, echo: str | None = None, shape: float = 
                           "evidence_ids": sorted({r.get("evidence_id") for r in own if r.get("evidence_id")}),
                           "affected_checks": TEXT, "still_checkable": TEXT, "needed_observation": TEXT})
         return {"notes": notes}
+    if role == "triage":
+        data = review_input if isinstance(review_input, dict) else {}
+        groups = [g for g in data.get("groups") or [] if isinstance(g, dict) and isinstance(g.get("id"), str)]
+        out, unknown = [], False
+        for index, g in enumerate(groups):
+            context = [cited.get(i, i) for i in g.get("context_evidence_ids") or [] if isinstance(i, str)]
+            kind = ("problem", "harmless", "unclear")[index % 3]
+            answer = {"group_id": g["id"], "classification": kind, "reason": TEXT}
+            if kind == "problem":
+                answer.update(title="Placeholder triage problem (dry run)", condition=TEXT, mechanism=TEXT, impact=TEXT, improvement=TEXT)
+            if kind != "unclear":
+                answer["evidence_ids"] = context[:1]
+            if kind != "unclear" and _pick(integrity, role + ".integrity", review_input, g["id"]):
+                answer["evidence_ids"] = ["ev_" + "0" * 24]  # evidence_id_unknown
+                unknown = True
+            elif _pick(shape, role, review_input, g["id"]):
+                if kind == "unclear":
+                    answer["classification"] = "maybe"  # triage_classification_invalid
+                else:
+                    answer["evidence_ids"] = context[:1] * 2  # evidence_id_duplicate
+            out.append(answer)
+        if unknown:
+            out.append({"group_id": "g65", "classification": "unclear", "reason": TEXT})  # triage_group_unknown
+        return {"triage": out}
     if role == "interpret":  # at least one item; a limit for the first observation
         data = review_input if isinstance(review_input, dict) else {}
         ids = [o.get("id") for o in data.get("observations") or [] if isinstance(o, dict) and o.get("id")]

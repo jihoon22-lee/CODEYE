@@ -49,19 +49,33 @@ CODEYE 분석 보고서
 
 <a id="tool-diagnostics"></a>
 
-<details><summary>도구 진단 2건 &#40;규칙 2종, 도구 1종&#41;</summary>
+<details><summary>도구 진단 2건 중 0건 판정&#40;문제·무해&#41;, 1건 판단 보류 &#40;규칙 2종, 도구 1종&#41;</summary>
 
-정적 분석 도구가 보고한 진단이며 결함으로 확인된 것이 아니다\. 분석기와 규칙별로 묶었고 규칙을 펼치면 위치가 나온다\.
+정적 분석 도구가 보고한 진단을 모델이 코드 단위로 묶어 분류한 결과다\. 분류는 결함 확인이 아니며, 문제로 분류한 묶음은 검증을 거쳐 조치 항목이나 추가 확인 후보가 된다\. 분류 결과별, 분석기와 규칙별로 묶었고 기본 심각도는 분석기 팩의 규칙 계열 표가 정한다\.
 
-<details><summary>go.staticcheck SA4006 · 1건 · low — this value of err is overwritten before the previous attempt&#39;s error is logged &#40;synthetic example&#41;</summary>
+<a id="tool-diagnostics-attention"></a>
 
-- `gateway.go:13-13`
+**확인이 필요한 진단 1건**
+
+모델이 이 코드에서 실제 문제로 분류했거나 판단할 수 없다고 한 진단이다\. 문제로 분류한 묶음의 검증 결과는 연결된 항목에 있다\.
+
+<details><summary>go.staticcheck SA6005 · 1건 · 기본 심각도 낮음 — should use strings.EqualFold instead &#40;synthetic example&#41;</summary>
+
+- **판단할 수 없음** 호출자 코드가 입력에 없어 진단의 영향을 판단할 수 없다\.
+
+- `svc/a/normalize.go:8-8`
 
 </details>
 
-<details><summary>go.staticcheck SA6005 · 1건 · low — should use strings.EqualFold instead &#40;synthetic example&#41;</summary>
+<a id="tool-diagnostics-not_triaged"></a>
 
-- `svc/a/normalize.go:8-8`
+**분류하지 않은 진단 1건**
+
+호출 상한·요청 크기·위치나 코드 단위 없음·비밀값 보류 등으로 모델이 분류하지 않은 진단이다\. 깨끗하다는 뜻이 아니다\. 그중 1건은 해석 역할의 후보가 다룬 진단이다\.
+
+<details><summary>go.staticcheck SA4006 · 1건 · 기본 심각도 낮음 — this value of err is overwritten before the previous attempt&#39;s error is logged &#40;synthetic example&#41;</summary>
+
+- `gateway.go:13-13`
 
 </details>
 
@@ -173,7 +187,7 @@ AI가 검토한 문제 2건 중 코드 근거를 확인한 항목 1건 \(기각 
 | 전체 분석기 작업 집계 \(구조·중복 및 비밀 탐지 포함\) | △ 일부 수행 | 분석 작업 9 · 성공 6 · 성공하지 않음 3 · 진단 2 · 발견 3 · 조치 0 · 미확정 3 |
 | 구조·중복 지표 | △ 일부 수행 | 측정 작업 2 · 임계 초과 측정 1 · 지표 종류 1 |
 | 비밀정보 | ✓ 성공 | 탐지 작업 1 · 탐지 1 · 파일 1 |
-| 코드 분석\(모델 검토\) | ✓ 성공 | 모델 호출 5 · 모델에 보낸 파일\(검증 범위 아님\) 2 · 모델에 보내지 않은 파일 1 · 발견 2 · 조치 1 · 미확정 0 · 기각 1 |
+| 코드 분석\(모델 검토\) | ✓ 성공 | 모델 호출 6 · 모델에 보낸 파일\(검증 범위 아님\) 2 · 모델에 보내지 않은 파일 1 · 분류 대상 도구 진단 2 · 그중 모델이 답한 진단\(판단 보류 포함\) 1 · 발견 2 · 조치 1 · 미확정 0 · 기각 1 |
 | 분석 공백 | \- | 공백 7 |
 
 ### 먼저 볼 것
@@ -758,21 +772,23 @@ const MaxRetries = 3
 <details>
 <summary>모델 검토 범위와 실행 기록</summary>
 
-상태\: ✓ 성공 · 작업 19개 중 4개 성공
+상태\: ✓ 성공 · 작업 23개 중 6개 성공
 
-검토 팩\: review@2\.8\.0
+검토 팩\: review@2\.9\.0
 
-모델 호출 5회, 그중 수락 5회\(환경·문서 역할 호출 포함, 전체 합계\)\.
+모델 호출 6회, 그중 수락 6회\(환경·문서 역할 호출 포함, 전체 합계\)\.
 
-모델 요청 크기 합계 79324바이트\(지침과 입력을 합친 요청 크기이며 소스 크기가 아니다\)\.
+모델 요청 크기 합계 91657바이트\(지침과 입력을 합친 요청 크기이며 소스 크기가 아니다\)\.
 
 모델에 보낸 파일 7개 / snapshot 파일 10개\.
 
 | 항목 | 수 |
 |---|---|
-| 모델 호출 | 5 |
+| 모델 호출 | 6 |
 | 모델에 보낸 파일\(검증 범위 아님\) | 2 |
 | 모델에 보내지 않은 파일 | 1 |
+| 분류 대상 도구 진단 | 2 |
+| 그중 모델이 답한 진단\(판단 보류 포함\) | 1 |
 | 발견 | 2 |
 | 조치 | 1 |
 | 미확정 | 0 |
@@ -806,9 +822,9 @@ const MaxRetries = 3
 
 검토 범위 작업 review\.scope\: ✓ 성공\.
 
-모델 호출 5회 / 상한 99회\.
+모델 호출 6회 / 상한 99회\.
 
-모델 요청 크기 합계 79324바이트, 요청당 상한 262144바이트\.
+모델 요청 크기 합계 91657바이트, 요청당 상한 262144바이트\.
 
 ### 모듈
 
@@ -856,7 +872,7 @@ const MaxRetries = 3
 
 ### AI 검토
 
-모델 검토 상태 performed\(사유 \-\), 모델 호출 5회\.
+모델 검토 상태 performed\(사유 \-\), 모델 호출 6회\.
 
 ### 분석 범위
 
@@ -872,7 +888,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 ### 작업 상태
 
-작업 35개\(failed 3, skipped\_policy 16, succeeded 15, unsupported 1\)\. 아래는 성공하지 않은 작업을 상태와 이유별로 묶은 것이다\(입력이 없어 건너뛴 작업은 뺐다\)\.
+작업 39개\(failed 3, skipped\_policy 18, succeeded 17, unsupported 1\)\. 아래는 성공하지 않은 작업을 상태와 이유별로 묶은 것이다\(입력이 없어 건너뛴 작업은 뺐다\)\.
 
 | 상태 | 이유 | 수 | 작업 |
 |---|---|---|---|
@@ -884,7 +900,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 실행 기록 31개\(exited 31\)\.
 
-산출물 85개, 합계 80938바이트\.
+산출물 87개, 합계 86099바이트\.
 
 작업·실행·산출물의 전체 목록과 개별 진단은 전체 보기\(detail\=full\)와 JSON 내보내기에 있다\.
 
@@ -892,9 +908,11 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 - caller\_expansion\_go\_only
 - caller\_expansion\_package\_functions\_only
+- diagnostics\_interpreted
 - document\_excerpt\_only
 - files\_outside\_review\_context
 - no\_callers\_found
+- no\_candidates\_to\_verify
 - 필수 작업 중 성공하지 않은 작업이 있다\.
 - 비밀값이 탐지된 파일은 모델 입력에서 뺐다\.
 - tools\_outside\_interpret\_input
@@ -915,7 +933,7 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 | 항목 | 값 |
 |---|---|
 | report | `0195f3a0-0000-7000-8000-000000000504` rev `1` |
-| digest | `52c9c3c755c9` |
+| digest | `ad138aaca947` |
 | status | `partial` |
 | quality\_verdict | `attention_required` |
 | run | `0195f3a0-0000-7000-8000-000000000501` |
@@ -925,4 +943,4 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 | created\_at | `2026-11-18T00:10:00Z` |
 | export | 코드 포함 내보내기\(권한 있는 사용자 전용\) |
 
-digest sha256: `52c9c3c755c90e2dbb181e82e70f0c9efc637f0efa81f4aee84dc07b8508632f`
+digest sha256: `ad138aaca947f0964bc1366a4722861118d3cd6419764ec58e6f9e1964945ed7`

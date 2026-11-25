@@ -134,6 +134,10 @@ REVIEW_RECORD_MEDIA = "application/vnd.codeye.review+json"
 DEFAULT_MAX_CALLS = 99
 
 
+# Every review record schema version (schemas/review-record.schema.json).
+RECORD_VERSIONS = ("0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8")
+
+
 def _kept_docs(directory):
     """The review records and the scope artifact keep_review_artifacts saved."""
     records, scope = [], None
@@ -141,7 +145,7 @@ def _kept_docs(directory):
         doc = json.loads(path.read_bytes())
         if doc.get("kind") == "review_scope":
             scope = doc
-        elif doc.get("schema_version") in ("0.2", "0.3") and "stage" in doc:
+        elif doc.get("schema_version") in RECORD_VERSIONS and "stage" in doc:
             records.append(doc)
     return records, scope
 

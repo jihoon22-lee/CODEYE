@@ -403,7 +403,9 @@ func TestContractFollowupPlansLastOnlyWithApprovedModelAndEligibleSource(t *test
 			t.Fatal(err)
 		}
 		i := slices.IndexFunc(plan, func(p analysis.TaskSpec) bool { return p.Key == record.TaskContract })
-		if (i >= 0) != want || (want && (i != len(plan)-1 || plan[i].Required)) {
+		// Only the diagnostic triage slots follow the contract follow-up.
+		last := len(plan) - 1 - len(triagePlanKeys(j))
+		if (i >= 0) != want || (want && (i != last || plan[i].Required)) {
 			t.Fatalf("optional contract task: %+v", plan)
 		}
 	}

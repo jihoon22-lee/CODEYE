@@ -342,7 +342,7 @@ func TestPartialReviewWithoutCardsAndFoldSummaries(t *testing.T) {
 			}
 		}
 	}
-	if !strings.Contains(md, "<details><summary>도구 진단 2건 &#40;규칙 2종, 도구 1종&#41;</summary>") {
+	if !strings.Contains(md, "<details><summary>도구 진단 2건 중 0건 판정&#40;문제·무해&#41;, 1건 판단 보류 &#40;규칙 2종, 도구 1종&#41;</summary>") {
 		t.Fatal("the diagnostic fold summary is not entity-encoded")
 	}
 }

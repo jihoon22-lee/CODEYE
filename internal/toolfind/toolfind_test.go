@@ -171,7 +171,8 @@ func TestDetectFindsEveryToolInItsLocation(t *testing.T) {
 	script(t, filepath.Join(usrbin, "gcc"), versionOutputs["gcc"])
 	// ~/.local/bin, ~/.opencode/bin and the CODEYE tool prefix.
 	script(t, filepath.Join(tr.home, ".local", "bin", "ruff"), versionOutputs["ruff"])
-	script(t, filepath.Join(tr.home, ".opencode", "bin", "opencode"), "1.19.5")
+	// OpenCode answers only when the probe turns its self-update off.
+	write(t, filepath.Join(tr.home, ".opencode", "bin", "opencode"), "#!/bin/sh\n[ \"$OPENCODE_DISABLE_AUTOUPDATE\" = 1 ] || exit 3\n"+printfLines("1.19.5"), 0o755)
 	tools := tr.tools()
 	for _, n := range []string{"mypy", "bandit", "lizard", "opengrep"} {
 		script(t, filepath.Join(tools, "bin", n), versionOutputs[n])

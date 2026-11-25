@@ -746,7 +746,7 @@ export const ko = {
       builder_version: '보고서 생성기 버전',
       ai_review: '모델 검토',
     } as Record<string, string>,
-    toolFields: { version: '버전', rule_context: '규칙 문맥', result: '결과', processed_files: '처리 파일 수' } as Record<string, string>,
+    toolFields: { version: '버전', rule_context: '규칙 문맥', severity_table: '기본 심각도 표', result: '결과', processed_files: '처리 파일 수' } as Record<string, string>,
     toolKey: (tool: string, field: string) => `도구 ${tool} ${field}`,
     reviewKey: (role: string) => `모델 검토 ${role} (모델·지침)`,
     none: '없음',

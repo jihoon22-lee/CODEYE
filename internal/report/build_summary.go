@@ -72,6 +72,35 @@ var hiddenDisposition = map[string]bool{"false_positive": true, "suppressed": tr
 
 var severityRank = map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
+// ValidationClass orders findings for every list that ranks or cuts them
+// (docs/REPORT.md#검증-상태): reproduced 0, supported 1, a diagnostic triage
+// problem not yet confirmed 2, any other unconfirmed finding (a tool finding,
+// a model candidate) 3, refuted 4. Severity orders within a class only, so an
+// unconfirmed high never pushes a confirmed medium out of a short list.
+func ValidationClass(f Finding) int {
+	switch f.Validation {
+	case ValidationReproduced:
+		return 0
+	case ValidationSupported:
+		return 1
+	case ValidationUnreviewed, ValidationInconclusive:
+		if triageFindingID.MatchString(f.ID) {
+			return 2
+		}
+		return 3
+	}
+	return 4
+}
+
+// summaryClass is ValidationClass with reproduced and supported as one
+// class: ValidateReport recomputes the stored summary, and the summaries of
+// earlier builders ranked the two together by severity. The other classes
+// keep the order those summaries had (a triage problem exists only from
+// builder 22).
+func summaryClass(f Finding) int {
+	return max(1, ValidationClass(f))
+}
+
 // ComputeSummary is the single source of every count a format shows.
 func ComputeSummary(findings []Finding, obs []Observation) Summary {
 	s := Summary{TotalFindings: len(findings), RawObservations: len(obs), Priorities: []string{}}
@@ -96,12 +125,12 @@ func ComputeSummary(findings []Finding, obs []Observation) Summary {
 		case "supported", "reproduced":
 			if !hiddenDisposition[f.Disposition] {
 				s.ActionableFindings++
-				cands = append(cands, cand{f, 0})
+				cands = append(cands, cand{f, summaryClass(f)})
 			}
 		case "unreviewed", "inconclusive":
 			s.PendingCandidates++
 			if !hiddenDisposition[f.Disposition] {
-				cands = append(cands, cand{f, 1})
+				cands = append(cands, cand{f, summaryClass(f)})
 			}
 		case "refuted":
 			s.RefutedFindings++

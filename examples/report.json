@@ -11,11 +11,11 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-00000000057d",
+      "id": "0195f3a0-0000-7000-8000-000000000583",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "8b29db1cf7ebb5160ce9652ffd70086f8ba21a9e69e650be0d573deb9d693580",
-      "size_bytes": 24792,
+      "sha256": "b12baab23203164099812dc7a4939a80177eca584c33d537cbb2a4222eb4d238",
+      "size_bytes": 26016,
       "task_key": null
     },
     {
@@ -716,7 +716,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000563",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "95b5831e50ce63ae6a6e920fd77d9ad99224983bc060c115c674ade14c76e118",
+      "sha256": "f779c4462862241360507b66c008b179e566a1491db298fb2d44f579a168d131",
       "size_bytes": 1573,
       "task_key": "review.environment"
     },
@@ -725,7 +725,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000565",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "b993f2b4cd4599b8d6ef7be84fb7c9f2790ef3e8fe6d4a81b91ddd7bc2d61b11",
+      "sha256": "4188885a69515a9aaa1575e46b10c1cc10a2c993043c13642696a6070540b9a3",
       "size_bytes": 3377,
       "task_key": "review.documents"
     },
@@ -734,7 +734,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000567",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "f9a49f58e16031246a820054d03472ff93f33307c976861e0d0e3f4e972600b5",
+      "sha256": "98f2183a8d28be4564fa6b72c62bbdc73db289b53ee851d187c298671afb0fc7",
       "size_bytes": 3307,
       "task_key": "review.investigate"
     },
@@ -743,7 +743,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000569",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "3a721eae26301ce234a57615b3a68d3346491a4c50fbbc265469dc40a4822a3c",
+      "sha256": "45d476ad513fafb6f20d1323e612f0215ee7f9b16b1c0d1f9e3d542cc975f6b7",
       "size_bytes": 3468,
       "task_key": "review.interpret"
     },
@@ -752,7 +752,7 @@
       "id": "0195f3a0-0000-7000-8000-00000000056b",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "95bc70535e4b146b0a9ee175992248662cab8f016eea55dd22e8ed0f758e02f6",
+      "sha256": "192c643ec81a035b448ca5fc1afb5e0623bd2b35c78adcc890d5b49b164edaca",
       "size_bytes": 4824,
       "task_key": "review.verify"
     },
@@ -761,9 +761,27 @@
       "id": "0195f3a0-0000-7000-8000-00000000056d",
       "media_type": "application/vnd.codeye.review-scope+json",
       "role": "other",
-      "sha256": "81ca07019c38223c9c507bd2f71f73f04cc444f1149b3b34e1f952b78197e02c",
+      "sha256": "23ad33385a130cae8b4a1bcde735d72d43031623213f5d0dcd4929ee7857a486",
       "size_bytes": 2470,
       "task_key": "review.scope"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.8",
+      "id": "0195f3a0-0000-7000-8000-00000000057e",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "8bd54517bfac6fb81dd63d1e5beff7ec33b8b5b008ea1cd298f98a98005c497e",
+      "size_bytes": 2690,
+      "task_key": "review.triage.t001"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.8",
+      "id": "0195f3a0-0000-7000-8000-000000000580",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "f7af4a974141f225a819d167d295fc0fd024b5be843afa69fb51f1cf16710538",
+      "size_bytes": 1247,
+      "task_key": "review.verify.t001"
     }
   ],
   "attempt": {
@@ -776,13 +794,60 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "47a1c68403428419fc822455496406c0a13543220931db4a5b376426cacb2c45",
+    "input_digest": "b0b94e5e3aadad72b9b53a487a77da624d4850b0290ed21ca213b0c371c2cfa3",
     "result_manifest_artifact_id": null,
-    "version": "21"
+    "version": "22"
   },
   "code_review": {
-    "accepted_calls": 5,
-    "calls": 5,
+    "accepted_calls": 6,
+    "calls": 6,
+    "diagnostic_triage": {
+      "diagnostics": 2,
+      "groups": [
+        {
+          "bucket": "attention",
+          "classification": "unclear",
+          "cross_tool": false,
+          "finding_id": null,
+          "group_id": "g1",
+          "locations": [],
+          "observation_ids": [
+            "obs_ce1cfe93957ba57dbc4e"
+          ],
+          "reason": "호출자 코드가 입력에 없어 진단의 영향을 판단할 수 없다.",
+          "task_key": "review.triage.t001"
+        }
+      ],
+      "interpreted": 1,
+      "limitations": [
+        "diagnostics_interpreted"
+      ],
+      "tasks": [
+        {
+          "key": "review.triage.t001",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.verify.t001",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.triage.t002",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.t002",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        }
+      ],
+      "triaged": 1
+    },
     "evidence": [
       {
         "blob_sha256": "a03fee1a659e56ed4175a7562b7a6838839236d736e602444b8ed2fdb65958d8",
@@ -813,7 +878,7 @@
     ],
     "inventory_files": 10,
     "ledger": {
-      "calls_used": 5,
+      "calls_used": 6,
       "files": [
         {
           "investigation": "accepted",
@@ -902,7 +967,7 @@
           "slices": []
         }
       ],
-      "request_bytes_sent": 79324,
+      "request_bytes_sent": 91657,
       "scope": {
         "key": "review.scope",
         "result": "accepted",
@@ -911,8 +976,8 @@
       "status": "overview_only"
     },
     "pack_id": "review",
-    "pack_version": "2.8.0",
-    "request_bytes": 79324,
+    "pack_version": "2.9.0",
+    "request_bytes": 91657,
     "roles": [
       {
         "key": "review.investigate",
@@ -938,15 +1003,15 @@
     ],
     "stage": {
       "counts": {
-        "skipped_policy": 15
+        "skipped_policy": 17
       },
       "reasons": [
         "no_review_scope"
       ],
       "stage": "code_review",
       "state": "succeeded",
-      "succeeded": 4,
-      "tasks": 19
+      "succeeded": 6,
+      "tasks": 23
     },
     "strengths": [
       {
@@ -1026,6 +1091,17 @@
           "task_status": "succeeded"
         },
         {
+          "key": "review.triage.t001",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.triage.t002",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
           "key": "review.verify.s001",
           "reason": "no_review_scope",
           "result": "skipped",
@@ -1066,6 +1142,17 @@
           "reason": "no_review_scope",
           "result": "skipped",
           "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.verify.t001",
+          "result": "accepted",
+          "task_status": "succeeded"
+        },
+        {
+          "key": "review.verify.t002",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
         }
       ],
       "reason": null,
@@ -1102,8 +1189,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "a427b8d7f81ed1deb7d44b676738c13a37b7f9aaf5522943aab56265ce37a694",
-        "pack_version": "2.8.0",
+        "pack_sha256": "03a350ea61a7c729d3807309aa3a93f9ea1ef82e659d2b483a1760a4c7082504",
+        "pack_version": "2.9.0",
         "request_sha256": "b1df944a707658a4c1153406bab943e7e585e404d72ea987170ba125771234e1",
         "role": "environment",
         "task_key": "review.environment"
@@ -1113,8 +1200,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "fdc4ee38d294971ad729e73fad135777082f6afe7f3934ee6c1e722d0b6cd6a6",
-        "pack_version": "2.8.0",
+        "pack_sha256": "832cd692d06a2199e1b98ad9cee2f43ce80b7adbd386996afc3214249526e82b",
+        "pack_version": "2.9.0",
         "request_sha256": "98ae5725a5f1fb6fd9d2814e385c23ba87111fa36ba99cb8204421832364d2a9",
         "role": "documents",
         "task_key": "review.documents"
@@ -1124,8 +1211,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "64e69b2866e3a7c5a9da990a08e0ae92f9c148a847f63c3262b50d12350f5def",
-        "pack_version": "2.8.0",
+        "pack_sha256": "2b1a937d187ca0fbd10602a765caa5b30a4d26e74aa2b33f06b4272ca766a7c1",
+        "pack_version": "2.9.0",
         "request_sha256": "f618e211bc94fa56a668a217cbe43824be3c3cfb8658a7d92dc50d6c6de37be2",
         "role": "investigate",
         "task_key": "review.investigate"
@@ -1135,8 +1222,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "d778c71f051df9853a9c18f0c8af8782b7e82b2342e91cd0686e0aa54f1fccad",
-        "pack_version": "2.8.0",
+        "pack_sha256": "60f4c1deaad67d5c054b49a713a973860f03219067c226409d419723609e6467",
+        "pack_version": "2.9.0",
         "request_sha256": "61ae4f18527b79cb297aafecf35cab37ac42ea1151e51150a2e4cfe747577105",
         "role": "interpret",
         "task_key": "review.interpret"
@@ -1146,11 +1233,22 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "e208762d13e57ba7473b745cceb1daf847a4a7de96effe28ed7e7d628fe2f788",
-        "pack_version": "2.8.0",
+        "pack_sha256": "3062b9e6e6e18764caa5013497cecafcb135d9cde85244637e7dc2bf295d804c",
+        "pack_version": "2.9.0",
         "request_sha256": "357bf871e894aeb29c3a763b325835bc9de7a2987b600c1bfe0095af0970d212",
         "role": "verify",
         "task_key": "review.verify"
+      },
+      {
+        "model": "fake/scripted",
+        "opencode_version": "1.19.5",
+        "outcome": "accepted",
+        "pack_id": "review",
+        "pack_sha256": "ead8df9ed695a66132a9beb004a55718804cc0da546db120672171e4c67aa4dc",
+        "pack_version": "2.9.0",
+        "request_sha256": "a7d6cb0368b5f2ce58f0132e5de6d88bf2c95ec839dbb831cd43490ae4487ccc",
+        "role": "triage",
+        "task_key": "review.triage.t001"
       }
     ],
     "scope_mode": "full",
@@ -1225,6 +1323,7 @@
           "selection": [],
           "source_suppressions": "none"
         },
+        "severity_table": "codeye-go-vet-default/1",
         "stderr_failures": 0,
         "task_key": "go-vet",
         "tool_version": "go1.27.4",
@@ -1255,6 +1354,7 @@
           "selection": [],
           "source_suppressions": "none"
         },
+        "severity_table": "codeye-go-vet-default/1",
         "stderr_failures": 0,
         "task_key": "go-vet.m01",
         "tool_version": "go1.27.4",
@@ -1281,6 +1381,7 @@
           "selection": [],
           "source_suppressions": "none"
         },
+        "severity_table": "codeye-go-vet-default/1",
         "stderr_failures": 0,
         "task_key": "go-vet.m02",
         "tool_version": "go1.27.4",
@@ -1377,6 +1478,7 @@
           ],
           "source_suppressions": "reported"
         },
+        "severity_table": "codeye-go-staticcheck/1",
         "stderr_failures": 0,
         "task_key": "staticcheck",
         "tool_version": "2026.2.2",
@@ -1412,6 +1514,7 @@
           ],
           "source_suppressions": "reported"
         },
+        "severity_table": "codeye-go-staticcheck/1",
         "stderr_failures": 0,
         "task_key": "staticcheck.m01",
         "tool_version": "2026.2.2",
@@ -1440,6 +1543,7 @@
           ],
           "source_suppressions": "reported"
         },
+        "severity_table": "codeye-go-staticcheck/1",
         "stderr_failures": 0,
         "task_key": "staticcheck.m02",
         "tool_version": "2026.2.2",
@@ -3111,7 +3215,7 @@
       },
       "schema_version": "0.1",
       "severity": "low",
-      "severity_reason": "분석 도구 진단의 심각도는 검토 전 기본값 low이다. 도구가 표시한 원문 등급은 관찰에 그대로 남기며 영향을 검토하지 않았다.",
+      "severity_reason": "기본 심각도: 규칙 계열 '쓰지 않는 코드·값'에 정한 등급이다. 분석기 규칙 팩의 심각도 표에서 구조화 데이터로만 정했고 이 위치의 영향은 검토하지 않았다. 도구가 표시한 원문 등급은 관찰에 그대로 남는다.",
       "title": "go.staticcheck SA4006: this value of err is overwritten before the previous attempt's error is logged (synthetic example)",
       "validation": "unreviewed",
       "verification": [
@@ -3198,7 +3302,7 @@
       },
       "schema_version": "0.1",
       "severity": "low",
-      "severity_reason": "분석 도구 진단의 심각도는 검토 전 기본값 low이다. 도구가 표시한 원문 등급은 관찰에 그대로 남기며 영향을 검토하지 않았다.",
+      "severity_reason": "기본 심각도: 규칙 계열 '성능'에 정한 등급이다. 분석기 규칙 팩의 심각도 표에서 구조화 데이터로만 정했고 이 위치의 영향은 검토하지 않았다. 도구가 표시한 원문 등급은 관찰에 그대로 남는다.",
       "title": "go.staticcheck SA6005: should use strings.EqualFold instead (synthetic example)",
       "validation": "unreviewed",
       "verification": [
@@ -3285,7 +3389,7 @@
       },
       "schema_version": "0.1",
       "severity": "low",
-      "severity_reason": "분석 도구 진단의 심각도는 검토 전 기본값 low이다. 도구가 표시한 원문 등급은 관찰에 그대로 남기며 영향을 검토하지 않았다.",
+      "severity_reason": "기본 심각도 low: 이 규칙은 분석기의 심각도 표에 없다. 도구가 표시한 원문 등급은 관찰에 그대로 남고 이 위치의 영향은 검토하지 않았다.",
       "title": "any.gitleaks generic-api-key: secret detected by gitleaks rule generic-api-key (value withheld)",
       "validation": "unreviewed",
       "verification": [
@@ -3349,9 +3453,11 @@
   "limitations": [
     "caller_expansion_go_only",
     "caller_expansion_package_functions_only",
+    "diagnostics_interpreted",
     "document_excerpt_only",
     "files_outside_review_context",
     "no_callers_found",
+    "no_candidates_to_verify",
     "required_task_not_succeeded",
     "secret_files_withheld",
     "tools_outside_interpret_input"
@@ -3630,7 +3736,9 @@
       {
         "counts": {
           "actionable": 1,
-          "calls": 5,
+          "calls": 6,
+          "diagnostics": 2,
+          "diagnostics_triaged": 1,
           "files_not_sent_to_model": 1,
           "files_sent_to_model": 2,
           "findings": 2,
@@ -4128,6 +4236,20 @@
       "status": "succeeded"
     },
     {
+      "id": "0195f3a0-0000-7000-8000-00000000057d",
+      "key": "review.triage.t001",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000581",
+      "key": "review.triage.t002",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
       "id": "0195f3a0-0000-7000-8000-00000000056a",
       "key": "review.verify",
       "reason": null,
@@ -4179,6 +4301,20 @@
     {
       "id": "0195f3a0-0000-7000-8000-00000000057b",
       "key": "review.verify.s007",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000057f",
+      "key": "review.verify.t001",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000582",
+      "key": "review.verify.t002",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"

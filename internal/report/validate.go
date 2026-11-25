@@ -11,6 +11,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/obsdoc"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis/severity"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/sourceexcerpt"
 )
 
@@ -97,6 +98,7 @@ func ValidateReport(r Report) error {
 	workflowKey := (WorkflowReviewDecoder{}).Key()
 	readingKey := (WorkflowReadingDecoder{}).Key()
 	citedKey := (CitedReviewDecoder{}).Key()
+	triageKey := (TriageReviewDecoder{}).Key()
 	for _, a := range r.Artifacts {
 		if !domain.ValidID(a.ID) || arts[a.ID] || !hex64.MatchString(a.SHA256) || a.SizeBytes < 0 {
 			return invalidf("artifact %s is invalid", a.ID)
@@ -113,6 +115,13 @@ func ValidateReport(r Report) error {
 			if err != nil || version < CitedLinesSince || strconv.Itoa(version) != r.Builder.Version ||
 				!strings.HasPrefix(deref(a.TaskKey), "review.") || a.Role != "other" || a.MediaType != citedKey.MediaType {
 				return invalidf("review artifact %s of schema %s requires a review task and its builder", a.ID, citedKey.SchemaVersion)
+			}
+		}
+		if a.Decoder != nil && *a.Decoder == triageKey.String() {
+			version, err := strconv.Atoi(r.Builder.Version)
+			if err != nil || version < TriageSince || strconv.Itoa(version) != r.Builder.Version ||
+				!isTriageTask(deref(a.TaskKey)) || a.Role != "other" || a.MediaType != triageKey.MediaType {
+				return invalidf("triage artifact %s requires a triage slot task and its builder", a.ID)
 			}
 		}
 		if a.Decoder != nil && *a.Decoder == readingKey.String() {
@@ -555,6 +564,13 @@ var safeTemplates = map[string]bool{
 	textToolSeverityReason: true, textToolCondition: true, textToolVerification: true, textToolEvidence: true,
 	textRejectImpact: true, textRejectAction: true, textRejectVerification: true,
 	textFormatImpact: true, textFormatAction: true, textFormatVerification: true, textFormatScope: true,
+}
+
+func init() {
+	// The default-severity reasons are fixed sentences of the tables.
+	for _, s := range severity.Reasons() {
+		safeTemplates[s] = true
+	}
 }
 
 func safeText(s string) string {

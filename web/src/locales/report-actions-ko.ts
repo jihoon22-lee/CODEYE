@@ -43,6 +43,28 @@ export const reportActionsKo = {
   noPlace: '없음',
   diagnosticCount: (n: number) => `${n}건`,
   diagnosticMore: (n: number) => `외 ${n}곳은 정적 분석 탭과 JSON에 있습니다.`,
+  diagnosticsTriaged: (diagnostics: number, decided: number, unclear: number, rules: number, tools: number) => `도구 진단 ${diagnostics}건 중 ${decided}건 판정(문제·무해), ${unclear}건 판단 보류 (규칙 ${rules}종, 도구 ${tools}종)`,
+  diagnosticsTriageNote: '정적 분석 도구가 보고한 진단을 모델이 코드 단위로 묶어 분류한 결과입니다. 분류는 결함 확인이 아니며, 문제로 분류한 묶음은 검증을 거쳐 조치 항목이나 추가 확인 후보가 됩니다. 분류 결과별, 분석기와 규칙별로 묶었고 기본 심각도는 분석기 팩의 규칙 계열 표가 정합니다.',
+  diagnosticBucket: {
+    attention: (n: number) => `확인이 필요한 진단 ${n}건`,
+    refuted: (n: number) => `검증에서 반증된 진단 ${n}건`,
+    harmless: (n: number) => `무해하다고 판단한 진단 ${n}건`,
+    not_triaged: (n: number) => `분류하지 않은 진단 ${n}건`,
+  } as Record<string, (n: number) => string>,
+  diagnosticBucketNote: {
+    attention: '모델이 이 코드에서 실제 문제로 분류했거나 판단할 수 없다고 한 진단입니다. 문제로 분류한 묶음의 검증 결과는 연결된 항목에 있습니다.',
+    refuted: '모델이 문제로 분류했으나 검증이 반례를 찾은 진단입니다. 도구 진단 자체는 그대로 남습니다.',
+    harmless: '모델이 이 맥락에서는 해가 없다고 판단한 진단이며, 그 이유와 근거 코드 위치를 함께 적습니다. 도구 진단을 숨기지 않습니다.',
+    not_triaged: '호출 상한·요청 크기·위치나 코드 단위 없음·비밀값 보류 등으로 모델이 분류하지 않은 진단입니다. 깨끗하다는 뜻이 아닙니다.',
+  } as Record<string, string>,
+  diagnosticInterpreted: (n: number) => `그중 ${n}건은 해석 역할의 후보가 다룬 진단입니다.`,
+  defaultSeverity: (severity: string) => `기본 심각도 ${severity}`,
+  triageClassification: {
+    problem: '실제 문제로 분류',
+    harmless: '무해하다고 판단',
+    unclear: '판단할 수 없음',
+  } as Record<string, string>,
+  triageRefuted: '문제로 분류했으나 검증에서 반증됨',
   coverageLead: '분석 범위의 한계',
   coverageLink: '분석 범위와 상태 보기',
 };

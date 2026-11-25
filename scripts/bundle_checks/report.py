@@ -436,6 +436,8 @@ def check_dependencies(report: dict) -> None:
 
 
 SLICE_TASK = re.compile(r"^review\.(investigate|verify)\.(s0(?:0[1-9]|[12][0-9]|3[0-2]))$")
+# A diagnostic triage slot's tasks (builder 22, docs/REVIEW.md#도구-진단-분류).
+TRIAGE_TASK = re.compile(r"^review\.(triage|verify)\.(t(?:00[1-9]|0[1-9][0-9]|[1-9][0-9]{2}))$")
 SLICE_FINDING = re.compile(r"^review_(s[0-9]{3})_")
 LEDGER_FILE_COUNTS = ("files_sent_to_model", "files_withheld", "files_unreadable", "files_budget_exhausted", "files_not_planned",
                       "files_secondary_not_reached", "files_not_sent")
@@ -451,9 +453,10 @@ def check_ledger(report: dict) -> None:
             ensure(builder >= 12 and call.get("task_key") == "review.contract" and task is not None
                    and not task["required_for_verdict"], "Contract review call lacks an optional task")
         if "task_key" in call:
-            match = SLICE_TASK.match(call["task_key"])
+            match = SLICE_TASK.match(call["task_key"]) or TRIAGE_TASK.match(call["task_key"])
             stage = match.group(1) if match else call["task_key"].removeprefix("review.")
             ensure(builder >= 6 and call["task_key"] in tasks and stage == call["role"], "Review call names a task it does not belong to")
+            ensure(not TRIAGE_TASK.match(call["task_key"]) or builder >= 22, "Triage call in a report before builder 22")
     for finding in report["findings"]:
         match = SLICE_FINDING.match(finding["id"])
         ensure(not match or (builder >= 6 and "review.investigate." + match.group(1) in tasks), "Slice finding of a slice that was not planned")
