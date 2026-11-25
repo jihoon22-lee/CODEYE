@@ -195,6 +195,8 @@ type callLedger struct {
 	holdMu sync.Mutex
 	// countFault, set by tests, fails the count of a call of a task.
 	countFault func(task string) bool
+	// waits counts the decisions that had to wait for an earlier unit.
+	waits int
 }
 
 func (l *callLedger) settle(u int) {
@@ -256,6 +258,7 @@ func (l *callLedger) below(ctx context.Context, j analysis.Job, task string, lim
 			return false, nil
 		}
 		ch := l.changed
+		l.waits++
 		l.mu.Unlock()
 		select {
 		case <-ch:
