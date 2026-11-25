@@ -40,8 +40,8 @@ var _ = template.Must(htmlSectionsTemplate.Parse(`
 </div>{{end}}
 {{template "candidate_fold" .Candidates}}{{template "candidate_fold" .Secondary}}
 {{with .Diagnostics}}{{if or .Groups .Sections}}<details class="card report-disclosure" id="{{.ID}}"><summary>{{reportIcon "chevron-down"}} {{.Label}}</summary>
-<p>{{.Note}}</p>{{with .Unplaced}}<p>{{.}}</p>{{end}}
-{{if .Groups}}{{template "diag_groups" .Groups}}{{end}}{{range .Sections}}<section class="report-diag-bucket" id="{{.ID}}"><h4>{{.Label}}</h4><p>{{.Note}}</p>{{template "diag_groups" .Groups}}</section>
+<p>{{.Note}}</p>{{with .Unplaced}}<p>{{.}}</p>{{end}}{{with .Paths}}<p class="report-diag-paths">{{.}}</p>{{end}}
+{{if .Groups}}{{template "diag_groups" .Groups}}{{end}}{{range .Sections}}<section class="report-diag-bucket" id="{{.ID}}"><h4>{{.Label}}</h4><p>{{.Note}}</p>{{with .Paths}}<p class="report-diag-paths">{{.}}</p>{{end}}{{template "diag_groups" .Groups}}</section>
 {{end}}</details>{{end}}{{end}}
 </section>{{end}}{{end}}{{end}}
 {{define "diag_groups"}}<div class="report-diag-groups">{{range .}}<details class="report-diag-group"><summary><span class="report-diag-name"><code>{{.Analyzer}}</code> <code>{{.Rule}}</code></span> <span class="report-diag-count">{{.Count}}</span>{{with .Severity}} <span class="report-diag-severity">{{.}}</span>{{end}}{{with .Description}}<span class="report-diag-description">{{.}}</span>{{end}}</summary>

@@ -435,12 +435,16 @@ func TestAnalyzerDecoderRejects(t *testing.T) {
 }
 
 // defaultSeverityOK reports a tool finding whose severity is the default of
-// a severity table and whose reason is the table's fixed sentence for it
+// a severity table (or the family's lowered severity on a path that is not
+// shipped code) and whose reason is the table's fixed sentence for it
 // (docs/ANALYZERS.md#기본-심각도): never critical, never a model's.
 func defaultSeverityOK(x Finding) bool {
 	for _, f := range severity.Families() {
 		if x.SeverityReason == severity.Reason(severity.Result{Family: f.Name}) {
 			return x.Severity == f.Severity
+		}
+		if x.SeverityReason == severity.Reason(severity.Result{Family: f.Name, Lowered: true}) {
+			return x.Severity == f.Lowered && f.Lowered != f.Severity
 		}
 	}
 	return x.Severity == severity.Low && (x.SeverityReason == severity.ReasonUnknown || x.SeverityReason == severity.ReasonMismatch)
