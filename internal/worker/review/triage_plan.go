@@ -194,7 +194,10 @@ func (s *roleStage) planTriage(docs []toolDoc, interpreted map[string]bool, slot
 			return cmp.Or(cmp.Compare(a.obs.Location.StartLine, b.obs.Location.StartLine), cmp.Compare(a.obs.Tool, b.obs.Tool), cmp.Compare(a.obs.ID, b.obs.ID))
 		})
 		for start := 0; start < len(g.diags); start += triageGroupObservations {
-			c := &triageGroup{diags: g.diags[start:min(len(g.diags), start+triageGroupObservations)], unit: g.unit, crossTool: g.crossTool}
+			c := &triageGroup{diags: g.diags[start:min(len(g.diags), start+triageGroupObservations)], unit: g.unit}
+			// A merged group split at the limit is cross-tool only in the
+			// chunks that still hold two tools.
+			c.crossTool = len(c.analyzers()) > 1
 			for _, d := range c.diags {
 				if severity.Rank(d.def.Severity) > severity.Rank(c.severity) {
 					c.severity = d.def.Severity

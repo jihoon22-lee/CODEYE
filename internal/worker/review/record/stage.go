@@ -713,7 +713,8 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 			return invalid("contract content")
 		}
 	case StageTriage:
-		if !empty(notes, docs, len(r.Limits), len(r.Verifications)) || len(r.Candidates) > b.candidates || len(r.TriageGroups) == 0 {
+		// A failed record may hold no group: its request could not be built.
+		if !empty(notes, docs, len(r.Limits), len(r.Verifications)) || len(r.Candidates) > b.candidates || (len(r.TriageGroups) == 0 && r.Outcome != OutcomeFailed) {
 			return invalid("triage content")
 		}
 	}

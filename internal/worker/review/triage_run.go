@@ -15,13 +15,15 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
-// Running a diagnostic triage slot (docs/REVIEW.md#도구-진단-분류). A slot is
+// Running a diagnostic triage slot (docs/REVIEW.md#도구-진단-분류). The slots
+// end the plan, after the module slices and the contract follow-up, which
+// leave them the held share of the call ceiling (triageHold). A slot is
 // admitted, in plan order, when a call for the triage and one for the
 // verification of its problems remain, as a module slice is. The decision
 // (or why the slot had nothing to send) is written next to the call
 // counter and the slot's verify follows it.
 
-const triageContract = `For this role use exactly {"triage":[{"group_id":"<id of input.groups>","classification":"problem|harmless|unclear","title":"what goes wrong (problem)","condition":"the code condition under which it bites (problem)","mechanism":"how the cited lines produce the failure (optional)","impact":"what breaks (problem)","improvement":"fix direction (problem)","reason":"problem: what would make it harmless; harmless: the guard, caller, type or test-only path that makes it harmless here; unclear: what the input lacks","evidence_ids":["ev_...:12-30"]}]}, ignoring any wider output examples. Return one entry per input group, at most %d. A problem cites at least one code or test line inside its group's context_evidence_ids; a harmless group cites the lines that make it harmless; an unclear group may cite. At most 6 evidence IDs per entry; fields a classification does not use stay empty. Keep each tool, rule, line, raw grade, count and default severity as given: do not restate the tool's run status, counts or severity, assign no severity, and never describe absent diagnostics as clean code.`
+const triageContract = `For this role use exactly {"triage":[{"group_id":"<id of input.groups>","classification":"problem|harmless|unclear","title":"what goes wrong (problem)","condition":"the code condition under which it bites (problem)","mechanism":"how the cited lines produce the failure (optional)","impact":"what breaks (problem)","improvement":"fix direction (problem)","reason":"problem: what would make it harmless; harmless: the guard, caller, type or test-only path that makes it harmless here; unclear: what the input lacks","evidence_ids":["ev_...:12-30"]}]}, ignoring any wider output examples. Return one entry per input group, at most %d. Cite only lines inside the entry's own group's context_evidence_ids: a problem cites at least one code or test line there; a harmless group cites the lines that make it harmless; an unclear group may cite. At most 6 evidence IDs per entry; fields a classification does not use stay empty. Keep each tool, rule, line, raw grade, count and default severity as given: do not restate the tool's run status, counts or severity, assign no severity, and never describe absent diagnostics as clean code.`
 
 const triageRepairRules = " Answer again only the groups listed in input.repair.groups."
 
@@ -250,6 +252,9 @@ type triageOutcome struct {
 	// omitted is the code of a group the platform left without a
 	// classification after the repair.
 	omitted string
+	// form: the answer's faults were all of form, so a group the repair
+	// answer then left out is omitted as form (triage_item_omitted).
+	form bool
 }
 
 func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []record.Upstream) analysis.TaskResult {
@@ -327,10 +332,13 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 			}
 		}
 	}
+	// dropped are groups a retry after an answer that was not JSON no
+	// longer asks for (left out as form).
+	dropped := map[string]bool{}
 	pending := func() []string {
 		var out []string
 		for _, g := range sent {
-			if _, ok := done[g.id]; !ok {
+			if _, ok := done[g.id]; !ok && !dropped[g.id] {
 				out = append(out, g.id)
 			}
 		}
@@ -355,15 +363,18 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 				issues = append(issues, itemIssue{List: "triage", Index: i + 1, Field: "group_id", Error: errTriageGroupUnknown})
 				continue
 			}
-			if _, ok := done[g.id]; ok {
-				continue
-			}
+			// A second answer for a group in one output is a fault even when
+			// the first was accepted; an answer for a group an earlier
+			// output settled is not read again.
 			if seen[g.id] {
 				codes = addLim(codes, errTriageGroupDuplicate)
 				issues = append(issues, itemIssue{List: "triage", Index: i + 1, Field: "group_id", Error: errTriageGroupDuplicate})
 				continue
 			}
 			seen[g.id] = true
+			if _, ok := done[g.id]; ok {
+				continue
+			}
 			o, itemCodes, itemIssues := s.checkTriageAnswer(a, g, i+1, reply, final)
 			codes = addLim(codes, itemCodes...)
 			issues = append(issues, itemIssues...)
@@ -374,6 +385,7 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 				accepted++
 				keepCited(reply, o.text.Evidence, o.ids)
 			default:
+				o.form = formOnly(itemCodes)
 				faults[g.id] = o
 			}
 		}
@@ -391,11 +403,21 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 	repaired, retried, proofRetried := false, false, false
 	var failed *analysis.TaskResult
 	resolvedLate := false
+	// A cancellation ends the loop like a failure: the record still holds
+	// the calls made and the groups sent, all left out.
+	cancelled := result(domain.TaskCancelled, "cancelled")
 	for attempt := 1; attempt <= record.RoleMaxCalls; attempt++ {
 		if s.ctx.Err() != nil {
-			return *s.fail(result(domain.TaskCancelled, "cancelled"))
+			failed = &cancelled
+			break
 		}
-		body, err := build(sent, repair)
+		// A repair carries only the groups still without an accepted
+		// answer, with their excerpts.
+		list := sent
+		if repair != nil {
+			list = slices.DeleteFunc(slices.Clone(sent), func(g triageSent) bool { return !slices.Contains(repair.Groups, g.id) })
+		}
+		body, err := build(list, repair)
 		if err != nil {
 			r := result(domain.TaskFailed, "review_input_unavailable")
 			failed = &r
@@ -429,7 +451,8 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 				continue
 			}
 			if s.ctx.Err() != nil {
-				return *s.fail(result(domain.TaskCancelled, "cancelled"))
+				failed = &cancelled
+				break
 			}
 			r := failure(reply)
 			failed = &r
@@ -444,6 +467,17 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 			retried = true
 			if repair == nil {
 				repair = &triageRepair{Groups: pending()}
+			}
+			// An output that is not JSON is most often an answer the output
+			// token limit cut: the retry asks for the first half of the
+			// remaining groups and leaves the rest out as a fault of form.
+			if len(repair.Groups) > 1 {
+				keep := (len(repair.Groups) + 1) / 2
+				for _, id := range repair.Groups[keep:] {
+					dropped[id] = true
+					faults[id] = triageOutcome{form: true}
+				}
+				repair.Groups = slices.Clone(repair.Groups[:keep])
 			}
 			repair.OutputErrors = addLim(append([]string{}, repair.OutputErrors...), "output_not_json")
 			continue
@@ -481,6 +515,10 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 	if resolvedLate {
 		s.rec.Limitations = addLim(s.rec.Limitations, record.LimOutputDegraded)
 	}
+	// A cancelled slot keeps no classification: its record fails.
+	if failed != nil && failed.Status == domain.TaskCancelled {
+		clear(done)
+	}
 	// The groups the slot sent, with what was accepted for each.
 	var groups []record.TriageGroup
 	var candidates []record.Candidate
@@ -496,6 +534,8 @@ func (s *roleStage) runTriage(bin []*triageGroup, plan triagePlan, upstream []re
 			tg.Omitted = record.TriageAnswerMissing
 			if f, faulted := faults[g.id]; faulted && f.omitted != "" {
 				tg.Omitted = f.omitted
+			} else if faulted && f.form {
+				tg.Omitted = record.TriageItemOmitted
 			} else if faulted {
 				tg.Omitted = record.TriageItemRejected
 			}
@@ -619,10 +659,37 @@ func (s *roleStage) checkTriageAnswer(a triageAnswer, g triageSent, index int, r
 		}
 		return o, codes, issues
 	}
+	// atGroup keeps the citations of raw that name the group's own excerpts
+	// (or an ID the request did not hold, which the ID check reports);
+	// outside says another group's excerpt was cited. That is a fault of
+	// form: the repair asks again, and after it only the group's own
+	// citations are kept.
+	atGroupOnly := func(raw []string) (in []string, outside bool) {
+		if raw == nil {
+			return nil, false
+		}
+		_, base, _ := reply.resolveIssues(raw, citeNarrow)
+		in = []string{}
+		for i, b := range base {
+			if _, sent := reply.sent[b]; sent && !slices.Contains(g.context, b) {
+				outside = true
+				continue
+			}
+			in = append(in, raw[i])
+		}
+		return in, outside
+	}
+	raw := a.Evidence
+	if in, outside := atGroupOnly(raw); outside {
+		note("evidence_ids", errTriageNotAtGroup, "")
+		if final {
+			raw = in
+		}
+	}
 	switch a.Classification {
 	case record.TriageProblem:
 		c := record.CandidateText{Title: a.Title, Condition: a.Condition, Impact: a.Impact, Improvement: a.Improvement, Counterpoint: a.Reason,
-			Mechanism: a.Mechanism, Evidence: a.Evidence}
+			Mechanism: a.Mechanism, Evidence: raw}
 		atGroup := func(base []string) []record.FieldProblem {
 			for _, id := range base {
 				if slices.Contains(g.context, id) {
@@ -632,7 +699,7 @@ func (s *roleStage) checkTriageAnswer(a triageAnswer, g triageSent, index int, r
 			return []record.FieldProblem{{Field: "evidence_ids", Code: errTriageNotAtGroup}}
 		}
 		chk := s.checkCandidate(c, "triage", index, reply, a.Mechanism != "", final, record.TriageItemOmitted, atGroup)
-		codes, issues = chk.codes, chk.issues
+		codes, issues = addLim(codes, chk.codes...), append(issues, chk.issues...)
 		if chk.keep {
 			o.text, o.lims = chk.text, chk.lims
 			if len(codes) == 0 || final {
@@ -641,17 +708,22 @@ func (s *roleStage) checkTriageAnswer(a triageAnswer, g triageSent, index int, r
 		}
 		return settle()
 	case record.TriageHarmless, record.TriageUnclear:
+		textOK := len(s.textErrors(a.Reason)) == 0
 		for _, code := range s.textErrors(a.Reason) {
 			note("reason", code, "")
 		}
 		kinds := []string{"code", "test"}
 		if a.Classification == record.TriageUnclear {
-			if len(a.Evidence) == 0 {
+			if len(raw) == 0 {
+				// Its citations are optional: after the repair an answer
+				// whose only fault was citing other groups keeps none.
+				if final && len(codes) > 0 && formOnly(codes) && textOK {
+					return o, codes, issues
+				}
 				return settle()
 			}
 			kinds = append(kinds, "document")
 		}
-		raw := a.Evidence
 		ids, _, citeIssues := reply.resolveIssues(raw, citeNarrow)
 		for _, is := range citeIssues {
 			note("evidence_ids", is.code, is.id)
@@ -663,7 +735,7 @@ func (s *roleStage) checkTriageAnswer(a triageAnswer, g triageSent, index int, r
 			o.ids = ids
 			return o, nil, nil
 		}
-		if final && formOnly(codes) && len(s.textErrors(a.Reason)) == 0 {
+		if final && formOnly(codes) && textOK {
 			ids, lims, errs := reply.degrade(raw, citeNarrow, 6, nil)
 			if len(errs) == 0 && !slices.Contains(lims, limCitationUnspecified) && len(idErrors(ids, reply.catalog(), 6, kinds...)) == 0 {
 				o.ids, o.lims = ids, lims

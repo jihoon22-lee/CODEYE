@@ -208,3 +208,86 @@ func TestTriageAdmissionHoldsAShareForTheHighestSeverity(t *testing.T) {
 		t.Fatalf("calls used %d, want the ceiling less at most the one call no pair fits", used)
 	}
 }
+
+// TestTriageVerifyFitsLargeGroupsAtTheMinimumBudget: problem groups of 64
+// diagnostics each are verified at the smallest request budget; the request
+// names a bounded number of each candidate's observations, the record keeps
+// them all.
+func TestTriageVerifyFitsLargeGroupsAtTheMinimumBudget(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("package triage\n\n")
+	var diags []exampleDiag
+	line := 3
+	for k := range 4 {
+		fmt.Fprintf(&b, "func big%d(x *int) int {\n", k)
+		for i := range 64 {
+			fmt.Fprintf(&b, "\ty%d := *x\n", i)
+			diags = append(diags, exampleDiag{path: "a.go", line: line + 1 + i, rule: "SA4006", category: "correctness", message: "this value is never used (synthetic)"})
+		}
+		b.WriteString("\treturn 0\n}\n")
+		line += 67
+	}
+	tree := map[string]string{"go.mod": "module example.test/triage\n\ngo 1.27\n", "a.go": b.String()}
+	j := treeJob(t, tree)
+	script := triageReviewScript(t)
+	problems := triageScript(t, func(triageGroupInput) string { return record.TriageProblem })
+	// The unit is longer than a whole citation: cite the first diagnostic's line.
+	script["triage"] = func(n int, q opencode.Request) opencode.Reply {
+		in := decodeAs[triageInput](t, q)
+		var out struct {
+			Triage []map[string]any `json:"triage"`
+		}
+		if err := json.Unmarshal(problems(n, q).Output, &out); err != nil {
+			t.Fatal(err)
+		}
+		for i, g := range in.Groups {
+			out.Triage[i]["evidence_ids"] = []string{fmt.Sprintf("%s:%d-%d", g.Context[0], g.Lines[0], g.Lines[0])}
+		}
+		return asJSON(out)
+	}
+	var verifyBytes []int
+	whole := script["verify"]
+	script["verify"] = func(n int, q opencode.Request) opencode.Reply {
+		verifyBytes = append(verifyBytes, len(opencode.Prompt(q)))
+		return whole(n, q)
+	}
+	script["interpret"] = func(_ int, q opencode.Request) opencode.Reply {
+		return asJSON(map[string]any{"hypotheses": []map[string]any{}, "limits": []map[string]any{{"observation_ids": []string{decodeAs[interpretInput](t, q).Observations[0].ID}, "statement": "도구 메시지만으로는 영향을 판단할 수 없다."}}})
+	}
+	caller := &scriptedCaller{script: script}
+	h, err := discovery.Wrap(Handler{Static: admissionStatic(t, []string{"a.go"}, diags), Caller: caller, Budget: Budget{RequestBytes: MinRequestBytes}},
+		discovery.Config{Observer: exampleObserver{t: t}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := h.Plan(t.Context(), j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results := map[string]analysis.TaskResult{}
+	for _, task := range plan {
+		results[task.Key] = h.Run(t.Context(), j, task, nil)
+	}
+	if r := results["review.triage.t001"]; r.Status != domain.TaskSucceeded {
+		t.Fatalf("triage %+v", r)
+	}
+	if r := results["review.verify.t001"]; r.Status != domain.TaskSucceeded {
+		t.Fatalf("verify %+v (request bytes %v)", r, verifyBytes)
+	}
+	var rec record.Record
+	raw, err := os.ReadFile(recordPath(j, "verify.t001"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		t.Fatal(err)
+	}
+	named, most := 0, 0
+	for _, c := range rec.Candidates {
+		named, most = named+len(c.ObservationIDs), max(most, len(c.ObservationIDs))
+	}
+	if len(rec.Candidates) < 2 || most <= verifyObservationsShown || len(rec.Observations) != named ||
+		!slices.Contains(rec.Limitations, limVerifyObservationsTrimmed) {
+		t.Fatalf("verify record holds %d candidates (largest %d observations), %d observations, limitations %v", len(rec.Candidates), most, len(rec.Observations), rec.Limitations)
+	}
+}

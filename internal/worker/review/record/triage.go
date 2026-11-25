@@ -141,11 +141,18 @@ func checkTriage(r Record, catalog map[string]Excerpt, observations map[string]O
 		if g.ObservationIDs == nil || len(g.ObservationIDs) == 0 || len(g.ObservationIDs) > MaxGroupObservations || g.ContextIDs == nil || len(g.ContextIDs) == 0 {
 			return invalid("triage group %s lists", g.ID)
 		}
+		tools := map[string]bool{}
 		for _, id := range g.ObservationIDs {
-			if _, ok := observations[id]; !ok || used[id] {
+			o, ok := observations[id]
+			if !ok || used[id] {
 				return invalid("triage group %s observation", g.ID)
 			}
 			used[id] = true
+			tools[o.Tool] = true
+		}
+		// cross_tool is exactly a group of two or more tools.
+		if g.CrossTool != (len(tools) > 1) {
+			return invalid("triage group %s cross_tool", g.ID)
 		}
 		if !idsOK(g.ContextIDs, catalog, 64) || !hasKind(g.ContextIDs, catalog, "code") {
 			return invalid("triage group %s context", g.ID)
