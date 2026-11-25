@@ -202,6 +202,22 @@ describe('existing test results', () => {
 });
 
 describe('analysis sections', () => {
+  it('counts the candidates left out because their evidence is not shipped code, from builder 24 on', () => {
+    const withCount = (builder: string) => {
+      const doc = example('report-slices.json');
+      doc.builder.version = builder;
+      doc.code_review.candidates_not_shipped = 2;
+      doc.overview.sections.find((x: { key: string }) => x.key === 'code_review').counts.candidates_not_shipped = 2;
+      return doc;
+    };
+    const doc = withCount('24');
+    expect(parseAnalysisReport(doc, doc.run_id).sections!.codeReview.candidatesNotShipped).toBe(2);
+    expect(t.sections.countLabels['code_review.candidates_not_shipped']).toContain('배포 코드가 아닌 경로');
+    expect(parseAnalysisReport(example('report-slices.json'), doc.run_id).sections!.codeReview.candidatesNotShipped).toBe(0);
+    const old = withCount('23');
+    expect(() => parseAnalysisReport(old, old.run_id)).toThrow();
+  });
+
   it('labels a legacy clipped document excerpt beside its whole pinned citation', () => {
     const doc = example('report.json');
     olderBuilder(doc, '17');

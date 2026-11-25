@@ -274,6 +274,9 @@ for (const surface of ['web panel', 'saved HTML']) {
       <pre class="source-window" tabindex="0"><code><span class="source-line"><span class="source-line-number" aria-hidden="true">4</span><span class="source-line-code">func Sum(samples []int) int {</span></span></code></pre></div>`;
     await page.setContent(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style>
       ${open}
+      <dl class="report-counts section-counts" data-section-counts="code_review">
+        <div data-count="candidates_not_shipped"><dt><span data-long="count-candidates-not-shipped">시험·예제 등 배포 코드가 아닌 경로만 인용해 검증하지 않은 모델 후보</span></dt><dd>12</dd></div>
+        <div data-count="long"><dt>${long('count-label')}</dt><dd>3</dd></div></dl>
       <section class="report-actions"><div class="report-group" data-tone="action">
       <article class="card report-action-card" data-severity="medium"><div class="card-body">
         <header class="report-action-head"><h6>${long('title')}</h6><p class="report-action-badges"><span class="report-status-badge" data-tone="ready">근거 있음</span><span class="report-action-severity">심각도 보통</span></p></header>

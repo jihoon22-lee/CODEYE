@@ -116,3 +116,63 @@ func TestPathClassIsOnlyInRequests(t *testing.T) {
 		t.Fatalf("a stored excerpt names a path class: %s", b)
 	}
 }
+
+// When every candidate of a request is about non-shipped code, nothing is sent
+// to verification: the stage ends without a call and without failing.
+func TestNothingToVerifyWhenAllCandidatesAreAboutNonShippedPaths(t *testing.T) {
+	j := coverageJob(t)
+	script := coverageScript(t)
+	investigations, withCandidates := 0, 0
+	script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[investigateInput](t, q)
+		investigations++
+		for _, e := range in.Scope.Excerpts {
+			if record.PathClass(e.Path) != "" {
+				withCandidates++
+				return asJSON(map[string]any{"candidates": []map[string]any{{"title": "시험 코드의 단언 누락", "condition": "주소가 비어 있는 경우", "mechanism": "단언이 없다.", "impact": "시험이 통과한다.",
+					"improvement": "단언을 더한다.", "counterpoint": "다른 시험이 덮을 수 있다.", "evidence_ids": []string{e.ID}}}})
+			}
+		}
+		return asJSON(map[string]any{"candidates": []any{}})
+	}
+	caller := &scriptedCaller{script: script}
+	r, results := reportAt(t, &j, sliceExampleStatic(t), caller, smallBudget, &exampleIDs{n: 0xbf0})
+	if withCandidates == 0 || caller.calls("verify") != 0 {
+		t.Fatalf("%d investigations, %d with a candidate about a test path, %d verify calls", investigations, withCandidates, caller.calls("verify"))
+	}
+	for key, res := range results {
+		if strings.HasPrefix(key, "review.verify") && res.Status == domain.TaskFailed {
+			t.Fatalf("%s %+v", key, res)
+		}
+	}
+	if r.CodeReview.CandidatesNotShipped != withCandidates {
+		t.Fatalf("counted %d of %d", r.CodeReview.CandidatesNotShipped, withCandidates)
+	}
+	for _, f := range r.Findings {
+		if strings.Contains(f.Title, "시험 코드의 단언 누락") {
+			t.Fatalf("listed: %s", f.ID)
+		}
+	}
+}
+
+// A scope with no shipped source (examples and tests only) has nothing else
+// to review: its candidates are not set aside.
+func TestShippedSourceInTheScope(t *testing.T) {
+	cases := []struct {
+		name  string
+		tree  map[string]string
+		scope domain.Scope
+		want  bool
+	}{
+		{"shipped and tests", map[string]string{"go.mod": "module x\n", "a.go": "package x\n", "a_test.go": "package x\n"}, domain.Scope{Kind: "full"}, true},
+		{"tests and examples only", map[string]string{"go.mod": "module x\n", "a_test.go": "package x\n", "examples/main.go": "package main\n"}, domain.Scope{Kind: "full"}, false},
+		{"scope inside the examples", map[string]string{"go.mod": "module x\n", "a.go": "package x\n", "examples/main.go": "package main\n"}, domain.Scope{Kind: "paths", Paths: []string{"examples"}}, false},
+	}
+	for _, c := range cases {
+		j := treeJob(t, c.tree)
+		j.Scope = c.scope
+		if got := (&roleStage{j: j}).hasShippedSource(); got != c.want {
+			t.Fatalf("%s: %v", c.name, got)
+		}
+	}
+}
