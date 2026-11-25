@@ -140,7 +140,7 @@
       "opencode_version": "1.19.5",
       "pack_id": "review",
       "pack_version": "2.10.0",
-      "pack_sha256": "1a29d0244ec329bde141e574ac3572bca67efe1dc2cff5d1d3acda6de255a7b0",
+      "pack_sha256": "5d1d9671dad9cb9e3c65ee9bb3f90ec2a1cc25fadccc976004dc6ac0dfd2d5ed",
       "pack_files": [
         "00-core.md",
         "domains.md",
@@ -148,8 +148,8 @@
         "languages/go.md",
         "pack.yaml"
       ],
-      "request_sha256": "9229b8f1f50d9cb30169d6dc1f83326a9a8f0c02150c2486ea8c984e5b73c20a",
-      "request_bytes": 19934,
+      "request_sha256": "42df2eda75c277f7e77929a895959a695d875a2e0602f928b1a694a6ed0a7b4b",
+      "request_bytes": 19569,
       "usage": {
         "input": 4559,
         "output": 50
