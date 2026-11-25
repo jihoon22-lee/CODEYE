@@ -419,6 +419,9 @@ func (s *roleStage) exchange(contract string, input func(*outputRepair) ([]byte,
 			return s.fail(result(domain.TaskCancelled, "cancelled"))
 		}
 		query, err := input(repair)
+		if err != nil && s.ctx.Err() != nil {
+			return s.fail(result(domain.TaskCancelled, "cancelled"))
+		}
 		if err != nil {
 			return end(result(domain.TaskFailed, "review_input_unavailable"), limRepairNotSent)
 		}

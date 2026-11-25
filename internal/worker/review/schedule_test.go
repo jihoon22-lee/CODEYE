@@ -530,7 +530,13 @@ func TestPairsCancelledMidFlight(t *testing.T) {
 			// started (no result).
 			st := statusOf(got)
 			if st[domain.TaskCancelled] == 0 || st[domain.TaskFailed] != 0 || len(got.results) == f.end-f.start {
-				t.Fatalf("statuses %v of %d tasks run, %d planned", st, len(got.results), f.end-f.start)
+				var failed []string
+				for k, r := range got.results {
+					if r.Status == domain.TaskFailed {
+						failed = append(failed, k+":"+r.Reason)
+					}
+				}
+				t.Fatalf("statuses %v of %d tasks run, %d planned; failed %v", st, len(got.results), f.end-f.start, failed)
 			}
 			deadline := time.Now().Add(5 * time.Second)
 			for runtime.NumGoroutine() > before+2 && time.Now().Before(deadline) {

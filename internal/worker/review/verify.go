@@ -146,6 +146,16 @@ func verificationClaimsExecution(v record.Verification) bool {
 // verify checks the accepted investigate and interpret candidates of the
 // whole run or, for a slice task, its own slice's investigate candidates
 // only (with the review.scope artifact as upstream).
+// inputUnavailable ends the stage whose input could not be built: cancelled
+// when the attempt was cancelled meanwhile (the snapshot reads stop with
+// the context), failed otherwise.
+func (s *roleStage) inputUnavailable() *analysis.TaskResult {
+	if s.ctx.Err() != nil {
+		return s.fail(result(domain.TaskCancelled, "cancelled"))
+	}
+	return s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+}
+
 func (s *roleStage) verify() analysis.TaskResult {
 	docRec, uDoc := s.prior(record.StageDocuments)
 	var invRec, intRec record.Record
@@ -229,7 +239,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 	withText, err := s.withText(context)
 	if err != nil {
 		s.setEvidence(context)
-		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+		return *s.inputUnavailable()
 	}
 	plain := make([]CandidateText, len(candidates))
 	cited := map[string]bool{}
@@ -255,12 +265,12 @@ func (s *roleStage) verify() analysis.TaskResult {
 		expansionCaps{s.limit().expansion, s.limit().expansionBytes})
 	if err != nil {
 		s.setEvidence(context)
-		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+		return *s.inputUnavailable()
 	}
 	declarations, err := s.enclosingDeclarations(anchors)
 	if err != nil {
 		s.setEvidence(context)
-		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+		return *s.inputUnavailable()
 	}
 	budget := s.limit().expansionBytes
 	for _, x := range extra {
@@ -269,7 +279,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 	linked, err := s.sourceCallContext(".", anchors, append(slices.Clone(anchors), extra...), s.limit().expansion-len(extra), budget)
 	if err != nil {
 		s.setEvidence(context)
-		return *s.fail(result(domain.TaskFailed, "review_input_unavailable"))
+		return *s.inputUnavailable()
 	}
 	if len(linked) != 0 {
 		extra = append(extra, linked...)
