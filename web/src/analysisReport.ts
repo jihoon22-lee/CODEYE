@@ -210,7 +210,21 @@ function evidence(v: unknown, expandedDocuments: boolean): Evidence {
     artifact: nullable(e.artifact_id) ?? undefined,
   };
 }
-function finding(v: unknown, expandedDocuments: boolean): Finding {
+// LATER_MARKERS are the limitation codes the report builder gave a meaning at
+// a later builder: the first builder that writes them. In a revision of an
+// older builder the same string is model text (the older builder did not strip
+// it), so it is no marker. The Go reader applies the same rule
+// (internal/report/validate.go, withoutLaterMarkers); a test reads the Go
+// constants.
+export const LATER_MARKERS: Record<string, number> = { candidate_not_shipped: 24, hypothesis_not_shipped: 25 };
+
+export function withoutLaterMarkers(limitations: string[], builder: unknown): string[] {
+  if (typeof builder !== 'string' || !/^[0-9]+$/.test(builder)) return limitations;
+  const canonical = String(Number(builder)) === builder;
+  return limitations.filter(note => !(note in LATER_MARKERS) || (canonical && Number(builder) >= LATER_MARKERS[note]));
+}
+
+function finding(v: unknown, expandedDocuments: boolean, builder: unknown): Finding {
   const f = object(v);
   return {
     id: str(f.id),
@@ -236,7 +250,7 @@ function finding(v: unknown, expandedDocuments: boolean): Finding {
     }),
     recommendation: str(object(f.recommendation).summary),
     verification: array(f.verification, str),
-    limitations: array(f.limitations, str),
+    limitations: withoutLaterMarkers(array(f.limitations, str), builder),
     evidence: array(f.evidence, v => evidence(v, expandedDocuments)),
     counter: array(f.counterevidence_ids, str),
     locations: array(f.locations ?? [], (l) => str(object(l).path)),
@@ -270,7 +284,7 @@ export function parseAnalysisReport(
   const pathClasses = typeof builderVersion === 'string' && /^(?:2[3-9]|[3-9][0-9]|[1-9][0-9]{2,})$/.test(builderVersion);
   const includesCode = r.export != null && object(r.export).include_code === true;
   const expandedDocuments = builder18 && includesCode;
-  const findings = array(r.findings, v => finding(v, expandedDocuments));
+  const findings = array(r.findings, v => finding(v, expandedDocuments, builderVersion));
   let unresolved = 0;
   const observations = array(r.observations, (v) => {
     const o = object(v),
