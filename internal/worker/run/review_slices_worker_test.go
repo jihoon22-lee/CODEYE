@@ -23,6 +23,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/worker/executor"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/workerproto"
 )
 
@@ -103,6 +104,7 @@ func (f *sliceScripted) Review(ctx context.Context, _ executor.Runner, q opencod
 		Scope struct {
 			Excerpts []struct {
 				ID         string
+				Path       string
 				Start, End int
 			} `json:"excerpts"`
 		} `json:"scope"`
@@ -120,7 +122,14 @@ func (f *sliceScripted) Review(ctx context.Context, _ executor.Runner, q opencod
 	case "documents":
 		body = map[string]any{"contracts": []any{}, "conflicts": []any{}, "questions": []any{}, "instruction_notes": []any{}}
 	case "investigate":
+		// The candidate is about shipped code, so that it is verified.
 		e := in.Scope.Excerpts[0]
+		for _, x := range in.Scope.Excerpts {
+			if record.PathClass(x.Path) == "" {
+				e = x
+				break
+			}
+		}
 		id := e.ID
 		if e.End-e.Start+1 > 80 {
 			id = fmt.Sprintf("%s:%d-%d", e.ID, e.Start, e.Start+79)

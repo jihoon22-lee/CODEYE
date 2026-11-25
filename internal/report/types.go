@@ -22,7 +22,7 @@ const (
 	BuilderID     = "codeye-report"
 	// Stored revisions keep their original builder and schema. Bump this
 	// version when the same accepted inputs would produce a different report.
-	BuilderVersion             = "23"
+	BuilderVersion             = "24"
 	TestCaseResultsSince       = 19
 	AnalysisEvidenceSince      = 17
 	GoTestFailureEvidenceSince = 18
@@ -31,6 +31,10 @@ const (
 	// of a tool finding on a path that is not shipped code and records the
 	// path class of every located observation.
 	PathSeveritySince = 23
+	// ShippedFocusSince is the first builder that leaves an investigation
+	// candidate whose evidence is all on paths that are not shipped code out
+	// of the findings and counts it (code_review.candidates_not_shipped).
+	ShippedFocusSince = 24
 )
 
 // Report statuses (schemas/report.schema.json).
@@ -59,27 +63,31 @@ const (
 // Report is the stored, canonical report document. Field names follow
 // schemas/report.schema.json (v0.1 plus the builder's additive properties).
 type Report struct {
-	Project        *ProjectInfo  `json:"project,omitempty"`
-	SchemaVersion  string        `json:"schema_version"`
-	Demo           bool          `json:"demo"`
-	ID             string        `json:"id"`
-	RunID          string        `json:"run_id"`
-	Revision       int           `json:"revision"`
-	CreatedAt      string        `json:"created_at"`
-	Status         string        `json:"status"`
-	QualityVerdict string        `json:"quality_verdict"`
-	Builder        Builder       `json:"builder"`
-	Export         Export        `json:"export"`
-	Inputs         Inputs        `json:"inputs"`
-	Attempt        Attempt       `json:"attempt"`
-	Summary        Summary       `json:"summary"`
-	Coverage       Coverage      `json:"coverage"`
-	Tasks          []Task        `json:"tasks"`
-	Executions     []Execution   `json:"executions"`
-	Artifacts      []Artifact    `json:"artifacts"`
-	Observations   []Observation `json:"observations"`
-	Findings       []Finding     `json:"findings"`
-	Limitations    []string      `json:"limitations"`
+	// scopeNonShipped is set by Build when the reviewable scope holds no
+	// shipped code (record.ShippedSourceIn is false); sections store it as
+	// code_review.subject.
+	scopeNonShipped bool
+	Project         *ProjectInfo  `json:"project,omitempty"`
+	SchemaVersion   string        `json:"schema_version"`
+	Demo            bool          `json:"demo"`
+	ID              string        `json:"id"`
+	RunID           string        `json:"run_id"`
+	Revision        int           `json:"revision"`
+	CreatedAt       string        `json:"created_at"`
+	Status          string        `json:"status"`
+	QualityVerdict  string        `json:"quality_verdict"`
+	Builder         Builder       `json:"builder"`
+	Export          Export        `json:"export"`
+	Inputs          Inputs        `json:"inputs"`
+	Attempt         Attempt       `json:"attempt"`
+	Summary         Summary       `json:"summary"`
+	Coverage        Coverage      `json:"coverage"`
+	Tasks           []Task        `json:"tasks"`
+	Executions      []Execution   `json:"executions"`
+	Artifacts       []Artifact    `json:"artifacts"`
+	Observations    []Observation `json:"observations"`
+	Findings        []Finding     `json:"findings"`
+	Limitations     []string      `json:"limitations"`
 
 	// Per-analysis sections (builder 5, sections_types.go). Absent in
 	// earlier revisions, which renderers show with the flat layout.

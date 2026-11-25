@@ -195,7 +195,11 @@ func ValidateReport(r Report) error {
 		}
 		wantClass := ""
 		if o.Location != nil && version >= PathSeveritySince {
-			wantClass = record.PathClass(o.Location.Path)
+			// Builder 23 recorded the class of the earlier, guessing rule.
+			wantClass = record.LegacyPathClass(o.Location.Path)
+			if version >= ShippedFocusSince {
+				wantClass = record.PathClass(o.Location.Path)
+			}
 		}
 		if o.PathClass != wantClass {
 			return invalidf("observation %s path class differs from its location", o.ID)
@@ -526,6 +530,11 @@ func Project(r Report, includeCode bool) Report {
 		g.Recommendation = Recommendation{Summary: safeText(f.Recommendation.Summary), Tradeoffs: safeTexts(f.Recommendation.Tradeoffs)}
 		g.Verification = safeTexts(f.Verification)
 		g.Limitations = safeTexts(f.Limitations)
+		for j, s := range f.Limitations {
+			if s == record.LimCandidateNotShipped {
+				g.Limitations[j] = s
+			}
+		}
 		g.Conditions = make([]Condition, len(f.Conditions))
 		for j, c := range f.Conditions {
 			c.Statement = safeText(c.Statement)

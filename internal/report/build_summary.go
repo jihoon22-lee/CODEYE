@@ -128,6 +128,10 @@ func ComputeSummary(findings []Finding, obs []Observation) Summary {
 				cands = append(cands, cand{f, summaryClass(f)})
 			}
 		case "unreviewed", "inconclusive":
+			if FindingNotShipped(f) {
+				// Listed, not pending: it was not verified by design.
+				continue
+			}
 			s.PendingCandidates++
 			if !hiddenDisposition[f.Disposition] {
 				cands = append(cands, cand{f, summaryClass(f)})

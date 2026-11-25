@@ -531,7 +531,7 @@ func exampleInput(t *testing.T, j analysis.Job, h analysis.Handler, plan []analy
 	}
 	snapshotID := ids.next()
 	in := report.Input{ReportID: ids.next(), Revision: 1, Now: reportExampleTime.Add(10 * time.Minute),
-		Run:      report.RunFacts{ID: j.RunID, ProjectID: ids.next(), Profile: j.Profile, ScopeKind: j.Scope.Kind},
+		Run:      report.RunFacts{ID: j.RunID, ProjectID: ids.next(), Profile: j.Profile, ScopeKind: j.Scope.Kind, ScopePaths: j.Scope.Paths},
 		Snapshot: report.SnapshotFacts{ID: snapshotID, ManifestDigest: j.Snapshot.Digest, Consistency: j.Snapshot.Manifest.Consistency},
 		Attempt:  report.AttemptFacts{ID: j.AttemptID, Number: 1, Epoch: j.Epoch, CompletionStatus: "partial", Cleanup: "confirmed"}, SourceManifest: srcBytes, Bodies: map[string][]byte{}}
 	reg := report.DefaultRegistry()

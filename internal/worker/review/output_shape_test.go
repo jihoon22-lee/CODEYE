@@ -397,7 +397,7 @@ func TestReportPublishesVerdictsOfAnIncompleteSliceVerify(t *testing.T) {
 	script := coverageScript(t)
 	candidate := func(in investigateInput, title string) map[string]any {
 		return map[string]any{"title": title, "condition": "주소가 비어 있는 경우", "mechanism": "빈 주소가 검사 없이 연결에 쓰인다.", "impact": "서비스가 잘못된 주소로 시작한다.",
-			"improvement": "주소를 검사한다.", "counterpoint": "기본값이 항상 채워질 수 있다.", "evidence_ids": []string{in.Scope.Excerpts[0].ID}}
+			"improvement": "주소를 검사한다.", "counterpoint": "기본값이 항상 채워질 수 있다.", "evidence_ids": []string{shippedExcerpt(in.Scope.Excerpts).ID}}
 	}
 	script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
 		in := decodeAs[investigateInput](t, q)

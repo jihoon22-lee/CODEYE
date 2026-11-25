@@ -188,7 +188,14 @@ function sourceEvidence(finding: Finding): LocatedEvidence[] {
   );
 }
 
+// findingNotShipped reports a model candidate the platform did not send to verification
+// because all its evidence is on paths that are not shipped code (builder 24).
+export function findingNotShipped(finding: Finding): boolean {
+  return finding.validation === 'unreviewed' && finding.limitations.includes('candidate_not_shipped');
+}
+
 export function secondaryReviewFinding(finding: Finding): boolean {
+  if (findingNotShipped(finding)) return true;
   const evidence = sourceEvidence(finding);
   return evidence.length > 0
     ? evidence.every(e => e.kind === 'test' || secondaryReviewPath(e.path))

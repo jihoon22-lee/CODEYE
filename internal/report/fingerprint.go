@@ -150,7 +150,7 @@ func ToolFingerprint(analyzer, rule, path, symbol, message string) (string, Fing
 // paths. It must run after the verdict was applied to f. Candidates of one
 // file without symbols share a fingerprint; such weak identities never carry
 // a disposition automatically (see DispositionCarries).
-func setModelFingerprint(f *Finding, c record.CandidateText, catalog map[string]record.Excerpt, linked []Observation) {
+func setModelFingerprint(f *Finding, c record.CandidateText, catalog map[string]record.Excerpt, linked []Observation, distinct ...string) {
 	cause := CauseCandidate + ":unclassified"
 	if f.Validation != "unreviewed" {
 		cause = CauseCandidate + ":" + f.Category
@@ -181,6 +181,13 @@ func setModelFingerprint(f *Finding, c record.CandidateText, catalog map[string]
 			msg = NormalizeCondition(*o.RawMessage)
 		}
 		conditions = append(conditions, strings.Join([]string{o.Tool, o.RuleID, p, msg}, "\x1f"))
+	}
+	for _, d := range distinct {
+		if d != "" {
+			// Tells apart candidates the other inputs cannot (the parts of one
+			// triage group): the lines of their diagnostics.
+			conditions = append(conditions, "lines\x1f"+d)
+		}
 	}
 	f.Fingerprint = fingerprint(&b, strings.Join(sortedUnique(conditions), "\x1e"))
 	f.FingerprintBasis = &b

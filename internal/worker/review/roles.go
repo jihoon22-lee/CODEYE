@@ -789,9 +789,12 @@ func (s *roleStage) documents() analysis.TaskResult {
 const investigateContract = `For this role use exactly {"candidates":[{"title":"what goes wrong","condition":"the concrete trigger input or state","mechanism":"how the cited lines produce the failure, step by step","impact":"...","improvement":"fix direction","counterpoint":"what would refute it: actual counterevidence or remaining uncertainty","evidence_ids":["ev_...:12-30"]}],"strengths":[{"title":"specific engineering practice","benefit":"what it prevents or enables","scope":"directory","evidence_ids":["ev_...:60-75"]}],"contract_comparisons":[{"contract_index":1,"applies_to":"directory","status":"match|partial|mismatch|unknown","reason":"specific link or missing evidence","document_evidence_ids":["ev_..."],"code_evidence_ids":["ev_...:40-52"]}]}. Return at most %d candidates and 3 strengths; a candidate cites at most 6 evidence IDs. Cite scope.excerpts code or test lines for candidates and scoped implementation code for strengths; an excerpt with "within" has its lines inside the named excerpt. For whole_run only, compare up to 6 documents.contracts, one comparison per contract, using its 1-based index, scope or narrower directory and its evidence_ids copied unchanged, without line ranges. For match, partial or mismatch cite 1-4 distinct code_evidence_ids with the implementation lines inside the scope, as for candidates (an excerpt of more than 80 lines needs a range); for an API documented in its own source file cite lines of the documented declaration's body, not its doc comment. Unknown may cite no code. Slices return no comparisons. Do not claim reproduction or provide attack instructions.`
 
 type investigateScope struct {
-	WholeRun        bool                    `json:"whole_run"`
-	Snapshot        string                  `json:"snapshot_manifest_digest"`
-	Modules         []string                `json:"modules"`
+	WholeRun bool     `json:"whole_run"`
+	Snapshot string   `json:"snapshot_manifest_digest"`
+	Modules  []string `json:"modules"`
+	// Subject is non_shipped when the reviewed scope holds no shipped code
+	// (record.ShippedSourceIn); absent otherwise.
+	Subject         string                  `json:"subject,omitempty"`
 	Excerpts        excerptList             `json:"excerpts"`
 	DirectCalls     []directCall            `json:"direct_calls,omitempty"`
 	MemberTest      *memberTestHint         `json:"member_test,omitempty"`
@@ -957,7 +960,7 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	if len(modules) > 32 {
 		modules = modules[:32]
 	}
-	in := investigateInput{Scope: investigateScope{WholeRun: s.slice == nil, Snapshot: s.j.Snapshot.Digest, Modules: nonNilList(modules), Limitations: s.rec.Limitations}, Documents: docs, Environment: envh}
+	in := investigateInput{Scope: investigateScope{WholeRun: s.slice == nil, Snapshot: s.j.Snapshot.Digest, Modules: nonNilList(modules), Subject: s.subject(), Limitations: s.rec.Limitations}, Documents: docs, Environment: envh}
 	build := func(list []record.Excerpt) ([]byte, error) {
 		x := in
 		x.Scope = in.Scope.withExcerpts(list, links)
@@ -970,7 +973,7 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	// can carry; it is fixed before fitting, so the instructions do not
 	// change with the excerpts sent.
 	maxCandidates := s.limit().candidateLimit(sourceBytes(code))
-	baseContract := fmt.Sprintf(investigateContract, maxCandidates)
+	baseContract := fmt.Sprintf(investigateContract, maxCandidates) + s.subjectContract()
 	instructions := s.instructions(baseContract)
 	sent, trimmed, err := s.fitExcerpts(instructions, 1, code, build)
 	// Keep space for multiple implementation paths before sending every

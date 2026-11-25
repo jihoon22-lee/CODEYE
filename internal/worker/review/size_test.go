@@ -194,8 +194,14 @@ func maxScriptFor(t *testing.T, b Budget) map[string]func(int, opencode.Request)
 				n = min(n, l.candidates)
 			}
 			var cands []map[string]any
+			// Candidates are about shipped code: an excerpt of a test, example or
+			// vendored path would be left out of the verification.
+			pool := slices.DeleteFunc(slices.Clone(in.Scope.Excerpts), func(e record.Excerpt) bool { return record.PathClass(e.Path) != "" })
+			if len(pool) == 0 {
+				pool = in.Scope.Excerpts
+			}
 			for i := range n {
-				e := in.Scope.Excerpts[i%len(in.Scope.Excerpts)]
+				e := pool[i%len(pool)]
 				cands = append(cands, map[string]any{"title": long(fmt.Sprint(i)), "condition": long("c"), "mechanism": longTextN("x", l.mechanism), "impact": long("i"), "improvement": long("m"), "counterpoint": long("p"), "evidence_ids": []string{cite(e)}})
 			}
 			return asJSON(map[string]any{"candidates": cands})

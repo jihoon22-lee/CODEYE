@@ -69,6 +69,7 @@ type verifyInput struct {
 	ObservedTests []observedTestCase `json:"observed_test_cases,omitempty"`
 	Scope         struct {
 		Snapshot    string      `json:"snapshot_manifest_digest"`
+		Subject     string      `json:"subject,omitempty"`
 		Excerpts    excerptList `json:"excerpts"`
 		Limitations []string    `json:"limitations"`
 	} `json:"scope"`
@@ -219,11 +220,21 @@ func (s *roleStage) verify() analysis.TaskResult {
 		contracts = nonNilList(docRec.Contracts)
 		addEvidence(citedDocuments(docRec))
 	}
-	s.rec.Candidates = nonNilList(candidates)
+	all := candidates
+	aside := s.notShippedCandidates(all, context)
+	candidates = slices.DeleteFunc(slices.Clone(all), func(c record.Candidate) bool { return aside[c.ID] })
+	s.rec.Candidates = nonNilList(all)
 	if len(candidates) == 0 {
 		s.setEvidence(context)
 		s.rec.Verifications = []record.Verification{}
-		s.rec.Limitations = addLim(s.rec.Limitations, limNoCandidates)
+		if len(aside) == 0 {
+			s.rec.Limitations = addLim(s.rec.Limitations, limNoCandidates)
+			return s.finish()
+		}
+		for _, c := range all {
+			s.rec.Verifications = append(s.rec.Verifications, unreviewed(c.ID, record.LimCandidateNotShipped))
+		}
+		s.rec.Limitations = addLim(s.rec.Limitations, record.LimCandidateNotShipped)
 		return s.finish()
 	}
 	withText, err := s.withText(context)
@@ -298,8 +309,8 @@ func (s *roleStage) verify() analysis.TaskResult {
 	// the rest stay unreviewed with a limitation. Every sent candidate keeps
 	// all excerpts it cites.
 	in := verifyInput{Observations: s.rec.Observations}
-	in.Scope.Snapshot = s.j.Snapshot.Digest
-	contract := verifyContract
+	in.Scope.Snapshot, in.Scope.Subject = s.j.Snapshot.Digest, s.subject()
+	contract := verifyContract + s.subjectContract()
 	if len(s.j.TestEvidence) > 0 {
 		contract += " Use an observed test to assess its cited assertion. State the code inference only; CODEYE reports the recorded outcome separately."
 	}
@@ -409,8 +420,16 @@ func (s *roleStage) verify() analysis.TaskResult {
 	// cite, plus what was sent.
 	recorded := append([]record.Excerpt{}, sent...)
 	have := catalogOf(sent)
+	citedAside := map[string]bool{}
+	for _, c := range all {
+		if aside[c.ID] {
+			for _, id := range c.Evidence {
+				citedAside[id] = true
+			}
+		}
+	}
 	for _, e := range context {
-		if _, ok := have[e.ID]; !ok && cited[e.ID] {
+		if _, ok := have[e.ID]; !ok && (cited[e.ID] || citedAside[e.ID]) {
 			recorded = append(recorded, e)
 		}
 	}
@@ -634,8 +653,16 @@ func (s *roleStage) verify() analysis.TaskResult {
 		citedIDs = append(citedIDs, v.SupportingEvidence, v.Counterevidence)
 	}
 	s.rec.Evidence = withCited(s.rec.Evidence, textless(cite.used(citedIDs...)))
-	s.rec.Verifications = make([]record.Verification, len(candidates))
-	for i, c := range candidates {
+	s.rec.Verifications = make([]record.Verification, len(all))
+	sendIndex := -1
+	for n, c := range all {
+		if aside[c.ID] {
+			s.rec.Verifications[n] = unreviewed(c.ID, record.LimCandidateNotShipped)
+			s.rec.Limitations = addLim(s.rec.Limitations, record.LimCandidateNotShipped)
+			continue
+		}
+		sendIndex++
+		i := sendIndex
 		v, ok := accepted[c.ID]
 		switch {
 		case ok:
@@ -653,7 +680,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 				s.rec.Limitations = addLim(s.rec.Limitations, lim, record.LimOutputDegraded)
 			}
 		}
-		s.rec.Verifications[i] = v
+		s.rec.Verifications[n] = v
 	}
 	var priors []record.Record
 	if uInv.State == record.UpstreamAccepted {

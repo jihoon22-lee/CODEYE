@@ -581,6 +581,10 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 		s.Ledger = c.ledger()
 	}
 	s.DiagnosticTriage = c.diagnosticTriage()
+	s.CandidatesNotShipped = c.candidatesNotShipped(s.FindingIDs)
+	if c.r.scopeNonShipped {
+		s.Subject = record.SubjectNonShipped
+	}
 	c.addStrengths(s)
 	return s
 }
@@ -592,4 +596,17 @@ func roleOrder(key string) int {
 		}
 	}
 	return 99
+}
+
+// candidatesNotShipped counts the model candidates of the code review the
+// platform did not send to verification because all their evidence is on
+// paths that are not shipped code (FindingNotShipped).
+func (c sectionContext) candidatesNotShipped(ids []string) int {
+	n := 0
+	for _, f := range c.r.Findings {
+		if FindingNotShipped(f) && slices.Contains(ids, f.ID) {
+			n++
+		}
+	}
+	return n
 }

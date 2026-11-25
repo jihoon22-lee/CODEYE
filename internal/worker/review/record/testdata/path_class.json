@@ -1,0 +1,142 @@
+[
+ {
+  "path": "svc/handler.go",
+  "class": ""
+ },
+ {
+  "path": "svc/handler_test.go",
+  "class": "test"
+ },
+ {
+  "path": "pkg/tests/test_x.py",
+  "class": "test"
+ },
+ {
+  "path": "src/test/java/A.java",
+  "class": "test"
+ },
+ {
+  "path": "web/src/a.test.ts",
+  "class": "test"
+ },
+ {
+  "path": "web/src/b.spec.js",
+  "class": "test"
+ },
+ {
+  "path": "pkg/conftest.py",
+  "class": "test"
+ },
+ {
+  "path": "crates/a/tests/b.rs",
+  "class": "test"
+ },
+ {
+  "path": "tests/it.rs",
+  "class": "test"
+ },
+ {
+  "path": "test/util.py",
+  "class": "test"
+ },
+ {
+  "path": "src/app/__tests__/x.js",
+  "class": "test"
+ },
+ {
+  "path": "testdata/in.go",
+  "class": "test"
+ },
+ {
+  "path": "svc/testdata/a.go",
+  "class": "test"
+ },
+ {
+  "path": "examples/demo/main.go",
+  "class": "example"
+ },
+ {
+  "path": "docs/examples/a.py",
+  "class": "example"
+ },
+ {
+  "path": "vendor/x/y.go",
+  "class": "vendored"
+ },
+ {
+  "path": "web/node_modules/a/index.js",
+  "class": "vendored"
+ },
+ {
+  "path": "Vendor/x.go",
+  "class": "vendored"
+ },
+ {
+  "path": "benchmarks/run.go",
+  "class": "benchmark"
+ },
+ {
+  "path": "crates/a/benches/b.rs",
+  "class": "benchmark"
+ },
+ {
+  "path": "svc/build/out.go",
+  "class": ""
+ },
+ {
+  "path": "README.md",
+  "class": ""
+ },
+ {
+  "path": "test",
+  "class": ""
+ },
+ {
+  "path": "internal/gen/gen.go",
+  "class": ""
+ },
+ {
+  "path": "cmd/gen/main.go",
+  "class": ""
+ },
+ {
+  "path": "src/main/java/org/foo/test/Util.java",
+  "class": ""
+ },
+ {
+  "path": "django/test/client.py",
+  "class": ""
+ },
+ {
+  "path": "src/demo/main.go",
+  "class": ""
+ },
+ {
+  "path": "pkg/build/x.py",
+  "class": ""
+ },
+ {
+  "path": "web/dist/app.js",
+  "class": ""
+ },
+ {
+  "path": "internal/generated/api.go",
+  "class": ""
+ },
+ {
+  "path": "svc/fixtures/a.go",
+  "class": ""
+ },
+ {
+  "path": "pkg/mocks/m.go",
+  "class": ""
+ },
+ {
+  "path": "src/examples/a.go",
+  "class": ""
+ },
+ {
+  "path": "lib/tests/helper.py",
+  "class": ""
+ }
+]

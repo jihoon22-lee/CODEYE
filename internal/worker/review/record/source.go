@@ -165,3 +165,33 @@ func SourceKind(p string) string {
 	}
 	return "code"
 }
+
+// testFileName reports a test file by the naming convention of its language
+// alone, no directory: the names IsTestPath counts (Go *_test.go; Python
+// test_*, *_test and conftest.py; JS/TS test.js, *.test.*, *.spec.*,
+// *.test-d.ts; Java *Test.java and *Tests.java; Rust tests.rs; C/C++
+// test_*, *_test, *_tests, *_unittest and *-test).
+func testFileName(p string) bool {
+	lower := strings.ToLower(p)
+	eco := SourceEcosystem(lower)
+	if eco == "" {
+		return false
+	}
+	base := lower[strings.LastIndex(lower, "/")+1:]
+	stem := strings.TrimSuffix(base, path.Ext(base))
+	switch eco {
+	case "go":
+		return strings.HasSuffix(base, "_test.go")
+	case "python":
+		return strings.HasPrefix(base, "test_") || strings.HasSuffix(stem, "_test") || base == "conftest.py"
+	case "javascript":
+		return jsTestFile(base) || strings.HasSuffix(stem, ".test") || strings.HasSuffix(stem, ".spec")
+	case "java":
+		b := p[strings.LastIndex(p, "/")+1:]
+		return strings.HasSuffix(b, "Test.java") || strings.HasSuffix(b, "Tests.java")
+	case "rust":
+		return base == "tests.rs"
+	}
+	return strings.HasPrefix(stem, "test_") || strings.HasSuffix(stem, "_test") || strings.HasSuffix(stem, "_tests") ||
+		strings.HasSuffix(stem, "_unittest") || strings.HasSuffix(stem, "-test")
+}

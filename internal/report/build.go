@@ -64,12 +64,21 @@ func Build(in Input, reg *Registry) (Report, error) {
 		return Report{}, invalidf("source manifest is invalid")
 	}
 	index := &SourceIndex{entries: map[string]string{}}
+	var included []string
 	for _, e := range manifest.Entries {
 		if (e.Kind == "file" || e.Kind == "lfs_pointer") && e.ExcludedReason == "" {
 			index.entries[e.Path] = e.SHA256
 			index.files++
 		}
+		if e.Kind == "file" && e.ExcludedReason == "" {
+			included = append(included, e.Path)
+		}
 	}
+	var changed []string
+	if in.PullRequest != nil {
+		changed = in.PullRequest.Job().Changed
+	}
+	index.shipped = record.ShippedSourceIn(included, domain.Scope{Kind: in.Run.ScopeKind, Paths: in.Run.ScopePaths}, in.PullRequest != nil, changed)
 	lim := newSet()
 	notes := newSet()
 	r := Report{
@@ -82,6 +91,7 @@ func Build(in Input, reg *Registry) (Report, error) {
 		Attempt: Attempt{ID: in.Attempt.ID, Number: in.Attempt.Number, LeaseEpoch: in.Attempt.Epoch, CompletionStatus: in.Attempt.CompletionStatus, CleanupState: in.Attempt.Cleanup, Reason: in.Attempt.Reason},
 		Tasks:   []Task{}, Executions: []Execution{}, Artifacts: []Artifact{}, Observations: []Observation{}, Findings: []Finding{},
 	}
+	r.scopeNonShipped = !index.shipped
 	r.Coverage = Coverage{ScopeMode: in.Run.ScopeKind, InventoryFiles: index.files, TestStatus: TestNotRun, Tools: []ToolCoverage{}}
 	notes.add(NoteInventoryAllLanguages)
 

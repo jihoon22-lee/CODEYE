@@ -464,6 +464,11 @@ func Validate(r Record, want Expect) error {
 	if err := checkStageContent(r, catalog, observations, b); err != nil {
 		return err
 	}
+	// The marker of a candidate that was not sent to verification is the
+	// platform's decision from its evidence and the scope.
+	if r.Stage == StageVerify && PackSetsAside(r.Pack.Version) && want.ShippedSource != nil && !NotShippedMatches(r.Candidates, r.Verifications, catalog, *want.ShippedSource) {
+		return invalid("candidate_not_shipped does not match the evidence of the candidates")
+	}
 	if err := checkTriage(r, catalog, observations, b); err != nil {
 		return err
 	}
@@ -820,7 +825,10 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 				reviewed++
 			}
 		}
-		if (failed && reviewed != 0) || (!failed && len(r.Candidates) > 0 && reviewed == 0) {
+		// Candidates the platform did not send (LimCandidateNotShipped) are
+		// not a verification the stage did or failed to complete.
+		notSent := len(NotShippedSet(r.Verifications))
+		if (failed && reviewed != 0) || (!failed && len(r.Candidates) > 0 && reviewed == 0 && notSent != len(r.Candidates)) {
 			return invalid("verification outcomes do not match stage")
 		}
 	}
@@ -925,7 +933,9 @@ func checkCalls(r Record) error {
 			return invalid("request digest")
 		}
 	}
-	noCall := r.Stage == StageVerify && len(r.Candidates) == 0
+	// A verify record with nothing to send makes no call: no candidate at
+	// all, or only candidates the platform did not send (LimCandidateNotShipped).
+	noCall := r.Stage == StageVerify && (len(r.Candidates) == 0 || len(NotShippedSet(r.Verifications)) == len(r.Candidates))
 	if noCall && len(r.Calls) != 0 {
 		return invalid("empty verify with a call")
 	}

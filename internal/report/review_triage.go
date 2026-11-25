@@ -47,7 +47,7 @@ func (TriageReviewDecoder) Decode(ctx DecodeContext, art ArtifactRef, body []byt
 		return Contribution{}, invalidf("triage record attached to unexpected task or role")
 	}
 	r, err := record.Decode(body, record.Expect{Snapshot: ctx.Snapshot.ManifestDigest,
-		RunID: ctx.RunID, AttemptID: ctx.AttemptID, Stage: stage, Slice: key, Lookup: ctx.Source.Lookup})
+		RunID: ctx.RunID, AttemptID: ctx.AttemptID, Stage: stage, Slice: key, Lookup: ctx.Source.Lookup, ShippedSource: ctx.Source.shippedSource()})
 	if err != nil {
 		return Contribution{}, err
 	}
@@ -104,7 +104,7 @@ func composeTriage(r *Report, states map[string]*taskState, obs map[string]Obser
 		for _, e := range from.Evidence {
 			evidence[e.ID] = e
 		}
-		addFindings(r, key+"_", from.Candidates, verdicts, evidence, obs)
+		addFindings(r, key+"_", from.Candidates, verdicts, evidence, obs, false)
 	}
 }
 

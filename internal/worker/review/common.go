@@ -59,7 +59,8 @@ func expect(j analysis.Job, stage string) record.Expect {
 			index[e.Path] = e.SHA256
 		}
 	}
-	return record.Expect{Snapshot: j.Snapshot.Digest, RunID: j.RunID, AttemptID: j.AttemptID, Stage: stage,
+	shipped := shippedSourceOf(j)
+	return record.Expect{Snapshot: j.Snapshot.Digest, RunID: j.RunID, AttemptID: j.AttemptID, Stage: stage, ShippedSource: &shipped,
 		Lookup: func(p string) (string, bool) { sha, ok := index[p]; return sha, ok }}
 }
 
@@ -68,4 +69,20 @@ func usage(u *opencode.Usage) *record.Usage {
 		return nil
 	}
 	return &record.Usage{Input: u.Input, Output: u.Output}
+}
+
+// shippedSourceOf is record.ShippedSourceIn of a job: its snapshot's included
+// files, its scope and, for a pull request, the files it changes.
+func shippedSourceOf(j analysis.Job) bool {
+	var paths []string
+	for _, e := range j.Snapshot.Manifest.Entries {
+		if e.Kind == "file" && e.ExcludedReason == "" {
+			paths = append(paths, e.Path)
+		}
+	}
+	var changed []string
+	if j.PullRequest != nil {
+		changed = j.PullRequest.Changed
+	}
+	return record.ShippedSourceIn(paths, j.Scope, j.PullRequest != nil, changed)
 }
