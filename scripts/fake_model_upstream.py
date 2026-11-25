@@ -56,6 +56,11 @@ may be a list of `input_text` parts.
 CA, docs/OPERATIONS.md#사내-ca); the key and certificate are the caller's test files.
 `--delay-seconds N` answers each request N seconds late, to see a slow model through the
 relay (which sends its headers only once the answer is complete) and OpenCode's waits.
+`--delay-jitter J --seed S` adds to that a delay between 0 and J seconds drawn from the
+seed and the request's review input, so concurrent requests (codeye agent
+--review-parallel) end in a seeded order other than the order they arrived in. Requests
+are answered concurrently, each on its own thread; the stop line reports the most
+requests in flight at once (`peak_in_flight`).
 `--echo-text TEXT` appends an operator-chosen text to every investigate candidate
 title, to see whether a model's own words reach the verify request (the relay's
 `--allow-model-echo` path). The text comes from the operator, never from labels.
@@ -348,26 +353,54 @@ def reply_text(payload: dict, echo: str | None = None, shape: float = 0.0, integ
                             ensure_ascii=False)
 
 
+def request_delay(payload: dict, delay: float, jitter: float, seed: int) -> float:
+    """The seconds a request is answered late: delay, plus a share of jitter
+    drawn from the seed and the request's review input (the whole payload
+    when it has none), so the same request waits as long under any arrival
+    order."""
+    if jitter <= 0:
+        return delay
+    texts = [content_text(m.get("content", "")) for m in payload.get("input", []) if isinstance(m, dict)]
+    found = next((m.group(1) for m in map(REVIEW_INPUT.search, texts) if m), None)
+    key = found if found is not None else json.dumps(payload, sort_keys=True)
+    digest = hashlib.sha256(f"{seed}\x00{key}".encode()).digest()
+    return delay + jitter * int.from_bytes(digest[:8], "big") / 2**64
+
+
 class FakeUpstream:
     def __init__(self, mode: str, dump: Path | None, echo: str | None = None, delay: float = 0.0,
-                 shape: float = 0.0, integrity: float = 0.0):
+                 shape: float = 0.0, integrity: float = 0.0, jitter: float = 0.0, seed: int = 0):
         self.mode = mode
         self.shape = shape
         self.integrity = integrity
         self.delay = delay
+        self.jitter = jitter
+        self.seed = seed
         self.dump = dump
         self.echo = echo
         self.calls = 0
+        self.in_flight = 0
+        self.peak = 0
         self.lock = threading.Lock()
 
     def respond(self, payload: dict) -> tuple[int, dict]:
         with self.lock:
             self.calls += 1
             number = self.calls
+            self.in_flight += 1
+            self.peak = max(self.peak, self.in_flight)
+        try:
+            return self._respond(payload, number)
+        finally:
+            with self.lock:
+                self.in_flight -= 1
+
+    def _respond(self, payload: dict, number: int) -> tuple[int, dict]:
         if self.dump is not None:
             (self.dump / f"{number:04d}.json").write_text(json.dumps(payload, ensure_ascii=False, indent=1))
-        if self.delay > 0:
-            time.sleep(self.delay)
+        wait = request_delay(payload, self.delay, self.jitter, self.seed)
+        if wait > 0:
+            time.sleep(wait)
         if self.mode == "fail":
             return 500, {"error": {"message": "fake failure", "type": "server_error", "code": "fake_failure"}}
         if self.mode == "unauthorized":
@@ -454,6 +487,9 @@ def main(argv=None) -> int:
     parser.add_argument("--dump", type=Path, help="write every received payload here (dry-run analysis only)")
     parser.add_argument("--echo-text", help="append this operator text to investigate candidate titles")
     parser.add_argument("--delay-seconds", type=float, default=0.0, help="answer every request this many seconds late")
+    parser.add_argument("--delay-jitter", type=float, default=0.0, metavar="SECONDS",
+                        help="add a seeded delay between 0 and SECONDS per request (see --seed)")
+    parser.add_argument("--seed", type=int, default=0, help="seed of --delay-jitter")
     parser.add_argument("--shape-errors", type=float, default=0.0, metavar="RATE",
                         help="share (0-1) of items answered with a fault of form on every call")
     parser.add_argument("--integrity-errors", type=float, default=0.0, metavar="RATE",
@@ -469,13 +505,14 @@ def main(argv=None) -> int:
         return 2
     if args.dump is not None:
         args.dump.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if not 0 <= args.delay_seconds <= 3600:
-        print("--delay-seconds is between 0 and 3600", file=sys.stderr)
+    if not (0 <= args.delay_seconds <= 3600 and 0 <= args.delay_jitter <= 3600):
+        print("--delay-seconds and --delay-jitter are between 0 and 3600", file=sys.stderr)
         return 2
     if not (0 <= args.shape_errors <= 1 and 0 <= args.integrity_errors <= 1):
         print("--shape-errors and --integrity-errors are between 0 and 1", file=sys.stderr)
         return 2
-    fake = FakeUpstream(args.mode, args.dump, args.echo_text, args.delay_seconds, args.shape_errors, args.integrity_errors)
+    fake = FakeUpstream(args.mode, args.dump, args.echo_text, args.delay_seconds, args.shape_errors, args.integrity_errors,
+                        args.delay_jitter, args.seed)
     server = make_server(fake)
     if args.tls_cert is not None:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -501,7 +538,8 @@ def main(argv=None) -> int:
             args.ready_file.unlink()
         except FileNotFoundError:
             pass
-        print(json.dumps({"event": "stopped", "calls": fake.calls, "at": time.time()}), file=sys.stderr)
+        print(json.dumps({"event": "stopped", "calls": fake.calls, "peak_in_flight": fake.peak, "at": time.time()}),
+              file=sys.stderr)
     return 0
 
 
