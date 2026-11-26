@@ -2,6 +2,7 @@ package progress
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -418,10 +419,18 @@ func TestReviewSlicesInCodeReviewStage(t *testing.T) {
 	// A lead follow-up skipped without a call is an optional reading the run
 	// did not need or afford: no lead offered or named, none the platform
 	// found (each unresolved lead keeps its reason in the record), no room
-	// under the ceiling, or a slot the ceiling refused.
+	// under the ceiling, or a slot the ceiling refused. None lowers the
+	// stage; the refusal by the ceiling had resolved leads to read, so it is
+	// no "nothing to review" and the report lists it as not run.
 	for _, reason := range []string{domain.ReasonLeadsNotOffered, domain.ReasonNoLeads, domain.ReasonNoLeadsResolved, domain.ReasonLeadsNotAdmitted, domain.ReasonLeadsSlotNotRun} {
-		if !domain.NothingToReview(reason) || !domain.LeadsNotRun(reason) {
-			t.Fatalf("lead follow-up skip %s lowers the stage", reason)
+		if !domain.SkipKeepsStage(reason) || !domain.LeadsNotRun(reason) || domain.NothingToReview(reason) == (reason == domain.ReasonLeadsNotAdmitted) {
+			t.Fatalf("lead follow-up skip %s", reason)
+		}
+		tasks := append([]Task{}, base...)
+		tasks[6] = task(cr, domain.TaskSkippedPolicy, reason)
+		run.Tasks = tasks
+		if s := find(t, Compute(run), string(cr)); s.State != Succeeded || !slices.Contains(s.Reasons, reason) {
+			t.Fatalf("lead follow-up skip %s lowers the stage: %+v", reason, s)
 		}
 	}
 	if domain.LeadsNotRun("review_budget_exhausted") || domain.LeadsNotRun(domain.ReasonNoReviewScope) {

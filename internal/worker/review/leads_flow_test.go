@@ -13,6 +13,7 @@ import (
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/progress"
+	"github.com/jihoon22-lee/CODEYE/internal/report"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
@@ -410,6 +411,74 @@ func TestLeadFollowupRefusedUnderTightCeiling(t *testing.T) {
 			t.Fatalf("ceiling %d: stage %s without leads, %s with", ceiling, codeReviewStage(plan, base), codeReviewStage(plan, res))
 		}
 		refusedFollowups(t, j, plan, res, l)
+	}
+}
+
+// A follow-up the ceiling refused had resolved leads to read, so the report
+// is not silent about it: the summary lists it among the tasks that did not
+// run, with its reason. It lowers no stage, changes neither the verdict nor
+// the AI review status and is no gap of its role, as in the run whose
+// investigations were asked for no leads.
+func TestRefusedFollowupIsListedAsNotRun(t *testing.T) {
+	build := func(l *leadsScript, ids *exampleIDs) report.Report {
+		t.Helper()
+		return sliceReportWithCaller(t, treeJob(t, chainTree(16)), vetStub{}, record.WholeRunMaxCalls, ids, &scriptedCaller{script: l.script(t)})
+	}
+	base, asked := build(&leadsScript{}, &exampleIDs{n: 0xf00}), build(&leadsScript{asked: true}, &exampleIDs{n: 0xf00})
+	var refused []string
+	for _, task := range asked.Tasks {
+		if task.Reason != nil && *task.Reason == record.ReasonLeadsNotAdmitted {
+			refused = append(refused, task.Key)
+		}
+	}
+	if len(refused) == 0 {
+		t.Fatal("no follow-up refused at the tight ceiling")
+	}
+	if asked.Status != base.Status || asked.QualityVerdict != base.QualityVerdict || asked.Coverage.AIReview.Status != base.Coverage.AIReview.Status ||
+		asked.CodeReview.Stage.State != base.CodeReview.Stage.State {
+		t.Fatalf("status %s/%s, verdict %s/%s, ai review %s/%s, stage %s/%s", asked.Status, base.Status, asked.QualityVerdict, base.QualityVerdict,
+			asked.Coverage.AIReview.Status, base.Coverage.AIReview.Status, asked.CodeReview.Stage.State, base.CodeReview.Stage.State)
+	}
+	for _, g := range asked.Gaps {
+		if g.Subject != nil && slices.Contains(refused, *g.Subject) {
+			t.Fatalf("gap %s for a refused follow-up", g.Code)
+		}
+	}
+	if err := report.ValidateReport(asked); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := report.Marshal(asked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The tasks table of the summary: a row per status and reason with the
+	// task keys (Markdown escapes the parentheses of the reason text).
+	md := string(report.RenderMarkdownAt(asked, report.Digest(raw), report.Korean, report.DetailSummary))
+	listed := func(code, key string) bool {
+		text, _ := report.Korean.CodeLabel(code)
+		return slices.ContainsFunc(strings.Split(md, "\n"), func(line string) bool {
+			line = strings.ReplaceAll(line, "\\", "")
+			return strings.HasPrefix(line, "|") && strings.Contains(line, text) && strings.Contains(line, "`"+key+"`") ||
+				strings.HasPrefix(line, "|") && strings.Contains(line, text) && strings.Contains(line, key+",")
+		})
+	}
+	for _, key := range refused {
+		if !listed(record.ReasonLeadsNotAdmitted, key) {
+			t.Fatalf("the summary does not list %s as not run with its reason", key)
+		}
+	}
+	// A follow-up with nothing to read stays out of that list.
+	nothing := 0
+	for _, task := range asked.Tasks {
+		if task.Reason != nil && *task.Reason == record.ReasonNoLeads {
+			nothing++
+			if listed(record.ReasonNoLeads, task.Key) {
+				t.Fatalf("the summary lists %s (no leads) as not run", task.Key)
+			}
+		}
+	}
+	if nothing == 0 {
+		t.Fatal("no follow-up without leads to compare")
 	}
 }
 

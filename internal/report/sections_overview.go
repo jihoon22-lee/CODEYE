@@ -146,7 +146,7 @@ func (c sectionContext) gaps() []Gap {
 			add(SectionCodeReview, "review_tasks_not_planned", nil, nil)
 		}
 		for _, t := range cr.Roles {
-			if t.Result == "accepted" || (t.Reason != nil && domain.NothingToReview(*t.Reason)) {
+			if t.Result == "accepted" || (t.Reason != nil && domain.SkipKeepsStage(*t.Reason)) {
 				continue
 			}
 			add(SectionCodeReview, "role_"+t.Result, strPtr(t.Key), t.Reason)
