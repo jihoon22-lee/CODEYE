@@ -75,6 +75,10 @@ const (
 	TUUnknown                = "unknown"
 	TUNotInCompileDB         = "not_in_compile_db"
 	TUCompileDBEntryExcluded = "compile_db_entry_excluded"
+	// TUPartialTooComplex: GCC reached its exploration limit
+	// (-Wanalyzer-too-complex) and stopped exploring some paths; its
+	// diagnostics stay, the unit is not a processed file.
+	TUPartialTooComplex = "partial_too_complex"
 )
 
 // sourceExt are the translation-unit extensions; headerExt are included
