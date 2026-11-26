@@ -812,7 +812,7 @@ cppcheck가 기준 분석기이고 clang-tidy와 GCC가 추가 검사를 수행�
 | `msvc_driver_unsupported`, `unsupported_driver` | `cl`·`clang-cl`, `nvcc`·형식이 맞지 않는 driver |
 | `unsafe_argument` | 허용 목록을 지난 뒤에도 안전하지 않은 인자가 남은 항목 |
 
-제외 수는 `target.properties.entries_excluded`와 제약 `compile_db_entries_excluded`·`duplicate_compile_db_entries`로 남는다. 범위 안 소스의 모든 항목이 제외되면 그 단위는 `compile_db_entry_excluded`, 항목이 없으면 `not_in_compile_db`이며 처리 파일이 아니다.
+제외 수는 `target.properties.entries_excluded`와 제약 `compile_db_entries_excluded`·`duplicate_compile_db_entries`로 남는다. 범위 안 소스의 모든 항목이 제외되면 그 단위는 `compile_db_entry_excluded`, 항목이 없으면 `not_in_compile_db`이며 처리 파일이 아니다. compile DB에 없는 소스에 가까운 항목의 인자를 빌려 주지 않는다(clangd 식 보간). 그런 소스는 구성한 build가 컴파일하지 않는 파일(꺼진 build 옵션의 소스, 시험 framework에 딸린 예제)이다. 빌린 인자로 시험 경로의 소스는 헤더를 찾지 못해 대부분 컴파일되지 않았고, 배포 코드 경로의 소스가 낸 진단은 정밀도의 근거가 없다. [A68](DECISIONS.md)
 
 **flag 허용 목록.** 분석 의미를 바꾸는 인자만 남긴다.
 
@@ -921,7 +921,8 @@ GCC 13 이상이 설치된 노드에서 `gcc --version`을 확인한다. 실기 
 
 - 설정한 GCC에 정제한 컴파일 인자와 `-fanalyzer -Wanalyzer-too-complex -fdiagnostics-format=json -fdiagnostics-column-unit=byte -fdiagnostics-color=never -fdiagnostics-show-option -S -o /dev/null` 및 작업 사본 파일의 절대 경로를 준다. `-S`의 컴파일러 프런트엔드는 실행되며 어셈블리 출력은 버린다. 프로젝트의 빌드 스크립트·컴파일러 wrapper·플러그인·응답 파일은 사용하지 않는다. 컴파일러 환경변수는 전달하지 않는다.
 - 파일 디스크립터의 접근 모드·유형·상태 오류, 중복 닫기, 누수, 닫힌 디스크립터 사용, 확인하지 않은 디스크립터 사용 등 `-Wanalyzer-fd-*` 일곱 규칙만 게시한다. 다른 GCC 경고는 발견 수에서 제외한다. 닫은 디스크립터를 읽은 합성 예제는 GCC에서 보고하고, 같은 입력을 기본 검사로 실행한 clang-tidy 21.1.8과 cppcheck 2.22.0은 이 진단을 보고하지 않았다. [실측 관찰 예시](../examples/observations-gcc-analyzer.json)
-- 경고가 있어도 종료 코드 0이며 정상 예제는 게시할 경고가 없다. 실패한 단위, 복잡도 한도, 시간 초과, 잘리거나 파싱할 수 없는 진단은 실패 또는 미완료 범위로 남긴다. 종료 코드가 성공한 단위의 분석 내용이 남을 수 있어도 실패한 작업 전체는 처리 완료로 기록하지 않는다.
+- 경고가 있어도 종료 코드 0이며 정상 예제는 게시할 경고가 없다. 실패한 단위, 시간 초과, 잘리거나 파싱할 수 없는 진단은 실패 또는 미완료 범위로 남긴다. 종료 코드가 성공한 단위의 분석 내용이 남을 수 있어도 실패한 작업 전체는 처리 완료로 기록하지 않는다.
+- **복잡도 한도는 그 단위의 한계다.** GCC가 `-Wanalyzer-too-complex`로 한 단위의 경로 탐색을 일부 멈추면 그 단위는 `partial_too_complex`다. 그 단위에서 찾은 진단은 남지만 처리 파일이 아니다. 끝까지 분석한 단위가 하나라도 있으면 작업은 성공하고 한계 `gcc_analyzer_too_complex`와 `target.properties.units_too_complex`(한도에 걸린 단위 수)를 남긴다. 모든 단위가 한도에 걸리면 끝까지 분석한 것이 없으므로 `failed / gcc_analyzer_too_complex`다. 다른 단위의 컴파일 실패·시간 초과·출력 오류는 전과 같이 작업을 실패시키고 그 사유가 앞선다. 탐색 한도(`--param analyzer-*`, `-fanalyzer-call-summaries`)는 GCC 기본값 그대로다. [A67](DECISIONS.md)
 - 저장 stderr는 작업 사본에 위치를 확인한 진단의 구조화된 원문만 사용한다. 기본 진단과 상태 전이의 위치는 스냅샷 해시·줄 및 저장된 JSON의 바이트 범위에 연결한다. 컴파일 DB digest와 소스 안 억제 상태를 함께 기록한다. [GCC 13 정적 분석 옵션](https://gcc.gnu.org/onlinedocs/gcc-13.4.0/gcc/Static-Analyzer-Options.html)
 
 ### C/C++ 규칙 문맥과 억제
@@ -950,6 +951,7 @@ Cppcheck 2.22.0은 개별 규칙 이름으로 `redundantAssignment`를 켤 수 �
 | `possibly_partial_missing_include` | 헤더 안 missingInclude는 포함한 단위 없이 한 번만 보고됨 | 아니오 |
 | `failed_missing_include`, `failed_compile`, `failed_parse` | clang-tidy 컴파일 실패, cppcheck 구문 실패 | 아니오 |
 | `not_processed`, `unknown` | 출력이 처리를 보여 주지 않음, 실행이 끝나지 않음 | 아니오 |
+| `partial_too_complex` | GCC가 복잡도 한도로 일부 경로 탐색을 멈춤(진단은 남음) | 아니오 |
 | `not_in_compile_db`, `compile_db_entry_excluded` | compile DB에 없음, 모든 항목 제외 | 아니오 |
 
 스냅샷 compile DB가 가리키는, configure가 build 디렉터리에 만드는 생성 헤더(`config.h` 등)가 스냅샷에 없으면 두 도구 모두 그 단위에서 `missing_include_files`(configuration_error)로 실패한다. 찾지 못한 헤더는 도구 오류이며 결함이 아니다. 다른 단위의 관찰은 남지만 처리 파일은 주장하지 않는다. 같은 헤더가 compile DB의 `-I`가 가리키는 위치에 스냅샷으로 있으면 성공한다. 헤더 안 위치의 관찰은 남지만 헤더를 처리 파일로 주장하지 않는다. 생성 소스·생성 헤더가 없는 것은 범위 공백이다. [compile DB 생성](#compile-db-생성)으로 만든 DB는 configure가 작업 사본 build 디렉터리에 쓴 헤더를 읽으므로 이 공백이 없다(`generated_include_dirs_used`). 같은 파일을 다른 매크로로 compile하는 두 번째 이후 항목은 분석하지 않는다. MSVC·nvcc 항목은 분석하지 않는다.

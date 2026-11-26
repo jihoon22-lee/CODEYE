@@ -887,6 +887,22 @@ pyright 진단이 준 것은 대부분 해석하지 못한 import와 그 뒤의 
 - GCC 분석은 세 사례 모두 단위 대부분이 `-Wanalyzer-too-complex`(탐색 한도)를 내어 작업 전체가 실패했고, 끝까지 분석한 단위가 있어도 처리 파일 0이었다.
 - 채점기 집계 "tool diagnostic hits label, before": dev 1/11, holdout 2/9.
 
+### C/C++: GCC 복잡도 한도, 추가 규칙, compile DB 보간
+
+C/C++ 변형 3개(dev 1, holdout 2)만 같은 도구 목록·설정으로 다시 실행했다. 다른 C/C++ 분석기의 코드는 바꾸지 않았다.
+
+| GCC 분석 | 기준 | 한도를 단위의 한계로(A67) |
+|---|---|---|
+| 작업 상태 | failed `gcc_analyzer_too_complex` 3 | succeeded 1, failed `gcc_analyzer_too_complex` 2 |
+| 처리 파일(배포 / 배포 아님) | 0 / 0 | 2 / 2 |
+| compile DB 단위 25개의 상태 | `analyzed_clean` 4, `unknown` 21 | `analyzed_clean` 4, `partial_too_complex` 21 |
+| 배포 코드 진단 | 0 | 0 |
+
+- 실패로 남은 두 작업은 compile DB에 단위가 하나뿐이고 그 단위가 한도에 걸렸다. 처리 파일 없는 성공을 envelope 계약이 받지 않으므로 그대로 실패다.
+- GCC 진단이 전후 모두 0이고 다른 분석기의 진단은 그대로이므로 도구 진단 집합과 채점기의 "tool diagnostic hits label" 집계는 기준과 같다.
+- **추가 규칙.** 누수·이중 해제·해제 뒤 사용·널 역참조 계열 열두 규칙을 더한 실험 규칙 팩으로 같은 변형을 실행했다. 단위 상태는 같고 GCC 실행 시간은 거의 같았다(단위 24개 사례에서 작업 합계 76초 → 81초). 더 나온 진단은 시험 경로 8건, 배포 코드 0건이다. 배포 코드의 정밀도 표본은 0건이라 잴 수 없었다. 시험 경로 8건을 읽은 결과는 오탐 7(단언 매크로가 실패 시 돌아오지 않는 것을 GCC가 모름), 불분명 1(시험의 확인하지 않은 할당)이다. 규칙 팩은 v1로 두었다.
+- **compile DB 보간(A68).** 세 사례의 compile DB에 없는 번역 단위 69개(배포 3, 시험 66)에 가장 가까운 항목의 인자를 빌려 cppcheck·clang-tidy를 제품 선택으로 직접 실행했다(제품 경로 밖의 실험). clang-tidy는 시험 경로 52개에서 컴파일 오류로 끝났고 배포 코드 3개는 컴파일되었다. 진단(헤더 위치 포함)은 clang-tidy 배포 10·시험 13, cppcheck(`missingInclude`·정보 제외) 배포 74·시험 96이었다. 배포 코드 진단의 정밀도 표본은 읽지 않았다.
+
 ### Java: SpotBugs 컴파일과 모듈 기술자
 
 Java 변형 3개(dev 2, holdout 1)만 같은 도구 목록·설정으로 다시 실행했다.

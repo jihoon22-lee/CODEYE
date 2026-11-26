@@ -653,6 +653,18 @@ def resolve_tools(doc, explicit, go=None, go_mod_cache=None, switches=()):
             "extra_args": extra, "discovery": discovery}
 
 
+def analyzer_tool_args(go, go_mod_cache, tools, switches, extra_args):
+    """The analyzer tool part of the agent arguments: --go, --go-mod-cache, the tool flags in name
+    order, the agent switches and the fetch settings. fixtures/tool-resolution/cases.json holds this
+    and the service's agent arguments (cmd/codeye agentArgv) to the same detection results."""
+    out = ["--go", go] if go else []
+    if go_mod_cache:
+        out += ["--go-mod-cache", go_mod_cache]
+    for k, v in sorted(tools.items()):
+        out += ["--" + k, v]
+    return out + ["--" + s for s in switches] + list(extra_args)
+
+
 def help_flags(binary):
     """Option names in the usage lines of `codeye agent --help` (the agent itself rejects unknown ones)."""
     import re
@@ -907,12 +919,8 @@ def run_batch(args):
                                          "accepted them if the batch ran): " + ", ".join(unknown))
 
             def agent_args(root_id):
-                out = ["--go", args.go, "--toolchain-path", args.toolchain_path]
-                if args.go_mod_cache:
-                    out += ["--go-mod-cache", args.go_mod_cache]
-                for k, v in sorted(tools.items()):
-                    out += ["--" + k, v]
-                out += ["--" + s for s in switches] + extra_args
+                out = ["--toolchain-path", args.toolchain_path]
+                out += analyzer_tool_args(args.go, args.go_mod_cache, tools, switches, extra_args)
                 if not args.no_repo_code_grant:
                     out += ["--repo-code-source-root", root_id]
                 if review:

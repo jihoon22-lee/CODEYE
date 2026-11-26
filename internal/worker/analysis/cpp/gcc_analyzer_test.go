@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -171,5 +173,71 @@ func TestGCCAnalyzerNeedsCompileDatabase(t *testing.T) {
 	res := a.Run(context.Background(), f.Job, tasks[0].Spec, nil)
 	if res.Status != domain.TaskUnsupported || res.Reason != ReasonCompileDBMissing || len(res.Executions) != 0 {
 		t.Fatalf("GCC must not guess build configuration: %+v", res)
+	}
+}
+
+// fakeGCC writes a GCC stand-in: --version answers GCC 15.2.0, and a unit
+// whose file name is in limited reports the exploration limit
+// (-Wanalyzer-too-complex) and, for descriptor.c, a selected diagnostic.
+func fakeGCC(t *testing.T, limited ...string) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script stand-in")
+	}
+	var cases strings.Builder
+	for _, name := range limited {
+		warning, args := "", ` "$last"`
+		if name == "descriptor.c" {
+			warning = `,{"kind":"warning","option":"-Wanalyzer-fd-use-after-close","message":"read on closed fd [-Wanalyzer-fd-use-after-close]","locations":[{"caret":{"file":"%s","line":8,"byte-column":17}}],"path":[{"location":{"file":"%s","line":7,"byte-column":5},"description":"closed here"}]}`
+			args = ` "$last" "$last" "$last"`
+		}
+		cases.WriteString(`  */` + name + `) printf '[{"kind":"warning","option":"-Wanalyzer-too-complex","message":"analysis bailed out early (7 enodes) [-Wanalyzer-too-complex]","locations":[{"caret":{"file":"%s","line":4,"byte-column":5}}]}` +
+			warning + `]'` + args + ` >&2 ;;` + "\n")
+	}
+	script := "#!/bin/sh\nif [ \"$1\" = --version ]; then printf 'gcc (GCC) 15.2.0\\n'; exit 0; fi\nfor a; do last=$a; done\ncase \"$last\" in\n" +
+		cases.String() + "  *) printf '[]' >&2 ;;\nesac\nexit 0\n"
+	exe := filepath.Join(t.TempDir(), "gcc")
+	if err := os.WriteFile(exe, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return exe
+}
+
+// A unit that reaches GCC's exploration limit keeps its diagnostics and is
+// not a processed file; it does not fail the units that finished. With no
+// unit finished the task is not a success (decision A67).
+func TestGCCAnalyzerKeepsUnitsPastTheComplexityLimit(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		limited   []string
+		status    domain.TaskStatus
+		reason    string
+		processed []string
+	}{
+		{"one unit limited", []string{"descriptor.c"}, domain.TaskSucceeded, "", []string{"src/clean.c"}},
+		{"every unit limited", []string{"descriptor.c", "clean.c"}, domain.TaskFailed, "gcc_analyzer_too_complex", nil},
+		{"no unit limited", nil, domain.TaskSucceeded, "", []string{"src/clean.c", "src/descriptor.c"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := newFixture(t, gccFiles(t), domain.Scope{})
+			a, err := NewGCCAnalyzer(Config{Executable: fakeGCC(t, test.limited...)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			res := runTask(t, a, f.Job, &recordingRunner{inner: &executor.Executor{}})
+			d, data := readEnvelope(t, f.Job, res)
+			if res.Status != test.status || res.Reason != test.reason || !slices.Equal(d.Coverage.ProcessedPaths, test.processed) ||
+				d.Coverage.Units[TUPartialTooComplex] != len(test.limited) {
+				t.Fatalf("result %+v\n%s", res, data)
+			}
+			limited := slices.Contains(d.Limitations, "gcc_analyzer_too_complex")
+			if limited != (len(test.limited) > 0) || (limited && d.Target.Properties["units_too_complex"] != strconv.Itoa(len(test.limited))) {
+				t.Fatalf("limitation %v properties %v", d.Limitations, d.Target.Properties)
+			}
+			if len(test.limited) > 0 && (len(d.Observations) != 1 || d.Observations[0].RuleID != "analyzer-fd-use-after-close" ||
+				d.Observations[0].Location == nil || d.Observations[0].Location.StartLine != 8) {
+				t.Fatalf("the limited unit's diagnostic is lost: %+v", d.Observations)
+			}
+		})
 	}
 }
