@@ -675,11 +675,12 @@ func TestLeadFollowupRecordHoldsWhatItSent(t *testing.T) {
 }
 
 // A refined disposition keeps the text of the candidate it replaced, and the
-// refined candidate keeps every citation of that candidate and cites lines
-// of a whole resolved excerpt: the record check (record.Decode) and the
-// lineage check (record.LeadFollowupMatches) reject a record that drops
-// either, and the lineage check one whose kept text is not the
-// investigation's.
+// refined candidate keeps every citation of that candidate first and in
+// order and cites lines of a whole resolved excerpt: the record check
+// (record.Decode) and the lineage check (record.LeadFollowupMatches) reject
+// a record that drops either or puts a new citation first, and the lineage
+// check one whose kept text is not the investigation's, or whose new
+// citation holds only lines the investigation already sent.
 func TestLeadRefinementRecordKeepsTheOriginal(t *testing.T) {
 	j, plan, res := chainRun(t, &leadsScript{asked: true}, 12, 0)
 	slot := ""
@@ -713,6 +714,7 @@ func TestLeadRefinementRecordKeepsTheOriginal(t *testing.T) {
 		"original missing":      {func(r *record.Record) { r.LeadFollowup.Dispositions[0].Original = nil }, false},
 		"citation dropped":      {func(r *record.Record) { r.Candidates[0].Evidence = newOnly }, false},
 		"no new line":           {func(r *record.Record) { r.Candidates[0].Evidence = slices.Clone(original) }, false},
+		"new citation first":    {func(r *record.Record) { r.Candidates[0].Evidence = append(slices.Clone(newOnly), original...) }, false},
 		"original on a kept candidate": {func(r *record.Record) {
 			r.LeadFollowup.Dispositions[0].Disposition, r.LeadFollowup.Dispositions[0].Lead = record.DispositionKept, ""
 			r.Candidates[0].CandidateText = inv.Candidates[0].CandidateText
@@ -737,6 +739,69 @@ func TestLeadRefinementRecordKeepsTheOriginal(t *testing.T) {
 			}
 		})
 	}
+	// The new citation lies in the resolved window but on lines the
+	// investigation already held (a caller window may overlap its excerpts):
+	// not new code.
+	held, seen := investigatedAlso(t, fu, inv, newOnly[0])
+	if record.LeadFollowupMatches(held, seen) {
+		t.Fatal("the lineage check accepted a refinement on lines the investigation held")
+	}
+}
+
+// investigatedAlso is a follow-up record and its investigation as if the
+// investigation had also sent the excerpt the follow-up cites as id: the
+// follow-up's new line count is recounted, every other check stays as it was.
+func investigatedAlso(t *testing.T, fu, inv record.Record, id string) (record.Record, record.Record) {
+	t.Helper()
+	var held record.Record
+	b, err := json.Marshal(fu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(b, &held); err != nil {
+		t.Fatal(err)
+	}
+	e, ok := catalogOf(fu.Evidence)[id]
+	if !ok {
+		t.Fatalf("%s is no excerpt of the follow-up", id)
+	}
+	seen := inv
+	seen.Evidence = append(slices.Clone(inv.Evidence), e)
+	held.LeadFollowup.NewLines = record.LineCount(record.LeadNewLineSet(held.LeadFollowup.New, catalogOf(held.Evidence), seen.Evidence))
+	if !record.LeadFollowupMatches(fu, inv) {
+		t.Fatal("the follow-up does not match its investigation")
+	}
+	return held, seen
+}
+
+// A contest stands on lines of the resolved code the investigation did not
+// send: the lineage check rejects one whose cited lines the investigation
+// already held.
+func TestLeadContestRestsOnNewLines(t *testing.T) {
+	l := &leadsScript{asked: true, leads: func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[leadsInput](t, q)
+		target := catalogOf(in.Scope.Excerpts)[in.Leads[0].Resolved[0]]
+		return asJSON(map[string]any{"results": []map[string]any{{"basis": in.Candidates[0].ID, "disposition": "contested",
+			"reason": "끝 패키지는 0 이하의 입력에 0을 돌려준다.", "evidence_ids": []string{fmt.Sprintf("%s:%d-%d", target.ID, target.Start+2, target.Start+2)}}}})
+	}}
+	j, plan, res := chainRun(t, l, 12, 0)
+	for _, p := range plan {
+		slot, ok := record.LeadsTask(p.Key)
+		if !ok || slot == "" || res[p.Key].Status != domain.TaskSucceeded {
+			continue
+		}
+		fu, inv := readRecord(t, j, "leads."+slot), readRecord(t, j, "investigate."+slot)
+		d := fu.LeadFollowup.Dispositions
+		if len(d) != 1 || d[0].Disposition != record.DispositionContested || len(d[0].EvidenceIDs) != 1 {
+			t.Fatalf("dispositions %+v", d)
+		}
+		held, seen := investigatedAlso(t, fu, inv, d[0].EvidenceIDs[0])
+		if record.LeadFollowupMatches(held, seen) {
+			t.Fatal("the lineage check accepted a contest on lines the investigation held")
+		}
+		return
+	}
+	t.Fatalf("no follow-up ran: %v", rows(plan, res))
 }
 
 // The lead contract travels only in an investigate request that offers

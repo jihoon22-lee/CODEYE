@@ -53,6 +53,7 @@
         {"if": {"properties": {"schema_version": {"enum": ["0.2","0.3","0.4","0.5","0.6"]}, "stage": {"const": "investigate"}}}, "then": {"properties": {"candidates": {"maxItems": 4}}}},
         {"if": {"properties": {"schema_version": {"enum": ["0.2","0.3","0.4","0.5","0.6"]}}}, "then": {"properties": {"evidence": {"items": {"properties": {"origin": {"enum": ["context", "caller", "test", "observation"]}}}}, "candidates": {"items": {"not": {"required": ["mechanism"]}, "properties": {"id": {"pattern": "^(investigate|interpret)_[1-4]$"}, "title": {"maxLength": 400}, "condition": {"maxLength": 400}, "impact": {"maxLength": 400}, "improvement": {"maxLength": 400}, "counterpoint": {"maxLength": 400}}}}, "verifications": {"items": {"properties": {"candidate_id": {"pattern": "^(investigate|interpret)_[1-4]$"}, "valid_conditions": {"items": {"maxLength": 600}}, "invalid_conditions": {"items": {"maxLength": 600}}, "unresolved_assumptions": {"items": {"maxLength": 600}}, "next_verification": {"items": {"maxLength": 600}}}}}}}},
         {"if": {"required": ["slice"]}, "then": {"properties": {"stage": {"enum": ["investigate", "leads", "triage", "verify"]}}}},
+        {"if": {"properties": {"stage": {"not": {"enum": ["leads", "verify"]}}}}, "then": {"properties": {"candidates": {"items": {"properties": {"evidence_ids": {"maxItems": 6}}}}}}},
         {"if": {"required": ["contract_comparisons"]}, "then": {"properties": {"stage": {"enum": ["investigate", "contract"]}, "outcome": {"const": "accepted"}, "schema_version": {"enum": ["0.2", "0.4", "0.6", "0.7", "0.9"]}}}},
         {"if": {"required": ["contract_probe"]}, "then": {"required": ["contract_comparisons"], "properties": {"stage": {"const": "investigate"}, "outcome": {"const": "accepted"}, "schema_version": {"enum": ["0.4","0.6","0.7","0.9"]}, "contract_comparisons":{"contains":{"properties":{"status":{"const":"unknown"}}}}}}},
         {"if": {"required": ["strengths"]}, "then": {"properties": {"stage": {"const": "investigate"}, "outcome": {"const": "accepted"}}}},
@@ -274,10 +275,10 @@
     "candidate": {
       "type":"object","additionalProperties":false,"required":["id","title","condition","impact","improvement","counterpoint","evidence_ids","origin"],
       "properties":{"id":{"$ref":"#/$defs/candidate_id"},"title":{"$ref":"#/$defs/text"},"condition":{"$ref":"#/$defs/text"},"mechanism":{"$ref":"#/$defs/mechanism"},"impact":{"$ref":"#/$defs/text"},"improvement":{"$ref":"#/$defs/text"},"counterpoint":{"$ref":"#/$defs/text"},
-        "evidence_ids":{"$ref":"#/$defs/citations"},"origin":{"enum":["investigate","interpret","triage"]},"observation_ids":{"type":"array","minItems":1,"maxItems":256,"uniqueItems":true,"items":{"$ref":"#/$defs/observation_id"}}},
+        "evidence_ids":{"$ref":"#/$defs/refs","minItems":1,"maxItems":8,"description":"At most 6, except an investigate candidate of a lead follow-up or verify record: a refinement keeps its original's citations and adds one or two (docs/REVIEW.md#후속-조사-요청과-출력)."},"origin":{"enum":["investigate","interpret","triage"]},"observation_ids":{"type":"array","minItems":1,"maxItems":256,"uniqueItems":true,"items":{"$ref":"#/$defs/observation_id"}}},
       "allOf":[
-        {"if":{"properties":{"origin":{"const":"interpret"}}},"then":{"required":["observation_ids"],"properties":{"id":{"pattern":"^interpret_"},"observation_ids":{"maxItems":4}}}},
-        {"if":{"properties":{"origin":{"const":"triage"}}},"then":{"required":["observation_ids"],"properties":{"id":{"pattern":"^triage_"}}}},
+        {"if":{"properties":{"origin":{"const":"interpret"}}},"then":{"required":["observation_ids"],"properties":{"id":{"pattern":"^interpret_"},"observation_ids":{"maxItems":4},"evidence_ids":{"maxItems":6}}}},
+        {"if":{"properties":{"origin":{"const":"triage"}}},"then":{"required":["observation_ids"],"properties":{"id":{"pattern":"^triage_"},"evidence_ids":{"maxItems":6}}}},
         {"if":{"properties":{"origin":{"const":"investigate"}}},"then":{"not":{"required":["observation_ids"]},"properties":{"id":{"pattern":"^investigate_"}}}}
       ]
     },
@@ -328,7 +329,7 @@
         "disposition":{"enum":["kept","refined","contested","added"]},"lead":{"$ref":"#/$defs/lead_id"},
         "reason":{"$ref":"#/$defs/text"},"evidence_ids":{"type":"array","minItems":1,"maxItems":6,"uniqueItems":true,"items":{"$ref":"#/$defs/id"}},
         "original":{"type":"object","additionalProperties":false,"required":["title","condition","impact","improvement","counterpoint","evidence_ids"],
-          "description":"refined only: the text of the investigation's candidate the refinement replaced (its ID is candidate_id). The refined candidate keeps every one of these evidence IDs.",
+          "description":"refined only: the text of the investigation's candidate the refinement replaced (its ID is candidate_id). The refined candidate keeps every one of these evidence IDs and adds one or two, each in a whole resolved excerpt.",
           "properties":{"title":{"$ref":"#/$defs/text"},"condition":{"$ref":"#/$defs/text"},"mechanism":{"$ref":"#/$defs/mechanism"},"impact":{"$ref":"#/$defs/text"},"improvement":{"$ref":"#/$defs/text"},"counterpoint":{"$ref":"#/$defs/text"},"evidence_ids":{"$ref":"#/$defs/citations"}}}
       },
       "allOf":[

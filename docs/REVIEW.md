@@ -402,10 +402,10 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 ### 후속 조사 요청과 출력
 
 - 요청은 메시지 하나다. 찾은 단서(ID, 필요한 것, 시작 줄, 식별자, 의심, 가리키는 후보 ID, 찾은 발췌 ID, 그중 부분 발췌 ID), 단서가 가리키는 후보, 발췌(단서가 인용한 줄, 후보가 인용한 줄, 찾은 발췌 순)를 담는다. 호출마다 새 세션이므로 원래 후보가 인용한 코드를 다시 보낸다. 요청이 예산을 넘으면 뒤쪽 단서부터 빼고 `review_input_trimmed`를 남기며, 단서 하나로도 넘으면 `review_input_too_large`로 실패한다.
-- 출력은 `{"results":[...]}`이고 기준(`basis`)마다 결과 하나다. 입력 후보에는 `refined`(고친 후보 전체: 원래 후보가 인용한 근거 ID를 모두 그대로 두고, 부분 발췌가 아닌 찾은 발췌 안의 줄을 하나 이상 더 인용한다)나 `contested`(이유와 코드 근거 1~6개, 그중 하나 이상이 부분 발췌가 아닌 찾은 발췌 안의 줄)를 쓰고, 고칠 것이 없으면 결과를 내지 않는다. 단서(`basis`가 단서 ID)마다 찾은 코드가 보인 다른 문제의 `added` 후보 하나까지이고 찾은 발췌를 인용해야 한다. 고치거나 더한 후보는 조사 후보와 같은 검사를 받는다.
-- 고친 후보는 새로 읽은 코드로 제목·조건·동작 방식·영향·개선 방향·반론을 바꿀 수 있지만, 시작한 코드(원래 후보의 인용)를 떠날 수 없다. 원래 인용을 하나라도 빼면 `lead_refinement_citations_dropped`, 선언 전체인 찾은 발췌의 줄을 인용하지 않으면 `lead_refinement_evidence_not_resolved`이고, 복구 뒤에도 남으면 그 결과만 빠져 원래 후보가 그대로 verify로 간다. 후보에는 심각도가 없으므로(심각도는 verify가 정한다) 심각도를 비교하는 규칙은 없다. 원래 후보가 근거 여섯 개를 모두 썼으면 새 줄을 더할 자리가 없어 고칠 수 없다(반박은 할 수 있다). 기록의 `refined` 처리는 원래 후보의 글(`original`)을 담고, 보고서의 그 발견은 원래 제목·단서·후속 조사 task를 보인다([단서 기록과 보고서](#단서-기록과-보고서)).
+- 출력은 `{"results":[...]}`이고 기준(`basis`)마다 결과 하나다. 입력 후보에는 `refined`(고친 후보 전체: 원래 후보가 인용한 근거 ID를 모두 그 순서대로 앞에 두고, 부분 발췌가 아닌 찾은 발췌 안의 줄을 하나나 둘 뒤에 더 인용한다. 그래서 고친 후보는 근거를 8개까지 인용한다)나 `contested`(이유와 코드 근거 1~6개, 그중 하나 이상이 부분 발췌가 아닌 찾은 발췌 안의 줄)를 쓰고, 고칠 것이 없으면 결과를 내지 않는다. 단서(`basis`가 단서 ID)마다 찾은 코드가 보인 다른 문제의 `added` 후보 하나까지이고 찾은 발췌를 인용해야 한다. 고치거나 더한 후보는 조사 후보와 같은 검사를 받는다. 인용 상한은 더한 후보가 조사 후보처럼 6개이고, 고친 후보는 아래 규칙이 정한다.
+- 고친 후보는 새로 읽은 코드로 제목·조건·동작 방식·영향·개선 방향·반론을 바꿀 수 있지만, 시작한 코드(원래 후보의 인용)를 떠날 수 없다. 원래 인용을 하나라도 빼면 `lead_refinement_citations_dropped`, 원래 인용을 그 순서대로 앞에 두지 않으면(발견의 위치가 원래 후보의 첫 인용에서 옮겨 간다) `lead_refinement_citations_reordered`, 새 근거를 셋 이상 더하면 `lead_refinement_citations_over_cap`이다. 새 근거가 없거나, 새 근거가 모두 그 후보를 가리키는 단서 하나의 선언 전체 발췌 안에 있지 않거나(부분 발췌의 줄, 조사가 보낸 줄, 다른 후보의 단서가 찾은 코드), 새 근거 중 조사 요청에 없던 줄(`new_lines`가 세는 줄)이 하나도 없으면 `lead_refinement_evidence_not_resolved`다. 호출부 창은 조사 발췌와 세 줄까지 겹칠 수 있으므로 창 안이라는 것만으로는 새 코드가 아니다. 기록의 처리는 새 근거가 있는 그 단서를 `lead`로 담는다. 그런 결과는 복구를 요청하지 않고 바로 빠지며(코드는 그 호출의 출력 오류에 남는다) 원래 후보가 그대로 verify로 간다. 반박도 그 후보를 가리키는 단서의 선언 전체 발췌 안에서 조사 요청에 없던 줄을 하나 이상 인용해야 하고 처리의 `lead`는 그 단서다. 더한 후보는 자기 단서(`basis`)가 찾은 발췌에서 조사 요청에 없던 줄을 인용해야 한다. 후보에는 심각도가 없으므로(심각도는 verify가 정한다) 심각도를 비교하는 규칙은 없다. 원래 후보가 근거 여섯 개를 모두 썼어도 새 근거 하나나 둘을 더해 8개까지 인용할 수 있다(`record.MaxRefinedEvidence`). 그래서 후속 조사 기록과 그 뒤 verify 기록의 조사 후보는 8개까지 인용할 수 있고, 기록 검사와 `record.LeadFollowupMatches`가 6개를 넘는 후보를 고친 후보로만 받는다. 기록의 `refined` 처리는 원래 후보의 글(`original`)을 담고, 보고서의 그 발견은 원래 제목·단서·후속 조사 task를 보인다([단서 기록과 보고서](#단서-기록과-보고서)).
 - 반박한 후보는 빠지지 않는다. 그 후보는 그대로 같은 조사의 verify로 가고, 요청의 후보에 `contested`(이유와 인용한 줄)가 붙으며 인용한 줄과 그 줄을 담은 찾은 발췌도 함께 간다. 그런 후보가 있는 verify 요청에만 반대 근거를 다른 반박 근거처럼 저울질하라는 계약 문장이 붙는다. 호출부 창은 부르는 줄과 그 앞뒤 세 줄만 담으므로 호출하는 함수의 앞쪽 검사가 창 밖에 있을 수 있다. 그래서 verify는 인용한 범위처럼 반박이 인용한 찾은 발췌에도 그것을 감싼 선언을 함께 받는다(한 단위에 들 때, origin `declaration`; `TestContestedCallerWindowReachesVerifyWithItsDeclaration`). 후속 조사 지침의 입력 설명도 호출부 발췌가 호출 주변만 보인다고 말한다. 판정은 verify가 하고, 반박이 맞으면 보고서는 다른 반박된 후보처럼 싣는다.
-- 출력 오류는 [출력 오류 분류](#출력-오류-분류)를 따른다(`lead_result_invalid`·`lead_result_duplicate`·`lead_contest_evidence_not_resolved`·`lead_addition_evidence_not_new`·`lead_refinement_citations_dropped`·`lead_refinement_evidence_not_resolved`). 복구 뒤에도 틀린 결과는 그 결과만 빼고 그 후보는 조사가 낸 그대로 남는다(`lead_result_omitted`).
+- 출력 오류는 [출력 오류 분류](#출력-오류-분류)를 따른다(`lead_result_invalid`·`lead_result_duplicate`·`lead_contest_evidence_not_resolved`·`lead_addition_evidence_not_new`·`lead_refinement_citations_dropped`·`lead_refinement_citations_reordered`·`lead_refinement_citations_over_cap`·`lead_refinement_evidence_not_resolved`). 복구 뒤에도 틀린 결과는 그 결과만 빼고 그 후보는 조사가 낸 그대로 남는다(`lead_result_omitted`). 고침의 인용 규칙을 어긴 결과는 복구 없이 뺀다.
 - 기록은 최종 후보 전부와 후보마다의 처리(`kept`·`refined`·`contested`·`added`)를 담는다. 같은 조사의 verify는 수락된 후속 조사 기록의 최종 후보를 검증한다. 후속 조사가 호출되지 않았거나 실패하면 verify는 조사의 후보를 그대로 검증하므로 후보가 줄지 않는다. 실패의 이유는 그 task와 기록에 남는다.
 - 후속 조사 기록의 근거는 보낸 것뿐이다. 조사 기록의 근거를 바꾸지 않은 항목, 찾은 발췌, 보낸 발췌 안에서 좁힌 인용 범위만 둘 수 있고, 인용 범위는 보낸 발췌 안에 있어야 한다(`record.Decode`, `record.LeadFollowupMatches`).
 
@@ -723,10 +723,12 @@ scripted caller로 잰 승인이다(최소 요청 예산, Go package가 다음 p
 | `contract_partial_support_invalid` | 무결성 | `contract_comparison_invalid`와 같다 |
 | `lead_result_invalid` | 무결성 | 단서 후속 조사 결과의 `basis`가 보낸 후보·단서가 아니거나 그 대상에 맞지 않는 `disposition`이다(후보에 대한 `added`, 단서에 대한 `refined` 등). 복구 요청에 그 결과를 다시 싣고, 복구 뒤에도 남으면 그 결과만 빼며 그 후보는 조사가 낸 그대로 남는다(`lead_result_omitted`) |
 | `lead_result_duplicate` | 형식 | 같은 `basis`의 두 번째 결과를 버린다. 앞 결과는 그대로 받는다 |
-| `lead_contest_evidence_not_resolved` | 무결성 | 반박(`contested`) 결과가 부분 발췌가 아닌 찾은 발췌 안의 코드를 인용하지 않았다. `lead_result_invalid`와 같다 |
-| `lead_addition_evidence_not_new` | 무결성 | 더한(`added`) 후보가 찾은 발췌 안의 코드를 인용하지 않았다. `lead_result_invalid`와 같다 |
-| `lead_refinement_citations_dropped` | 무결성 | 고친(`refined`) 후보가 원래 후보가 인용한 근거 ID 중 하나 이상을 뺐다. `lead_result_invalid`와 같다 |
-| `lead_refinement_evidence_not_resolved` | 무결성 | 고친(`refined`) 후보가 부분 발췌가 아닌 찾은 발췌 안의 코드를 인용하지 않았다. `lead_result_invalid`와 같다 |
+| `lead_contest_evidence_not_resolved` | 무결성 | 반박(`contested`) 결과가 그 후보를 가리키는 단서의 부분 발췌가 아닌 찾은 발췌 안에서 조사 요청에 없던 줄을 인용하지 않았다. `lead_result_invalid`와 같다 |
+| `lead_addition_evidence_not_new` | 무결성 | 더한(`added`) 후보가 자기 단서가 찾은 발췌 안에서 조사 요청에 없던 줄을 인용하지 않았다. `lead_result_invalid`와 같다 |
+| `lead_refinement_citations_dropped` | 무결성 | 고친(`refined`) 후보가 원래 후보가 인용한 근거 ID 중 하나 이상을 뺐다. 복구를 요청하지 않고 그 결과만 뺀다(`lead_result_omitted`). 원래 후보는 조사가 낸 그대로 verify로 간다 |
+| `lead_refinement_citations_reordered` | 무결성 | 고친 후보가 원래 후보의 근거 ID를 모두 두었지만 그 순서대로 앞에 두지 않았다(발견의 위치가 옮겨 간다). `lead_refinement_citations_dropped`와 같다 |
+| `lead_refinement_citations_over_cap` | 무결성 | 고친 후보가 원래 인용 밖의 근거를 셋 이상 더했다(새 근거는 하나나 둘, 모두 8개까지). `lead_refinement_citations_dropped`와 같다 |
+| `lead_refinement_evidence_not_resolved` | 무결성 | 고친 후보가 새 근거를 더하지 않았거나, 새 근거가 그 후보를 가리키는 단서 하나의 부분이 아닌 찾은 발췌 안에 모두 있지 않거나, 새 근거 중 조사 요청에 없던 줄이 없다. `lead_refinement_citations_dropped`와 같다 |
 
 ## 후보 검증과 근거 규칙
 

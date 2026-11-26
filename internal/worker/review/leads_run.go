@@ -61,16 +61,25 @@ const limLeadResultOmitted = "lead_result_omitted"
 const (
 	errLeadResultInvalid   = "lead_result_invalid"
 	errLeadResultDuplicate = "lead_result_duplicate"
-	// A contest cites no line of a whole resolved declaration (a partial
-	// window cannot show the condition never happens).
+	// A contest cites no line of a whole resolved declaration of a lead of
+	// its candidate that the investigation did not send (a partial window
+	// cannot show the condition never happens).
 	errLeadContestLines = "lead_contest_evidence_not_resolved"
-	// An added candidate cites no line of the resolved code.
+	// An added candidate cites no line of its lead's resolved code that the
+	// investigation did not send.
 	errLeadAdditionLines = "lead_addition_evidence_not_new"
 	// A refinement drops a citation of the candidate it refines: it may
 	// rewrite the text from new code, not leave the code it started from.
 	errLeadRefinementCitations = "lead_refinement_citations_dropped"
-	// A refinement cites no line of a whole resolved declaration.
+	// A refinement keeps the candidate's citations but not first and in
+	// order, which would move the finding's location.
+	errLeadRefinementOrder = "lead_refinement_citations_reordered"
+	// A refinement adds no citation, or adds one outside the whole resolved
+	// declarations of one lead of its candidate, or none of its new
+	// citations holds a line the investigation did not send.
 	errLeadRefinementLines = "lead_refinement_evidence_not_resolved"
+	// A refinement adds more than record.MaxRefinementNewEvidence citations.
+	errLeadRefinementOverCap = "lead_refinement_citations_over_cap"
 )
 
 // investigateLeadsContract offers leads; it travels only in a request that
@@ -78,7 +87,7 @@ const (
 // same instructions as before leads existed.
 const investigateLeadsContract = ` Optionally return up to %d "leads":[{"need":"definition|callers","evidence_id":"ev_...:40-42","symbol":"Name","suspicion":"the open premise and what that code decides","candidate":1}]. A lead is no finding: write the suspicion as a candidate first with its unconfirmed premise, and give a lead only when that premise depends on code this request lacks; candidate is the 1-based position of that candidate (required). If the sent code decides the point, write the candidate without a lead. evidence_id cites the sent code lines holding symbol, one identifier: for definition the callee of a call on those lines, for callers the declaration there. The platform finds only project code: a project function, a method of a concrete project type the code fixes as the receiver's type, and a package-qualified call into a project package. It finds no standard library or external module code and no call through an interface or a value of unknown type: do not name those. Never name code this request carries.`
 
-const leadsContract = `For this role use exactly {"results":[{"basis":"investigate_1 or lead_1","disposition":"refined|contested|added","title":"what goes wrong","condition":"the concrete trigger input or state","mechanism":"how the cited lines produce the failure, step by step","impact":"...","improvement":"fix direction","counterpoint":"what would refute it","evidence_ids":["ev_...:12-30"],"reason":"contested only: why the cited lines show the condition cannot happen"}]}. At most one result per basis. For an input candidate (basis its id) give refined with the complete corrected candidate, keeping every evidence ID the input candidate cites and adding at least one inside a resolved excerpt that is not in the lead's partial_evidence_ids, or contested with only reason and 1-6 code evidence_ids, one of them inside a resolved excerpt that is not in the lead's partial_evidence_ids, that show the condition cannot happen: the candidate stays and verify weighs the contest; omit a candidate that stays as it is. For a lead (basis the lead id) give at most one added candidate for another problem the resolved code shows, citing a resolved excerpt. A candidate cites 1-6 evidence IDs of scope.excerpts, at least one code or test. Do not claim reproduction or provide attack instructions.`
+const leadsContract = `For this role use exactly {"results":[{"basis":"investigate_1 or lead_1","disposition":"refined|contested|added","title":"what goes wrong","condition":"the concrete trigger input or state","mechanism":"how the cited lines produce the failure, step by step","impact":"...","improvement":"fix direction","counterpoint":"what would refute it","evidence_ids":["ev_...:12-30"],"reason":"contested only: why the cited lines show the condition cannot happen"}]}. At most one result per basis. For an input candidate (basis its id) give refined with the complete corrected candidate, keeping every evidence ID the input candidate cites first and in the same order and adding one or two after them, each inside a resolved excerpt of one lead of that candidate that is not in the lead's partial_evidence_ids (so a refined candidate cites at most 8), or contested with only reason and 1-6 code evidence_ids, one of them inside a resolved excerpt of a lead of that candidate that is not in the lead's partial_evidence_ids, that show the condition cannot happen: the candidate stays and verify weighs the contest; omit a candidate that stays as it is. For a lead (basis the lead id) give at most one added candidate for another problem the resolved code shows, citing a resolved excerpt of that lead. An added candidate cites 1-6 evidence IDs of scope.excerpts; every candidate cites at least one code or test. Do not claim reproduction or provide attack instructions.`
 
 // leadOutput is one lead as the investigate output gives it.
 type leadOutput struct {
@@ -474,8 +483,30 @@ func (s *roleStage) leadsFollowup(inv record.Record, upstream []record.Upstream)
 			return t.Path == e.Path && t.SHA256 == e.SHA256 && t.Start <= e.Start && e.End <= t.End
 		})
 	}
-	whole := slices.DeleteFunc(slices.Clone(req.added), func(id string) bool { return slices.Contains(req.partial, id) })
+	// A result rests on the code of one lead: a refinement or contest on a
+	// lead that names its candidate, an addition on its own lead (the
+	// disposition's lead), and on a line of that code the investigation did
+	// not send (a caller window may overlap its excerpts).
+	leadsOf := map[string][]record.Lead{}
+	for _, l := range req.leads {
+		if l.CandidateID != "" {
+			leadsOf[l.CandidateID] = append(leadsOf[l.CandidateID], l)
+		}
+	}
+	targetsOf := func(l record.Lead, partial bool) []string {
+		var out []string
+		for _, t := range l.Targets {
+			if partial || !t.Partial {
+				out = append(out, t.ID)
+			}
+		}
+		return out
+	}
+	newCode := func(cited map[string]record.Excerpt, id string) bool {
+		return record.LineCount(record.LeadNewLineSet([]string{id}, cited, inv.Evidence)) > 0
+	}
 	var refined, added map[string]record.CandidateText
+	var refinedLeads map[string]string
 	var contested map[string]record.LeadDisposition
 	var cite *citer
 	var issues []itemIssue
@@ -492,6 +523,7 @@ func (s *roleStage) leadsFollowup(inv record.Record, upstream []record.Upstream)
 		reply.known = catalog
 		var f outputFaults
 		ref, add, con := map[string]record.CandidateText{}, map[string]record.CandidateText{}, map[string]record.LeadDisposition{}
+		refLead := map[string]string{}
 		seen := map[string]bool{}
 		left := false
 		none := func([]string) []record.FieldProblem { return nil }
@@ -510,31 +542,75 @@ func (s *roleStage) leadsFollowup(inv record.Record, upstream []record.Upstream)
 				seen[basis] = true
 				continue
 			case sentCandidates[basis] && disposition == record.DispositionRefined, isLead && lead.ID != "" && disposition == record.DispositionAdded:
-				r := s.checkCandidate(x.candidate(), "results", i+1, reply, true, s.lastChance, limLeadResultOmitted, none)
+				// A refinement cites up to record.MaxRefinedEvidence: its
+				// original's citations and one or two more. More new ones
+				// leave it out at once, before the count would ask a repair.
+				cite := record.MaxCandidateEvidence
+				if !isLead {
+					cite = record.MaxRefinedEvidence
+					ids, _, _ := reply.resolveIssues(x.EvidenceIDs, citeNarrow)
+					more := map[string]bool{}
+					for _, id := range ids {
+						if !slices.Contains(citedBy[basis], id) {
+							more[id] = true
+						}
+					}
+					if len(more) > record.MaxRefinementNewEvidence {
+						f.reject(errLeadRefinementOverCap)
+						left = true
+						continue
+					}
+				}
+				r := s.checkCandidateCiting(x.candidate(), "results", i+1, reply, true, s.lastChance, limLeadResultOmitted, cite, none)
 				f.optional(r.codes, r.issues, r.lims)
 				if !r.keep {
 					left = true
 					continue
 				}
-				if isLead && !slices.ContainsFunc(r.text.Evidence, func(id string) bool { return within(reply.catalog(), id, req.added) }) {
+				cited := reply.catalog()
+				if isLead && !slices.ContainsFunc(r.text.Evidence, func(id string) bool { return within(cited, id, targetsOf(lead, true)) && newCode(cited, id) }) {
 					fault("evidence_ids", errLeadAdditionLines)
 					continue
 				}
 				if !isLead {
 					// A refinement rewrites the text from the resolved code: it
-					// keeps the citations it started from and cites lines of a
-					// whole resolved declaration (record.RefinementGrounded).
-					kept := !slices.ContainsFunc(citedBy[basis], func(id string) bool { return !slices.Contains(r.text.Evidence, id) })
-					grounded := slices.ContainsFunc(r.text.Evidence, func(id string) bool { return within(reply.catalog(), id, whole) })
-					if !kept {
-						fault("evidence_ids", errLeadRefinementCitations)
+					// keeps the citations it started from first and in order
+					// (the finding keeps its location) and adds one or two, all
+					// lines of the whole resolved declarations of one lead of
+					// its candidate and one of them new to the investigation
+					// (record.RefinementGrounded); the lineage records that
+					// lead. One outside those bounds is left out at once,
+					// asking no repair, and the candidate goes to verify as the
+					// investigation gave it.
+					original, ev := citedBy[basis], r.text.Evidence
+					fresh := slices.DeleteFunc(slices.Clone(ev), func(id string) bool { return slices.Contains(original, id) })
+					code, from := "", ""
+					switch {
+					case slices.ContainsFunc(original, func(id string) bool { return !slices.Contains(ev, id) }):
+						code = errLeadRefinementCitations
+					case !slices.Equal(ev[:len(original)], original):
+						code = errLeadRefinementOrder
+					case len(fresh) > record.MaxRefinementNewEvidence:
+						code = errLeadRefinementOverCap
+					default:
+						for _, l := range leadsOf[basis] {
+							whole := targetsOf(l, false)
+							if len(fresh) > 0 && !slices.ContainsFunc(fresh, func(id string) bool { return !within(cited, id, whole) }) &&
+								slices.ContainsFunc(fresh, func(id string) bool { return newCode(cited, id) }) {
+								from = l.ID
+								break
+							}
+						}
+						if from == "" {
+							code = errLeadRefinementLines
+						}
 					}
-					if !grounded {
-						fault("evidence_ids", errLeadRefinementLines)
-					}
-					if !kept || !grounded {
+					if code != "" {
+						f.reject(code)
+						left = true
 						continue
 					}
+					refLead[basis] = from
 				}
 				seen[basis] = true
 				if isLead {
@@ -549,9 +625,20 @@ func (s *roleStage) leadsFollowup(inv record.Record, upstream []record.Upstream)
 					codes = addLim(codes, is.code)
 				}
 				cited := reply.catalog()
-				codes = addLim(codes, idErrors(ids, cited, 6, "code")...)
+				codes = addLim(codes, idErrors(ids, cited, record.MaxCandidateEvidence, "code")...)
 				codes = addLim(codes, s.textErrors(x.Reason)...)
-				if len(codes) == 0 && !slices.ContainsFunc(ids, func(id string) bool { return within(cited, id, whole) }) {
+				// The contest stands on new lines of a whole resolved
+				// declaration of a lead of its candidate; the lineage records
+				// that lead.
+				from := ""
+				for _, l := range leadsOf[basis] {
+					whole := targetsOf(l, false)
+					if slices.ContainsFunc(ids, func(id string) bool { return within(cited, id, whole) && newCode(cited, id) }) {
+						from = l.ID
+						break
+					}
+				}
+				if len(codes) == 0 && from == "" {
 					codes = addLim(codes, errLeadContestLines)
 				}
 				if len(codes) > 0 {
@@ -561,7 +648,7 @@ func (s *roleStage) leadsFollowup(inv record.Record, upstream []record.Upstream)
 					continue
 				}
 				seen[basis] = true
-				con[basis] = record.LeadDisposition{CandidateID: basis, Disposition: record.DispositionContested, Reason: x.Reason, EvidenceIDs: ids}
+				con[basis] = record.LeadDisposition{CandidateID: basis, Disposition: record.DispositionContested, Lead: from, Reason: x.Reason, EvidenceIDs: ids}
 			default:
 				fault("disposition", errLeadResultInvalid)
 			}
@@ -569,7 +656,7 @@ func (s *roleStage) leadsFollowup(inv record.Record, upstream []record.Upstream)
 		issues = f.issues
 		errs := s.outcome(&f)
 		if len(errs) == 0 {
-			refined, added, contested, cite, omitted = ref, add, con, reply, left
+			refined, refinedLeads, added, contested, cite, omitted = ref, refLead, add, con, reply, left
 		}
 		return errs
 	}
@@ -582,7 +669,7 @@ func (s *roleStage) leadsFollowup(inv record.Record, upstream []record.Upstream)
 	if omitted {
 		s.rec.Limitations = addLim(s.rec.Limitations, limLeadResultOmitted)
 	}
-	s.assembleLeads(inv, req, refined, added, contested, cite)
+	s.assembleLeads(inv, req, refined, refinedLeads, added, contested, cite)
 	if !record.LeadFollowupMatches(s.rec, inv) {
 		return *s.fail(result(domain.TaskFailed, reasonLineageMismatch))
 	}
@@ -592,15 +679,10 @@ func (s *roleStage) leadsFollowup(inv record.Record, upstream []record.Upstream)
 // assembleLeads writes the final candidates and their dispositions: every
 // candidate of the investigation in order (contested, refined or kept, then
 // renumbered), then the added ones in lead order within the record's
-// candidate bound. No candidate is removed.
-func (s *roleStage) assembleLeads(inv record.Record, req leadsRequest, refined, added map[string]record.CandidateText,
-	contested map[string]record.LeadDisposition, cite *citer) {
-	leadOf := map[string]string{}
-	for _, l := range req.leads {
-		if leadOf[l.CandidateID] == "" {
-			leadOf[l.CandidateID] = l.ID
-		}
-	}
+// candidate bound. No candidate is removed. A contest or refinement names
+// the lead whose code it rests on (refinedLeads for a refinement).
+func (s *roleStage) assembleLeads(inv record.Record, req leadsRequest, refined map[string]record.CandidateText, refinedLeads map[string]string,
+	added map[string]record.CandidateText, contested map[string]record.LeadDisposition, cite *citer) {
 	final := []record.Candidate{}
 	dispositions := []record.LeadDisposition{}
 	var cited [][]string
@@ -610,7 +692,7 @@ func (s *roleStage) assembleLeads(inv record.Record, req leadsRequest, refined, 
 		next.ID = id
 		if d, ok := contested[c.ID]; ok {
 			// Unchanged; verify reads the contest from the disposition.
-			d.FinalID, d.Lead = id, leadOf[c.ID]
+			d.FinalID = id
 			final = append(final, next)
 			dispositions = append(dispositions, d)
 			cited = append(cited, next.Evidence, d.EvidenceIDs)
@@ -624,7 +706,7 @@ func (s *roleStage) assembleLeads(inv record.Record, req leadsRequest, refined, 
 				original := c.CandidateText
 				original.ID = ""
 				next.CandidateText = t
-				d.Disposition, d.Lead, d.Original = record.DispositionRefined, leadOf[c.ID], &original
+				d.Disposition, d.Lead, d.Original = record.DispositionRefined, refinedLeads[c.ID], &original
 			}
 		}
 		final = append(final, next)

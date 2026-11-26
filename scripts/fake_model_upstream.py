@@ -87,9 +87,9 @@ literals (quoted, or backtick and triple-quoted strings across lines),
 up to `lead_limit`, each a `definition` lead of the first candidate. In both
 modes the follow-up (role `leads`) refines that candidate from its first lead
 and adds one candidate from each other lead (basis the lead). A refinement
-keeps every evidence ID of the candidate and cites the lead's line and the
-first resolved excerpt that is not partial (`partial_evidence_ids`); with no
-such excerpt that lead gets no result. An added candidate cites the lead's
+keeps every evidence ID of the candidate and adds one citation, the first
+resolved excerpt that is not partial (`partial_evidence_ids`); with no such
+excerpt that lead gets no result. An added candidate cites the lead's
 line and its first resolved excerpt. `--shape-errors` makes a share of the
 results repeat (`lead_result_duplicate`, the repeat is dropped). Without
 `--leads`, or without a candidate, the investigation names no lead.
@@ -481,19 +481,24 @@ def result_for(role: str, review_input, echo: str | None = None, shape: float = 
             partial = set(i for i in lead.get("partial_evidence_ids") or [] if isinstance(i, str))
             if basis in bases or not ids:
                 continue
-            bases.add(basis)
             line = cited.get(lead["evidence_id"], lead["evidence_id"])
             if basis == lead["id"]:
                 evidence = [line, cited.get(ids[0], ids[0])]
             else:
-                # A refinement keeps the candidate's citations and rests on a
-                # whole resolved excerpt; without one this lead gets no result.
+                # A refinement keeps the candidate's citations and adds one
+                # line of a whole resolved excerpt; without one this lead gets
+                # no result.
                 whole = [i for i in ids if i not in partial]
                 if not whole:
                     continue
-                evidence = list(dict.fromkeys(originals.get(basis, []) + [line, cited.get(whole[0], whole[0])]))
-                if len(evidence) > 6:
+                kept = originals.get(basis, [])
+                new = cited.get(whole[0], whole[0])
+                if new in kept:
                     continue
+                evidence = kept + [new]
+            # The basis is used once a result is emitted: a candidate whose
+            # first lead gave none is refined from its next.
+            bases.add(basis)
             result = dict(candidate, title="Placeholder candidate after a lead (dry run)", basis=basis,
                           disposition="added" if basis == lead["id"] else "refined", evidence_ids=evidence)
             results.append(result)

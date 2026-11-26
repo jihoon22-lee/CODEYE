@@ -775,8 +775,12 @@ def check_leads_examples(raw: dict, validators: dict) -> int:
     exactly their targets and its partial ones their partial targets, its
     line count is their lines the investigation did not send, every original
     candidate has one disposition in order and a kept one is unchanged, a
-    refined one keeps the original text, every citation of it and cites
-    lines of a whole new excerpt (record.RefinementGrounded); the verify names the follow-up by its digest and checks its candidates. The
+    refined one keeps the original text and every citation of it first and
+    in order and adds one or two, each a line of a whole new excerpt of the
+    lead its disposition names and one of them a line the investigation did
+    not send (record.RefinementGrounded, record.LeadFollowupMatches), and
+    only a refined one cites more than six; the verify names the
+    follow-up by its digest and checks its candidates. The
     chain tree of the Go test is synthetic, so the blobs are not read here;
     the Go decoder binds them to the snapshot manifest."""
 
@@ -829,12 +833,14 @@ def check_leads_examples(raw: dict, validators: dict) -> int:
         ensure([d["candidate_id"] for d in originals] == candidates, "follow-up dispositions differ from the investigation's candidates")
         final = {c["id"]: c for c in fu["candidates"]}
         ensure(sorted(d["final_id"] for d in f["dispositions"] if d.get("final_id")) == sorted(final), "follow-up candidates without a disposition")
-        whole = [i for i in f["new_evidence_ids"] if i not in f.get("partial_evidence_ids", [])]
 
         def inside(i, outer):
             e, x = catalog.get(i), catalog[outer]
             return e is not None and (e["path"], e["sha256"]) == (x["path"], x["sha256"]) and x["start_line"] <= e["start_line"] and e["end_line"] <= x["end_line"]
 
+        for d in f["dispositions"]:
+            if d["disposition"] != "refined" and d.get("final_id"):
+                ensure(len(final[d["final_id"]]["evidence_ids"]) <= 6, "follow-up candidate citing more than six without a refinement: " + d["final_id"])
         for d in originals:
             original = next(c for c in inv["candidates"] if c["id"] == d["candidate_id"])
             if d["disposition"] == "kept":
@@ -844,7 +850,14 @@ def check_leads_examples(raw: dict, validators: dict) -> int:
                 cited = final[d["final_id"]]["evidence_ids"]
                 ensure(d.get("original") == text, "refinement without the investigation's text: " + d["candidate_id"])
                 ensure(set(original["evidence_ids"]) <= set(cited), "refinement drops a citation of its candidate: " + d["candidate_id"])
-                ensure(any(inside(i, w) for i in cited for w in whole), "refinement cites no line of a whole resolved excerpt: " + d["candidate_id"])
+                n = len(original["evidence_ids"])
+                ensure(cited[:n] == original["evidence_ids"], "refinement does not keep its candidate's citations first and in order: " + d["candidate_id"])
+                new = cited[n:]
+                ensure(1 <= len(new) <= 2, "refinement adds no citation or more than two: " + d["candidate_id"])
+                own = [t["id"] for t in leads[d["lead"]]["targets"] if not t.get("partial")]
+                ensure(all(any(inside(i, w) for w in own) for i in new), "refinement adds a line outside the whole resolved excerpts of its lead: " + d["candidate_id"])
+                ensure(any({(catalog[i]["path"], catalog[i]["sha256"], k) for k in range(catalog[i]["start_line"], catalog[i]["end_line"] + 1)} - sent_before for i in new),
+                       "refinement adds no line the investigation did not send: " + d["candidate_id"])
         ensure(carries_upstream_evidence(fu, inv), "follow-up evidence changes an excerpt of the investigation")
         up = {u["source"]: u for u in ver["upstream"]}
         ensure(up.get("review.leads.s001", {}).get("sha256") == hashlib.sha256(compact_json(raw["leads.s001"])).hexdigest(), "verify is not bound to the follow-up")
@@ -864,6 +877,21 @@ def check_leads_examples(raw: dict, validators: dict) -> int:
 
     def disposition(d):
         return d["leads.s001"]["lead_followup"]["dispositions"][0]
+
+    def refine_with(d, *lines):
+        """The refined candidate also cites these lines, each a new cited
+        excerpt of the record: (an evidence ID it lies in, line)."""
+        fu = d["leads.s001"]
+        for outer, line in lines:
+            e = dict(next(x for x in fu["evidence"] if x["id"] == outer), start_line=line, end_line=line, origin="cited")
+            e["id"] = excerpt_id(fu["snapshot_manifest_digest"], e)
+            fu["evidence"].append(e)
+            fu["candidates"][0]["evidence_ids"].append(e["id"])
+
+    whole_new = docs["leads.s001"]["lead_followup"]["new_evidence_ids"][0]
+    whole_start = next(e for e in docs["leads.s001"]["evidence"] if e["id"] == whole_new)["start_line"]
+    anchor = docs["investigate.s001"]["leads"][0]["evidence_id"]
+    anchor_line = next(e for e in docs["investigate.s001"]["evidence"] if e["id"] == anchor)["start_line"]
 
     failed = copy.deepcopy(docs["leads.s001"])
     failed.update(outcome="failed", failure_reason="review_input_too_large", calls=[])
@@ -892,6 +920,9 @@ def check_leads_examples(raw: dict, validators: dict) -> int:
         case("refinement dropping a citation of its candidate", lambda d: d["leads.s001"]["candidates"][0].update(
             evidence_ids=[i for i in d["leads.s001"]["candidates"][0]["evidence_ids"] if i not in d["investigate.s001"]["candidates"][0]["evidence_ids"]])),
         case("refinement citing no new line", lambda d: d["leads.s001"]["candidates"][0].update(evidence_ids=list(d["investigate.s001"]["candidates"][0]["evidence_ids"]))),
+        case("refinement adding three citations", lambda d: refine_with(d, (whole_new, whole_start + 2), (whole_new, whole_start + 3))),
+        case("refinement adding a line outside its lead's code", lambda d: refine_with(d, (anchor, anchor_line - 1))),
+        case("refinement citing the resolved line first", lambda d: d["leads.s001"]["candidates"][0]["evidence_ids"].reverse()),
         case("kept candidate with an original text", lambda d: (disposition(d).update(disposition="kept"), disposition(d).pop("lead"))),
         case("contested candidate without its reason", lambda d: disposition(d).update(disposition="contested", evidence_ids=list(d["leads.s001"]["lead_followup"]["new_evidence_ids"]))),
         case("lead without a candidate", lambda d: lead(d).pop("candidate_id")),

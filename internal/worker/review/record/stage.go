@@ -830,7 +830,16 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 		if (r.Schema == SchemaVersionTriage) != (c.Origin == StageTriage) {
 			return invalid("candidate origin")
 		}
-		if !candidateTextWithin(c.CandidateText, b) || !refs(c.Evidence, catalog, 6, "code", "test", "document") || !hasKind(c.Evidence, catalog, "code") ||
+		// A refined investigate candidate of a lead follow-up, and the
+		// verify record that checks it, may cite up to MaxRefinedEvidence;
+		// checkLeadFollowup and LeadFollowupMatches bound it to refinements,
+		// and the report takes a verify only with its upstream's candidates
+		// unchanged.
+		cite := MaxCandidateEvidence
+		if (r.Stage == StageLeads || r.Stage == StageVerify) && c.Origin == StageInvestigate {
+			cite = MaxRefinedEvidence
+		}
+		if !candidateTextWithin(c.CandidateText, b) || !refs(c.Evidence, catalog, cite, "code", "test", "document") || !hasKind(c.Evidence, catalog, "code") ||
 			(b.mechanism > 0 && (c.Origin == StageInvestigate || c.Origin == StageInterpret) && r.Stage == c.Origin && c.Mechanism == "") {
 			return invalid("candidate %s", c.ID)
 		}

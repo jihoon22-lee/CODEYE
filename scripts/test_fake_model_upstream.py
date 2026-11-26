@@ -115,17 +115,25 @@ class LeadsTest(unittest.TestCase):
         repeated = f.result_for("leads", follow, shape=1.0, leads=True)["results"]
         self.assertEqual(len(repeated), 4)
         self.assertEqual(repeated[0], repeated[1])
-        # A refinement keeps every citation of its candidate and rests on a
-        # resolved excerpt that is not partial; with only a partial one the
-        # lead that would refine gets no result, and the others still add.
+        # A refinement keeps every citation of its candidate first and adds
+        # one, a resolved excerpt that is not partial (not the lead's line).
         cited = json.loads(json.dumps(follow))
         cited["candidates"][0]["evidence_ids"] = ["ev_" + "d" * 24, "ev_" + "e" * 24]
         first = f.result_for("leads", cited, leads="project")["results"][0]
         self.assertEqual((first["disposition"], first["evidence_ids"]),
-                         ("refined", ["ev_" + "d" * 24, "ev_" + "e" * 24, "ev_" + "a" * 24, "ev_" + "c" * 24]))
+                         ("refined", ["ev_" + "d" * 24, "ev_" + "e" * 24, "ev_" + "c" * 24]))
+        # A candidate that already cites six is refined with a seventh.
+        six = json.loads(json.dumps(follow))
+        six["candidates"][0]["evidence_ids"] = ["ev_" + c * 24 for c in "def012"]
+        first = f.result_for("leads", six, leads=True)["results"][0]
+        self.assertEqual((first["disposition"], len(first["evidence_ids"]), first["evidence_ids"][-1]), ("refined", 7, "ev_" + "c" * 24))
+        # The first lead resolved only partially gives nothing, and the
+        # candidate's next lead refines it: a basis is used only once a result
+        # is emitted.
         partial = json.loads(json.dumps(follow))
         partial["leads"][0]["partial_evidence_ids"] = ["ev_" + "c" * 24]
-        self.assertEqual([(r["basis"], r["disposition"]) for r in f.result_for("leads", partial, leads=True)["results"]], [("lead_2", "added")])
+        self.assertEqual([(r["basis"], r["disposition"], r["evidence_ids"]) for r in f.result_for("leads", partial, leads=True)["results"]],
+                         [("investigate_1", "refined", ["ev_" + "a" * 24, "ev_" + "c" * 24])])
 
     PROJECT = {"scope": {"snapshot_manifest_digest": "0" * 64, "lead_limit": 3, "excerpts": [
         {"id": "ev_" + "a" * 24, "path": "app/main.go", "start_line": 3, "end_line": 9, "kind": "code",
