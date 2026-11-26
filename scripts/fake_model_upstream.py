@@ -74,14 +74,15 @@ requests in flight at once (`peak_in_flight`).
 `--echo-text TEXT` appends an operator-chosen text to every investigate candidate
 title, to see whether a model's own words reach the verify request (the relay's
 `--allow-model-echo` path). The text comes from the operator, never from labels.
-`--leads` makes an investigation whose request offers leads (`scope.lead_limit`,
-docs/REVIEW.md#단서-후속-조사) name up to that many: one per qualified call
-(`pkg.Name(`) on a sent code line whose name no sent excerpt declares, the first
-for its first candidate, the others for no candidate. The follow-up (role
-`leads`) then refines that candidate and adds one candidate per other lead,
-each citing the lead's line and its first resolved excerpt; `--shape-errors`
-makes a share of the results repeat (`lead_result_duplicate`, the repeat is
-dropped). Without `--leads` the investigation names no lead.
+`--leads` makes an investigation with a candidate whose request offers leads
+(`scope.lead_limit`, docs/REVIEW.md#단서-후속-조사) name up to that many: one
+per qualified call (`pkg.Name(`) on a sent code line whose name no sent excerpt
+declares, each for its first candidate. The follow-up (role `leads`) then
+refines that candidate from the first lead and adds one candidate from each
+other lead (basis the lead), each citing the lead's line and its first resolved
+excerpt; `--shape-errors` makes a share of the results repeat
+(`lead_result_duplicate`, the repeat is dropped). Without `--leads`, or without
+a candidate, the investigation names no lead.
 
 Stdlib only.
 """
@@ -163,11 +164,12 @@ STANDARD_QUALIFIERS = frozenset((
 DECLARATION = re.compile(r"\bfunc (?:\([^)]*\) )?([A-Za-z_][A-Za-z0-9_]*)\(")
 
 
-def _leads(review_input, limit: int, has_candidate: bool) -> list[dict]:
-    """Leads of an investigation that offers them: one per qualified call on
-    a sent code line whose name no sent excerpt declares. Calls whose
-    qualifier names a directory of a sent path (a package of the project)
-    come first and calls of standard-library qualifiers last."""
+def _leads(review_input, limit: int) -> list[dict]:
+    """Leads of an investigation that offers them, all for its first
+    candidate: one per qualified call on a sent code line whose name no sent
+    excerpt declares. Calls whose qualifier names a directory of a sent path
+    (a package of the project) come first and calls of standard-library
+    qualifiers last."""
     scope = review_input.get("scope") if isinstance(review_input, dict) else None
     excerpts = [e for e in (scope or {}).get("excerpts") or [] if isinstance(e, dict) and e.get("kind") == "code"
                 and isinstance(e.get("id"), str) and isinstance(e.get("text"), str)]
@@ -188,8 +190,7 @@ def _leads(review_input, limit: int, has_candidate: bool) -> list[dict]:
         if len(out) == limit:
             break
         if not any(x["symbol"] == name for x in out):
-            out.append({"need": "definition", "evidence_id": ref, "symbol": name, "suspicion": TEXT,
-                        "candidate": 1 if has_candidate and not out else 0})
+            out.append({"need": "definition", "evidence_id": ref, "symbol": name, "suspicion": TEXT, "candidate": 1})
     return out
 
 
@@ -332,8 +333,8 @@ def result_for(role: str, review_input, echo: str | None = None, shape: float = 
             if comparisons:
                 out["contract_comparisons"] = comparisons
         limit = data["scope"].get("lead_limit") if isinstance(data.get("scope"), dict) else None
-        if leads and isinstance(limit, int) and limit > 0:
-            named = _leads(data, limit, bool(out["candidates"]))
+        if leads and isinstance(limit, int) and limit > 0 and out["candidates"]:
+            named = _leads(data, limit)
             if named:
                 out["leads"] = named
         return out
@@ -343,13 +344,16 @@ def result_for(role: str, review_input, echo: str | None = None, shape: float = 
         for lead in data.get("leads") or []:
             if not isinstance(lead, dict) or not isinstance(lead.get("id"), str) or not isinstance(lead.get("evidence_id"), str):
                 continue
-            basis = lead.get("candidate_id") or lead["id"]
+            # The first lead of a candidate refines it; any other lead adds.
+            basis = lead.get("candidate_id")
+            if not isinstance(basis, str) or basis in bases:
+                basis = lead["id"]
             resolved = [cited.get(i, i) for i in lead.get("resolved_evidence_ids") or [] if isinstance(i, str)]
             if basis in bases or not resolved:
                 continue
             bases.add(basis)
             result = dict(candidate, title="Placeholder candidate after a lead (dry run)", basis=basis,
-                          disposition="refined" if lead.get("candidate_id") else "added",
+                          disposition="added" if basis == lead["id"] else "refined",
                           evidence_ids=[cited.get(lead["evidence_id"], lead["evidence_id"]), resolved[0]])
             results.append(result)
             if _pick(shape, role, review_input, basis):

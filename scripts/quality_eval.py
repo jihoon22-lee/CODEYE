@@ -61,6 +61,10 @@ BASE_REVIEW_ROLES = ("environment", "documents", "investigate", "interpret", "ve
 # triage and verify, lead follow-ups (docs/REVIEW.md#단서-후속-조사) as leads;
 # they are not an original role of the slice check below.
 PACK_ROLES = (*BASE_REVIEW_ROLES, "leads", "triage", "contract")
+# The roles whose calls fill the per-attempt ceiling of a variant with slices
+# (estimate): slot investigations and their verifies, their lead follow-ups
+# and the final contract review.
+SLICED_ROLES = ("investigate", "verify", "contract", "leads")
 # The counters of code_review.lead_followups (docs/REPORT.md#단서-후속-조사).
 LEAD_COUNTS = ("leads_asked", "leads_resolved", "tasks_planned", "tasks_run", "tasks_accepted", "calls", "new_excerpts", "new_lines")
 LEAD_MAPS = ("leads_unresolved", "tasks_not_run", "dispositions")
@@ -416,9 +420,9 @@ def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAU
     request bytes / bytes_per_token input tokens and output_tokens_upper output tokens at the
     relay's worst-case prices, else CONSTANTS.
     Module slices (docs/REVIEW.md#모듈-단위-검토-분할): a variant whose history made
-    more original-role calls than original roles may have planned slices. Slices and final
-    contract followup share the per-attempt ceiling. Its upper is max_calls calls at the
-    dearest per-call cost of investigate, verify and contract. A variant without history is
+    more original-role calls than original roles may have planned slices. Slices, their lead
+    follow-ups and final contract followup share the per-attempt ceiling. Its upper is max_calls
+    calls at the dearest per-call cost of investigate, verify, contract and leads. A variant without history is
     estimated as above (the constants are single-file inputs without slices); run the capture
     dry run with the same selection first. With slices_unknown (project-scale cases) a variant
     without history is treated as one that may plan slices: its upper is the per-attempt ceiling.
@@ -457,7 +461,7 @@ def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAU
                   else slices_unknown)
         if sliced:
             upper_calls += max_calls
-            upper_cost += max_calls * max(per_call[r] for r in ("investigate", "verify", "contract")) * margin
+            upper_cost += max_calls * max(per_call[r] for r in SLICED_ROLES) * margin
             continue
         for r in BASE_REVIEW_ROLES:
             count = max(1, seen.get(r, 0)) if seen is not None else 1

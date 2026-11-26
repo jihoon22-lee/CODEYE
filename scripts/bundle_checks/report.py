@@ -86,7 +86,7 @@ def check_go_test_failure_contracts(validators: dict, base: dict) -> int:
 
 
 def check_document_excerpt_contracts(validators: dict, base: dict) -> int:
-    report = copy.deepcopy(base)
+    report = without_leads(base)
     report["builder"]["version"] = "18"
     lines = ["Readable document clause. " * 7 for _ in range(10)] + ["The revision is excluded." * 3]
     row = {"id": "ev_" + "a" * 24, "kind": "document", "path": "README.md", "start_line": 1, "end_line": len(lines),
@@ -104,6 +104,40 @@ def check_document_excerpt_contracts(validators: dict, base: dict) -> int:
     row["excerpt"]["text"] += "x" * 200
     expect_invalid("document excerpt exceeds its own budget", check_report_schema, report)
     return 3
+
+
+LEADS_DECODER = "application/vnd.codeye.review+json;schema_version=0.9"
+
+
+def without_leads(base: dict) -> dict:
+    """A copy of a report without its review records on schema 0.9 and its
+    lead follow-up calls, the two that bind it to builder 26."""
+    report = copy.deepcopy(base)
+    report["artifacts"] = [a for a in report.get("artifacts", []) if a.get("decoder") != LEADS_DECODER]
+    if "review_calls" in report.get("coverage", {}):
+        report["coverage"]["review_calls"] = [c for c in report["coverage"]["review_calls"] if c["role"] != "leads"]
+    return report
+
+
+def check_lead_builder_contract(validators: dict, base: dict) -> int:
+    """A review record on schema 0.9 or a lead follow-up call binds the report
+    to builder 26 (docs/REVIEW.md#단서-후속-조사): without them a builder 25
+    report is valid, with either it is not."""
+    check_report_schema = validators["report.schema.json"].validate
+    plain = without_leads(base)
+    plain["builder"]["version"] = "25"
+    check_report_schema(plain)
+    record = next(a for a in base["artifacts"] if a.get("decoder") == LEADS_DECODER)
+    investigate = next(c for c in base["coverage"]["review_calls"] if c["role"] == "investigate")
+    call = dict(investigate, role="leads", task_key="review.leads")
+    cases = {
+        "review record 0.9 in a builder 25 report": dict(plain, artifacts=plain["artifacts"] + [record]),
+        "lead follow-up call in a builder 25 report": dict(plain, coverage=dict(plain["coverage"], review_calls=plain["coverage"]["review_calls"] + [call])),
+    }
+    for name, report in cases.items():
+        expect_invalid(name, check_report_schema, report)
+        check_report_schema(dict(report, builder=dict(report["builder"], version="26")))
+    return len(cases)
 
 
 HYPOTHESIS_NOT_SHIPPED = "hypothesis_not_shipped"

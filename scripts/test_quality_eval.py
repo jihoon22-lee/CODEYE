@@ -208,8 +208,19 @@ class PlannerTests(unittest.TestCase):
             self.assertEqual(est["max_calls"], 40)
             self.assertEqual(est["expected"]["calls"], 12)
             self.assertEqual(est["upper"]["calls"], 40 + int(5 * 1.1 + 2 * 1.1 + 2 + 2 + 0.999))
-            dearest = max(per_call[r] for r in ("investigate", "verify", "contract"))
+            dearest = max(per_call[r] for r in ("investigate", "verify", "contract", "leads"))
             self.assertGreaterEqual(est["upper"]["ledger_microusd"], int(40 * dearest * 1.5))
+
+    def test_sliced_upper_prices_the_ceiling_at_a_dearer_lead_follow_up(self):
+        # Lead follow-ups share the ceiling with the slots: when a follow-up
+        # request is the dearest, every call of the ceiling is priced at it.
+        hist = {"dirs": ["h"], "calls_per_variant": {}, "input_bytes_max": {},
+                "usage_mean": {"investigate": (4000, 300), "verify": (5000, 300), "contract": (3000, 200), "leads": (9000, 600)},
+                "per_key": {("CASE-1", "after"): {"documents": 1, "investigate": 4, "verify": 4, "leads": 2}}}
+        est = quality_eval.estimate([({"id": "CASE-1"}, "after", None)], history=hist, max_calls=40)
+        per_call = est["per_call_microusd"]
+        self.assertEqual(max(per_call, key=per_call.get), "leads")
+        self.assertEqual(est["upper"], {"calls": 40, "ledger_microusd": int(40 * per_call["leads"] * est["margin"])})
 
 
 class RegressionPilotCoverageTests(unittest.TestCase):
@@ -345,12 +356,14 @@ class RegressionPilotCoverageTests(unittest.TestCase):
         rows[1]["tasks"] += [{"key": "review.leads", "status": "succeeded", "reason": None},
                              {"key": "review.leads.s001", "status": "succeeded", "reason": None},
                              {"key": "review.leads.s002", "status": "skipped_policy", "reason": "no_leads"},
-                             {"key": "review.leads.s003", "status": "budget_exhausted", "reason": "review_budget_exhausted"}]
+                             {"key": "review.leads.s003", "status": "skipped_policy", "reason": "leads_not_admitted"},
+                             {"key": "review.leads.s004", "status": "skipped_policy", "reason": "leads_slot_not_run"}]
         sent = ("review.investigate", "review.leads", "review.leads.s001")
         failures, pilot = self.check(rows, sent=sent)
         self.assertEqual(failures, [])
-        self.assertEqual((pilot["lead_tasks"], pilot["lead_tasks_budget_exhausted"], pilot["lead_records"], pilot["lead_calls"]), (4, 1, 2, 2))
-        self.assertEqual(pilot["lead_tasks_by_status"], {"budget_exhausted/review_budget_exhausted": 1, "skipped_policy/no_leads": 1, "succeeded": 2})
+        self.assertEqual((pilot["lead_tasks"], pilot["lead_tasks_refused"], pilot["lead_records"], pilot["lead_calls"]), (5, 2, 2, 2))
+        self.assertEqual(pilot["lead_tasks_by_status"], {"skipped_policy/leads_not_admitted": 1, "skipped_policy/leads_slot_not_run": 1,
+                                                         "skipped_policy/no_leads": 1, "succeeded": 2})
         # f.go:3-5 and c.go:3-5 are new; c.go:1 and a.go:1 were investigated.
         self.assertEqual((pilot["lead_new_lines"], pilot["lead_lines_not_investigated"], pilot["new_source_lines"]), (6, 6, 3))
         # llm_exposed_files covers the follow-up's f.go too.
@@ -359,7 +372,11 @@ class RegressionPilotCoverageTests(unittest.TestCase):
         self.assertIn("below the 3 sent review calls", self.check(rows, calls_used=2, sent=sent)[0][0])
         # A follow-up the ceiling refused has no call and no record.
         self.assertIn("with a record or a call", self.check(rows, calls=("review.leads.s003",), sent=sent)[0][0])
-        rows[1]["tasks"][-4]["status"] = "budget_exhausted"
+        self.assertIn("with a record or a call", self.check(rows, calls=("review.leads.s004",), sent=sent)[0][0])
+        # A follow-up the investigation did not need is no refusal: a call
+        # under it is not this check's failure.
+        self.assertEqual(self.check(rows, calls=("review.leads.s002",), sent=sent)[0], [])
+        rows[1]["tasks"][-5].update(status="skipped_policy", reason="leads_not_admitted")
         self.assertIn("['review.leads']", self.check(rows, sent=sent[:1])[0][0])
         # A short synthetic case: its slot follow-ups end like its slots.
         regression = self.rows(regression_tasks=("review.investigate", "review.scope", "review.leads"))

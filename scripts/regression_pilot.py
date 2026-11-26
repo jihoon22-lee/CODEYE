@@ -132,6 +132,9 @@ def audit_reports(output, root):
 SLICE_TASK = re.compile(r"^review\.(?:scope|(?:investigate|verify)\.s\d{3})$")
 # Lead follow-ups (docs/REVIEW.md#단서-후속-조사): the whole run's and a slot's.
 LEADS_TASK = re.compile(r"^review\.leads(?:\.s\d{3})?$")
+# A follow-up the ceiling refused: the reserve for the later work left no room
+# for it, or the slot investigation it follows was not run.
+LEADS_REFUSED = {("skipped_policy", "leads_not_admitted"), ("skipped_policy", "leads_slot_not_run")}
 REVIEW_RECORD_MEDIA = "application/vnd.codeye.review+json"
 DEFAULT_MAX_CALLS = 99
 
@@ -191,8 +194,9 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
     with the configured ceiling; the ledger's calls_used (the attempt counter
     before the slices plus the slice records) is known and at most the
     ceiling and not below the sent review calls, the lead follow-ups' calls
-    included; a slice or lead follow-up the ceiling refused has no record and
-    no call; the overview and slice investigations do not repeat source
+    included; a slice the ceiling refused (budget_exhausted) or a lead
+    follow-up it refused (leads_not_admitted, leads_slot_not_run) has no
+    record and no call; the overview and slice investigations do not repeat source
     lines; the slices add source lines and the ledger and llm_exposed_files
     cover the distinct sent files; the relay ledger has no refused or blocked
     request.
@@ -256,7 +260,8 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
         lead_records = [r for r in records if r["stage"] == "leads"]
         lead_lines = set().union(*map(_lead_lines, lead_records))
         exposed_paths = sent_paths | {path for path, _ in lead_lines}
-        exhausted = [k for k, t in tasks.items() if (SLICE_TASK.match(k) or LEADS_TASK.match(k)) and t["status"] == "budget_exhausted"]
+        exhausted = [k for k, t in tasks.items() if SLICE_TASK.match(k) and t["status"] == "budget_exhausted"
+                     or LEADS_TASK.match(k) and (t["status"], t.get("reason")) in LEADS_REFUSED]
         recorded = {"review." + r["stage"] + ("." + r["slice"]["key"] if "slice" in r else "") for r in records
                     if "slice" in r or r["stage"] == "leads"}
         review_calls = report["coverage"].get("review_calls", [])
@@ -279,7 +284,7 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
                  "slice_tasks": sum(1 for k in tasks if SLICE_TASK.match(k)), "slices_admitted": len(slice_inv),
                  "slice_tasks_budget_exhausted": sum(1 for k in exhausted if SLICE_TASK.match(k)),
                  "lead_tasks": sum(lead_tasks.values()), "lead_tasks_by_status": dict(sorted(lead_tasks.items())),
-                 "lead_tasks_budget_exhausted": sum(1 for k in exhausted if LEADS_TASK.match(k)),
+                 "lead_tasks_refused": sum(1 for k in exhausted if LEADS_TASK.match(k)),
                  "lead_records": len(lead_records), "lead_calls": sum(1 for c in review_calls if LEADS_TASK.match(c.get("task_key", ""))),
                  "lead_new_lines": sum((r.get("lead_followup") or {}).get("new_lines", 0) for r in lead_records),
                  "lead_lines_not_investigated": len(lead_lines - combined),
@@ -301,7 +306,7 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
         elif calls_used < sent_calls:
             failures.append(f"pilot: ledger calls_used {calls_used} below the {sent_calls} sent review calls")
         if set(exhausted) & (recorded | called):
-            failures.append(f"pilot: budget-exhausted slices or lead follow-ups with a record or a call {sorted(set(exhausted) & (recorded | called))}")
+            failures.append(f"pilot: slices or lead follow-ups the ceiling refused with a record or a call {sorted(set(exhausted) & (recorded | called))}")
         if sum(map(len, windows)) != len(combined):
             failures.append("pilot: the same source lines reached two investigate requests")
         if not combined - windows[0]:

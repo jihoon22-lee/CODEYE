@@ -69,7 +69,8 @@ class ConcurrentAnswersTest(unittest.TestCase):
 
 class LeadsTest(unittest.TestCase):
     """TC-338: the --leads double names leads only when the request offers
-    them, never for a name a sent excerpt declares, and answers the
+    them and the investigation has a candidate, every lead for that
+    candidate and never for a name a sent excerpt declares, and answers the
     follow-up with one result per candidate or lead."""
 
     INPUT = {"scope": {"snapshot_manifest_digest": "0" * 64, "lead_limit": 3, "excerpts": [
@@ -82,29 +83,35 @@ class LeadsTest(unittest.TestCase):
     def test_investigate_names_undeclared_calls(self):
         out = f.result_for("investigate", self.INPUT, leads=True)
         self.assertEqual([(x["symbol"], x["evidence_id"], x["candidate"]) for x in out["leads"]],
-                         [("Load", "ev_" + "a" * 24 + ":4-4", 1), ("Token", "ev_" + "a" * 24 + ":5-5", 0)])
+                         [("Load", "ev_" + "a" * 24 + ":4-4", 1), ("Token", "ev_" + "a" * 24 + ":5-5", 1)])
         self.assertNotIn("leads", f.result_for("investigate", self.INPUT))
         # A call into a sent path's package comes first, a standard-library
         # call after the other calls.
         standard = json.loads(json.dumps(self.INPUT))
         standard["scope"]["excerpts"][0]["text"] = "3| func main() {\n4| \tfmt.Println(1)\n5| \tvault.Token()\n6| \thelper.Open()\n7| }"
         self.assertEqual([(x["symbol"], x["evidence_id"], x["candidate"]) for x in f.result_for("investigate", standard, leads=True)["leads"]],
-                         [("Open", "ev_" + "a" * 24 + ":6-6", 1), ("Token", "ev_" + "a" * 24 + ":5-5", 0), ("Println", "ev_" + "a" * 24 + ":4-4", 0)])
+                         [("Open", "ev_" + "a" * 24 + ":6-6", 1), ("Token", "ev_" + "a" * 24 + ":5-5", 1), ("Println", "ev_" + "a" * 24 + ":4-4", 1)])
         unoffered = json.loads(json.dumps(self.INPUT))
         del unoffered["scope"]["lead_limit"]
         self.assertNotIn("leads", f.result_for("investigate", unoffered, leads=True))
+        # No candidate, no lead: a lead names the candidate it follows.
+        uncited = {"scope": {"snapshot_manifest_digest": "0" * 64, "lead_limit": 3, "excerpts": []}}
+        out = f.result_for("investigate", uncited, leads=True)
+        self.assertEqual(out["candidates"], [])
+        self.assertNotIn("leads", out)
 
     def test_follow_up_refines_and_adds(self):
         follow = {"scope": {"snapshot_manifest_digest": "0" * 64, "excerpts": [
             {"id": "ev_" + "a" * 24, "path": "app/main.go", "start_line": 4, "end_line": 4, "kind": "code", "text": "4| \tstore.Load(1)"},
             {"id": "ev_" + "c" * 24, "path": "store/s.go", "start_line": 10, "end_line": 14, "kind": "code", "text": "10| func Load(n int) {"}]},
             "leads": [{"id": "lead_1", "evidence_id": "ev_" + "a" * 24, "candidate_id": "investigate_1", "resolved_evidence_ids": ["ev_" + "c" * 24]},
-                      {"id": "lead_2", "evidence_id": "ev_" + "a" * 24, "resolved_evidence_ids": ["ev_" + "c" * 24]},
-                      {"id": "lead_3", "evidence_id": "ev_" + "a" * 24, "candidate_id": "investigate_1", "resolved_evidence_ids": ["ev_" + "c" * 24]}],
+                      {"id": "lead_2", "evidence_id": "ev_" + "a" * 24, "candidate_id": "investigate_1", "resolved_evidence_ids": ["ev_" + "c" * 24]},
+                      {"id": "lead_3", "evidence_id": "ev_" + "a" * 24, "candidate_id": "investigate_1", "resolved_evidence_ids": []}],
             "candidates": [{"id": "investigate_1", "evidence_ids": ["ev_" + "a" * 24]}]}
         results = f.result_for("leads", follow, leads=True)["results"]
         self.assertEqual([(r["basis"], r["disposition"], r["evidence_ids"]) for r in results],
                          [("investigate_1", "refined", ["ev_" + "a" * 24, "ev_" + "c" * 24]), ("lead_2", "added", ["ev_" + "a" * 24, "ev_" + "c" * 24])])
+        self.assertNotIn("lead_3", [r["basis"] for r in results])  # nothing resolved, nothing to cite
         repeated = f.result_for("leads", follow, shape=1.0, leads=True)["results"]
         self.assertEqual(len(repeated), 4)
         self.assertEqual(repeated[0], repeated[1])

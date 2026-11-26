@@ -575,7 +575,9 @@ def check_slice_examples(raw: dict, validators: dict) -> int:
             doc = docs[name]
             record_v.validate(doc)
             stage = name.split(".")[0]
-            ensure(doc["schema_version"] in ("0.3", "0.7") and doc["stage"] == stage and doc.get("slice") == {"key": entry["key"], "modules": entry["modules"]}, "slice record identity: " + name)
+            # A slot investigation that offered leads is on 0.9 (docs/REVIEW.md#단서-후속-조사).
+            versions = ("0.3", "0.7", "0.9") if stage == "investigate" else ("0.3", "0.7")
+            ensure(doc["schema_version"] in versions and doc["stage"] == stage and doc.get("slice") == {"key": entry["key"], "modules": entry["modules"]}, "slice record identity: " + name)
             ensure(all(doc[k] == scope[k] for k in ("snapshot_manifest_digest", "run_id", "attempt_id", "pack")), "slice record of another attempt: " + name)
             for e in doc["evidence"]:
                 body = (root / e["path"]).read_bytes()
@@ -770,7 +772,8 @@ def check_leads_examples(raw: dict, validators: dict) -> int:
     code excerpt of its investigation and names one of its candidates; a
     resolved target is not an excerpt of the investigation; the follow-up
     sends only resolved leads with their anchors, its new excerpts are
-    exactly their targets, its line count is theirs, every original
+    exactly their targets and its partial ones their partial targets, its
+    line count is their lines the investigation did not send, every original
     candidate has one disposition in order and a kept one is unchanged; the
     verify names the follow-up by its digest and checks its candidates. The
     chain tree of the Go test is synthetic, so the blobs are not read here;
@@ -798,7 +801,7 @@ def check_leads_examples(raw: dict, validators: dict) -> int:
         leads = {x["id"]: x for x in inv["leads"]}
         for x in inv["leads"]:
             ensure(x["evidence_id"] in evidence and evidence[x["evidence_id"]]["kind"] in ("code", "test"), "lead cites no code excerpt of its investigation: " + x["id"])
-            ensure(x.get("candidate_id") is None or x["candidate_id"] in candidates, "lead of an unknown candidate: " + x["id"])
+            ensure(x.get("candidate_id") in candidates, "lead of no candidate of its investigation: " + x["id"])
             for target in x.get("targets", []):
                 ensure(target["id"] == excerpt_id(inv["snapshot_manifest_digest"], target) and target["end_line"] - target["start_line"] < 60, "lead target binding: " + x["id"])
                 ensure(target["id"] not in evidence, "lead target the investigation already sent: " + x["id"])
@@ -812,11 +815,15 @@ def check_leads_examples(raw: dict, validators: dict) -> int:
         catalog = {e["id"]: e for e in fu["evidence"]}
         ensure(sent <= set(catalog) and set(f["new_evidence_ids"]) <= sent, "follow-up excerpts outside its record")
         ensure(set(f["new_evidence_ids"]) == set(targets) and all({k: v for k, v in catalog[i].items()} == targets[i] for i in targets), "follow-up new excerpts differ from the resolved targets")
+        # New lines: the lines of the new excerpts the investigation did not
+        # send, each counted once per file (record.LeadNewLineSet).
         lines = set()
         for i in f["new_evidence_ids"]:
             e = catalog[i]
             lines |= {(e["path"], e["sha256"], n) for n in range(e["start_line"], e["end_line"] + 1)}
-        ensure(f["new_lines"] == len(lines), "follow-up new line count")
+        sent_before = {(e["path"], e["sha256"], n) for e in inv["evidence"] for n in range(e["start_line"], e["end_line"] + 1)}
+        ensure(f["new_lines"] == len(lines - sent_before), "follow-up new line count")
+        ensure(set(f.get("partial_evidence_ids", [])) == {t["id"] for t in targets.values() if t.get("partial")}, "follow-up partial excerpts differ from the partial targets")
         originals = [d for d in f["dispositions"] if d.get("candidate_id")]
         ensure([d["candidate_id"] for d in originals] == candidates, "follow-up dispositions differ from the investigation's candidates")
         final = {c["id"]: c for c in fu["candidates"]}
@@ -866,7 +873,11 @@ def check_leads_examples(raw: dict, validators: dict) -> int:
         case("follow-up new line count", lambda d: d["leads.s001"]["lead_followup"].update(new_lines=d["leads.s001"]["lead_followup"]["new_lines"] + 1)),
         case("follow-up of an unresolved lead", lambda d: d["leads.s001"]["lead_followup"].update(leads=["lead_2"])),
         case("kept candidate with a lead", lambda d: disposition(d).update(disposition="kept")),
-        case("withdrawn candidate without its reason", lambda d: (disposition(d).update(disposition="withdrawn"), disposition(d).pop("final_id"))),
+        case("withdrawn candidate", lambda d: disposition(d).update(disposition="withdrawn")),
+        case("contested candidate without its reason", lambda d: disposition(d).update(disposition="contested", evidence_ids=list(d["leads.s001"]["lead_followup"]["new_evidence_ids"]))),
+        case("lead without a candidate", lambda d: lead(d).pop("candidate_id")),
+        case("lead of another investigation's candidate", lambda d: lead(d).update(candidate_id="investigate_9")),
+        case("offered investigation without its lead limit", lambda d: d["investigate.s001"].pop("lead_limit")),
         case("follow-up candidate without a disposition", lambda d: d["leads.s001"]["lead_followup"].update(dispositions=[])),
         case("verify unbound to the follow-up", lambda d: next(u for u in d["verify.s001"]["upstream"] if u["source"] == "review.leads.s001").update(sha256="0" * 64)),
         case("verify of the investigation's candidates", lambda d: d["verify.s001"].update(candidates=d["investigate.s001"]["candidates"])),
