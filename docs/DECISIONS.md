@@ -354,6 +354,15 @@
 
 [분석기](ANALYZERS.md#opengrep-패턴taint-팩) · [SARIF 입력 어댑터](ANALYZERS.md#sarif-입력-어댑터)
 
+**A70 — SpotBugs 컴파일은 모듈 기술자를 빼고, 전이 classpath는 Java 의존성 받기로 미룬다.** (기록 2026-11-26) REQ-007/008/012/014, NFR-006과 TC-323에 대해 다음을 확정한다. 실제 Java 프로젝트의 분석기만 실행에서 SpotBugs가 `java_compilation_failed`로 실패한 원인은 classpath가 아니라 모듈 기술자였다. `module-info.java`를 다른 소스와 함께 넘기자 javac가 이름 있는 모듈로 컴파일하며 모든 파일을 `file should be on source path, or on patch path for module`로 거부했다([평가 결과](EVALUATION-RESULTS.md#분석기-실행-범위도구만-조건)).
+
+1. **기술자는 컴파일하지 않는다.** 클래스는 이름 없는 모듈로 컴파일한다. 직접 의존성 JAR가 classpath에 있으므로 이름 있는 모듈에서는 읽히지 않는 JAR도 읽힌다. SpotBugs는 같은 바이트코드를 읽는다. 모듈 경계는 검사하지 않으며 한계 `java_module_descriptor_not_compiled`로 남긴다. 기술자만 있으면 컴파일할 것이 없으므로 `unsupported / java_production_sources_unselected`다.
+2. **채택하지 않은 안.** 기술자가 있는 디렉터리를 `-sourcepath`로 주는 안은 이 사례에서도 컴파일되었으나, 모듈이 `requires`하는 다른 모듈을 `--module-path`로 줘야 하고 classpath의 직접 의존성 JAR가 이름 있는 모듈에서 보이지 않는다. 지금의 classpath 계약(직접 의존성만, 카탈로그로 검증)과 맞지 않는다.
+3. **전이 classpath의 범위.** A42~A44의 틀로 넣는다면 `deps.java` 받기 작업(필수 아님, 프로젝트 선택과 노드 스위치가 모두 켜져야 함, 받은 저장소는 Maven 저장소 배치의 공유 캐시)이 저장소 코드를 실행하지 않고 POM을 읽어 의존성을 푼다. 이를 위해서는 부모 POM 사슬, `import` 범위 BOM과 `dependencyManagement`, 속성 치환, 범위(`compile`·`provided`·`runtime`), 제외와 `optional`, 가까운 쪽이 이기는 버전 조정, 버전 범위와 relocation을 Maven과 같게 구현해야 한다. JDK·OS로 켜지는 profile은 평가하지 않는 한계로 남는다. lockfile이 없으므로 고정 근거는 저장소의 체크섬뿐이고 `dependency_versions_not_pinned`가 된다. Gradle은 Gradle을 실행하지 않고는 풀 수 없어 리터럴 선언과 버전 카탈로그까지만 다룬다. 받기 기록 schema·보고서 공백·분석기 연결을 함께 바꾸는 큰 변경이라 이 결정에서는 구현하지 않는다.
+4. **측정이 말하는 우선순위.** 이 집합의 Java 사례에서는 직접 의존성만으로 인한 컴파일 실패가 없었다. 기술자를 뺀 뒤 SpotBugs 작업이 모두 컴파일되었다. 전이 classpath는 실제 프로젝트에서 그 때문에 실패하는 측정이 생길 때 다시 본다.
+
+[Java 팩](ANALYZERS.md#java-팩) · [Java 로컬 클래스패스](ANALYZERS.md#java-로컬-클래스패스)
+
 ## 모델 검토
 
 **A21 — 단계 기록과 필수 검토 역할.** (기록 2026-11-18) REQ-009/010/011/013/027과 TC-97에 대해 다음을 확정한다.
