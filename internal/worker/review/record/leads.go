@@ -95,7 +95,7 @@ var LeadReasons = []string{LeadInRequest, LeadSymbolNotAtAnchor, LeadDefinitionM
 // Task reasons of a follow-up that made no call.
 const (
 	ReasonNoLeads         = domain.ReasonNoLeads
-	ReasonNoLeadsResolved = "no_leads_resolved"
+	ReasonNoLeadsResolved = domain.ReasonNoLeadsResolved
 )
 
 // Lead is one lead of an investigation with the platform's resolution.

@@ -415,6 +415,11 @@ func TestReviewSlicesInCodeReviewStage(t *testing.T) {
 	if !domain.NothingToReview(domain.ReasonNoReviewScope) || domain.NothingToReview("review_budget_exhausted") || domain.NothingToReview("model_source_not_approved") {
 		t.Fatal("nothing-to-review set")
 	}
+	// A lead follow-up with no lead, or with none the platform found, had
+	// nothing to send (each unresolved lead keeps its reason in the record).
+	if !domain.NothingToReview(domain.ReasonNoLeads) || !domain.NothingToReview(domain.ReasonNoLeadsResolved) {
+		t.Fatal("lead follow-up skips lower the stage")
+	}
 }
 
 // TC-314 (docs/REVIEW.md#호출-상한과-승인): review pairs run concurrently, so
