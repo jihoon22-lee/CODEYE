@@ -104,8 +104,11 @@ type assembleInput struct {
 	Rustc, Cargo, ClippyV, Main *executor.Result
 	// First is the run whose compile errors were all in ExcludedKinds
 	// targets; Main is then the retry without those kinds.
-	First                *executor.Result
-	ExcludedKinds        []string
+	First         *executor.Result
+	ExcludedKinds []string
+	// ExcludedPackages: cargo doc's First run collided on a library name;
+	// Main is the run without these packages.
+	ExcludedPackages     []string
 	Executions           []analysis.Execution
 	Mask                 func(string) string
 	Cancelled, Integrity bool
@@ -399,7 +402,12 @@ var targetFlags = []string{"--lib", "--bins", "--tests", "--benches", "--example
 const LimTargetsExcluded = "failing_target_kinds_excluded"
 
 // retryName is the execution name of the retry without the failing kinds.
-func (k Kind) retryName() string { return k.main() + ".targets" }
+func (k Kind) retryName() string {
+	if k == KindDoc {
+		return execDoc + ".packages"
+	}
+	return k.main() + ".targets"
+}
 
 // withoutKinds replaces --all-targets in args with the target flags of every
 // kind except the excluded ones.
@@ -559,6 +567,12 @@ func assemble(in assembleInput) obsdoc.Document {
 	}
 	if in.Kind == KindDoc {
 		doc.Target.Properties["targets"] = "documentation"
+		if in.First != nil {
+			for _, p := range in.ExcludedPackages {
+				doc.RulePack.Selection = append(doc.RulePack.Selection, "--exclude", p)
+			}
+			doc.Target.Properties["excluded_packages"] = strings.Join(in.ExcludedPackages, ",")
+		}
 	}
 	doc.Coverage.Unit = "crate"
 	doc.Coverage.FilesInScope = ptr(len(in.ScopeFiles))
@@ -575,9 +589,13 @@ func assemble(in assembleInput) obsdoc.Document {
 		doc.Executions = append(doc.Executions, obsdoc.ExecutionOf(e.Name, e.Result))
 	}
 	mainName := in.Kind.main()
-	if in.First != nil && in.Kind != KindDoc {
+	if in.First != nil {
 		mainName = in.Kind.retryName()
-		limitations = append(limitations, LimTargetsExcluded)
+		if in.Kind == KindDoc {
+			limitations = append(limitations, LimDocPackagesExcluded)
+		} else {
+			limitations = append(limitations, LimTargetsExcluded)
+		}
 	}
 	if in.Integrity {
 		doc.Outcome = obsdoc.Outcome{TaskStatus: domain.TaskFailed, Reason: ptr(ReasonSnapshotIntegrity), ExitClass: obsdoc.ExitNotRun}

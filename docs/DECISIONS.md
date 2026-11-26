@@ -389,6 +389,12 @@
 
 [Java 팩](ANALYZERS.md#java-팩) · [Java 로컬 클래스패스](ANALYZERS.md#java-로컬-클래스패스)
 
+**A71 — cargo doc은 라이브러리 이름이 겹치는 패키지 쌍에서 더 깊은 쪽을 빼고 다시 실행한다.** (기록 2026-11-26) REQ-007/012, NFR-006과 TC-327에 대해 다음을 확정한다. A69와 같은 방식으로 재실행한다. 실제 Rust workspace에서 rustdoc 작업이 `doc_output_collision`으로 실패했다. C API 래퍼 패키지가 본 패키지와 같은 라이브러리 이름을 써서 cargo가 workspace 전체의 문서화를 거부했다([평가 결과](EVALUATION-RESULTS.md#분석기-실행-범위도구만-조건)).
+
+1. **조건.** 첫 실행이 exit 101이고 stream을 끝까지 받았으며, stderr가 출력 이름 충돌만 말하고(toolchain, lockfile, 의존성, linker, manifest, build script, 컴파일 오류가 없음) 충돌한 패키지 쌍을 cargo 문구에서 읽을 수 있을 때만 다시 실행한다.
+2. **뺄 패키지.** 각 쌍에서 manifest 디렉터리가 더 깊은 패키지를 뺀다. 깊이가 같으면 이름 순서가 뒤인 것을 뺀다. 저장소 루트의 패키지가 보통 본 라이브러리이고 하위의 같은 이름은 래퍼라는 관찰에 따른 규칙이며, 결정적이어서 같은 입력에서 같은 패키지를 뺀다.
+3. **기록.** 한계 `doc_colliding_packages_excluded`, `excluded_packages`, 선택의 `--exclude`로 무엇을 빼고 문서화했는지 남긴다. 채택하지 않은 안은 패키지마다 따로 문서화하는 것이다. 같은 출력 경로를 쓰므로 실행마다 target 디렉터리를 나눠야 하고, 실행 수가 패키지 수만큼 는다.
+
 ## 모델 검토
 
 **A21 — 단계 기록과 필수 검토 역할.** (기록 2026-11-18) REQ-009/010/011/013/027과 TC-97에 대해 다음을 확정한다.

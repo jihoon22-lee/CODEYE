@@ -100,7 +100,7 @@
 
 ### 빌드 문맥과 추가 분석 입력
 
-Java의 전이 의존성을 포함한 classpath 해석, Meson·autotools `configure`·`bear`로 감싼 make의 compile DB를 더한다. CMake 프로젝트의 compile DB 생성, 허가받은 Rust build script의 시스템 C 도구 경로, dependency-cruiser 외부 대상 해석은 [compile DB 생성](ANALYZERS.md#compile-db-생성)·[Rust 환경](ANALYZERS.md#rust-환경)에, SARIF 입력 어댑터(팩 안의 도구 출력만)와 파일 안 taint 규칙은 [Opengrep 패턴·taint 팩](ANALYZERS.md#opengrep-패턴taint-팩)에 반영했다. taint 규칙의 측정과 남은 공백(파일 사이 흐름, 매크로 뒤의 호출, 검증 분기, 애플리케이션에서 찾은 실제 결함 0건)은 [측정](ANALYZERS.md#opengrep-규칙-측정)에 있다.
+Java의 전이 의존성을 포함한 classpath 해석, Meson·autotools `configure`·`bear`로 감싼 make의 compile DB를 더한다. Java 전이 classpath는 의존성 받기의 틀로 넣는 범위(POM 해석, 버전 고정 근거, Gradle의 한계)를 [A70](DECISIONS.md)에 정리했고, 직접 의존성만으로 컴파일이 실패하는 측정이 생길 때 시작한다. CMake 프로젝트의 compile DB 생성, 허가받은 Rust build script의 시스템 C 도구 경로, dependency-cruiser 외부 대상 해석은 [compile DB 생성](ANALYZERS.md#compile-db-생성)·[Rust 환경](ANALYZERS.md#rust-환경)에, SARIF 입력 어댑터(팩 안의 도구 출력만)와 파일 안 taint 규칙은 [Opengrep 패턴·taint 팩](ANALYZERS.md#opengrep-패턴taint-팩)에 반영했다. taint 규칙의 측정과 남은 공백(파일 사이 흐름, 매크로 뒤의 호출, 검증 분기, 애플리케이션에서 찾은 실제 결함 0건)은 [측정](ANALYZERS.md#opengrep-규칙-측정)에 있다.
 
 완료 조건:
 - 해당 언어 사례의 tools 조건 위치 지표와 분석기 공백 task 변화를 기록한다.

@@ -596,7 +596,7 @@ role `observations`, media `application/vnd.codeye.observations+json`, `kind=ana
 - **위치 고정.** 저장소 `.npmrc`·`.yarnrc`·`.yarnrc.yml`은 비밀 파일 규칙으로 스냅샷에 들어오지 않는다. pnpm은 `pnpm-workspace.yaml`과 `package.json`에서도 설정을 읽으므로 위치·레지스트리·proxy를 명령줄로 정하고, 명령줄 값이 두 파일보다 이기는 것을 실측했다(npm 11.16, pnpm 11.28, yarn 1.22). 그래서 쓰기는 설치 루트의 `node_modules`, 공유 캐시(`javascript/{npm,pnpm,yarn}`), task 디렉터리 안에 머문다.
 - **밖을 가리키는 로컬 의존성.** 설치 전에 설치 루트 아래 `package.json`들의 의존성 필드와 lockfile의 로컬 항목(npm `packages` key와 link `resolved`, pnpm importer의 `link:`·`file:`, yarn 항목)을 읽어, `file:`·`link:`·`portal:` 경로가 스냅샷 밖(절대 경로, `..`로 벗어남)이면 설치를 실행하지 않는다. 패키지 관리자가 그 디렉터리에 설치하게 되기 때문이다. `skipped_policy`/`local_dependency_outside_project`이고 `failed_items`가 그 의존성을 적으며 분석기는 받기가 없을 때처럼 실행한다. 스냅샷 안의 로컬 의존성과 workspace 참조는 그대로 설치한다. 설치 루트 아래의 모든 `package.json`을 보므로 workspace 멤버가 아닌 시험 자료의 `package.json`도 설치를 막을 수 있다.
 - **트리.** 설치가 끝나면 설치 루트 아래의 `node_modules`(멤버 포함, `node_modules` 안으로 내려가지 않음, 최대 256)를 `installed_dirs`에 적는다. 한 번 더 훑어 작업 사본과 패키지 캐시 밖을 가리키는 링크(`file:`·`link:` 의존성, junction 포함)를 지우고 `dropped_inputs`(사유 `link_outside_workspace`, 최대 64)와 한계 `links_outside_workspace_removed`로 남긴다. 나머지 설치는 그대로 쓴다. 실패·중단·drift인 설치는 트리를 지우고 `installed_dirs`를 남기지 않는다. 트리는 attempt 실행 사본과 함께 지워진다.
-- **분석기.** tsc·type-aware ESLint는 기록이 `prepared`·`partial`이고 `installed_dirs`가 있으면 그 디렉터리를 받아들이고 `type_check_without_dependencies` 대신 `dependencies_prepared`(`partial`이면 `dependencies_partially_prepared`)를 남긴다. 기록에 없는 `node_modules`나 링크인 `node_modules`는 전과 같이 거부한다. gitleaks는 설치 트리를 건너뛰고(pnpm 배치의 링크 때문에 걸어 다니기 검사가 실패하지 않도록) jscpd·lizard는 manifest 파일만 읽으므로 설치 트리를 세지 않는다.
+- **분석기.** tsc·type-aware ESLint는 기록이 `prepared`·`partial`이고 `installed_dirs`가 있으면 그 디렉터리를 받아들이고 `type_check_without_dependencies` 대신 `dependencies_prepared`(`partial`이면 `dependencies_partially_prepared`)를 남긴다. 모듈의 설치 루트를 감싸는 상위 설치 루트(하위 디렉터리에 자기 lockfile이 있는 모듈의 저장소 루트)의 기록도 쓸 수 있으면 그 `installed_dirs`를 함께 받아들인다. Node 해석이 모듈에서 위로 올라가며 그 트리를 지나기 때문이다. 이전에는 하위 설치 루트 모듈이 상위 루트의 설치 트리 때문에 `node_modules_outside_snapshot`으로 건너뛰어졌다. 기록에 없는 `node_modules`나 링크인 `node_modules`는 전과 같이 거부한다. gitleaks는 설치 트리를 건너뛰고(pnpm 배치의 링크 때문에 걸어 다니기 검사가 실패하지 않도록) jscpd·lizard는 manifest 파일만 읽으므로 설치 트리를 세지 않는다.
 - **사유.** `lockfile_outdated`(frozen lockfile이 package.json과 맞지 않음), `lockfile_version_unsupported`, `lockfile_format_unsupported`, `manifest_invalid`, `dependency_not_found`(레지스트리에 없음, `failed_items`에 이름), `registry_auth_required`, `registry_unreachable`, `local_dependency_outside_project`(`skipped_policy`), `snapshot_integrity_failed`, `workspace_drift`, `toolchain_unavailable`(버전을 읽을 수 없음), `package_manager_not_configured`(`--node`나 관리자 스크립트 없음, corepack shim)와 공통 사유.
 - **설치 패키지의 쓰임.** 설치한 패키지는 타입 검사기(tsc·type-aware ESLint)만 읽는다. 스냅샷의 일부가 아니므로 그 파일 내용은 보고서의 코드 발췌나 모델 입력에 들어가지 않는다(진단 메시지가 의존성의 타입 이름을 담을 수는 있다). 프로젝트 밖을 가리키는 `file:` 의존성은 위 사전 검사가 막고, 링크 정리가 둘째 방어선이다.
 
@@ -1326,7 +1326,7 @@ clippy 작업은 allow-by-default인 여섯 lint를 `-W`로 켠다. 소스의 `#
 | Cargo.toml 파싱 실패 | failed / `manifest_invalid`(configuration_error) |
 | `rust-version`이 rustc보다 높음 | failed / `toolchain_unavailable`(configuration_error) |
 | `failed to run custom build command` | failed / `build_script_failed` |
-| rustdoc의 `document output filename collision`(같은 이름의 crate 둘을 문서화) | failed / `doc_output_collision`(configuration_error) |
+| rustdoc의 `document output filename collision`(같은 이름의 crate 둘을 문서화) | 각 쌍에서 디렉터리가 더 깊은 패키지를 `--exclude`로 뺀 재실행의 판정, `doc_colliding_packages_excluded`. 쌍을 읽지 못하거나 다른 원인이 함께 있으면 failed / `doc_output_collision`(configuration_error) |
 | 그 밖의 종료 코드, 101인데 설명 없음 | failed / `cargo_failed` |
 | 버전 출력 미인식 | failed / `tool_version_unrecognized` |
 | stdout 잘림·손상·알 수 없는 레코드 | failed / `output_truncated`·`output_unparsed` |
@@ -1369,7 +1369,7 @@ C/C++ 진단의 관련 위치는 도구가 반환한 순서로 한 건의 상세
 ## 문서 참조와 오류 반환 검사
 
 - **Go errcheck.** go vet과 같은 패키지 패턴·모듈 캐시·오프라인 빌드 환경으로 호출자가 버린 오류의 위치를 찾는다. `go list`의 실제 선택 파일과 진단 줄을 고정 스냅샷에 연결한다. 코드에 명시적으로 처리한 오류나 활성 빌드에서 제외된 파일을 검사 완료로 보고하지 않는다. 패키지는 `-mod=readonly`로 읽는다. 모듈에 `vendor/modules.txt`가 있으면 go vet·Staticcheck(go 명령의 기본)처럼 `-mod=vendor`로 vendor 디렉터리에서 읽고 `vendor_directory_used`를 남긴다. 선택(`rule_pack.selection`)이 실제 플래그다. 이전에는 vendor를 쓰는 모듈에서도 `-mod=readonly`가 오프라인 proxy에 모듈을 물어 `errcheck_packages_unavailable`로 실패했다.
-- **Rust rustdoc.** 저장소 코드 실행을 허용한 노드에서 `cargo doc --offline --locked --workspace --no-deps`로 현재 빌드 구성의 문서 참조를 확인한다. rustdoc 진단만 남긴다. 생성한 문서의 crate 진입 파일과 실제 진단 위치를 처리 범위에 기록한다. 나머지 하위 모듈의 문서화 여부는 이 결과로 확정할 수 없다.
+- **Rust rustdoc.** 저장소 코드 실행을 허용한 노드에서 `cargo doc --offline --locked --workspace --no-deps`로 현재 빌드 구성의 문서 참조를 확인한다. rustdoc 진단만 남긴다. 생성한 문서의 crate 진입 파일과 실제 진단 위치를 처리 범위에 기록한다. 나머지 하위 모듈의 문서화 여부는 이 결과로 확정할 수 없다. 두 패키지가 같은 이름의 라이브러리를 문서화해 cargo가 workspace를 거부하면(`document output filename collision`, C API 래퍼 crate가 본 crate의 라이브러리 이름을 쓰는 경우), 각 쌍에서 디렉터리가 더 깊은 패키지를 `--exclude`로 빼고 한 번 더 실행한다(`cargo.doc.packages`). 뺀 패키지는 `target.properties.excluded_packages`, 한계 `doc_colliding_packages_excluded`, 선택의 `--exclude`로 남고 그 패키지는 문서화하지 않는다. [A71](DECISIONS.md)
 
 ## Go 내부 패키지 의존 관계
 

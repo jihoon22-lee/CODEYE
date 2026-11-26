@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
@@ -165,7 +166,20 @@ func PreparedTrees(job analysis.Job, moduleDir string) (dirs []string, limitatio
 	if rec.State != depdoc.StatePrepared {
 		limitation = LimDependenciesPartiallyPrepared
 	}
-	return rec.InstalledDirs, limitation, true
+	dirs = append(dirs, rec.InstalledDirs...)
+	// Node resolution walks up from the module: a node_modules that an
+	// enclosing install root's task of this attempt installed (a repository
+	// with its own lockfile in a subdirectory) is on that path and is the
+	// same attempt's dependency code, not a tree from outside the snapshot.
+	for _, r := range roots {
+		if r.Dir == root.Dir || r.Dir == "" || !(r.Dir == "." || strings.HasPrefix(root.Dir, r.Dir+"/")) {
+			continue
+		}
+		if up, ok := depdoc.ReadForModule(job.Scratch, depdoc.TaskKey("javascript", r.Suffix), "javascript", r.Dir, Expect(job)); ok && up.TreeUsable() {
+			dirs = append(dirs, up.InstalledDirs...)
+		}
+	}
+	return dirs, limitation, true
 }
 
 // Expect binds dependency records to the job (snapshot, run, attempt and
