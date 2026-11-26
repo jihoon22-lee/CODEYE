@@ -972,3 +972,35 @@ JS/TS 변형 3개와 Rust 변형 3개만 같은 도구 목록·설정으로 다�
 - 늘어난 type-aware ESLint 진단 2건은 그 벤치마크 스크립트에 있다(경로 규칙으로는 배포 코드). 소스와 대조한 결과 실제 문제 0, 잡음 1(`JSON.parse` 결과를 `Object.keys`에 넘긴 것), 불분명 1(구조 분해한 함수 값의 `this` 결속)이다.
 - rustdoc 실패는 C API 래퍼 패키지가 본 패키지와 같은 라이브러리 이름을 쓴 workspace였다. 래퍼를 뺀 재실행이 성공했고, 늘어난 진단은 없다.
 - 다른 작업의 관찰 집합은 전후가 같다.
+
+### 누적 전후 비교(main `2f7ee0d`)
+
+위 다섯 변경이 모두 들어간 main으로 기준과 같은 20개 변형, 같은 도구 목록·설정을 다시 실행했다. 칸은 "기준 → 이번"이고, 같으면 한 번만 적는다.
+
+| 분석기 | 작업 상태 | 처리 파일(배포 / 배포 아님) | 범위 파일 | 배포 코드 진단 |
+|---|---|---|---|---|
+| go vet | succeeded 10 | 62 / 76 | 143 | 0 |
+| Staticcheck | succeeded 10 | 62 / 76 | 143 | 5 |
+| errcheck | succeeded 9, failed `errcheck_packages_unavailable` 1 → succeeded 10 | 50 / 58 → 62 / 76 | 143 | 10 |
+| cppcheck | succeeded 3 | 6 / 19 | 91 | 17 |
+| clang-tidy | succeeded 3 | 6 / 19 | 91 | 30 |
+| GCC 분석 | failed `gcc_analyzer_too_complex` 3 → succeeded 1, failed `gcc_analyzer_too_complex` 2 | 0 / 0 → 2 / 2 | 91 | 0 |
+| ruff | succeeded 5 | 46 / 2 | 48 | 29 |
+| mypy | succeeded 5 | 46 / 2 | 48 | 31 |
+| pyright | succeeded 5 | 46 / 2 | 48 | 215 |
+| bandit | succeeded 5 | 46 / 2 | 48 | 6 |
+| ESLint | succeeded 4 | 76 / 244 | 320 | 16 |
+| tsc | succeeded 2, `node_modules_outside_snapshot` 1 → succeeded 3 | 18 / 2 → 19 / 2 | 189 → 190 | 0 |
+| type-aware ESLint | succeeded 2, `node_modules_outside_snapshot` 1, 입력 예산 초과 1 → succeeded 3, 입력 예산 초과 1 | 9 / 2 → 10 / 2 | 135 | 4 → 6 |
+| cargo check | failed `package_errors` 2, succeeded 1 → succeeded 2, failed `lints_denied` 1 | 3 / 0 → 4 / 1 | 12 | 72 |
+| clippy | failed `package_errors` 2, succeeded 1 → succeeded 3 | 3 / 0 → 10 / 1 | 12 | 126 |
+| rustdoc | succeeded 2, failed `doc_output_collision` 1 → succeeded 3 | 2 / 0 → 3 / 0 | 12 | 2 |
+| PMD | succeeded 3 | 68 / 0 | 68 | 2 |
+| SpotBugs | succeeded 2, failed `java_compilation_failed` 1 → succeeded 3 | 34 / 0 → 66 / 0 | 68 | 13 → 16 |
+
+- 위 표의 실패·건너뜀 작업 12개(입력 예산 초과 제외) 중 9개가 성공으로 바뀌었다. 실패로 남은 것은 GCC 분석 2개(모든 단위가 탐색 한도에 걸림)와 배포 코드의 deny 기본 lint로 실패한 cargo check 1개다. 그 밖에 바뀌지 않은 공백은 type-aware ESLint의 입력 예산 초과 1, `deps.python`의 `no_binary_distribution` 1, compile DB에 없는 C/C++ 번역 단위 66개, 설치하지 않은 Opengrep이다.
+- tsc의 범위 파일이 하나 는 것은 건너뛰던 작업이 범위를 세지 못했기(`files_in_scope_unknown`) 때문이다.
+- 배포 코드 진단은 SpotBugs 3건, type-aware ESLint 2건만 늘었다. 정밀도 표본은 각 절에 적었다.
+- 다른 분석기의 작업 상태·처리 파일·진단 수는 기준과 같다.
+- 채점기 집계 "tool diagnostic hits label, before": dev 1/11 → 1/11, holdout 2/9 → 2/9.
+- **남은 차이.** 처리 범위가 넓어졌는데도 도구 진단이 결함 줄에 닿는 사례 수는 그대로다. 남은 차이는 도구가 실행되지 않아서보다, 실행된 규칙이 그 줄에 진단을 내지 않아서 생긴다고 본다. 사례 라벨은 읽지 않았으므로 사례마다 확인하지는 않았다.
