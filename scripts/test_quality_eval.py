@@ -418,6 +418,21 @@ class ReviewOutcomeTests(unittest.TestCase):
         self.assertEqual(quality_eval.review_invalid(None, {**clean, "echo_unverified": ["x"]}, "secret_screen_failed"),
                          "answer_echo_unverified")
 
+    def test_lead_followup_counters(self):
+        block = {"leads_asked": 3, "leads_resolved": 1, "leads_unresolved": {"lead_secret_withheld": 1, "lead_ambiguous": 1},
+                 "tasks_planned": 4, "tasks_run": 1, "tasks_accepted": 1, "tasks_not_run": {"no_review_scope": 3},
+                 "calls": 2, "new_excerpts": 1, "new_lines": 9, "dispositions": {"refined": 1}}
+        with_leads = {"code_review": {"lead_followups": block}}
+        got = quality_eval.lead_followups(with_leads)
+        self.assertEqual((got["leads_asked"], got["calls"], got["new_lines"]), (3, 2, 9))
+        self.assertEqual(list(got["leads_unresolved"]), ["lead_ambiguous", "lead_secret_withheld"])
+        self.assertIsNone(quality_eval.lead_followups({"code_review": {}}))
+        self.assertIsNone(quality_eval.lead_followups({}))
+        total = quality_score.lead_followups([with_leads, with_leads, {"code_review": None}])
+        self.assertEqual((total["leads_asked"], total["tasks_run"], total["calls"], total["reports_without"]), (6, 2, 4, 1))
+        self.assertEqual(total["leads_unresolved"], {"lead_ambiguous": 2, "lead_secret_withheld": 2})
+        self.assertEqual(total["tasks_not_run"], {"no_review_scope": 6})
+
     def test_agent_switches(self):
         self.assertEqual(quality_eval.agent_switches(["python-both-type-checkers", "python-both-type-checkers"]),
                          ["python-both-type-checkers"])
