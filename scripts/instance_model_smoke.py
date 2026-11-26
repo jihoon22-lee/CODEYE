@@ -6,6 +6,10 @@ base_url만 바꾼 가짜 upstream(scripts/fake_model_upstream.py)이다. 모델
 
 1. agent.model 없이 <state>/secrets/model.json만 둔 서비스 설정으로 start → model probe 성공 →
    로컬 Go 프로젝트 run → 검토 단계 수락, ai_review performed, 보고서 게시.
+1b. 단서 후속 조사(TC-339): 요청 바이트 40,000으로 다시 시작하고 단서를 남기는 가짜 upstream(--leads --dump)으로
+   여러 패키지의 Go 프로젝트를 분석한다. 후속 조사 요청에는 플랫폼이 스냅샷에서 찾은 발췌가 스냅샷·경로·blob·줄로
+   계산한 ID로 실리고, 비밀값 모양의 줄이 있어 보류된 파일의 내용은 어떤 요청에도 없다. 저장된 기록과 보고서의
+   lead_followups가 같은 수를 센다.
 2. 같은 키 파일의 base_url을 401을 내는 가짜로 바꾼다(재시작 없음, 호출마다 다시 읽음) →
    probe는 request 단계 model_auth_failed → run은 정적 분석을 마치고 보고서가 모델 검토 미수행과
    그 사유를 적는다.
@@ -18,6 +22,7 @@ CODEYE_SMOKE_REAL_MODEL_CREDENTIAL=PATH(0600 CODEYE 키 파일, base_url 없음)
 대신 그 키로 1단계만 실행한다(**실모델, 비용 발생**, 호출 상한 15). 키 파일은 agent.model.credential_file로
 가리키기만 하고 복사하지 않으며, 끝에 같은 키 미노출 검사를 한다.
 """
+import hashlib
 import json
 import os
 import shutil
@@ -34,9 +39,9 @@ KEY = "sk-codeye-smoke-" + os.urandom(12).hex()
 REAL = os.environ.get("CODEYE_SMOKE_REAL_MODEL_CREDENTIAL", "")
 
 
-def fake_upstream(root, directory, name, mode):
+def fake_upstream(root, directory, name, mode, *extra):
     ready = directory / f"{name}.json"
-    process = subprocess.Popen([sys.executable, str(root / "scripts/fake_model_upstream.py"), "--ready-file", str(ready), "--mode", mode],
+    process = subprocess.Popen([sys.executable, str(root / "scripts/fake_model_upstream.py"), "--ready-file", str(ready), "--mode", mode, *extra],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     wait_for(f"fake upstream {name}", lambda: ready.exists() and ready.read_text().strip(), 30)
     return process, json.loads(ready.read_text())["port"]
@@ -167,6 +172,31 @@ def run(base, root, env, probe_env):
             print("PASS: 실모델 codeye start 모델 검토(키 파일 하나)")
             return
 
+        # 1b. 단서 후속 조사: 작은 요청 예산과 단서를 남기는 가짜 upstream.
+        dump = directory / "leads-requests"
+        lead_fake, lead_port = fake_upstream(root, directory, "fake-leads", "normal", "--leads", "--dump", str(dump))
+        fakes.append(lead_fake)
+        chain = source / "chain"
+        withheld = write_chain(chain)
+        cli("stop", "--config", cfg)
+        doc["agent"]["model"] = {"review_request_bytes": 40000}
+        cfg.write_text(json.dumps(doc))
+        cli("start", "--config", cfg)
+        session = Session(state, origin)
+        write_secret(lead_port)
+        chain_project = session.request("POST", "projects", {
+            "name": "chain", "local_path": str(chain),
+            "analysis": {"send_source_to_model": True, "fetch_dependencies": False, "run_build_scripts": False},
+        })
+        view, report = analyze(session, chain_project["id"])
+        check_leads(session, view, report, state, chain, dump, withheld)
+        cli("stop", "--config", cfg)
+        del doc["agent"]["model"]
+        cfg.write_text(json.dumps(doc))
+        cli("start", "--config", cfg)
+        session = Session(state, origin)
+        write_secret(good_port)
+
         # 2. 키 거부: 재시작 없이 다음 호출부터 401. 정적 분석은 계속, 보고서가 사유를 적는다.
         write_secret(bad_port)
         failed_probe = cli("model", "probe", "--config", cfg, expect=1).stdout
@@ -177,7 +207,7 @@ def run(base, root, env, probe_env):
         assert ai["status"] == "not_performed" and "model_auth_failed" in reasons, ai
         assert report["coverage"]["tools"], "정적 분석 결과 없음"
         markdown, _ = session.request("GET", f"runs/{view['id']}/report?revision={view['report']['revision']}&format=markdown", raw=True)
-        assert "API 키를 거부했다" in markdown.decode(), "Markdown 보고서가 모델 검토 미수행 사유를 적지 않음"
+        assert "API 키를 거부함" in markdown.decode(), "Markdown 보고서가 모델 검토 미수행 사유를 적지 않음"
         print(f"  키 거부: run {view['status']}, ai_review {ai['status']} ({sorted(r for r in reasons if r)})")
 
         # 3. 시험하지 않은 OpenCode 버전: wrapper로 재시작.
@@ -228,6 +258,93 @@ def run(base, root, env, probe_env):
         for p in fakes:
             p.send_signal(signal.SIGTERM)
             p.wait(timeout=10)
+
+
+CHAIN_PAD = "\t// The chain steps down one package per call and adds its own index.\n" * 28
+
+
+def write_chain(chain):
+    """A Go module of a main package and seven chained packages whose
+    functions are each about one review unit long, so a 40,000-byte request
+    sends some and leaves the next package's function out; main also calls
+    vault, whose credential-shaped line withholds the file. The value is
+    built here so no fixture holds it. Returns that value."""
+    value = "codeye" + "smokefixture" + "0" * 6
+    (chain / "vault").mkdir(parents=True)
+    (chain / "go.mod").write_text("module example.com/chain\n\ngo 1.22\n")
+    (chain / "main.go").write_text('package main\n\nimport (\n\t"fmt"\n\n\t"example.com/chain/p01"\n\t"example.com/chain/vault"\n)\n\n'
+                                   "func main() {\n" + CHAIN_PAD + "\ttoken := vault.Token()\n\tfmt.Println(p01.F01(3), len(token))\n}\n")
+    for i in range(1, 8):
+        body = f"package p{i:02d}\n\n" + (f'import "example.com/chain/p{i + 1:02d}"\n\n' if i < 7 else "")
+        if i < 7:
+            body += (f"// F{i:02d} steps down the chain.\nfunc F{i:02d}(n int) int {{\n" + CHAIN_PAD
+                     + f"\tif n <= 0 {{\n\t\treturn 0\n\t}}\n\treturn p{i + 1:02d}.F{i + 1:02d}(n-1) + {i}\n}}\n")
+        else:
+            body += f"// F{i:02d} ends the chain; a negative input gives -1.\nfunc F{i:02d}(n int) int {{\n" + CHAIN_PAD + "\tif n < 0 {\n\t\treturn -1\n\t}\n\treturn n\n}\n"
+        (chain / f"p{i:02d}").mkdir()
+        (chain / f"p{i:02d}/f.go").write_text(body)
+    (chain / "vault/vault.go").write_text(f'package vault\n\nconst password = "{value}"\n\n// Token returns the stored token.\nfunc Token() string {{ return password }}\n')
+    return value
+
+
+def captured(dump):
+    """(role, prompt, review input, user text bytes) of every request the fake received."""
+    import fake_model_upstream as fake
+    out = []
+    for path in sorted(dump.glob("*.json")):
+        payload = json.loads(path.read_text())
+        texts = [fake.content_text(m.get("content", "")) for m in payload.get("input", []) if isinstance(m, dict) and m.get("role") == "user"]
+        prompt = next((t for t in texts if fake.ROLE.search(t)), "")
+        role = fake.ROLE.search(prompt)
+        found = fake.REVIEW_INPUT.search(prompt)
+        out.append((role.group(1) if role else "", prompt, json.loads(found.group(1)) if found else None, sum(len(t.encode()) for t in texts)))
+    return out
+
+
+def check_leads(session, view, report, state, chain, dump, withheld):
+    requests = captured(dump)
+    assert requests and all(withheld not in prompt for _, prompt, _, _ in requests), "보류 파일의 내용이 모델 요청에 있음"
+    followups = [(data, size) for role, _, data, size in requests if role == "leads"]
+    assert followups, f"후속 조사 요청 없음: {[r[0] for r in requests]} {report['code_review'].get('lead_followups')}"
+    resolved = set()
+    for data, size in followups:
+        snapshot = data["scope"]["snapshot_manifest_digest"]
+        excerpts = {e["id"]: e for e in data["scope"]["excerpts"]}
+        for lead in data["leads"]:
+            assert lead["evidence_id"] in excerpts and lead["resolved_evidence_ids"], lead
+            for ident in lead["resolved_evidence_ids"]:
+                e = excerpts[ident]
+                blob = (chain / e["path"]).read_bytes()
+                sha = hashlib.sha256(blob).hexdigest()
+                binding = "\0".join([snapshot, e["path"], sha, f'{e["start_line"]}:{e["end_line"]}'])
+                assert e["sha256"] == sha and ident == "ev_" + hashlib.sha256(binding.encode()).hexdigest()[:24], f"발췌 ID가 스냅샷 blob과 맞지 않음: {ident}"
+                lines = blob.decode().split("\n")[e["start_line"] - 1:e["end_line"]]
+                if "text" in e:
+                    assert e["text"] == "\n".join(f"{e['start_line'] + i}| {x}" for i, x in enumerate(lines)), f"발췌 원문이 스냅샷과 다름: {ident}"
+                resolved.add(ident)
+    lf = report["code_review"]["lead_followups"]
+    assert lf["leads_resolved"] >= 1 and lf["leads_unresolved"].get("lead_secret_withheld", 0) >= 1, lf
+    assert lf["calls"] == len(followups) and lf["tasks_accepted"] >= 1 and lf["new_excerpts"] >= 1 and lf["new_lines"] >= 1, lf
+    stored = {"asked": 0, "new_lines": 0, "new": set(), "bytes": []}
+    for a in report["artifacts"]:
+        key = a.get("task_key") or ""
+        if a["media_type"] != "application/vnd.codeye.review+json" or not (key.startswith("review.leads") or key.startswith("review.investigate")):
+            continue
+        record = json.loads((state / "artifacts/sha256" / a["sha256"][:2] / a["sha256"]).read_bytes())
+        stored["asked"] += len(record.get("leads", []))
+        if record.get("lead_followup"):
+            stored["new_lines"] += record["lead_followup"]["new_lines"]
+            stored["new"] |= set(record["lead_followup"]["new_evidence_ids"])
+            stored["bytes"] += [c["request_bytes"] for c in record["calls"]]
+    assert stored["asked"] == lf["leads_asked"] and stored["new_lines"] == lf["new_lines"] and stored["new"] <= resolved, (stored, lf)
+    assert stored["bytes"] and max(stored["bytes"]) <= 40000, stored["bytes"]
+    markdown, _ = session.request("GET", f"runs/{view['id']}/report?revision={view['report']['revision']}&format=markdown", raw=True)
+    assert "단서 후속 조사" in markdown.decode(), "Markdown 보고서에 단서 후속 조사가 없음"
+    first, size = followups[0]
+    where = {e["id"]: f"{e['path']}:{e['start_line']}-{e['end_line']}" for e in first["scope"]["excerpts"]}
+    print("  단서 후속 조사: 요청 " + ", ".join(f"{len(d['leads'])}개 단서·발췌 {len(d['scope']['excerpts'])}개" for d, _ in followups)
+          + f"; 첫 요청(사용자 메시지 {size}바이트) 단서 {[(x['id'], x['symbol'], [(i, where[i]) for i in x['resolved_evidence_ids']]) for x in first['leads']]}")
+    print(f"  기록 request_bytes {stored['bytes']} (상한 40000), 보고서 lead_followups {json.dumps(lf, ensure_ascii=False, sort_keys=True)}")
 
 
 def stat_mode(path):

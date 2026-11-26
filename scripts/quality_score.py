@@ -320,6 +320,32 @@ def report_structure(report: dict, records: list) -> dict:
     }
 
 
+LEAD_COUNTS = ("leads_asked", "leads_resolved", "tasks_planned", "tasks_run", "tasks_accepted", "calls", "new_excerpts", "new_lines")
+LEAD_MAPS = ("leads_unresolved", "tasks_not_run", "dispositions")
+
+
+def lead_followups(reports):
+    """The sum of code_review.lead_followups over reports (docs/REPORT.md#단서-후속-조사).
+    A report without the object (a builder before 26, or no follow-up planned) counts in
+    reports_without; the counts come from the records, never from model prose."""
+    out = {k: 0 for k in LEAD_COUNTS}
+    out.update({k: {} for k in LEAD_MAPS})
+    out["reports_without"] = 0
+    for report in reports:
+        block = (report.get("code_review") or {}).get("lead_followups")
+        if not isinstance(block, dict):
+            out["reports_without"] += 1
+            continue
+        for k in LEAD_COUNTS:
+            out[k] += block.get(k, 0)
+        for k in LEAD_MAPS:
+            for reason, n in (block.get(k) or {}).items():
+                out[k][reason] = out[k].get(reason, 0) + n
+    for k in LEAD_MAPS:
+        out[k] = dict(sorted(out[k].items()))
+    return out
+
+
 def batch_metrics(manifest, rows, reports, judgments, corpus, slack=2, batch_dir=None):
     name = manifest["batch"]
     valid = [r for r in rows if not r.get("invalid") and r["key"] in reports]
@@ -483,6 +509,7 @@ def batch_metrics(manifest, rows, reports, judgments, corpus, slack=2, batch_dir
             "rows": len(rows), "scored_variants": len(units), "excluded": dict(excluded),
             "judged_findings": len(judged_all), "findings": total_findings,
             "metrics": metrics, "structural": structural, "cost_time": cost,
+            "lead_followups": lead_followups([reports[r["key"]] for r in valid]),
             "breakdown": {"language": breakdown("language"), "category": breakdown("category"),
                           "detection": breakdown("detection")},
             "variance": variance(units)}
@@ -638,6 +665,10 @@ def render_table(result):
             ("review outcome counts (reported variants, excluded included)", lambda b: ", ".join(f"{k} {v}" for k, v in sorted(b["structural"]["review_outcomes"].items()))),
             ("reproduced without execution", lambda b: str(b["structural"]["unsupported_assertions_structural"]["reproduced_without_execution"])),
             ("review calls / ledger requests", lambda b: f"{b['cost_time']['review_calls']} / {b['cost_time']['ledger_requests']}"),
+            ("lead follow-ups: leads asked / resolved, tasks run / accepted, calls, new lines",
+             lambda b: f"{b['lead_followups']['leads_asked']} / {b['lead_followups']['leads_resolved']}, "
+                       f"{b['lead_followups']['tasks_run']} / {b['lead_followups']['tasks_accepted']}, "
+                       f"{b['lead_followups']['calls']}, {b['lead_followups']['new_lines']}"),
             ("ledger charged (USD)", lambda b: f"{b['cost_time']['ledger_charged_microusd'] / 1e6:.4f}"),
             ("wall s total / median", lambda b: f"{b['cost_time']['wall_s_total']} / {b['cost_time']['wall_s_median']}"),
             ("variants scored / excluded", lambda b: f"{b['scored_variants']} / {sum(b['excluded'].values())}"),

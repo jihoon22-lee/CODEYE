@@ -428,6 +428,7 @@
     "review_input_incomplete": "예산 때문에 모델에 보내지 못한 검증 후보가 있어 검증이 끝나지 않음 (일부 미검토)",
     "review_input_too_large": "최소 발췌로도 요청 크기 한도를 넘어 모델을 호출하지 않음 (실패)",
     "review_input_trimmed": "요청 크기 한도 때문에 일부 발췌를 모델 입력에서 뺌 (미검토)",
+    "review_instructions_invalid": "검토 지침 팩을 읽지 못해 이 역할을 실행하지 않음 (실패)",
     "review_lead_omitted": "조사 출력의 단서 일부가 형식 검사에 맞지 않거나 개수 한도를 넘어 빠짐 (일부 제외)",
     "review_line_input_limit": "줄 크기 한도를 넘는 줄을 모델 입력에서 뺌 (미검토)",
     "review_lineage_mismatch": "검토 단계 사이의 후보 또는 호출 기록이 일치하지 않아 제외함 (실패)",

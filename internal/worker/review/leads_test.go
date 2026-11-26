@@ -301,3 +301,37 @@ func TestLeadParsing(t *testing.T) {
 		t.Fatalf("more than %d leads: %d", record.MaxLeads, len(leads))
 	}
 }
+
+// A reason names what the lead's own call reaches: one line calls into a
+// file the read filters withhold, the next calls a function of the standard
+// library (not in the snapshot) and a function of another package. The
+// withheld file is the reason only of the call into it; the other calls
+// are not found or resolved, never matched to another call on their line.
+func TestLeadReasonsFollowTheirOwnCall(t *testing.T) {
+	credential := "const password = \"" + "codeye" + "fixture" + strings.Repeat("0", 8) + "\"\n"
+	j := treeJob(t, map[string]string{
+		"go.mod":         "module example.org/chain\n\ngo 1.23\n",
+		"main.go":        "package main\n\nimport (\n\t\"fmt\"\n\n\t\"example.org/chain/p01\"\n\t\"example.org/chain/vault\"\n)\n\nfunc main() {\n\ttoken := vault.Token()\n\tfmt.Println(p01.F01(3), len(token))\n}\n",
+		"p01/f.go":       "package p01\n\n// F01 doubles n.\nfunc F01(n int) int {\n\treturn 2 * n\n}\n",
+		"vault/vault.go": "package vault\n\n" + credential + "\nfunc Token() string { return password }\n",
+	})
+	s := leadStage(t, j)
+	window, token := leadWindow(t, s, "main.go", "token := vault.Token()", 2)
+	_, println := leadWindow(t, s, "main.go", "fmt.Println(", 0)
+	for _, c := range []struct {
+		symbol string
+		anchor record.Excerpt
+		reason string
+	}{{"Token", token, record.LeadWithheld}, {"Println", println, record.LeadDefinitionMissing}, {"F01", println, ""}} {
+		l := resolveOne(t, s, record.LeadNeedDefinition, c.symbol, window, c.anchor)
+		if c.reason == "" {
+			if !l.Resolved() || l.Targets[0].Path != "p01/f.go" {
+				t.Fatalf("%s: %+v", c.symbol, l)
+			}
+			continue
+		}
+		if l.Resolved() || l.Reason != c.reason {
+			t.Fatalf("%s: %+v", c.symbol, l)
+		}
+	}
+}

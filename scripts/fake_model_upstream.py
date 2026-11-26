@@ -74,6 +74,14 @@ requests in flight at once (`peak_in_flight`).
 `--echo-text TEXT` appends an operator-chosen text to every investigate candidate
 title, to see whether a model's own words reach the verify request (the relay's
 `--allow-model-echo` path). The text comes from the operator, never from labels.
+`--leads` makes an investigation whose request offers leads (`scope.lead_limit`,
+docs/REVIEW.md#단서-후속-조사) name up to that many: one per qualified call
+(`pkg.Name(`) on a sent code line whose name no sent excerpt declares, the first
+for its first candidate, the others for no candidate. The follow-up (role
+`leads`) then refines that candidate and adds one candidate per other lead,
+each citing the lead's line and its first resolved excerpt; `--shape-errors`
+makes a share of the results repeat (`lead_result_duplicate`, the repeat is
+dropped). Without `--leads` the investigation names no lead.
 
 Stdlib only.
 """
@@ -144,6 +152,33 @@ def _texts(node, out):
 
 
 FUNCTION = re.compile(r"^\d+\| func ([A-Za-z_][A-Za-z0-9_]*)\(", re.M)
+NUMBERED = re.compile(r"^(\d+)\| (.*)$")
+QUALIFIED_CALL = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\.([A-Za-z_][A-Za-z0-9_]*)\(")
+DECLARATION = re.compile(r"\bfunc (?:\([^)]*\) )?([A-Za-z_][A-Za-z0-9_]*)\(")
+
+
+def _leads(review_input, limit: int, has_candidate: bool) -> list[dict]:
+    """Leads of an investigation that offers them: one per qualified call on
+    a sent code line whose name no sent excerpt declares."""
+    scope = review_input.get("scope") if isinstance(review_input, dict) else None
+    excerpts = [e for e in (scope or {}).get("excerpts") or [] if isinstance(e, dict) and e.get("kind") == "code"
+                and isinstance(e.get("id"), str) and isinstance(e.get("text"), str)]
+    declared = {m for e in excerpts for line in e["text"].split("\n") for m in DECLARATION.findall(line)}
+    out: list[dict] = []
+    for e in excerpts:
+        for line in e["text"].split("\n"):
+            numbered = NUMBERED.match(line)
+            if not numbered or DECLARATION.search(numbered.group(2)):
+                continue
+            for name in QUALIFIED_CALL.findall(numbered.group(2)):
+                if name in declared or any(x["symbol"] == name for x in out):
+                    continue
+                n = numbered.group(1)
+                out.append({"need": "definition", "evidence_id": f"{e['id']}:{n}-{n}", "symbol": name, "suspicion": TEXT,
+                            "candidate": 1 if has_candidate and not out else 0})
+                if len(out) == limit:
+                    return out
+    return out
 
 
 def _candidates(node, out):
@@ -259,7 +294,7 @@ def _comparisons(data: dict) -> list[dict]:
     return out
 
 
-def result_for(role: str, review_input, echo: str | None = None, shape: float = 0.0, integrity: float = 0.0) -> dict:
+def result_for(role: str, review_input, echo: str | None = None, shape: float = 0.0, integrity: float = 0.0, leads: bool = False) -> dict:
     evidence: dict[str, str] = {}
     cited: dict[str, str] = {}
     classes: dict[str, str] = {}
@@ -284,7 +319,30 @@ def result_for(role: str, review_input, echo: str | None = None, shape: float = 
             comparisons = _comparisons(data)
             if comparisons:
                 out["contract_comparisons"] = comparisons
+        limit = data["scope"].get("lead_limit") if isinstance(data.get("scope"), dict) else None
+        if leads and isinstance(limit, int) and limit > 0:
+            named = _leads(data, limit, bool(out["candidates"]))
+            if named:
+                out["leads"] = named
         return out
+    if role == "leads":
+        data = review_input if isinstance(review_input, dict) else {}
+        results, bases = [], set()
+        for lead in data.get("leads") or []:
+            if not isinstance(lead, dict) or not isinstance(lead.get("id"), str) or not isinstance(lead.get("evidence_id"), str):
+                continue
+            basis = lead.get("candidate_id") or lead["id"]
+            resolved = [cited.get(i, i) for i in lead.get("resolved_evidence_ids") or [] if isinstance(i, str)]
+            if basis in bases or not resolved:
+                continue
+            bases.add(basis)
+            result = dict(candidate, title="Placeholder candidate after a lead (dry run)", basis=basis,
+                          disposition="refined" if lead.get("candidate_id") else "added",
+                          evidence_ids=[cited.get(lead["evidence_id"], lead["evidence_id"]), resolved[0]])
+            results.append(result)
+            if _pick(shape, role, review_input, basis):
+                results.append(dict(result))  # lead_result_duplicate
+        return {"results": results}
     if role == "verify":
         found: list[tuple[str, list[str]]] = []
         _candidates(review_input, found)
@@ -384,7 +442,7 @@ def content_text(content) -> str:
     return ""
 
 
-def reply_text(payload: dict, echo: str | None = None, shape: float = 0.0, integrity: float = 0.0) -> tuple[str, str]:
+def reply_text(payload: dict, echo: str | None = None, shape: float = 0.0, integrity: float = 0.0, leads: bool = False) -> tuple[str, str]:
     """Return (role, assistant text) for a Responses payload."""
     texts = [content_text(m.get("content", "")) for m in payload.get("input", [])
              if isinstance(m, dict) and m.get("role") == "user"]
@@ -401,7 +459,7 @@ def reply_text(payload: dict, echo: str | None = None, shape: float = 0.0, integ
     head = prompt[:found.start()] if found else prompt  # the attachment precedes the prompt
     proofs = PROOF.findall(head)
     proof = proofs[-1] if proofs else ""
-    return role, json.dumps({"workspace_proof": proof, "result": result_for(role, review_input, echo, shape, integrity)},
+    return role, json.dumps({"workspace_proof": proof, "result": result_for(role, review_input, echo, shape, integrity, leads)},
                             ensure_ascii=False)
 
 
@@ -421,8 +479,9 @@ def request_delay(payload: dict, delay: float, jitter: float, seed: int) -> floa
 
 class FakeUpstream:
     def __init__(self, mode: str, dump: Path | None, echo: str | None = None, delay: float = 0.0,
-                 shape: float = 0.0, integrity: float = 0.0, jitter: float = 0.0, seed: int = 0):
+                 shape: float = 0.0, integrity: float = 0.0, jitter: float = 0.0, seed: int = 0, leads: bool = False):
         self.mode = mode
+        self.leads = leads
         self.shape = shape
         self.integrity = integrity
         self.delay = delay
@@ -457,7 +516,7 @@ class FakeUpstream:
             return 500, {"error": {"message": "fake failure", "type": "server_error", "code": "fake_failure"}}
         if self.mode == "unauthorized":
             return 401, {"error": {"message": "fake: invalid api key", "type": "invalid_request_error", "code": "invalid_api_key"}}
-        role, text = reply_text(payload, self.echo, self.shape, self.integrity)
+        role, text = reply_text(payload, self.echo, self.shape, self.integrity, self.leads)
         messages = payload.get("input", [])
         input_bytes = sum(len(content_text(m.get("content", "")).encode()) for m in messages if isinstance(m, dict))
         cap = int(payload.get("max_output_tokens") or 1)
@@ -538,6 +597,7 @@ def main(argv=None) -> int:
     parser.add_argument("--mode", choices=("normal", "expensive", "fail", "unauthorized"), default="normal")
     parser.add_argument("--dump", type=Path, help="write every received payload here (dry-run analysis only)")
     parser.add_argument("--echo-text", help="append this operator text to investigate candidate titles")
+    parser.add_argument("--leads", action="store_true", help="name leads when an investigation offers them and answer their follow-up")
     parser.add_argument("--delay-seconds", type=float, default=0.0, help="answer every request this many seconds late")
     parser.add_argument("--delay-jitter", type=float, default=0.0, metavar="SECONDS",
                         help="add a seeded delay between 0 and SECONDS per request (see --seed)")
@@ -564,7 +624,7 @@ def main(argv=None) -> int:
         print("--shape-errors and --integrity-errors are between 0 and 1", file=sys.stderr)
         return 2
     fake = FakeUpstream(args.mode, args.dump, args.echo_text, args.delay_seconds, args.shape_errors, args.integrity_errors,
-                        args.delay_jitter, args.seed)
+                        args.delay_jitter, args.seed, args.leads)
     server = make_server(fake)
     if args.tls_cert is not None:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

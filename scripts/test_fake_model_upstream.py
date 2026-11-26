@@ -67,5 +67,42 @@ class ConcurrentAnswersTest(unittest.TestCase):
         self.assertLess(elapsed, 1.2)
 
 
+class LeadsTest(unittest.TestCase):
+    """TC-338: the --leads double names leads only when the request offers
+    them, never for a name a sent excerpt declares, and answers the
+    follow-up with one result per candidate or lead."""
+
+    INPUT = {"scope": {"snapshot_manifest_digest": "0" * 64, "lead_limit": 3, "excerpts": [
+        {"id": "ev_" + "a" * 24, "path": "app/main.go", "start_line": 3, "end_line": 6, "kind": "code",
+         "text": "3| func main() {\n4| \tstore.Load(1)\n5| \tvault.Token()\n6| \thelper.Local()\n7| }"},
+        {"id": "ev_" + "b" * 24, "path": "helper/h.go", "start_line": 1, "end_line": 1, "kind": "code",
+         "text": "1| func Local() int { return 1 }"},
+    ]}}
+
+    def test_investigate_names_undeclared_calls(self):
+        out = f.result_for("investigate", self.INPUT, leads=True)
+        self.assertEqual([(x["symbol"], x["evidence_id"], x["candidate"]) for x in out["leads"]],
+                         [("Load", "ev_" + "a" * 24 + ":4-4", 1), ("Token", "ev_" + "a" * 24 + ":5-5", 0)])
+        self.assertNotIn("leads", f.result_for("investigate", self.INPUT))
+        unoffered = json.loads(json.dumps(self.INPUT))
+        del unoffered["scope"]["lead_limit"]
+        self.assertNotIn("leads", f.result_for("investigate", unoffered, leads=True))
+
+    def test_follow_up_refines_and_adds(self):
+        follow = {"scope": {"snapshot_manifest_digest": "0" * 64, "excerpts": [
+            {"id": "ev_" + "a" * 24, "path": "app/main.go", "start_line": 4, "end_line": 4, "kind": "code", "text": "4| \tstore.Load(1)"},
+            {"id": "ev_" + "c" * 24, "path": "store/s.go", "start_line": 10, "end_line": 14, "kind": "code", "text": "10| func Load(n int) {"}]},
+            "leads": [{"id": "lead_1", "evidence_id": "ev_" + "a" * 24, "candidate_id": "investigate_1", "resolved_evidence_ids": ["ev_" + "c" * 24]},
+                      {"id": "lead_2", "evidence_id": "ev_" + "a" * 24, "resolved_evidence_ids": ["ev_" + "c" * 24]},
+                      {"id": "lead_3", "evidence_id": "ev_" + "a" * 24, "candidate_id": "investigate_1", "resolved_evidence_ids": ["ev_" + "c" * 24]}],
+            "candidates": [{"id": "investigate_1", "evidence_ids": ["ev_" + "a" * 24]}]}
+        results = f.result_for("leads", follow, leads=True)["results"]
+        self.assertEqual([(r["basis"], r["disposition"], r["evidence_ids"]) for r in results],
+                         [("investigate_1", "refined", ["ev_" + "a" * 24, "ev_" + "c" * 24]), ("lead_2", "added", ["ev_" + "a" * 24, "ev_" + "c" * 24])])
+        repeated = f.result_for("leads", follow, shape=1.0, leads=True)["results"]
+        self.assertEqual(len(repeated), 4)
+        self.assertEqual(repeated[0], repeated[1])
+
+
 if __name__ == "__main__":
     unittest.main()

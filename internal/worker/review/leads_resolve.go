@@ -140,11 +140,13 @@ func (l *leadScan) read(e source.Entry) (string, bool, error) {
 }
 
 // missing is the reason of a lead the scan found nothing for: a file it
-// was not allowed to read, then its limit, then notFound.
-func (l *leadScan) missing(notFound string) string {
+// was not allowed to read that the lead may point into (relevant), then its
+// limit, then notFound. The scan reads every file the anchor's file calls
+// into, so a refused file of another call never names the reason.
+func (l *leadScan) missing(notFound string, relevant func(string) bool) string {
 	for _, reason := range []string{record.LeadWithheld, record.LeadOutsideChange, record.LeadOutsideScope, record.LeadGenerated, record.LeadSecondary} {
-		for _, r := range l.refused {
-			if r == reason {
+		for p, r := range l.refused {
+			if r == reason && relevant(p) {
 				return reason
 			}
 		}
@@ -153,6 +155,65 @@ func (l *leadScan) missing(notFound string) string {
 		return record.LeadScanLimit
 	}
 	return notFound
+}
+
+var importLine = regexp.MustCompile(`^\s*(import|from|#\s*include|use|mod|require|export)\b|\brequire\s*\(`)
+
+// definitionFiles reports the files a definition lead may point into, by
+// path and text alone (they could not be read): for a qualified call
+// (q.symbol, q::symbol, q->symbol) a file whose name or directory is q or
+// that an import line naming q points at; for an unqualified call a file of
+// the anchor's directory or one that an import line naming the symbol
+// points at.
+func (r *leadResolver) definitionFiles(scan *leadScan, anchor record.Excerpt, symbol string) func(string) bool {
+	qualified := regexp.MustCompile(`([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:\.|::|->)\s*` + regexp.QuoteMeta(symbol) + `\s*\(`)
+	var names []string
+	for _, m := range qualified.FindAllStringSubmatch(anchor.Text, -1) {
+		names = addLim(names, m[1])
+	}
+	var imports []string
+	if f, err := scan.index.goFile(anchor.Path); err == nil && f.parsed != nil {
+		for _, spec := range f.parsed.Imports {
+			line := spec.Path.Value
+			if spec.Name != nil {
+				line = spec.Name.Name + " " + line
+			}
+			imports = append(imports, line)
+		}
+	} else if e, ok := r.catalog.files[anchor.Path]; ok {
+		if text, readable, err := scan.read(e); err == nil && readable {
+			for _, line := range strings.Split(text, "\n") {
+				if importLine.MatchString(line) {
+					imports = append(imports, line)
+				}
+			}
+		}
+	}
+	return func(p string) bool {
+		own := []string{strings.TrimSuffix(path.Base(p), path.Ext(p)), path.Base(path.Dir(p))}
+		points := func(token string) bool {
+			for _, line := range imports {
+				if symbolAt(line, token) && slices.ContainsFunc(own, func(n string) bool { return symbolAt(line, n) }) {
+					return true
+				}
+			}
+			return false
+		}
+		if len(names) == 0 {
+			return path.Dir(p) == path.Dir(anchor.Path) || points(symbol)
+		}
+		for _, q := range names {
+			if slices.Contains(own, q) || points(q) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// callAt reports a call of symbol in text: the identifier followed by "(".
+func callAt(text, symbol string) bool {
+	return regexp.MustCompile(`(^|[^A-Za-z0-9_$])` + regexp.QuoteMeta(symbol) + `\s*\(`).MatchString(text)
 }
 
 // leadLanguage reports a source file whose leads a resolver reads.
@@ -289,7 +350,9 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 		}
 	}
 	// A call bound under another name (an import alias) is matched by the
-	// symbol on its call lines when no binding has the symbol's own name.
+	// symbol on its call lines when no binding has the symbol's own name and
+	// those lines do not call the binding's own name (then the binding is
+	// another call on the same line).
 	lines := strings.Split(anchor.Text, "\n")
 	callText := func(loc sourceCallLocation) string {
 		lo, hi := loc.start-anchor.Start, loc.end-anchor.Start
@@ -306,7 +369,7 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 		switch {
 		case link.symbol == symbol:
 			add(link.callee)
-		case symbolAt(callText(link.caller), symbol) && !slices.Contains(aliased, link.callee):
+		case symbolAt(callText(link.caller), symbol) && !callAt(callText(link.caller), link.symbol) && !slices.Contains(aliased, link.callee):
 			aliased = append(aliased, link.callee)
 		}
 	}
@@ -326,7 +389,7 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 	}
 	switch {
 	case len(hits) == 0:
-		return nil, scan.missing(record.LeadDefinitionMissing), nil
+		return nil, scan.missing(record.LeadDefinitionMissing, r.definitionFiles(scan, anchor, symbol)), nil
 	case len(hits) > 1:
 		return nil, record.LeadAmbiguous, nil
 	}
@@ -470,8 +533,10 @@ func (r *leadResolver) callers(scan *leadScan, symbol string, anchor record.Exce
 			hits = append(hits, leadHit{loc: link.caller, origin: "caller", symbol: symbol})
 		}
 	}
+	// The caller scan lists only files the run may read; what it refused
+	// were callees of those files, not callers.
 	if len(hits) == 0 {
-		return nil, scan.missing(record.LeadCallersMissing), nil
+		return nil, scan.missing(record.LeadCallersMissing, func(string) bool { return false }), nil
 	}
 	return hits, "", nil
 }

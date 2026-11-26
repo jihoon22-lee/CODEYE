@@ -58,8 +58,12 @@ GATEWAY = SCRIPTS / "model_budget_relay.py"
 PACK = "review"
 BASE_REVIEW_ROLES = ("environment", "documents", "investigate", "interpret", "verify")
 # Diagnostic triage slots (docs/REVIEW.md#도구-진단-분류) record their calls as
-# triage and verify; they are not an original role of the slice check below.
-PACK_ROLES = (*BASE_REVIEW_ROLES, "triage", "contract")
+# triage and verify, lead follow-ups (docs/REVIEW.md#단서-후속-조사) as leads;
+# they are not an original role of the slice check below.
+PACK_ROLES = (*BASE_REVIEW_ROLES, "leads", "triage", "contract")
+# The counters of code_review.lead_followups (docs/REPORT.md#단서-후속-조사).
+LEAD_COUNTS = ("leads_asked", "leads_resolved", "tasks_planned", "tasks_run", "tasks_accepted", "calls", "new_excerpts", "new_lines")
+LEAD_MAPS = ("leads_unresolved", "tasks_not_run", "dispositions")
 MANIFEST_SCHEMA = "codeye-quality-eval-manifest"
 REGISTRY = "holdout-registry.jsonl"
 HOLDOUT_LABEL = "holdout_seen_by_prior_revision"
@@ -466,6 +470,9 @@ def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAU
         upper_cost += count * (1 + repair_rate) * (per_call["triage"] + per_call["verify"]) * margin
         upper_calls += 2
         upper_cost += 2 * per_call["contract"] * margin
+        # The whole run's lead follow-up: one request and one repair or retry.
+        upper_calls += 2
+        upper_cost += 2 * per_call["leads"] * margin
     out = {"variants": n, "basis": basis, "margin": margin, "repair_rate": repair_rate, "max_calls": max_calls,
            "slices_unknown": slices_unknown,
            "per_call_microusd": per_call, "calls_per_variant": rates,
@@ -560,6 +567,17 @@ def review_invalid(current, delta, outcome):
     return None
 
 
+def lead_followups(report):
+    """The report's lead follow-up counters (builder 26), None when the report
+    has none (an earlier builder, or no follow-up planned)."""
+    block = (report.get("code_review") or {}).get("lead_followups")
+    if not isinstance(block, dict):
+        return None
+    out = {k: block.get(k, 0) for k in LEAD_COUNTS}
+    out.update({k: dict(sorted((block.get(k) or {}).items())) for k in LEAD_MAPS})
+    return out
+
+
 def summarize_report(report, records):
     """Structured facts of one published report (no LLM narrative is used)."""
     tasks = [{k: t.get(k) for k in ("key", "status", "reason", "required_for_verdict")} for t in report["tasks"]]
@@ -589,7 +607,7 @@ def summarize_report(report, records):
             "review_calls": [{k: c.get(k) for k in ("role", "outcome", "pack_id", "pack_version", "pack_sha256", "model",
                                                     "opencode_version")} for c in calls],
             "calls": len(calls), "usage": dict(usage), "record_limitations": limitations,
-            "report_limitations": report.get("limitations", [])}
+            "report_limitations": report.get("limitations", []), "lead_followups": lead_followups(report)}
 
 
 # ---------------------------------------------------------------- run

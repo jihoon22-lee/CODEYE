@@ -121,9 +121,32 @@ func (l *leadsScript) script(t *testing.T) map[string]func(int, opencode.Request
 	return s
 }
 
+// bodyChainTree is chainTree with the long comment inside each function,
+// so a request of units carries whole functions and the overview's last
+// call reaches the next package's function, which it does not carry.
+func bodyChainTree(n int) map[string]string {
+	tree := map[string]string{"go.mod": "module example.org/chain\n\ngo 1.23\n"}
+	pad := strings.Repeat("\t// The chain steps down one package per call and adds its own index.\n", 28)
+	for i := range n {
+		body := fmt.Sprintf("package p%02d\n\n", i)
+		if i < n-1 {
+			body += fmt.Sprintf("import \"example.org/chain/p%02d\"\n\n// F%02d steps down the chain.\nfunc F%02d(n int) int {\n%s\tif n <= 0 {\n\t\treturn 0\n\t}\n\treturn p%02d.F%02d(n-1) + %d\n}\n", i+1, i, i, pad, i+1, i+1, i)
+		} else {
+			body += fmt.Sprintf("// F%02d ends the chain; a negative input gives -1.\nfunc F%02d(n int) int {\n%s\tif n < 0 {\n\t\treturn -1\n\t}\n\treturn n\n}\n", i, i, pad)
+		}
+		tree[fmt.Sprintf("p%02d/f.go", i)] = body
+	}
+	return tree
+}
+
 func chainRun(t *testing.T, l *leadsScript, packages, maxCalls int) (analysis.Job, []analysis.TaskSpec, map[string]analysis.TaskResult) {
 	t.Helper()
-	j := treeJob(t, chainTree(packages))
+	return treeRun(t, l, chainTree(packages), maxCalls)
+}
+
+func treeRun(t *testing.T, l *leadsScript, tree map[string]string, maxCalls int) (analysis.Job, []analysis.TaskSpec, map[string]analysis.TaskResult) {
+	t.Helper()
+	j := treeJob(t, tree)
 	f := &scriptedCaller{script: l.script(t)}
 	plan, res := runRoleWith(t, j, Handler{Static: vetStub{}, Caller: f, Budget: smallBudget, MaxCalls: maxCalls}, "1.27.4")
 	return j, plan, res
@@ -209,6 +232,49 @@ func TestLeadFollowupWithoutLeadsChangesNothing(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The overview's follow-up counts the slots the scope will give lines (the
+// same computation as review.scope) and runs at the default ceiling; its
+// verify checks the refined candidates. At every ceiling the other tasks
+// end as they do without leads: the follow-up never takes a slot's call.
+func TestOverviewLeadFollowupKeepsTheSlots(t *testing.T) {
+	for _, ceiling := range []int{0, 20, record.WholeRunMaxCalls} {
+		t.Run(fmt.Sprint(ceiling), func(t *testing.T) {
+			_, plan, base := treeRun(t, &leadsScript{}, bodyChainTree(8), ceiling)
+			l := &leadsScript{asked: true}
+			j, _, asked := treeRun(t, l, bodyChainTree(8), ceiling)
+			for _, p := range plan {
+				if _, ok := record.LeadsTask(p.Key); !ok && (base[p.Key].Status != asked[p.Key].Status || base[p.Key].Reason != asked[p.Key].Reason) {
+					t.Fatalf("%s: %+v without leads, %+v with", p.Key, base[p.Key], asked[p.Key])
+				}
+			}
+			slices := 0
+			for _, p := range plan {
+				if stage, _, ok := record.SliceTask(p.Key); ok && stage == record.StageInvestigate && asked[p.Key].Status == domain.TaskSucceeded {
+					slices++
+				}
+			}
+			r := asked[record.TaskLeads]
+			if ceiling != 0 {
+				if r.Status == domain.TaskSucceeded {
+					t.Logf("ceiling %d: overview follow-up admitted with %d slices", ceiling, slices)
+				}
+				return
+			}
+			if r.Status != domain.TaskSucceeded || slices == 0 {
+				t.Fatalf("overview follow-up %+v with %d slices: %v", r, slices, rows(plan, asked))
+			}
+			fu, ver := readRecord(t, j, record.StageLeads), readRecord(t, j, record.StageVerify)
+			if !slicesContainUpstream(ver.Upstream, record.TaskLeads) || ver.Candidates[0].Condition != fu.Candidates[0].Condition {
+				t.Fatalf("overview verify %+v %+v", ver.Upstream, ver.Candidates)
+			}
+		})
+	}
+}
+
+func slicesContainUpstream(list []record.Upstream, source string) bool {
+	return slices.ContainsFunc(list, func(u record.Upstream) bool { return u.Source == source && u.State == record.UpstreamAccepted })
 }
 
 // Under a tight ceiling the follow-ups are dropped first: a follow-up is

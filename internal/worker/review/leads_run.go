@@ -183,9 +183,11 @@ func (s *roleStage) leadsTask(slot string) analysis.TaskResult {
 
 // leadsCallLimit is the count of calls below which a follow-up may call:
 // the ceiling less the calls the later work keeps (see the package comment
-// above). The overview follow-up also keeps the whole-run bound for itself
-// and its verify, so calls_before_slices and the ceiling's minimum do not
-// change.
+// above). The overview follow-up runs before review.scope and counts the
+// slots the scope will give lines from the same computation (scopeDoc);
+// when that fails it keeps a pair for every planned slot. It also keeps the
+// whole-run bound for itself and its verify, so calls_before_slices and the
+// ceiling's minimum do not change.
 func (s *roleStage) leadsCallLimit(doc record.ScopeDoc, slot string, inv record.Record) int {
 	reserve := record.RoleMaxCalls
 	overview := inv
@@ -195,20 +197,29 @@ func (s *roleStage) leadsCallLimit(doc record.ScopeDoc, slot string, inv record.
 	if overview.ContractProbe != nil {
 		reserve += record.ContractMaxCalls
 	}
-	if slot == "" {
-		reserve += record.SliceMinCalls * s.h.plannedSlots(s.ctx, s.j)
-	} else {
-		after := false
-		for _, sl := range doc.Slices {
-			if after && slices.ContainsFunc(sl.Files, func(f record.ScopeFile) bool { return f.State == record.FilePlanned }) {
-				reserve += doc.Budget.SliceReserveCalls
-			}
-			after = after || sl.Key == slot
+	overviewTask := slot == ""
+	if overviewTask {
+		planner := *s
+		planner.rec = record.Record{}
+		scope, r := planner.scopeDoc()
+		if r != nil {
+			// Without the computation every planned slot keeps a pair.
+			reserve += record.SliceMinCalls * s.h.plannedSlots(s.ctx, s.j)
 		}
+		doc = scope
+	}
+	// Every later slot with planned lines (every one for the overview)
+	// keeps its admission pair.
+	after := overviewTask
+	for _, sl := range doc.Slices {
+		if after && slices.ContainsFunc(sl.Files, func(f record.ScopeFile) bool { return f.State == record.FilePlanned }) {
+			reserve += doc.Budget.SliceReserveCalls
+		}
+		after = after || sl.Key == slot
 	}
 	reserve += record.SliceMinCalls * s.triageBins()
 	limit := s.h.maxCalls(s.j.Scope) - reserve
-	if slot == "" {
+	if overviewTask {
 		limit = min(limit, record.WholeRunMaxCalls-record.RoleMaxCalls)
 	}
 	return limit
