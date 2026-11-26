@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
@@ -305,26 +306,47 @@ func TestLeadFollowupWithoutLeadsChangesNothing(t *testing.T) {
 }
 
 // A follow-up is admitted only while the ceiling keeps, after both of its
-// calls, every later task's call cap: with every verify, or every
-// investigation, needing a second call (a reply that is not JSON) or all
-// three (a format repair, then a retry), every other task ends as it does
-// without leads at every ceiling.
+// calls, every later task's call cap. With every verify and investigation
+// taking all three calls of each request (a format repair, then a retry:
+// the worst case the reserve is for), every other task ends as it does
+// without leads at every ceiling from the smallest past the follow-up's
+// admission; a reserve below the caps admits it where a later task then
+// loses a call. With every verify's first reply not JSON, the same holds at
+// ceilings 17 and 18.
 func TestLeadFollowupLeavesTheLaterRepairs(t *testing.T) {
-	for _, c := range []struct{ repaired, retried []string }{
-		{repaired: []string{"verify"}}, {repaired: []string{"investigate"}}, {repaired: []string{"investigate", "verify"}},
-		{retried: []string{"verify"}}, {retried: []string{"investigate"}}, {retried: []string{"investigate", "verify"}},
-	} {
-		for ceiling := 15; ceiling <= 30; ceiling++ {
-			t.Run(fmt.Sprint(c, ceiling), func(t *testing.T) {
-				_, plan, base := chainRun(t, &leadsScript{repaired: c.repaired, retried: c.retried}, 12, ceiling)
-				l := &leadsScript{asked: true, repaired: c.repaired, retried: c.retried}
-				_, _, asked := chainRun(t, l, 12, ceiling)
-				sameOtherTasks(t, plan, base, asked)
-				if codeReviewStage(plan, base) != codeReviewStage(plan, asked) {
-					t.Fatalf("stage %s without leads, %s with", codeReviewStage(plan, base), codeReviewStage(plan, asked))
-				}
-			})
+	worst := []int{}
+	for ceiling := 15; ceiling <= 40; ceiling++ {
+		worst = append(worst, ceiling)
+	}
+	var admitted atomic.Int32
+	// The runs are independent (each its own snapshot and scratch); the
+	// group returns when every parallel run has ended.
+	t.Run("ceilings", func(t *testing.T) {
+		for _, c := range []struct {
+			repaired, retried []string
+			ceilings          []int
+		}{{repaired: []string{"verify"}, ceilings: []int{17, 18}}, {retried: []string{"investigate", "verify"}, ceilings: worst}} {
+			for _, ceiling := range c.ceilings {
+				t.Run(fmt.Sprint(c.repaired, c.retried, ceiling), func(t *testing.T) {
+					t.Parallel()
+					_, plan, base := chainRun(t, &leadsScript{repaired: c.repaired, retried: c.retried}, 12, ceiling)
+					l := &leadsScript{asked: true, repaired: c.repaired, retried: c.retried}
+					_, _, asked := chainRun(t, l, 12, ceiling)
+					sameOtherTasks(t, plan, base, asked)
+					if codeReviewStage(plan, base) != codeReviewStage(plan, asked) {
+						t.Fatalf("stage %s without leads, %s with", codeReviewStage(plan, base), codeReviewStage(plan, asked))
+					}
+					for _, p := range plan {
+						if _, ok := record.LeadsTask(p.Key); ok && c.retried != nil && asked[p.Key].Status == domain.TaskSucceeded {
+							admitted.Add(1)
+						}
+					}
+				})
+			}
 		}
+	})
+	if admitted.Load() == 0 {
+		t.Fatal("no follow-up admitted up to ceiling 40: the sweep does not reach the admission")
 	}
 }
 
