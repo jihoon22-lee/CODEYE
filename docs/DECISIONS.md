@@ -371,6 +371,14 @@
 
 [번역 단위 범위](ANALYZERS.md#번역-단위-범위와-생성-헤더)
 
+**A69 — cargo check·clippy는 시험·벤치·예제 대상만 컴파일되지 않으면 그 종류를 빼고 다시 실행한다.** (기록 2026-11-26) REQ-007/008/012, NFR-006과 TC-322에 대해 다음을 확정한다. A22 10의 `--all-targets`는 기본 선택으로 유지한다. 실제 Rust 프로젝트의 분석기만 실행에서 cargo check·clippy가 `package_errors`로 실패했고, 원인은 안정 toolchain이 nightly 전용 벤치의 `#![feature]`를 거부한 것(E0554)이었다. 라이브러리와 바이너리는 컴파일되었는데 배포 코드의 결과가 실패한 작업에 갇혔다([평가 결과](EVALUATION-RESULTS.md#분석기-실행-범위도구만-조건)).
+
+1. **조건.** 첫 실행이 exit 101이고 stdout을 끝까지 해석했으며, lint가 아닌 컴파일 오류의 대상 종류가 모두 `test`·`bench`·`example`이고, stderr가 다른 원인(toolchain, lockfile, 의존성, linker, manifest, build script, 문서 충돌)을 말하지 않을 때만 다시 실행한다. 대상 종류는 cargo JSON 레코드의 `target.kind`에서 읽고 stderr 문구로 추측하지 않는다.
+2. **재실행.** 실패한 종류만 뺀 대상 플래그로 한 번만 실행하고, 결과는 재실행의 판정 그대로다. 새 target 디렉터리를 쓴다. 실패한 대상이 남긴 dep-info가 처리 파일로 읽히지 않게 하기 위해서다. 한계 `failing_target_kinds_excluded`와 `excluded_target_kinds`·`targets`·선택으로 무엇을 빼고 검사했는지 남긴다.
+3. **채택하지 않은 안.** (가) 처음부터 `--lib --bins`만 검사하는 안은 컴파일되는 시험 코드의 진단과 처리 범위를 모든 프로젝트에서 잃는다. (나) nightly toolchain으로 바꾸는 안은 운영자가 정한 toolchain을 바꾸고 다른 결과를 낸다. (다) 첫 실행의 실패한 대상 오류를 성공한 envelope의 도구 오류로 싣는 안은 envelope 계약(성공에는 도구 오류가 없음)에 어긋난다. 첫 실행의 원시 stream은 실행 기록으로 남는다.
+
+[Rust 실행](ANALYZERS.md#rust-실행과-lint-수준)
+
 ## 모델 검토
 
 **A21 — 단계 기록과 필수 검토 역할.** (기록 2026-11-18) REQ-009/010/011/013/027과 TC-97에 대해 다음을 확정한다.

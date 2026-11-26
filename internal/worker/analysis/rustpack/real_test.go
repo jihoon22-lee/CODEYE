@@ -609,3 +609,18 @@ func TestRealRustupProxyIsRefused(t *testing.T) {
 		t.Fatal("the rustup proxy was accepted")
 	}
 }
+
+// TC-322 with the real toolchain: a bench using #![feature(test)] fails on
+// stable (E0554) under --all-targets; the retry without benches analyses the
+// library and tests. CODEYE_RUST_CAPTURE records both runs for the replay.
+func TestRealFailingBenchTargetIsExcluded(t *testing.T) {
+	for _, c := range []struct {
+		kind         Kind
+		key, capture string
+	}{{KindCheck, "cargo-check", "check-nightlybench"}, {KindClippy, "clippy", "clippy-nightlybench"}} {
+		t.Run(c.key, func(t *testing.T) {
+			res, doc, _, _, _ := realRun(t, c.kind, "nightlybench", c.key, c.capture, domain.Scope{}, nil)
+			checkFailingBenchExcluded(t, c.kind, res, doc)
+		})
+	}
+}
