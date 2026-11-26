@@ -740,7 +740,8 @@ func TestLeadRefinementRecordKeepsTheOriginal(t *testing.T) {
 		})
 	}
 	// The new citation lies in the resolved window but on lines the
-	// investigation already held (a caller window may overlap its excerpts):
+	// investigation already held (a resolved window leaves the sent lines
+	// out, and the lineage check guards it):
 	// not new code.
 	held, seen := investigatedAlso(t, fu, inv, newOnly[0])
 	if record.LeadFollowupMatches(held, seen) {

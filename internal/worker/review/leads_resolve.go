@@ -54,6 +54,10 @@ type leadResolver struct {
 	// with their text.
 	sent      []record.Excerpt
 	sentPaths map[string]bool
+	// carried are all the excerpts the request carried, of any kind (an
+	// in-source API document travels as a document excerpt of a source
+	// file): the lines a window leaves out.
+	carried []record.Excerpt
 	// excerpts and bytes are what the follow-up's caps leave.
 	excerpts, bytes int
 }
@@ -61,6 +65,7 @@ type leadResolver struct {
 func (s *roleStage) newLeadResolver(sent []record.Excerpt) *leadResolver {
 	r := &leadResolver{s: s, g: planCodeGroupsFor(s.j.Snapshot.Manifest, s.j.Scope, s.h.secondary(), changedPaths(s.j)),
 		catalog: s.callCatalog(), sentPaths: map[string]bool{}, excerpts: s.limit().leadExcerpts, bytes: s.limit().leadBytes}
+	r.carried = slices.Clone(sent)
 	for _, e := range sent {
 		if e.Text != "" && (e.Kind == "code" || e.Kind == "test") {
 			r.sent = append(r.sent, e)
@@ -797,7 +802,15 @@ func (r *leadResolver) window(scan *leadScan, h leadHit) (x record.Excerpt, part
 		if x.End-x.Start+1 > record.MaxLeadWindowLines || record.JSONLen(x.Text) > maxWindowBytes {
 			return record.Excerpt{}, false, nil, false
 		}
-		x, held, ok := r.unsent(x, h.loc)
+		// The expansion window's call is the line calling the symbol.
+		call := h.loc
+		for i, line := range strings.Split(x.Text, "\n") {
+			if callAt(line, h.symbol) {
+				call = sourceCallLocation{x.Path, x.Start + i, x.Start + i}
+				break
+			}
+		}
+		x, held, ok := r.unsent(x, call)
 		return x, false, held, ok
 	}
 	e, ok := r.catalog.files[h.loc.path]
@@ -824,7 +837,7 @@ func (r *leadResolver) window(scan *leadScan, h leadHit) (x record.Excerpt, part
 	whole := h.declaration()
 	if origin == "context" && whole.path == h.loc.path && whole.start >= 1 && whole.start <= h.loc.start && h.loc.end <= whole.end &&
 		whole.end <= len(lines) && whole.end-whole.start+1 <= record.MaxLeadWindowLines &&
-		!slices.ContainsFunc(r.sent, func(x record.Excerpt) bool {
+		!slices.ContainsFunc(r.carried, func(x record.Excerpt) bool {
 			return x.Path == whole.path && x.Start <= whole.end && whole.start <= x.End
 		}) {
 		if x, ok := r.s.boundedExcerpt(e, kind, origin, whole.start, lines[whole.start-1:whole.end], maxWindowBytes); ok && x.End == whole.end {
@@ -854,7 +867,7 @@ func (r *leadResolver) window(scan *leadScan, h leadHit) (x record.Excerpt, part
 // window overlaps.
 func (r *leadResolver) unsent(x record.Excerpt, hit sourceCallLocation) (out record.Excerpt, held []string, ok bool) {
 	var over []record.Excerpt
-	for _, e := range r.sent {
+	for _, e := range r.carried {
 		if e.Path == x.Path && e.SHA256 == x.SHA256 && e.Start <= x.End && x.Start <= e.End {
 			over = append(over, e)
 		}

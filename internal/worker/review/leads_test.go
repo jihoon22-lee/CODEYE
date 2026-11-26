@@ -199,6 +199,23 @@ func TestLeadResolutionOutcomes(t *testing.T) {
 	if write.End <= write.Start || l.Reason != record.LeadInRequest || (len(l.InRequest) != 2 || !slices.Contains(l.InRequest, first.ID) || !slices.Contains(l.InRequest, second.ID)) || l.Targets != nil {
 		t.Fatalf("definition sent in two pieces %+v (declaration %+v)", l, write)
 	}
+	// A document excerpt of the same file (an in-source API document) over
+	// the declaration's first lines: the window leaves them out too.
+	doc := sentLines(t, s, write.Path, write.Start, write.Start+1)
+	doc.Kind = "document"
+	l = resolveOne(t, s, record.LeadNeedDefinition, "write", window, anchor, doc)
+	if !l.Resolved() || len(l.Targets) != 1 || l.Targets[0].Start <= doc.End || l.Targets[0].End != write.End || !l.Targets[0].Partial {
+		t.Fatalf("definition under a sent document excerpt %+v (declaration %+v)", l, write)
+	}
+	// A sent unit over the first two lines of a Go caller expansion window:
+	// the window starts after them and still holds the call.
+	callers := resolveOne(t, s, record.LeadNeedCallers, "Save", decl, declAnchor).Targets[0]
+	unit := sentLines(t, s, callers.Path, callers.Start, callers.Start+1)
+	l = resolveOne(t, s, record.LeadNeedCallers, "Save", decl, declAnchor, unit)
+	if !l.Resolved() || len(l.Targets) != 1 || l.Targets[0].Start != callers.Start+2 || l.Targets[0].End != callers.End ||
+		l.Targets[0].Origin != "caller" || l.Targets[0].Symbol != "Save" || !strings.Contains(sentLines(t, s, callers.Path, l.Targets[0].Start, l.Targets[0].End).Text, "Save(") {
+		t.Fatalf("caller window under a sent unit %+v (window %+v)", l, callers)
+	}
 
 	ruby, rubyAnchor := leadWindow(t, s, "tools/gen.rb", "write(key)", 0)
 	if l = resolveOne(t, s, record.LeadNeedDefinition, "write", ruby, rubyAnchor); l.Reason != record.LeadLanguage {
@@ -557,7 +574,7 @@ func TestUnsentKeepsTheNewLinesOfAWindow(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := &leadResolver{s: &roleStage{ctx: t.Context(), j: j}}
 			for _, s := range c.sent {
-				r.sent = append(r.sent, excerpt(s[0], s[1]))
+				r.carried = append(r.carried, excerpt(s[0], s[1]))
 			}
 			x := excerpt(c.window[0], c.window[1], c.blank...)
 			out, held, ok := r.unsent(x, sourceCallLocation{"w.go", c.call[0], c.call[1]})

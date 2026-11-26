@@ -483,10 +483,11 @@ func (s *roleStage) leadsFollowup(inv record.Record, upstream []record.Upstream)
 			return t.Path == e.Path && t.SHA256 == e.SHA256 && t.Start <= e.Start && e.End <= t.End
 		})
 	}
-	// A result rests on the code of one lead: a refinement or contest on a
-	// lead that names its candidate, an addition on its own lead (the
+	// A result rests on the code of the leads of its candidate (a
+	// refinement or contest) or of its own lead (an addition, the
 	// disposition's lead), and on a line of that code the investigation did
-	// not send (a caller window may overlap its excerpts).
+	// not send. Resolved windows leave the sent lines out (unsent), so this
+	// guards that.
 	leadsOf := map[string][]record.Lead{}
 	for _, l := range req.leads {
 		if l.CandidateID != "" {
