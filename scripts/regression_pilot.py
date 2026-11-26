@@ -130,12 +130,14 @@ def audit_reports(output, root):
 # Module-sliced review (docs/REVIEW.md#모듈-단위-검토-분할): slice task keys and
 # the scope artifact a pilot report references.
 SLICE_TASK = re.compile(r"^review\.(?:scope|(?:investigate|verify)\.s\d{3})$")
+# Lead follow-ups (docs/REVIEW.md#단서-후속-조사): the whole run's and a slot's.
+LEADS_TASK = re.compile(r"^review\.leads(?:\.s\d{3})?$")
 REVIEW_RECORD_MEDIA = "application/vnd.codeye.review+json"
 DEFAULT_MAX_CALLS = 99
 
 
 # Every review record schema version (schemas/review-record.schema.json).
-RECORD_VERSIONS = ("0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8")
+RECORD_VERSIONS = ("0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9")
 
 
 def _kept_docs(directory):
@@ -154,6 +156,18 @@ def _context_lines(record):
     return {(e["path"], line) for e in record.get("evidence", [])
             if e.get("origin") == "context" and e.get("kind") in ("code", "test")
             for line in range(e["start_line"], e["end_line"] + 1)}
+
+
+def _lead_lines(record):
+    """The lines of the excerpts a lead follow-up resolved and sent for the
+    first time (lead_followup.new_evidence_ids)."""
+    new = set((record.get("lead_followup") or {}).get("new_evidence_ids", []))
+    return {(e["path"], line) for e in record.get("evidence", []) if e.get("id") in new
+            for line in range(e["start_line"], e["end_line"] + 1)}
+
+
+def _slot_leads(key):
+    return bool(LEADS_TASK.match(key)) and key != "review.leads"
 
 
 def _test_ledger(ledger):
@@ -176,9 +190,20 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
     its report reads every review artifact and carries the review ledger
     with the configured ceiling; the ledger's calls_used (the attempt counter
     before the slices plus the slice records) is known and at most the
-    ceiling; a slice the ceiling refused has no record and no call; the
-    overview and slices do not repeat source lines; the slices add source
-    lines and the ledger and llm_exposed_files cover the distinct sent files; the relay ledger has no refused or blocked request.
+    ceiling and not below the sent review calls, the lead follow-ups' calls
+    included; a slice or lead follow-up the ceiling refused has no record and
+    no call; the overview and slice investigations do not repeat source
+    lines; the slices add source lines and the ledger and llm_exposed_files
+    cover the distinct sent files; the relay ledger has no refused or blocked
+    request.
+
+    A lead follow-up (docs/REVIEW.md#단서-후속-조사) is not an investigation
+    of new lines: its session sends the original candidates' code again by
+    design, so its record is outside the repeated-lines rule. The lines of the
+    excerpts it resolved count separately (lead_new_lines, and
+    lead_lines_not_investigated for those no investigation sent), and
+    llm_exposed_files must also cover the files of those excerpts. A short
+    synthetic case's slot follow-ups end with no_review_scope like its slots.
 
     With a test relay ledger (a dry run against the fake upstream) two causes
     are expected rather than failures, and are listed in dry_run_expected: a
@@ -206,10 +231,11 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
                     key = task["key"]
                     if key == "review.scope" and task["status"] != "succeeded":
                         failures.append(f"{label}: scope inventory {task['status']}")
-                    elif SLICE_TASK.match(key) and key != "review.scope" and (task["status"], task["reason"]) != ("skipped_policy", "no_review_scope"):
+                    elif (SLICE_TASK.match(key) and key != "review.scope" or _slot_leads(key)) and (task["status"], task["reason"]) != ("skipped_policy", "no_review_scope"):
                         failures.append(f"{label}: unnecessary or incomplete follow-up {key}: {task['status']}/{task['reason']}")
                 report = json.loads((output / (label + ".json")).read_text())
-                extra_calls = [c["task_key"] for c in report["coverage"].get("review_calls", []) if SLICE_TASK.match(c.get("task_key", ""))]
+                extra_calls = [c["task_key"] for c in report["coverage"].get("review_calls", [])
+                               if SLICE_TASK.match(c.get("task_key", "")) or _slot_leads(c.get("task_key", ""))]
                 if extra_calls:
                     failures.append(f"{label}: unexpected model calls {extra_calls}")
             for call in row["review_calls"]:
@@ -227,11 +253,22 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
         combined = set().union(*windows)
         overview_paths = {path for path, _ in windows[0]}
         sent_paths = {path for path, _ in combined}
-        exhausted = [k for k, t in tasks.items() if SLICE_TASK.match(k) and t["status"] == "budget_exhausted"]
-        recorded = {"review." + r["stage"] + "." + r["slice"]["key"] for r in records if "slice" in r}
-        called = {c.get("task_key") for c in report["coverage"].get("review_calls", [])}
+        lead_records = [r for r in records if r["stage"] == "leads"]
+        lead_lines = set().union(*map(_lead_lines, lead_records))
+        exposed_paths = sent_paths | {path for path, _ in lead_lines}
+        exhausted = [k for k, t in tasks.items() if (SLICE_TASK.match(k) or LEADS_TASK.match(k)) and t["status"] == "budget_exhausted"]
+        recorded = {"review." + r["stage"] + ("." + r["slice"]["key"] if "slice" in r else "") for r in records
+                    if "slice" in r or r["stage"] == "leads"}
+        review_calls = report["coverage"].get("review_calls", [])
+        called = {c.get("task_key") for c in review_calls}
+        sent_calls = sum(1 for c in review_calls if c.get("request_sha256"))
         exposed = report["coverage"].get("llm_exposed_files")
         calls_used = book["calls_used"] if book else None
+        lead_tasks = {}
+        for k, t in tasks.items():
+            if LEADS_TASK.match(k):
+                state = t["status"] + ("/" + t["reason"] if t.get("reason") else "")
+                lead_tasks[state] = lead_tasks.get(state, 0) + 1
         ledger_sent = sum(m["files_sent_to_model"] for m in book["modules"]) if book else None
         fake = sorted(k for k, t in tasks.items() if k.startswith("review.") and t["status"] == "failed" and t["reason"] == "review_output_invalid") if test else []
         unconfigured = sorted(k for k, t in tasks.items() if t["required_for_verdict"] and t["status"] == "unsupported" and t["reason"] == "tool_not_configured") if test else []
@@ -239,7 +276,14 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
         unread = sorted(x for x in report["limitations"] if x.startswith(_UNREAD))
         expected = []
         pilot = {"calls_used": calls_used, "recorded_calls": sum(len(r.get("calls", [])) for r in records), "max_calls": max_calls,
-                 "slice_tasks": sum(1 for k in tasks if SLICE_TASK.match(k)), "slices_admitted": len(slice_inv), "slice_tasks_budget_exhausted": len(exhausted),
+                 "slice_tasks": sum(1 for k in tasks if SLICE_TASK.match(k)), "slices_admitted": len(slice_inv),
+                 "slice_tasks_budget_exhausted": sum(1 for k in exhausted if SLICE_TASK.match(k)),
+                 "lead_tasks": sum(lead_tasks.values()), "lead_tasks_by_status": dict(sorted(lead_tasks.items())),
+                 "lead_tasks_budget_exhausted": sum(1 for k in exhausted if LEADS_TASK.match(k)),
+                 "lead_records": len(lead_records), "lead_calls": sum(1 for c in review_calls if LEADS_TASK.match(c.get("task_key", ""))),
+                 "lead_new_lines": sum((r.get("lead_followup") or {}).get("new_lines", 0) for r in lead_records),
+                 "lead_lines_not_investigated": len(lead_lines - combined),
+                 "report_lead_followups": (report.get("code_review") or {}).get("lead_followups"),
                  "overview_files": len(overview_paths), "files_sent_by_records": len(sent_paths), "new_source_lines": len(combined - windows[0]), "ledger_status": book and book["status"],
                  "ledger_files_sent_to_model": ledger_sent, "llm_exposed_files": exposed, "review_tasks_without_record": unrecorded, "dry_run_expected": expected}
         if unread:
@@ -254,8 +298,10 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
             failures.append("pilot: no scope artifact and ledger with the configured ceiling")
         if not isinstance(calls_used, int) or calls_used > max_calls:
             failures.append(f"pilot: ledger calls_used {calls_used} unknown or above the ceiling {max_calls}")
+        elif calls_used < sent_calls:
+            failures.append(f"pilot: ledger calls_used {calls_used} below the {sent_calls} sent review calls")
         if set(exhausted) & (recorded | called):
-            failures.append(f"pilot: budget-exhausted slices with a record or a call {sorted(set(exhausted) & (recorded | called))}")
+            failures.append(f"pilot: budget-exhausted slices or lead follow-ups with a record or a call {sorted(set(exhausted) & (recorded | called))}")
         if sum(map(len, windows)) != len(combined):
             failures.append("pilot: the same source lines reached two investigate requests")
         if not combined - windows[0]:
@@ -264,8 +310,8 @@ def check_coverage(rows, output, root, max_calls=DEFAULT_MAX_CALLS, ledger=None)
             failures.append(f"pilot: ledger files sent to the model {ledger_sent} below {len(sent_paths)} distinct files")
         if exposed is None and fake and set(unrecorded) <= set(fake):
             expected.append(f"llm_exposed_files unknown: the fake upstream reply was rejected for {fake}")
-        elif not isinstance(exposed, int) or exposed < len(sent_paths):
-            failures.append(f"pilot: llm_exposed_files {exposed} below {len(sent_paths)} distinct files")
+        elif not isinstance(exposed, int) or exposed < len(exposed_paths):
+            failures.append(f"pilot: llm_exposed_files {exposed} below {len(exposed_paths)} distinct files")
     if ledger is not None:
         bad = [r.get("type") for r in (json.loads(line) for line in Path(ledger).read_text().splitlines() if line.strip())
                if r.get("type") in ("refused", "blocked")]
