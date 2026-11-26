@@ -142,10 +142,12 @@ var outputCodes = map[string]codeClass{
 	"contract_partial_support_invalid": classIntegrity,
 	// Lead follow-up results: optional items, left out after the repair
 	// whatever the class (the candidate stays as the investigation gave it).
-	errLeadResultInvalid:   classIntegrity,
-	errLeadResultDuplicate: classForm,
-	errLeadContestLines:    classIntegrity,
-	errLeadAdditionLines:   classIntegrity,
+	errLeadResultInvalid:       classIntegrity,
+	errLeadResultDuplicate:     classForm,
+	errLeadContestLines:        classIntegrity,
+	errLeadAdditionLines:       classIntegrity,
+	errLeadRefinementCitations: classIntegrity,
+	errLeadRefinementLines:     classIntegrity,
 }
 
 // integrityCode reports a code that keeps rejecting after the repair; an

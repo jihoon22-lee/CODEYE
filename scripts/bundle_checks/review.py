@@ -774,8 +774,9 @@ def check_leads_examples(raw: dict, validators: dict) -> int:
     sends only resolved leads with their anchors, its new excerpts are
     exactly their targets and its partial ones their partial targets, its
     line count is their lines the investigation did not send, every original
-    candidate has one disposition in order and a kept one is unchanged; the
-    verify names the follow-up by its digest and checks its candidates. The
+    candidate has one disposition in order and a kept one is unchanged, a
+    refined one keeps the original text, every citation of it and cites
+    lines of a whole new excerpt (record.RefinementGrounded); the verify names the follow-up by its digest and checks its candidates. The
     chain tree of the Go test is synthetic, so the blobs are not read here;
     the Go decoder binds them to the snapshot manifest."""
 
@@ -828,10 +829,22 @@ def check_leads_examples(raw: dict, validators: dict) -> int:
         ensure([d["candidate_id"] for d in originals] == candidates, "follow-up dispositions differ from the investigation's candidates")
         final = {c["id"]: c for c in fu["candidates"]}
         ensure(sorted(d["final_id"] for d in f["dispositions"] if d.get("final_id")) == sorted(final), "follow-up candidates without a disposition")
+        whole = [i for i in f["new_evidence_ids"] if i not in f.get("partial_evidence_ids", [])]
+
+        def inside(i, outer):
+            e, x = catalog.get(i), catalog[outer]
+            return e is not None and (e["path"], e["sha256"]) == (x["path"], x["sha256"]) and x["start_line"] <= e["start_line"] and e["end_line"] <= x["end_line"]
+
         for d in originals:
+            original = next(c for c in inv["candidates"] if c["id"] == d["candidate_id"])
             if d["disposition"] == "kept":
-                original = next(c for c in inv["candidates"] if c["id"] == d["candidate_id"])
                 ensure(dict(final[d["final_id"]], id=original["id"]) == original, "kept candidate changed: " + d["candidate_id"])
+            if d["disposition"] == "refined":
+                text = {k: v for k, v in original.items() if k not in ("id", "origin", "observation_ids")}
+                cited = final[d["final_id"]]["evidence_ids"]
+                ensure(d.get("original") == text, "refinement without the investigation's text: " + d["candidate_id"])
+                ensure(set(original["evidence_ids"]) <= set(cited), "refinement drops a citation of its candidate: " + d["candidate_id"])
+                ensure(any(inside(i, w) for i in cited for w in whole), "refinement cites no line of a whole resolved excerpt: " + d["candidate_id"])
         ensure(carries_upstream_evidence(fu, inv), "follow-up evidence changes an excerpt of the investigation")
         up = {u["source"]: u for u in ver["upstream"]}
         ensure(up.get("review.leads.s001", {}).get("sha256") == hashlib.sha256(compact_json(raw["leads.s001"])).hexdigest(), "verify is not bound to the follow-up")
@@ -874,6 +887,12 @@ def check_leads_examples(raw: dict, validators: dict) -> int:
         case("follow-up of an unresolved lead", lambda d: d["leads.s001"]["lead_followup"].update(leads=["lead_2"])),
         case("kept candidate with a lead", lambda d: disposition(d).update(disposition="kept")),
         case("withdrawn candidate", lambda d: disposition(d).update(disposition="withdrawn")),
+        case("refinement without the original text", lambda d: disposition(d).pop("original")),
+        case("refinement with another original text", lambda d: disposition(d)["original"].update(title="다른 후보의 제목")),
+        case("refinement dropping a citation of its candidate", lambda d: d["leads.s001"]["candidates"][0].update(
+            evidence_ids=[i for i in d["leads.s001"]["candidates"][0]["evidence_ids"] if i not in d["investigate.s001"]["candidates"][0]["evidence_ids"]])),
+        case("refinement citing no new line", lambda d: d["leads.s001"]["candidates"][0].update(evidence_ids=list(d["investigate.s001"]["candidates"][0]["evidence_ids"]))),
+        case("kept candidate with an original text", lambda d: (disposition(d).update(disposition="kept"), disposition(d).pop("lead"))),
         case("contested candidate without its reason", lambda d: disposition(d).update(disposition="contested", evidence_ids=list(d["leads.s001"]["lead_followup"]["new_evidence_ids"]))),
         case("lead without a candidate", lambda d: lead(d).pop("candidate_id")),
         case("lead of another investigation's candidate", lambda d: lead(d).update(candidate_id="investigate_9")),

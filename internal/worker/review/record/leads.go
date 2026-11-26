@@ -182,6 +182,9 @@ type LeadDisposition struct {
 	Lead        string   `json:"lead,omitempty"`
 	Reason      string   `json:"reason,omitempty"`
 	EvidenceIDs []string `json:"evidence_ids,omitempty"`
+	// Original is the text of the candidate a refinement replaced (without
+	// its ID, which is CandidateID): the record shows what changed.
+	Original *CandidateText `json:"original,omitempty"`
 }
 
 var (
@@ -351,20 +354,24 @@ func checkLeadFollowup(r Record, catalog map[string]Excerpt, b bounds) error {
 		_, isFinal := final[d.FinalID]
 		switch d.Disposition {
 		case DispositionKept, DispositionRefined:
-			if d.CandidateID == "" || !isFinal || d.Reason != "" || d.EvidenceIDs != nil || added || (d.Lead == "") != (d.Disposition == DispositionKept) {
+			if d.CandidateID == "" || !isFinal || d.Reason != "" || d.EvidenceIDs != nil || added || (d.Lead == "") != (d.Disposition == DispositionKept) ||
+				(d.Original == nil) != (d.Disposition == DispositionKept) {
 				return invalid("lead disposition")
+			}
+			if o := d.Original; o != nil && (o.ID != "" || !candidateTextWithin(*o, b) || !RefinementGrounded(final[d.FinalID].Evidence, o.Evidence, whole, catalog)) {
+				return invalid("lead refinement")
 			}
 		case DispositionContested:
 			// The counter-evidence cites lines of a whole resolved
 			// declaration: a partial window cannot show the condition never
 			// happens.
 			if d.CandidateID == "" || !isFinal || d.Lead == "" || !ProseText(d.Reason, b.text) || !refs(d.EvidenceIDs, catalog, 6, "code") || added ||
-				!slices.ContainsFunc(d.EvidenceIDs, func(id string) bool { return leadNewLines(id, whole, catalog) }) {
+				d.Original != nil || !slices.ContainsFunc(d.EvidenceIDs, func(id string) bool { return leadNewLines(id, whole, catalog) }) {
 				return invalid("lead contest")
 			}
 		case DispositionAdded:
 			// An added candidate is found in the new code.
-			if d.CandidateID != "" || !isFinal || !slices.Contains(f.Leads, d.Lead) || d.Reason != "" || d.EvidenceIDs != nil ||
+			if d.CandidateID != "" || !isFinal || !slices.Contains(f.Leads, d.Lead) || d.Reason != "" || d.EvidenceIDs != nil || d.Original != nil ||
 				!slices.ContainsFunc(final[d.FinalID].Evidence, func(id string) bool { return leadNewLines(id, f.New, catalog) }) {
 				return invalid("lead addition")
 			}
@@ -392,6 +399,19 @@ func checkLeadFollowup(r Record, catalog map[string]Excerpt, b bounds) error {
 		return invalid("lead follow-up candidates without disposition")
 	}
 	return nil
+}
+
+// RefinementGrounded reports a refinement that stays on the code its
+// candidate started from and rests on new code: the refined citations keep
+// every citation of the original and one lies in a whole resolved excerpt
+// (whole: the new excerpts that are not partial windows).
+func RefinementGrounded(refined, original, whole []string, catalog map[string]Excerpt) bool {
+	for _, id := range original {
+		if !slices.Contains(refined, id) {
+			return false
+		}
+	}
+	return slices.ContainsFunc(refined, func(id string) bool { return leadNewLines(id, whole, catalog) })
 }
 
 // leadNewLines reports a citation that lies in one of the new excerpts.
@@ -521,6 +541,7 @@ func LeadFollowupMatches(fu, inv Record) bool {
 	if !CarriesUpstreamEvidence(fu, inv) {
 		return false
 	}
+	whole := slices.DeleteFunc(slices.Clone(f.New), func(id string) bool { return slices.Contains(f.Partial, id) })
 	investigated := catalogOf(inv.Evidence)
 	for _, e := range fu.Evidence {
 		t, target := targets[e.ID]
@@ -554,15 +575,32 @@ func LeadFollowupMatches(fu, inv Record) bool {
 		if d.Disposition != DispositionKept && (!linked[d.CandidateID] || leads[d.Lead].CandidateID != d.CandidateID) {
 			return false
 		}
-		if d.Disposition == DispositionKept || d.Disposition == DispositionContested {
+		switch d.Disposition {
+		case DispositionKept, DispositionContested:
 			c := final[d.FinalID]
 			c.ID = original.ID
-			if !sameCandidate(c, original) {
+			if d.Original != nil || !sameCandidate(c, original) {
+				return false
+			}
+		case DispositionRefined:
+			// The record keeps the investigation's text, and the refinement
+			// keeps the original's citations and cites lines of a whole
+			// resolved excerpt.
+			text := original.CandidateText
+			text.ID = ""
+			c, ok := final[d.FinalID]
+			if !ok || d.Original == nil || !sameText(*d.Original, text) || c.Origin != original.Origin ||
+				!RefinementGrounded(c.Evidence, original.Evidence, whole, catalog) {
 				return false
 			}
 		}
 	}
 	return i == len(inv.Candidates)
+}
+
+func sameText(a, b CandidateText) bool {
+	return a.ID == b.ID && a.Title == b.Title && a.Condition == b.Condition && a.Impact == b.Impact && a.Improvement == b.Improvement &&
+		a.Counterpoint == b.Counterpoint && a.Mechanism == b.Mechanism && slices.Equal(a.Evidence, b.Evidence)
 }
 
 func sameCandidate(a, b Candidate) bool {

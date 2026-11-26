@@ -90,7 +90,18 @@
         "candidate_id": "investigate_1",
         "final_id": "investigate_1",
         "disposition": "refined",
-        "lead": "lead_1"
+        "lead": "lead_1",
+        "original": {
+          "title": "다음 패키지의 음수 처리에 따라 결과가 달라질 수 있음",
+          "condition": "n이 0보다 큰 호출",
+          "impact": "끝 패키지가 음수를 돌려주면 합계가 줄어든다.",
+          "improvement": "반환값의 범위를 확인한다.",
+          "counterpoint": "다음 패키지가 음수를 돌려주지 않을 수 있다.",
+          "mechanism": "인용한 줄이 다음 패키지 함수의 반환값을 그대로 더한다.",
+          "evidence_ids": [
+            "ev_52d092ed61aa42665bb8ccd0"
+          ]
+        }
       }
     ]
   },
@@ -112,8 +123,8 @@
         "leads.md",
         "pack.yaml"
       ],
-      "request_sha256": "436a2db4aabe84fb615cb997614a34db21284137061b18fa18113ebb9b42625a",
-      "request_bytes": 13156,
+      "request_sha256": "f0a4b9b813e375244e7dce3fe77b7328b4711af20a4e0acc316a70d55a354c9f",
+      "request_bytes": 13306,
       "usage": {
         "input": 1479,
         "output": 50

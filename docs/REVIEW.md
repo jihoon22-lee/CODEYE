@@ -402,9 +402,10 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 ### 후속 조사 요청과 출력
 
 - 요청은 메시지 하나다. 찾은 단서(ID, 필요한 것, 시작 줄, 식별자, 의심, 가리키는 후보 ID, 찾은 발췌 ID, 그중 부분 발췌 ID), 단서가 가리키는 후보, 발췌(단서가 인용한 줄, 후보가 인용한 줄, 찾은 발췌 순)를 담는다. 호출마다 새 세션이므로 원래 후보가 인용한 코드를 다시 보낸다. 요청이 예산을 넘으면 뒤쪽 단서부터 빼고 `review_input_trimmed`를 남기며, 단서 하나로도 넘으면 `review_input_too_large`로 실패한다.
-- 출력은 `{"results":[...]}`이고 기준(`basis`)마다 결과 하나다. 입력 후보에는 `refined`(고친 후보 전체)나 `contested`(이유와 코드 근거 1~6개, 그중 하나 이상이 부분 발췌가 아닌 찾은 발췌 안의 줄)를 쓰고, 고칠 것이 없으면 결과를 내지 않는다. 단서(`basis`가 단서 ID)마다 찾은 코드가 보인 다른 문제의 `added` 후보 하나까지이고 찾은 발췌를 인용해야 한다. 고치거나 더한 후보는 조사 후보와 같은 검사를 받는다.
+- 출력은 `{"results":[...]}`이고 기준(`basis`)마다 결과 하나다. 입력 후보에는 `refined`(고친 후보 전체: 원래 후보가 인용한 근거 ID를 모두 그대로 두고, 부분 발췌가 아닌 찾은 발췌 안의 줄을 하나 이상 더 인용한다)나 `contested`(이유와 코드 근거 1~6개, 그중 하나 이상이 부분 발췌가 아닌 찾은 발췌 안의 줄)를 쓰고, 고칠 것이 없으면 결과를 내지 않는다. 단서(`basis`가 단서 ID)마다 찾은 코드가 보인 다른 문제의 `added` 후보 하나까지이고 찾은 발췌를 인용해야 한다. 고치거나 더한 후보는 조사 후보와 같은 검사를 받는다.
+- 고친 후보는 새로 읽은 코드로 제목·조건·동작 방식·영향·개선 방향·반론을 바꿀 수 있지만, 시작한 코드(원래 후보의 인용)를 떠날 수 없다. 원래 인용을 하나라도 빼면 `lead_refinement_citations_dropped`, 선언 전체인 찾은 발췌의 줄을 인용하지 않으면 `lead_refinement_evidence_not_resolved`이고, 복구 뒤에도 남으면 그 결과만 빠져 원래 후보가 그대로 verify로 간다. 후보에는 심각도가 없으므로(심각도는 verify가 정한다) 심각도를 비교하는 규칙은 없다. 원래 후보가 근거 여섯 개를 모두 썼으면 새 줄을 더할 자리가 없어 고칠 수 없다(반박은 할 수 있다). 기록의 `refined` 처리는 원래 후보의 글(`original`)을 담고, 보고서의 그 발견은 원래 제목·단서·후속 조사 task를 보인다([단서 기록과 보고서](#단서-기록과-보고서)).
 - 반박한 후보는 빠지지 않는다. 그 후보는 그대로 같은 조사의 verify로 가고, 요청의 후보에 `contested`(이유와 인용한 줄)가 붙으며 인용한 줄과 그 줄을 담은 찾은 발췌도 함께 간다. 그런 후보가 있는 verify 요청에만 반대 근거를 다른 반박 근거처럼 저울질하라는 계약 문장이 붙는다. 판정은 verify가 하고, 반박이 맞으면 보고서는 다른 반박된 후보처럼 싣는다.
-- 출력 오류는 [출력 오류 분류](#출력-오류-분류)를 따른다(`lead_result_invalid`·`lead_result_duplicate`·`lead_contest_evidence_not_resolved`·`lead_addition_evidence_not_new`). 복구 뒤에도 틀린 결과는 그 결과만 빼고 그 후보는 조사가 낸 그대로 남는다(`lead_result_omitted`).
+- 출력 오류는 [출력 오류 분류](#출력-오류-분류)를 따른다(`lead_result_invalid`·`lead_result_duplicate`·`lead_contest_evidence_not_resolved`·`lead_addition_evidence_not_new`·`lead_refinement_citations_dropped`·`lead_refinement_evidence_not_resolved`). 복구 뒤에도 틀린 결과는 그 결과만 빼고 그 후보는 조사가 낸 그대로 남는다(`lead_result_omitted`).
 - 기록은 최종 후보 전부와 후보마다의 처리(`kept`·`refined`·`contested`·`added`)를 담는다. 같은 조사의 verify는 수락된 후속 조사 기록의 최종 후보를 검증한다. 후속 조사가 호출되지 않았거나 실패하면 verify는 조사의 후보를 그대로 검증하므로 후보가 줄지 않는다. 실패의 이유는 그 task와 기록에 남는다.
 - 후속 조사 기록의 근거는 보낸 것뿐이다. 조사 기록의 근거를 바꾸지 않은 항목, 찾은 발췌, 보낸 발췌 안에서 좁힌 인용 범위만 둘 수 있고, 인용 범위는 보낸 발췌 안에 있어야 한다(`record.Decode`, `record.LeadFollowupMatches`).
 
@@ -724,6 +725,8 @@ scripted caller로 잰 승인이다(최소 요청 예산, Go package가 다음 p
 | `lead_result_duplicate` | 형식 | 같은 `basis`의 두 번째 결과를 버린다. 앞 결과는 그대로 받는다 |
 | `lead_contest_evidence_not_resolved` | 무결성 | 반박(`contested`) 결과가 부분 발췌가 아닌 찾은 발췌 안의 코드를 인용하지 않았다. `lead_result_invalid`와 같다 |
 | `lead_addition_evidence_not_new` | 무결성 | 더한(`added`) 후보가 찾은 발췌 안의 코드를 인용하지 않았다. `lead_result_invalid`와 같다 |
+| `lead_refinement_citations_dropped` | 무결성 | 고친(`refined`) 후보가 원래 후보가 인용한 근거 ID 중 하나 이상을 뺐다. `lead_result_invalid`와 같다 |
+| `lead_refinement_evidence_not_resolved` | 무결성 | 고친(`refined`) 후보가 부분 발췌가 아닌 찾은 발췌 안의 코드를 인용하지 않았다. `lead_result_invalid`와 같다 |
 
 ## 후보 검증과 근거 규칙
 
@@ -904,7 +907,7 @@ scripted caller로 잰 승인이다(최소 요청 예산, Go package가 다음 p
 
 - 단서를 받은 조사 기록(전체·slot)과 모든 [단서 후속 조사](#단서-후속-조사) 기록(stage `leads`)이 쓴다. 0.7에 조사 기록의 `lead_limit`·`leads`와 후속 조사 기록의 `lead_followup`을 더한 것이다. 계약 probe와 HTTP 근거 읽기는 0.7과 같이 실리고, 보고서의 문서 대조·관련 흐름·강점·도구 진단 분류·slot 장부가 0.7 기록과 같이 읽는다(`TestLeadOfferedRecordsFeedTheReportSections`).
 - 조사 기록의 `lead_limit`(3)는 요청이 단서를 받았다는 뜻이고 남긴 단서가 없어도 있다. `leads[]`는 모델의 `id`(`lead_N`), `need`, `symbol`, `evidence_id`(그 기록의 근거), `suspicion`, `candidate_id`(필수)와 플랫폼의 `resolution`(`resolved`·`unresolved`)을 가진다. 찾았으면 `targets`(최대 3개: `id`·`path`·`sha256`·`start_line`·`end_line`·`kind`·`origin`·선택 `symbol`, 선언 전체가 아닌 정의 창이면 `partial`), 못 찾았으면 `reason`이고 `lead_already_in_request`이면 그 발췌의 `in_request_evidence_ids`도 있다. 찾은 위치는 조사 기록의 근거가 아니다(그 요청이 보내지 않았다).
-- 후속 조사 기록(`review.leads`, `review.leads.sNNN`, slot이면 `slice`)의 `lead_followup`은 `leads`(보낸 단서 ID), `sent_evidence_ids`(요청이 보낸 발췌), `new_evidence_ids`(그중 찾은 발췌), `partial_evidence_ids`(그중 부분 발췌), `new_lines`(찾은 발췌의 줄 중 조사 기록의 발췌에 없던 줄을 파일마다 한 번 센 수), `dispositions`(최종 후보마다 `candidate_id`·`final_id`·`disposition`·`lead`, 반박이면 `reason`·`evidence_ids`)다. 상류는 같은 조사 기록이고 slot이면 `review.scope`도 있다. 기록 검사(`record.LeadFollowupMatches`)가 조사 기록의 후보·단서와 처리, 근거의 범위를 대조한다. 반박한 후보는 원래 후보 그대로 최종 후보에 남고, 고친 후보와 더한 후보는 조사 후보와 같은 형식이다.
+- 후속 조사 기록(`review.leads`, `review.leads.sNNN`, slot이면 `slice`)의 `lead_followup`은 `leads`(보낸 단서 ID), `sent_evidence_ids`(요청이 보낸 발췌), `new_evidence_ids`(그중 찾은 발췌), `partial_evidence_ids`(그중 부분 발췌), `new_lines`(찾은 발췌의 줄 중 조사 기록의 발췌에 없던 줄을 파일마다 한 번 센 수), `dispositions`(최종 후보마다 `candidate_id`·`final_id`·`disposition`·`lead`, 반박이면 `reason`·`evidence_ids`)다. 상류는 같은 조사 기록이고 slot이면 `review.scope`도 있다. 기록 검사(`record.LeadFollowupMatches`)가 조사 기록의 후보·단서와 처리, 근거의 범위를 대조한다. 반박한 후보는 원래 후보 그대로 최종 후보에 남고, 고친 후보와 더한 후보는 조사 후보와 같은 형식이다. 고친 후보의 처리는 원래 후보의 글(`original`: ID 없는 제목·조건·동작 방식·영향·개선 방향·반론·근거 ID)을 담고, 고친 후보는 그 근거 ID를 모두 인용하며 부분이 아닌 찾은 발췌의 줄도 인용한다(`record.RefinementGrounded`). 기록 검사는 `original`이 조사 기록의 후보와 같은지도 본다.
 - 보고서 생성기 26부터 읽는다(`LeadsReviewDecoder`). [조사 예시](../examples/review/leads/investigate.s001.json) · [후속 조사 예시](../examples/review/leads/leads.s001.json) · [검증 예시](../examples/review/leads/verify.s001.json)
 
 ## 보고서 연결

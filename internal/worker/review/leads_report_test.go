@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -271,6 +272,134 @@ func TestContestedCandidateGoesToVerify(t *testing.T) {
 	}
 	if refuted != accepted {
 		t.Fatalf("%d refuted findings for %d contested candidates", refuted, accepted)
+	}
+}
+
+// A refinement rewrites a candidate's text from the resolved code: it keeps
+// every citation of the candidate it refines and cites lines of a whole
+// resolved declaration. Dropping a citation (lead_refinement_citations_dropped),
+// or citing only a partial window or the investigation's own lines
+// (lead_refinement_evidence_not_resolved), is rejected: after its repair the
+// result is left out and the candidate goes to verify as the investigation
+// gave it. An accepted refinement keeps the original text in its
+// disposition.
+func TestLeadRefinementKeepsItsCitationsAndRestsOnNewCode(t *testing.T) {
+	pad := strings.Repeat("\t// One more step of the chain.\n", 70)
+	long := chainTree(12)
+	for k, v := range long {
+		if strings.HasSuffix(k, ".go") {
+			long[k] = strings.Replace(v, "\t}\n\treturn ", "\t}\n"+pad+"\treturn ", 1)
+		}
+	}
+	resolvedLine := func(in leadsInput) string {
+		target := catalogOf(in.Scope.Excerpts)[in.Leads[0].Resolved[0]]
+		return fmt.Sprintf("%s:%d-%d", target.ID, target.Start+1, target.Start+1)
+	}
+	for name, c := range map[string]struct {
+		tree map[string]string
+		// cite picks the refinement's citations.
+		cite func(in leadsInput) []string
+		want []string
+	}{
+		"keeps its citations and cites the resolved declaration": {chainTree(12), func(in leadsInput) []string {
+			return []string{in.Leads[0].EvidenceID, resolvedLine(in)}
+		}, nil},
+		"drops the citation it started from": {chainTree(12), func(in leadsInput) []string {
+			return []string{resolvedLine(in)}
+		}, []string{errLeadRefinementCitations}},
+		"cites a partial definition window": {long, func(in leadsInput) []string {
+			return []string{in.Leads[0].EvidenceID, resolvedLine(in)}
+		}, []string{errLeadRefinementLines}},
+		"cites only the investigation's lines": {chainTree(12), func(in leadsInput) []string {
+			return []string{in.Leads[0].EvidenceID}
+		}, []string{errLeadRefinementLines}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			j := treeJob(t, c.tree)
+			var mu sync.Mutex
+			var repairs [][]string
+			const condition = "n이 0보다 크고 다음 패키지가 0 이하를 받는 호출"
+			l := &leadsScript{asked: true, leads: func(_ int, q opencode.Request) opencode.Reply {
+				in := decodeAs[leadsInput](t, q)
+				if in.Repair != nil {
+					var codes []string
+					for _, is := range in.Repair.Items {
+						codes = append(codes, is.Error)
+					}
+					mu.Lock()
+					repairs = append(repairs, codes)
+					mu.Unlock()
+				}
+				refined := chainCandidate(in.Leads[0].EvidenceID)
+				refined["condition"], refined["evidence_ids"] = condition, c.cite(in)
+				refined["basis"], refined["disposition"] = in.Candidates[0].ID, "refined"
+				return asJSON(map[string]any{"results": []map[string]any{refined}})
+			}}
+			script := l.script(t)
+			verify := script["verify"]
+			var conditions []string
+			script["verify"] = func(n int, q opencode.Request) opencode.Reply {
+				mu.Lock()
+				for _, x := range decodeAs[verifyInput](t, q).Candidates {
+					conditions = append(conditions, x.Condition)
+				}
+				mu.Unlock()
+				return verify(n, q)
+			}
+			h, err := discovery.Wrap(Handler{Static: vetStub{}, Caller: &scriptedCaller{script: script}, Budget: smallBudget}, discovery.Config{Observer: exampleObserver{t: t}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			plan, err := h.Plan(t.Context(), j)
+			if err != nil {
+				t.Fatal(err)
+			}
+			results := map[string]analysis.TaskResult{}
+			for _, task := range plan {
+				results[task.Key] = h.Run(t.Context(), j, task, nil)
+			}
+			run := 0
+			for _, p := range plan {
+				slot, ok := record.LeadsTask(p.Key)
+				if !ok || results[p.Key].Status != domain.TaskSucceeded {
+					continue
+				}
+				run++
+				fu := readRecord(t, j, strings.TrimPrefix(record.LeadsTaskKey(slot), "review."))
+				inv := readRecord(t, j, strings.TrimPrefix(strings.Replace(p.Key, "review.leads", "review.investigate", 1), "review."))
+				d := fu.LeadFollowup.Dispositions
+				original := inv.Candidates[0].CandidateText
+				original.ID = ""
+				if c.want == nil {
+					if len(d) != 1 || d[0].Disposition != record.DispositionRefined || d[0].Original == nil ||
+						!reflect.DeepEqual(*d[0].Original, original) || fu.Candidates[0].Condition != condition {
+						t.Fatalf("%s dispositions %+v", p.Key, d)
+					}
+					continue
+				}
+				if len(d) != 1 || d[0].Disposition != record.DispositionKept || d[0].Original != nil ||
+					!slices.Contains(fu.Limitations, limLeadResultOmitted) || fu.Candidates[0].Condition != original.Condition {
+					t.Fatalf("%s dispositions %+v, limitations %v", p.Key, d, fu.Limitations)
+				}
+			}
+			if run == 0 || slices.Contains(conditions, condition) != (c.want == nil) {
+				t.Fatalf("%d follow-ups; verify read the refinement: %v", run, slices.Contains(conditions, condition))
+			}
+			if c.want == nil {
+				if len(repairs) != 0 {
+					t.Fatalf("repairs %v", repairs)
+				}
+				return
+			}
+			if len(repairs) != run {
+				t.Fatalf("%d follow-ups, %d repairs", run, len(repairs))
+			}
+			for _, codes := range repairs {
+				if !slices.Equal(codes, c.want) {
+					t.Fatalf("repair codes %v", codes)
+				}
+			}
+		})
 	}
 }
 

@@ -605,6 +605,71 @@ func TestLeadFollowupRecordHoldsWhatItSent(t *testing.T) {
 	}
 }
 
+// A refined disposition keeps the text of the candidate it replaced, and the
+// refined candidate keeps every citation of that candidate and cites lines
+// of a whole resolved excerpt: the record check (record.Decode) and the
+// lineage check (record.LeadFollowupMatches) reject a record that drops
+// either, and the lineage check one whose kept text is not the
+// investigation's.
+func TestLeadRefinementRecordKeepsTheOriginal(t *testing.T) {
+	j, plan, res := chainRun(t, &leadsScript{asked: true}, 12, 0)
+	slot := ""
+	for _, p := range plan {
+		if s, ok := record.LeadsTask(p.Key); ok && s != "" && res[p.Key].Status == domain.TaskSucceeded {
+			slot = s
+			break
+		}
+	}
+	if slot == "" {
+		t.Fatalf("no follow-up ran: %v", rows(plan, res))
+	}
+	name := "leads." + slot
+	fu, inv := readRecord(t, j, name), readRecord(t, j, "investigate."+slot)
+	d := fu.LeadFollowup.Dispositions
+	if len(d) != 1 || d[0].Disposition != record.DispositionRefined || d[0].Original == nil || !record.LeadFollowupMatches(fu, inv) {
+		t.Fatalf("refinement %+v", d)
+	}
+	original := inv.Candidates[0].Evidence
+	newOnly := slices.DeleteFunc(slices.Clone(fu.Candidates[0].Evidence), func(id string) bool { return slices.Contains(original, id) })
+	if len(newOnly) == 0 {
+		t.Fatal("the refinement cites no new line")
+	}
+	for change, c := range map[string]struct {
+		edit func(r *record.Record)
+		// valid: the record check still accepts it (only the lineage
+		// check can tell).
+		valid bool
+	}{
+		"original text changed": {func(r *record.Record) { r.LeadFollowup.Dispositions[0].Original.Title = "다른 제목의 후보" }, true},
+		"original missing":      {func(r *record.Record) { r.LeadFollowup.Dispositions[0].Original = nil }, false},
+		"citation dropped":      {func(r *record.Record) { r.Candidates[0].Evidence = newOnly }, false},
+		"no new line":           {func(r *record.Record) { r.Candidates[0].Evidence = slices.Clone(original) }, false},
+		"original on a kept candidate": {func(r *record.Record) {
+			r.LeadFollowup.Dispositions[0].Disposition, r.LeadFollowup.Dispositions[0].Lead = record.DispositionKept, ""
+			r.Candidates[0].CandidateText = inv.Candidates[0].CandidateText
+			r.Candidates[0].ID = r.LeadFollowup.Dispositions[0].FinalID
+		}, false},
+	} {
+		t.Run(change, func(t *testing.T) {
+			var bad record.Record
+			b, err := json.Marshal(fu)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(b, &bad); err != nil {
+				t.Fatal(err)
+			}
+			c.edit(&bad)
+			if record.LeadFollowupMatches(bad, inv) {
+				t.Fatal("the lineage check accepted it")
+			}
+			if _, err := record.Marshal(bad, expectRecord(j, name)); (err == nil) != c.valid {
+				t.Fatalf("record check: %v", err)
+			}
+		})
+	}
+}
+
 // The lead contract travels only in an investigate request that offers
 // leads (scope.lead_limit): a request that offers none carries the role's
 // guide and contract alone, the same instruction text as before leads, and

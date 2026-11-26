@@ -326,13 +326,16 @@
       "properties":{
         "candidate_id":{"$ref":"#/$defs/candidate_id"},"final_id":{"$ref":"#/$defs/candidate_id"},
         "disposition":{"enum":["kept","refined","contested","added"]},"lead":{"$ref":"#/$defs/lead_id"},
-        "reason":{"$ref":"#/$defs/text"},"evidence_ids":{"type":"array","minItems":1,"maxItems":6,"uniqueItems":true,"items":{"$ref":"#/$defs/id"}}
+        "reason":{"$ref":"#/$defs/text"},"evidence_ids":{"type":"array","minItems":1,"maxItems":6,"uniqueItems":true,"items":{"$ref":"#/$defs/id"}},
+        "original":{"type":"object","additionalProperties":false,"required":["title","condition","impact","improvement","counterpoint","evidence_ids"],
+          "description":"refined only: the text of the investigation's candidate the refinement replaced (its ID is candidate_id). The refined candidate keeps every one of these evidence IDs.",
+          "properties":{"title":{"$ref":"#/$defs/text"},"condition":{"$ref":"#/$defs/text"},"mechanism":{"$ref":"#/$defs/mechanism"},"impact":{"$ref":"#/$defs/text"},"improvement":{"$ref":"#/$defs/text"},"counterpoint":{"$ref":"#/$defs/text"},"evidence_ids":{"$ref":"#/$defs/citations"}}}
       },
       "allOf":[
-        {"if":{"properties":{"disposition":{"const":"kept"}}},"then":{"required":["candidate_id","final_id"],"not":{"anyOf":[{"required":["reason"]},{"required":["evidence_ids"]},{"required":["lead"]}]}}},
-        {"if":{"properties":{"disposition":{"const":"refined"}}},"then":{"required":["candidate_id","final_id","lead"],"not":{"anyOf":[{"required":["reason"]},{"required":["evidence_ids"]}]}}},
-        {"if":{"properties":{"disposition":{"const":"contested"}}},"then":{"required":["candidate_id","final_id","lead","reason","evidence_ids"]}},
-        {"if":{"properties":{"disposition":{"const":"added"}}},"then":{"required":["final_id","lead"],"not":{"anyOf":[{"required":["candidate_id"]},{"required":["reason"]},{"required":["evidence_ids"]}]}}}
+        {"if":{"properties":{"disposition":{"const":"kept"}}},"then":{"required":["candidate_id","final_id"],"not":{"anyOf":[{"required":["reason"]},{"required":["evidence_ids"]},{"required":["lead"]},{"required":["original"]}]}}},
+        {"if":{"properties":{"disposition":{"const":"refined"}}},"then":{"required":["candidate_id","final_id","lead","original"],"not":{"anyOf":[{"required":["reason"]},{"required":["evidence_ids"]}]}}},
+        {"if":{"properties":{"disposition":{"const":"contested"}}},"then":{"required":["candidate_id","final_id","lead","reason","evidence_ids"],"not":{"required":["original"]}}},
+        {"if":{"properties":{"disposition":{"const":"added"}}},"then":{"required":["final_id","lead"],"not":{"anyOf":[{"required":["candidate_id"]},{"required":["reason"]},{"required":["evidence_ids"]},{"required":["original"]}]}}}
       ]
     },
     "triage_group": {

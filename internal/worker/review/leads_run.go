@@ -66,6 +66,11 @@ const (
 	errLeadContestLines = "lead_contest_evidence_not_resolved"
 	// An added candidate cites no line of the resolved code.
 	errLeadAdditionLines = "lead_addition_evidence_not_new"
+	// A refinement drops a citation of the candidate it refines: it may
+	// rewrite the text from new code, not leave the code it started from.
+	errLeadRefinementCitations = "lead_refinement_citations_dropped"
+	// A refinement cites no line of a whole resolved declaration.
+	errLeadRefinementLines = "lead_refinement_evidence_not_resolved"
 )
 
 // investigateLeadsContract offers leads; it travels only in a request that
@@ -73,7 +78,7 @@ const (
 // same instructions as before leads existed.
 const investigateLeadsContract = ` Optionally return up to %d "leads":[{"need":"definition|callers","evidence_id":"ev_...:40-42","symbol":"Name","suspicion":"the open premise and what that code decides","candidate":1}]. A lead is no finding: write the suspicion as a candidate first with its unconfirmed premise, and give a lead only when that premise depends on code this request lacks; candidate is the 1-based position of that candidate (required). If the sent code decides the point, write the candidate without a lead. evidence_id cites the sent code lines holding symbol, one identifier: for definition the callee of a call on those lines, for callers the declaration there. The platform finds only project code: a project function, a method of a concrete project type the code fixes as the receiver's type, and a package-qualified call into a project package. It finds no standard library or external module code and no call through an interface or a value of unknown type: do not name those. Never name code this request carries.`
 
-const leadsContract = `For this role use exactly {"results":[{"basis":"investigate_1 or lead_1","disposition":"refined|contested|added","title":"what goes wrong","condition":"the concrete trigger input or state","mechanism":"how the cited lines produce the failure, step by step","impact":"...","improvement":"fix direction","counterpoint":"what would refute it","evidence_ids":["ev_...:12-30"],"reason":"contested only: why the cited lines show the condition cannot happen"}]}. At most one result per basis. For an input candidate (basis its id) give refined with the complete corrected candidate, or contested with only reason and 1-6 code evidence_ids, one of them inside a resolved excerpt that is not in the lead's partial_evidence_ids, that show the condition cannot happen: the candidate stays and verify weighs the contest; omit a candidate that stays as it is. For a lead (basis the lead id) give at most one added candidate for another problem the resolved code shows, citing a resolved excerpt. A candidate cites 1-6 evidence IDs of scope.excerpts, at least one code or test. Do not claim reproduction or provide attack instructions.`
+const leadsContract = `For this role use exactly {"results":[{"basis":"investigate_1 or lead_1","disposition":"refined|contested|added","title":"what goes wrong","condition":"the concrete trigger input or state","mechanism":"how the cited lines produce the failure, step by step","impact":"...","improvement":"fix direction","counterpoint":"what would refute it","evidence_ids":["ev_...:12-30"],"reason":"contested only: why the cited lines show the condition cannot happen"}]}. At most one result per basis. For an input candidate (basis its id) give refined with the complete corrected candidate, keeping every evidence ID the input candidate cites and adding at least one inside a resolved excerpt that is not in the lead's partial_evidence_ids, or contested with only reason and 1-6 code evidence_ids, one of them inside a resolved excerpt that is not in the lead's partial_evidence_ids, that show the condition cannot happen: the candidate stays and verify weighs the contest; omit a candidate that stays as it is. For a lead (basis the lead id) give at most one added candidate for another problem the resolved code shows, citing a resolved excerpt. A candidate cites 1-6 evidence IDs of scope.excerpts, at least one code or test. Do not claim reproduction or provide attack instructions.`
 
 // leadOutput is one lead as the investigate output gives it.
 type leadOutput struct {
@@ -456,8 +461,10 @@ func (s *roleStage) leadsFollowup(inv record.Record, upstream []record.Upstream)
 		sentLeads[l.ID] = l
 	}
 	sentCandidates := map[string]bool{}
+	citedBy := map[string][]string{}
 	for _, c := range req.candidates {
 		sentCandidates[c.ID] = true
+		citedBy[c.ID] = c.Evidence
 	}
 	// within reports a citation inside one of the listed resolved excerpts.
 	within := func(cited map[string]record.Excerpt, id string, list []string) bool {
@@ -512,6 +519,22 @@ func (s *roleStage) leadsFollowup(inv record.Record, upstream []record.Upstream)
 				if isLead && !slices.ContainsFunc(r.text.Evidence, func(id string) bool { return within(reply.catalog(), id, req.added) }) {
 					fault("evidence_ids", errLeadAdditionLines)
 					continue
+				}
+				if !isLead {
+					// A refinement rewrites the text from the resolved code: it
+					// keeps the citations it started from and cites lines of a
+					// whole resolved declaration (record.RefinementGrounded).
+					kept := !slices.ContainsFunc(citedBy[basis], func(id string) bool { return !slices.Contains(r.text.Evidence, id) })
+					grounded := slices.ContainsFunc(r.text.Evidence, func(id string) bool { return within(reply.catalog(), id, whole) })
+					if !kept {
+						fault("evidence_ids", errLeadRefinementCitations)
+					}
+					if !grounded {
+						fault("evidence_ids", errLeadRefinementLines)
+					}
+					if !kept || !grounded {
+						continue
+					}
 				}
 				seen[basis] = true
 				if isLead {
@@ -598,8 +621,10 @@ func (s *roleStage) assembleLeads(inv record.Record, req leadsRequest, refined, 
 			t.ID = c.ID
 			if !sameText(t, c.CandidateText) {
 				t.ID = id
+				original := c.CandidateText
+				original.ID = ""
 				next.CandidateText = t
-				d.Disposition, d.Lead = record.DispositionRefined, leadOf[c.ID]
+				d.Disposition, d.Lead, d.Original = record.DispositionRefined, leadOf[c.ID], &original
 			}
 		}
 		final = append(final, next)
