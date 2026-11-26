@@ -328,9 +328,12 @@ func (a *Analyzer) runSpotBugs(ctx context.Context, runner executor.Runner, run 
 	if !complete(res, outcome) {
 		return
 	}
-	parseSpotBugs(run, files, doc, outcome, res.Stdout.Data)
+	context := slices.DeleteFunc(slices.Clone(compileFiles), func(f source.Entry) bool {
+		return slices.ContainsFunc(files, func(g source.Entry) bool { return g.Path == f.Path })
+	})
+	parseSpotBugs(run, files, context, doc, outcome, res.Stdout.Data)
 	code := pack.ExitCode(res)
-	if code != 0 && (code != 1 || len(doc.Observations) == 0 && doc.Coverage.Units["java_findings_location_unmapped"] == 0) {
+	if code != 0 && (code != 1 || len(doc.Observations) == 0 && doc.Coverage.Units["java_findings_location_unmapped"] == 0 && doc.Coverage.Units["java_findings_outside_scope"] == 0) {
 		outcome.Fail(domain.TaskFailed, "spotbugs_failed", obsdoc.ExitExecutionError)
 	}
 }

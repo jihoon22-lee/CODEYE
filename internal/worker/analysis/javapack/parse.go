@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
@@ -102,6 +103,33 @@ type spotBug struct {
 	Type     string     `xml:"type,attr"`
 	Category string     `xml:"category,attr"`
 	Lines    []spotLine `xml:"SourceLine"`
+	// The class, method and field the bug is about carry their own
+	// source lines; only their source path is read (to tell a report in a
+	// compiler context file from one without a location). Referenced types
+	// are not the bug's place and are not read.
+	Classes []spotMember `xml:"Class"`
+	Methods []spotMember `xml:"Method"`
+	Fields  []spotMember `xml:"Field"`
+}
+
+type spotMember struct {
+	Lines []spotLine `xml:"SourceLine"`
+}
+
+// sourcePaths are the source paths of every line of the bug.
+func (b spotBug) sourcePaths() []string {
+	var out []string
+	for _, l := range b.Lines {
+		out = append(out, l.SourcePath)
+	}
+	for _, members := range [][]spotMember{b.Classes, b.Methods, b.Fields} {
+		for _, m := range members {
+			for _, l := range m.Lines {
+				out = append(out, l.SourcePath)
+			}
+		}
+	}
+	return out
 }
 
 type spotSummary struct {
@@ -145,7 +173,10 @@ func selectedSource(names map[string]string, name string) string {
 	return names[name]
 }
 
-func parseSpotBugs(run *anypack.Run, files []source.Entry, doc *obsdoc.Document, outcome *anypack.Outcome, body []byte) {
+// parseSpotBugs reads the XML report. files are the selected sources;
+// context are the other sources compiled with them, whose reports are outside
+// the selected scope and counted, never located.
+func parseSpotBugs(run *anypack.Run, files, context []source.Entry, doc *obsdoc.Document, outcome *anypack.Outcome, body []byte) {
 	dec := xml.NewDecoder(bytes.NewReader(body))
 	var opened, closed, errorSeen bool
 	var summary spotSummary
@@ -154,6 +185,8 @@ func parseSpotBugs(run *anypack.Run, files []source.Entry, doc *obsdoc.Document,
 	resolver := anypack.NewResolver(run.Job.Snapshot.SnapshotDir, files, nil)
 	ordinals := map[string]int{}
 	names := spotSourceNames(run.Job.Snapshot.SnapshotDir, files)
+	contextNames := spotSourceNames(run.Job.Snapshot.SnapshotDir, context)
+	outside := 0
 	for {
 		offset := dec.InputOffset()
 		token, err := dec.Token()
@@ -193,12 +226,18 @@ func parseSpotBugs(run *anypack.Run, files []source.Entry, doc *obsdoc.Document,
 				case "STYLE":
 					category = "maintainability"
 				}
+				located := false
 				for _, line := range bug.Lines {
 					p := selectedSource(names, line.SourcePath)
 					if p != "" && line.Start > 0 && line.End >= line.Start {
 						observation(doc, resolver, p, bug.Type, category, spotbugsExecution, digest, line.Start, line.End, offset, dec.InputOffset(), ordinals)
+						located = true
 						break
 					}
+				}
+				if paths := bug.sourcePaths(); !located && !slices.ContainsFunc(paths, func(sp string) bool { return selectedSource(names, sp) != "" }) &&
+					slices.ContainsFunc(paths, func(sp string) bool { return selectedSource(contextNames, sp) != "" }) {
+					outside++
 				}
 			case "Errors":
 				var info struct {
@@ -237,7 +276,11 @@ func parseSpotBugs(run *anypack.Run, files []source.Entry, doc *obsdoc.Document,
 		terminalParseFailure(doc, outcome)
 		return
 	}
-	if n := seen - len(doc.Observations); n > 0 {
+	if outside > 0 {
+		doc.Coverage.Units["java_findings_outside_scope"] = outside
+		doc.Limitations = append(doc.Limitations, "observations_outside_scope_omitted")
+	}
+	if n := seen - len(doc.Observations) - outside; n > 0 {
 		doc.Coverage.Units["java_findings_location_unmapped"] = n
 		doc.Limitations = append(doc.Limitations, "java_findings_location_unmapped")
 	}
