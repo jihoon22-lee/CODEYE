@@ -377,6 +377,7 @@
 2. **채택하지 않은 안.** 기술자가 있는 디렉터리를 `-sourcepath`로 주는 안은 이 사례에서도 컴파일되었으나, 모듈이 `requires`하는 다른 모듈을 `--module-path`로 줘야 하고 classpath의 직접 의존성 JAR가 이름 있는 모듈에서 보이지 않는다. 지금의 classpath 계약(직접 의존성만, 카탈로그로 검증)과 맞지 않는다.
 3. **전이 classpath의 범위.** A42~A44의 틀로 넣는다면 `deps.java` 받기 작업(필수 아님, 프로젝트 선택과 노드 스위치가 모두 켜져야 함, 받은 저장소는 Maven 저장소 배치의 공유 캐시)이 저장소 코드를 실행하지 않고 POM을 읽어 의존성을 푼다. 이를 위해서는 부모 POM 사슬, `import` 범위 BOM과 `dependencyManagement`, 속성 치환, 범위(`compile`·`provided`·`runtime`), 제외와 `optional`, 가까운 쪽이 이기는 버전 조정, 버전 범위와 relocation을 Maven과 같게 구현해야 한다. JDK·OS로 켜지는 profile은 평가하지 않는 한계로 남는다. lockfile이 없으므로 고정 근거는 저장소의 체크섬뿐이고 `dependency_versions_not_pinned`가 된다. Gradle은 Gradle을 실행하지 않고는 풀 수 없어 리터럴 선언과 버전 카탈로그까지만 다룬다. 받기 기록 schema·보고서 공백·분석기 연결을 함께 바꾸는 큰 변경이라 이 결정에서는 구현하지 않는다.
 4. **측정이 말하는 우선순위.** 이 집합의 Java 사례에서는 직접 의존성만으로 인한 컴파일 실패가 없었다. 기술자를 뺀 뒤 SpotBugs 작업이 모두 컴파일되었다. 전이 classpath는 실제 프로젝트에서 그 때문에 실패하는 측정이 생길 때 다시 본다.
+5. **범위 밖 보고는 따로 센다.** 위치를 연결하지 못했다고 센 SpotBugs 보고의 대부분은 경로 범위 밖에 있는 같은 모듈 운영 소스의 보고였다. 그 소스는 컴파일 문맥으로만 넘기고 근거는 선택한 소스에만 연결하므로 관찰로 만들지 않는 것이 계약이다. 위치 실패와 섞이지 않게 `java_findings_outside_scope`로 따로 세고 `observations_outside_scope_omitted`를 남긴다(Rust와 같은 한계 코드). 범위 밖 보고를 관찰로 싣는 안은 사용자가 고른 범위를 넘어 발견을 게시하므로 채택하지 않았다. 남은 위치 없는 보고는 클래스·메서드 수준이고 대부분 낮은 우선순위의 한 규칙이어서, 메서드 줄로 위치를 대신 잡는 변경은 정밀도 근거가 생길 때 한다.
 
 [Java 팩](ANALYZERS.md#java-팩) · [Java 로컬 클래스패스](ANALYZERS.md#java-로컬-클래스패스)
 
