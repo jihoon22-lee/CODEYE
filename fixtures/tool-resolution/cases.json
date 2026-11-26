@@ -1,0 +1,107 @@
+{
+  "description": "One tool detection result per case and the analyzer tool arguments the local agent gets from it. cmd/codeye (useDetectedTools, agentArgv) and scripts/quality_eval.py (resolve_tools, analyzer_tool_args) are both tested against this file, so the evaluation runner configures the agent like the service. Compared are --go, --go-mod-cache, the tool flags, --python-both-type-checkers and the dependency fetch settings, as a sorted list.",
+  "cases": [
+    {
+      "name": "found tools with fetch settings, an explicit tool wins",
+      "dependency_fetch": true,
+      "explicit": {"tools": {"uv": "/home/u/.local/bin/uv"}},
+      "tools_json": {
+        "schema_version": "0.1",
+        "detected_at": "2026-11-26T00:00:00Z",
+        "go_mod_cache": "/home/u/go/pkg/mod",
+        "go_settings": {"goproxy": "https://proxy.example,direct", "goprivate": "example.com/*"},
+        "npm_registry": "https://npm.example/",
+        "python_both_type_checkers": true,
+        "tools": [
+          {"name": "go", "status": "found", "path": "/opt/go/bin/go", "source": "PATH", "version_tested": true},
+          {"name": "git", "status": "found", "path": "/usr/bin/git", "source": "PATH", "version_tested": true},
+          {"name": "gh", "status": "found", "path": "/usr/bin/gh", "source": "PATH", "version_tested": true},
+          {"name": "opencode", "status": "found", "path": "/opt/opencode", "source": "PATH", "version_tested": true},
+          {"name": "node", "status": "found", "path": "/opt/node/bin/node", "source": "PATH", "version_tested": true},
+          {"name": "mypy", "status": "found", "path": "/opt/mypy", "source": "PATH", "version_tested": true},
+          {"name": "pyright", "status": "found", "path": "/opt/pyright/index.js", "source": "PATH", "version_tested": true},
+          {"name": "npm", "status": "found", "path": "/opt/npm/bin/npm-cli.js", "source": "PATH", "version_tested": true},
+          {"name": "uv", "status": "found", "path": "/usr/local/bin/uv", "source": "PATH", "version_tested": true},
+          {"name": "cppcheck", "status": "found", "path": "/opt/cppcheck", "source": "PATH", "version_tested": false},
+          {"name": "clang-tidy", "status": "unusable", "version_tested": false},
+          {"name": "opengrep", "status": "not_found", "version_tested": false}
+        ]
+      },
+      "want": [
+        ["--cppcheck", "/opt/cppcheck"],
+        ["--go", "/opt/go/bin/go"],
+        ["--go-mod-cache", "/home/u/go/pkg/mod"],
+        ["--go-private", "example.com/*"],
+        ["--go-proxy", "https://proxy.example,direct"],
+        ["--mypy", "/opt/mypy"],
+        ["--node", "/opt/node/bin/node"],
+        ["--npm", "/opt/npm/bin/npm-cli.js"],
+        ["--npm-registry", "https://npm.example/"],
+        ["--pyright", "/opt/pyright/index.js"],
+        ["--python-both-type-checkers"],
+        ["--uv", "/home/u/.local/bin/uv"]
+      ]
+    },
+    {
+      "name": "fetch off: no fetch settings; one type checker: no switch",
+      "dependency_fetch": false,
+      "explicit": {},
+      "tools_json": {
+        "schema_version": "0.1",
+        "detected_at": "2026-11-26T00:00:00Z",
+        "go_mod_cache": "/home/u/go/pkg/mod",
+        "go_settings": {"goproxy": "https://proxy.example,direct"},
+        "npm_registry": "https://npm.example/",
+        "python_both_type_checkers": false,
+        "tools": [
+          {"name": "go", "status": "found", "path": "/opt/go/bin/go", "source": "PATH", "version_tested": true},
+          {"name": "mypy", "status": "found", "path": "/opt/mypy", "source": "PATH", "version_tested": true},
+          {"name": "pyright", "status": "not_found", "version_tested": false}
+        ]
+      },
+      "want": [
+        ["--go", "/opt/go/bin/go"],
+        ["--go-mod-cache", "/home/u/go/pkg/mod"],
+        ["--mypy", "/opt/mypy"]
+      ]
+    },
+    {
+      "name": "no usable go: no module cache; explicit go and cache win",
+      "dependency_fetch": true,
+      "explicit": {"go": "/srv/go/bin/go", "go_mod_cache": "/srv/gomod"},
+      "tools_json": {
+        "schema_version": "0.1",
+        "detected_at": "2026-11-26T00:00:00Z",
+        "go_mod_cache": "/home/u/go/pkg/mod",
+        "python_both_type_checkers": false,
+        "tools": [
+          {"name": "go", "status": "unusable", "version_tested": false},
+          {"name": "staticcheck", "status": "found", "path": "/opt/staticcheck", "source": "PATH", "version_tested": true}
+        ]
+      },
+      "want": [
+        ["--go", "/srv/go/bin/go"],
+        ["--go-mod-cache", "/srv/gomod"],
+        ["--staticcheck", "/opt/staticcheck"]
+      ]
+    },
+    {
+      "name": "no go at all",
+      "dependency_fetch": true,
+      "explicit": {},
+      "tools_json": {
+        "schema_version": "0.1",
+        "detected_at": "2026-11-26T00:00:00Z",
+        "go_mod_cache": "/home/u/go/pkg/mod",
+        "python_both_type_checkers": false,
+        "tools": [
+          {"name": "go", "status": "not_found", "version_tested": false},
+          {"name": "ruff", "status": "found", "path": "/opt/ruff", "source": "PATH", "version_tested": true}
+        ]
+      },
+      "want": [
+        ["--ruff", "/opt/ruff"]
+      ]
+    }
+  ]
+}

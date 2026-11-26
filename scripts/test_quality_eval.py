@@ -426,6 +426,28 @@ class ToolDiscoveryTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 quality_eval.resolve_tools(bad, {})
 
+    def test_agent_arguments_match_the_service(self):
+        # cmd/codeye TestDetectedToolsBecomeTheFixtureAgentArguments holds the service to the same file.
+        cases = json.loads((SCRIPTS.parent / "fixtures/tool-resolution/cases.json").read_text(encoding="utf-8"))["cases"]
+        self.assertTrue(cases)
+        fixed = {"--go", "--go-mod-cache", "--npm-registry"} | {"--" + flag for _, flag in quality_eval.GO_SETTING_FLAGS}
+        for c in cases:
+            with self.subTest(c["name"]):
+                ex = c["explicit"]
+                switches = ["dependency-fetch"] if c["dependency_fetch"] else []
+                r = quality_eval.resolve_tools(c["tools_json"], ex.get("tools", {}), ex.get("go"), ex.get("go_mod_cache"), switches)
+                argv = quality_eval.analyzer_tool_args(r["go"], r["go_mod_cache"], r["tools"], r["switches"], r["extra_args"])
+                valued = fixed | {"--" + t["name"] for t in c["tools_json"]["tools"]} | {"--" + k for k in ex.get("tools", {})}
+                pairs, i = [], 0
+                while i < len(argv):
+                    if argv[i] == "--python-both-type-checkers":
+                        pairs.append([argv[i]])
+                    elif argv[i] in valued:
+                        pairs.append(argv[i:i + 2])
+                        i += 1
+                    i += 1
+                self.assertEqual(sorted(pairs, key="\0".join), c["want"])
+
 
 class AgentBudgetTests(unittest.TestCase):
     @staticmethod
