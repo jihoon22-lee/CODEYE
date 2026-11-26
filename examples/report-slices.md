@@ -195,7 +195,7 @@ AI가 검토한 문제 6건 중 코드 근거를 확인한 항목 0건 \(판단 
 
 ### 탐색 한계
 
-- `tool_not_probed`
+- 이 도구의 버전을 확인하지 않아 요구와 비교하지 못함 \(미확인\) `tool_not_probed`
 
 ### 환경 메모
 
@@ -316,6 +316,14 @@ AI가 검토한 문제 6건 중 코드 근거를 확인한 항목 0건 \(판단 
 
 </details>
 
+<details>
+<summary>범위 단위와 한계 2개 보기</summary>
+
+- Go\: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석함 \(범위 공백, 결함 아님\) `default_build_context_only`
+- 분석 완료, 진단 없음\: 1 `analyzed_clean`
+
+</details>
+
 - 검사 범위에서 보고된 진단 없음 · 대상 파일 30개 중 30개 처리 `go-vet.m02`
 
 <details>
@@ -354,6 +362,14 @@ AI가 검토한 문제 6건 중 코드 근거를 확인한 항목 0건 \(판단 
 
 </details>
 
+<details>
+<summary>범위 단위와 한계 2개 보기</summary>
+
+- Go\: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석함 \(범위 공백, 결함 아님\) `default_build_context_only`
+- 분석 완료, 진단 없음\: 1 `analyzed_clean`
+
+</details>
+
 </details>
 
 ### 타입·컴파일
@@ -368,7 +384,7 @@ AI가 검토한 문제 6건 중 코드 근거를 확인한 항목 0건 \(판단 
 
 ### 정적 규칙
 
-- **none** – 실행 안 함\(미지원\) · 범위의 이 언어를 맡을 분석기가 이 빌드에 없다\. `pack-gap.javascript`
+- **none** – 실행 안 함\(미지원\) · 이 언어의 소스가 있으나 그 언어의 분석기가 없음 \(정적 분석 공백, 0건 통과 아님\) `pack-gap.javascript` `analyzer_pack_missing`
 
 ### 타입·컴파일
 
@@ -382,7 +398,7 @@ AI가 검토한 문제 6건 중 코드 근거를 확인한 항목 0건 \(판단 
 
 ### 정적 규칙
 
-- **none** – 실행 안 함\(미지원\) · 범위의 이 언어를 맡을 분석기가 이 빌드에 없다\. `pack-gap.python`
+- **none** – 실행 안 함\(미지원\) · 이 언어의 소스가 있으나 그 언어의 분석기가 없음 \(정적 분석 공백, 0건 통과 아님\) `pack-gap.python` `analyzer_pack_missing`
 
 ### 타입·컴파일
 
@@ -582,7 +598,7 @@ AI가 검토한 문제 6건 중 코드 근거를 확인한 항목 0건 \(판단 
 | `review.investigate` | ✓ 성공 | `accepted` | `-` |
 | `review.interpret` | – 정책 제외 | `skipped` | `no_tool_observations` |
 | `review.verify` | ✓ 성공 | `accepted` | `-` |
-| `review.contract` | – 정책 제외 | `skipped` | 이 단계에서 검토할 대상이 선택되지 않았습니다\. |
+| `review.contract` | – 정책 제외 | `skipped` | 이 단계에서 검토할 대상이 선택되지 않음 \(미검토\) |
 
 <details>
 <summary>파일과 원문 줄 범위\(39개\)</summary>
@@ -661,7 +677,7 @@ AI가 검토한 문제 6건 중 코드 근거를 확인한 항목 0건 \(판단 
 | slot | 상태 | 이유 | 모듈 |
 |---|---|---|---|
 | s001–s005\(5개\) | ✓ 성공 | \- | go\:store, go\:api, javascript\:web, python\:worker |
-| s006–s009\(4개\) | △ 예산 소진 | attempt의 모델 호출 상한에 닿아 실행하지 않았다\(호출 없음\)\. | go\:store |
+| s006–s009\(4개\) | △ 예산 소진 | 노드의 모델 호출 상한에 닿아 이 모듈 묶음을 검토하지 않음 \(미검토, 0건 통과 아님\) | go\:store |
 
 <details>
 <summary>파일과 원문 줄 범위\(39개\)</summary>
@@ -720,9 +736,9 @@ AI가 검토한 문제 6건 중 코드 근거를 확인한 항목 0건 \(판단 
 
 | 분석 | 공백 | 세부 | 수 | 대상 |
 |---|---|---|---|---|
-| 환경 분석 | 탐색 한계 | tool\_not\_probed | 1 | `-` |
-| 환경 분석 | 모듈 요구를 판단할 수 없다 | not\_observed | 2 | `javascript:web node, python:worker python` |
-| 정적 분석 | 실행하지 않음\(미지원\) | 범위의 이 언어를 맡을 분석기가 이 빌드에 없다\. | 2 | `pack-gap.javascript, pack-gap.python` |
+| 환경 분석 | 탐색 한계 | 이 도구의 버전을 확인하지 않아 요구와 비교하지 못함 \(미확인\) | 1 | `-` |
+| 환경 분석 | 모듈 요구를 판단할 수 없다 | 요구 버전은 선언됐지만 노드에서 그 도구의 버전을 확인하지 못해 비교하지 못함 \(미확인\) | 2 | `javascript:web node, python:worker python` |
+| 정적 분석 | 실행하지 않음\(미지원\) | 이 언어의 소스가 있으나 그 언어의 분석기가 없음 \(정적 분석 공백, 0건 통과 아님\) | 2 | `pack-gap.javascript, pack-gap.python` |
 | 구조·중복 지표 | 이 분석 작업이 계획되지 않았다 | \- | 1 | `-` |
 | 비밀정보 | git 이력은 검사하지 않았다 | \- | 1 | `gitleaks` |
 | 코드 분석\(모델 검토\) | 호출 상한 때문에 요청에 넣지 못한 소스 범위 | \- | 1 | `go:store` |
@@ -740,9 +756,9 @@ AI가 검토한 문제 6건 중 코드 근거를 확인한 항목 0건 \(판단 
 
 inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언어 무관\)\.
 
-테스트 실행 작업은 계획되지 않았다\.
+테스트 실행 작업이 계획되지 않음 \(미실행\)
 
-진단 없이 마친 검사가 있습니다\.
+진단 없이 마친 검사가 있음 — 0건 보고는 결함 없음이 아님 \(참고\)
 
 ### 작업 상태
 
@@ -750,8 +766,8 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 | 상태 | 이유 | 수 | 작업 |
 |---|---|---|---|
-| – 실행 안 함\(미지원\) | 범위의 이 언어를 맡을 분석기가 이 빌드에 없다\. | 2 | `pack-gap.javascript, pack-gap.python` |
-| △ 예산 소진 | attempt의 모델 호출 상한에 닿아 실행하지 않았다\(호출 없음\)\. | 8 | `review.investigate.s006, review.investigate.s007, review.investigate.s008, review.investigate.s009, review.verify.s006 외 3개` |
+| – 실행 안 함\(미지원\) | 이 언어의 소스가 있으나 그 언어의 분석기가 없음 \(정적 분석 공백, 0건 통과 아님\) | 2 | `pack-gap.javascript, pack-gap.python` |
+| △ 예산 소진 | 노드의 모델 호출 상한에 닿아 이 모듈 묶음을 검토하지 않음 \(미검토, 0건 통과 아님\) | 8 | `review.investigate.s006, review.investigate.s007, review.investigate.s008, review.investigate.s009, review.verify.s006 외 3개` |
 
 ### 실행 기록과 산출물
 
@@ -763,16 +779,16 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 ### 한계와 공백
 
-- caller\_expansion\_go\_only
-- caller\_expansion\_package\_functions\_only
-- 고정 스냅샷에서 표시할 발췌를 확보하지 못했다\.
-- excerpt\_only
-- files\_outside\_review\_context
-- no\_callers\_found
-- no\_symbol\_for\_expansion
-- 범위에 이 언어의 소스가 있으나 노드에 그 언어의 분석기가 없어 정적 분석을 하지 않았다\. \(javascript\)
-- 범위에 이 언어의 소스가 있으나 노드에 그 언어의 분석기가 없어 정적 분석을 하지 않았다\. \(python\)
-- upstream\_interpret\_skipped
+- 호출자 추적은 Go 코드에서만 수행함 \(범위 공백\)
+- 호출자 추적 범위는 같은 패키지의 직접 호출뿐임 \(범위 공백\)
+- 고정 스냅샷에서 표시할 발췌를 확보하지 못함 \(참고\)
+- 검토는 선택된 코드 발췌 범위에 한정됨 \(부분 검토\)
+- 요청 크기 한도 때문에 일부 대상 파일을 모델 입력에 싣지 못함 \(미검토\)
+- 인용한 함수를 부르는 코드를 검토 범위에서 찾지 못함 \(호출자 없음을 뜻하지 않음\)
+- 인용한 줄에서 호출자를 따라갈 Go 함수·메서드 선언을 찾지 못해 호출자 확장을 하지 않음 \(참고\)
+- 범위에 소스가 있으나 노드에 그 언어의 분석기가 없어 정적 분석을 하지 않음 \(정적 분석 공백, 0건 통과 아님\) \(javascript\)
+- 범위에 소스가 있으나 노드에 그 언어의 분석기가 없어 정적 분석을 하지 않음 \(정적 분석 공백, 0건 통과 아님\) \(python\)
+- 앞 단계 interpret 역할이 생략되어 그 결과 없이 진행함 \(미검토 범위 있음\)
 
 ### 분석 대상과 실행 시각
 

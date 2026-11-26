@@ -173,3 +173,38 @@ it('explains a legacy SpotBugs rule once and keeps both reported locations', () 
   expect(screen.getAllByText(description)).toHaveLength(1);
   expect(screen.queryByText('spotbugs reported ' + rule)).toBeNull();
 });
+
+it('words a tool row\'s limitations and coverage counters with the raw code beside each', () => {
+  const mypy = tool('mypy', 'python.mypy', {
+    limitations: ['python_version_unknown', 'type_stubs_missing', 'code_nobody_defined', 'no_file_reached_clone_thresholds'],
+    units: { analyzed_clean: 3, syntax_error: 1, import_unresolved: 2, format_input_limit: 4 },
+  });
+  const { container } = render(<InspectionReading language={{ ecosystem: 'python', tools: [mypy] }} byID={new Map()} />);
+  const notes = container.querySelector('.inspection-coverage-notes');
+  expect(notes).not.toBeNull();
+  expect(notes!.querySelector('summary')!.textContent).toBe('범위 단위와 한계 6개 보기');
+  const text = notes!.textContent!;
+  expect(text).toContain('Python 버전 선언을 찾지 못해');
+  expect(text).toContain('분석 완료, 진단 없음: 3');
+  expect(text).toContain('구문 오류로 해석하지 못해 처리 파일에서 뺀 Python 파일');
+  // A code with no text is shown as it is, never dropped.
+  expect(text).toContain('code_nobody_defined');
+  // The raw code stays in a title and a small code span; the entries already
+  // worded on their own line are not said twice.
+  expect(container.querySelector('[title="python_version_unknown"]')).not.toBeNull();
+  expect(notes!.querySelector('small code')!.textContent).toBeTruthy();
+  expect(text).not.toContain('format_input_limit');
+  expect(text).not.toContain('no_file_reached_clone_thresholds');
+});
+
+it('shows no coverage notes for a row without limitations or counters', () => {
+  const { container } = render(<InspectionReading language={{ ecosystem: 'go', tools: [tool('go-vet', 'go.vet')] }} byID={new Map()} />);
+  expect(container.querySelector('.inspection-coverage-notes')).toBeNull();
+});
+
+it('keeps the raw reason code of a failed row in a title', () => {
+  const failed = tool('mypy', 'python.mypy', { status: 'failed', reason: 'mypy_failed', processed: null });
+  const { container } = render(<InspectionReading language={{ ecosystem: 'python', tools: [failed] }} byID={new Map()} />);
+  const reason = container.querySelector('[title="mypy_failed"]');
+  expect(reason?.textContent).toContain('mypy가 구문 오류가 아닌 오류');
+});

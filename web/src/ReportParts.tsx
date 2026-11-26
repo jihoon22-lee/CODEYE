@@ -6,6 +6,7 @@ import type { Citation, Excerpt, RelatedWorkflow } from './parseReportSections';
 import { reportURL, sourceEvidenceURL } from './analysisReport';
 import { FindingHistory, HIDDEN, findingBadge, type ComparisonLoad } from './HistoryView';
 import { ko } from './locales/ko';
+import { reasonWithHint } from './reasonHints';
 import { reportKo as t } from './locales/report-ko';
 import { ReportIcon } from './ReportLayout';
 import tablerLicense from '../../internal/report/reportui/LICENSE.tabler-core?url&no-inline';
@@ -17,14 +18,10 @@ import type { DocumentExample } from './reportExample';
 import { ReportFindingWorkbench } from './ReportFindingWorkbench';
 
 export { label } from './format';
-// A reason code ("code" or "code:detail") in words: the report's wording, else the stage
-// wording the run page uses, else the code itself.
+// A reason code ("code" or "code:detail") in words from the shared catalog, else
+// the code itself.
 export function explainReason(value: string) {
-  const [code, ...detail] = value.split(':');
-  if (!code) return value;
-  const text = Object.hasOwn(t.reasons, code) ? t.reasons[code] : Object.hasOwn(ko.stages.reasonLabels, code) ? ko.stages.reasonLabels[code] : null;
-  if (text == null) return value;
-  return [text, ...detail].join(' · ');
+  return reasonWithHint(value) ?? value;
 }
 export function ReportIdentity({ report, showStatus = true }: { report: AnalysisReport; showStatus?: boolean }) {
   const p = report.project;
@@ -269,7 +266,7 @@ function FindingDetails({ f, history }: { f: Finding; history?: ReactNode }) {
       {f.limitations.length > 0 && (
         <>
           <h6>{t.limitations}</h6>
-          <TextList values={f.limitations} />
+          <TextList values={f.limitations.map(explainReason)} />
         </>
       )}
       <details className="finding-evidence">
