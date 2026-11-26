@@ -120,9 +120,10 @@ def without_leads(base: dict) -> dict:
 
 
 def check_lead_builder_contract(validators: dict, base: dict) -> int:
-    """A review record on schema 0.9 or a lead follow-up call binds the report
-    to builder 26 (docs/REVIEW.md#단서-후속-조사): without them a builder 25
-    report is valid, with either it is not."""
+    """A review record on schema 0.9, a lead follow-up call or a refined
+    finding binds the report to builder 26 (docs/REVIEW.md#단서-후속-조사):
+    without them a builder 25 report is valid, with any it is not. Returns
+    the negative cases run."""
     check_report_schema = validators["report.schema.json"].validate
     plain = without_leads(base)
     plain["builder"]["version"] = "25"
@@ -137,7 +138,25 @@ def check_lead_builder_contract(validators: dict, base: dict) -> int:
     for name, report in cases.items():
         expect_invalid(name, check_report_schema, report)
         check_report_schema(dict(report, builder=dict(report["builder"], version="26")))
-    return len(cases)
+    # A refined finding's lineage (findings[].lead_refinement): only on an
+    # investigation finding, with a follow-up task key, in a builder 26 report.
+    lineage = {"task_key": "review.leads", "candidate_id": "investigate_1", "lead": "lead_1", "original_title": "원래 후보의 제목"}
+
+    def refined(report: dict, finding_id: str, **change) -> dict:
+        out = copy.deepcopy(report)
+        next(f for f in out["findings"] if f["id"] == finding_id)["lead_refinement"] = dict(lineage, **change)
+        return out
+
+    check_report_schema(refined(base, "review_investigate_1"))
+    lineage_cases = {
+        "refined finding in a builder 25 report": refined(plain, "review_investigate_1"),
+        "refined finding that is no investigation candidate": refined(base, "review_interpret_1"),
+        "refined finding of another task": refined(base, "review_investigate_1", task_key="review.investigate"),
+        "refined finding without its original title": refined(base, "review_investigate_1", original_title=""),
+    }
+    for name, report in lineage_cases.items():
+        expect_invalid(name, check_report_schema, report)
+    return len(cases) + len(lineage_cases)
 
 
 HYPOTHESIS_NOT_SHIPPED = "hypothesis_not_shipped"

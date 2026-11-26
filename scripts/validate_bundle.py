@@ -114,7 +114,7 @@ def main() -> None:
     document_excerpt_negatives = check_document_excerpt_contracts(validators, report)
     print(f"PASS: complete document excerpt bounds and builder compatibility; {document_excerpt_negatives} negative cases")
     lead_builder_negatives = check_lead_builder_contract(validators, report)
-    print(f"PASS: review records 0.9 and lead follow-up calls need builder 26; {lead_builder_negatives} negative cases")
+    print(f"PASS: review records 0.9, lead follow-up calls and refined findings need builder 26; {lead_builder_negatives} negative cases")
     validators["analyzer.schema.json"].validate(analyzer)
     validators["analyzer.schema.json"].validate(go_vet)
     validators["go-vet-observations.schema.json"].validate(observations)
