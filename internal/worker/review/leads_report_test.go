@@ -273,3 +273,105 @@ func TestContestedCandidateGoesToVerify(t *testing.T) {
 		t.Fatalf("%d refuted findings for %d contested candidates", refuted, accepted)
 	}
 }
+
+// A contest stands only on lines of a resolved excerpt that is the whole
+// declaration. A definition too long for one window is sent partial (the
+// request and the record say so), and a contest citing it, or citing only
+// the investigation's own lines, is rejected (lead_contest_evidence_not_resolved):
+// after its repair the result is left out and the candidate goes to verify
+// as the investigation gave it.
+func TestLeadContestNeedsAWholeResolvedExcerpt(t *testing.T) {
+	pad := strings.Repeat("\t// One more step of the chain.\n", 70)
+	long := chainTree(12)
+	for k, v := range long {
+		if strings.HasSuffix(k, ".go") {
+			long[k] = strings.Replace(v, "\t}\n\treturn ", "\t}\n"+pad+"\treturn ", 1)
+		}
+	}
+	for name, c := range map[string]struct {
+		tree    map[string]string
+		partial bool
+		// cite picks the contest's citation: in the resolved window or the
+		// lead's own line.
+		cite func(in leadsInput) string
+	}{
+		"partial definition window": {long, true, func(in leadsInput) string {
+			target := catalogOf(in.Scope.Excerpts)[in.Leads[0].Resolved[0]]
+			return fmt.Sprintf("%s:%d-%d", target.ID, target.Start+1, target.Start+1)
+		}},
+		"the investigation's own lines": {chainTree(12), false, func(in leadsInput) string { return in.Leads[0].EvidenceID }},
+	} {
+		t.Run(name, func(t *testing.T) {
+			j := treeJob(t, c.tree)
+			var mu sync.Mutex
+			var repairs [][]string
+			l := &leadsScript{asked: true, leads: func(_ int, q opencode.Request) opencode.Reply {
+				in := decodeAs[leadsInput](t, q)
+				if got := slices.Equal(in.Leads[0].Partial, in.Leads[0].Resolved[:1]); got != c.partial {
+					t.Errorf("request partial %v, resolved %v", in.Leads[0].Partial, in.Leads[0].Resolved)
+				}
+				if in.Repair != nil {
+					var codes []string
+					for _, is := range in.Repair.Items {
+						codes = append(codes, is.Error)
+					}
+					mu.Lock()
+					repairs = append(repairs, codes)
+					mu.Unlock()
+				}
+				return asJSON(map[string]any{"results": []map[string]any{{"basis": in.Candidates[0].ID, "disposition": "contested",
+					"reason": "인용한 줄이 음수 입력을 먼저 돌려보내므로 후보의 조건이 일어나지 않는다.", "evidence_ids": []string{c.cite(in)}}}})
+			}}
+			script := l.script(t)
+			verify := script["verify"]
+			script["verify"] = func(n int, q opencode.Request) opencode.Reply {
+				if slices.ContainsFunc(decodeAs[verifyInput](t, q).Candidates, func(x verifyCandidate) bool { return x.Contested != nil }) {
+					t.Error("a rejected contest reached verify")
+				}
+				return verify(n, q)
+			}
+			h, err := discovery.Wrap(Handler{Static: vetStub{}, Caller: &scriptedCaller{script: script}, Budget: smallBudget}, discovery.Config{Observer: exampleObserver{t: t}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			plan, err := h.Plan(t.Context(), j)
+			if err != nil {
+				t.Fatal(err)
+			}
+			results := map[string]analysis.TaskResult{}
+			for _, task := range plan {
+				results[task.Key] = h.Run(t.Context(), j, task, nil)
+			}
+			run := 0
+			for _, p := range plan {
+				slot, ok := record.LeadsTask(p.Key)
+				if !ok || results[p.Key].Status != domain.TaskSucceeded {
+					continue
+				}
+				run++
+				fu := readRecord(t, j, strings.TrimPrefix(record.LeadsTaskKey(slot), "review."))
+				d := fu.LeadFollowup.Dispositions
+				if len(d) != 1 || d[0].Disposition != record.DispositionKept || !slices.Contains(fu.Limitations, limLeadResultOmitted) {
+					t.Fatalf("%s dispositions %+v, limitations %v", p.Key, d, fu.Limitations)
+				}
+				if got := len(fu.LeadFollowup.Partial) > 0; got != c.partial {
+					t.Fatalf("%s record partial %v", p.Key, fu.LeadFollowup.Partial)
+				}
+				inv := readRecord(t, j, strings.TrimPrefix(strings.Replace(p.Key, "review.leads", "review.investigate", 1), "review."))
+				if got := slices.ContainsFunc(inv.Leads, func(x record.Lead) bool {
+					return slices.ContainsFunc(x.Targets, func(tg record.LeadTarget) bool { return tg.Partial })
+				}); got != c.partial {
+					t.Fatalf("%s investigation targets partial %v", p.Key, got)
+				}
+			}
+			if run == 0 || len(repairs) != run {
+				t.Fatalf("%d follow-ups, %d repairs", run, len(repairs))
+			}
+			for _, codes := range repairs {
+				if !slices.Equal(codes, []string{errLeadContestLines}) {
+					t.Fatalf("repair codes %v", codes)
+				}
+			}
+		})
+	}
+}
