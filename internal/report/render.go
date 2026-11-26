@@ -359,6 +359,9 @@ func mdFinding(p func(...string), l Locale, f Finding, h string, sectioned bool)
 	p("- id: ", mdCode(f.ID))
 	p("- category / severity: ", mdCode(f.Category), " / ", mdCode(f.Severity), " — ", mdText(f.SeverityReason))
 	p("- validation / disposition: ", mdCode(f.Validation), " / ", mdCode(f.Disposition))
+	if x := f.LeadRefinement; x != nil {
+		p("- ", mdText(l.Label("finding.lead_refinement")), ": ", mdCode(x.CandidateID), " · ", mdCode(x.Lead), " · ", mdCode(x.TaskKey), " — ", mdText(x.OriginalTitle))
+	}
 	for _, e := range f.Evidence {
 		if e.Excerpt != nil && e.Location != nil {
 			mdCitations(p, []sourceCitation{citeSource(e.Location.Path, e.Location.StartLine, e.Location.EndLine, e.Excerpt)})
@@ -752,7 +755,8 @@ var htmlTemplate = template.Must(template.New("report").Funcs(htmlFuncs).Parse(`
 <h3>{{index $.FindingTitle .ID}}</h3>
 <ul>
 <li>category / severity: <code>{{.Category}}</code> / <code>{{.Severity}}</code> — {{.SeverityReason}}</li>
-<li>validation / disposition: <code>{{.Validation}}</code> / <code>{{.Disposition}}</code></li>
+<li>validation / disposition: <code>{{.Validation}}</code> / <code>{{.Disposition}}</code></li>{{with .LeadRefinement}}
+<li>{{$.L.Label "finding.lead_refinement"}}: <code>{{.CandidateID}}</code> · <code>{{.Lead}}</code> · <code>{{.TaskKey}}</code> — {{.OriginalTitle}}</li>{{end}}
 {{range .Locations}}<li>location: <code>{{.Path}}:{{.StartLine}}-{{.EndLine}}</code></li>{{end}}
 {{range .Conditions}}<li>발생 조건 (<code>{{.Status}}</code>) {{.Statement}} <code>{{join .EvidenceIDs ","}}</code></li>{{end}}
 {{if .CounterevidenceIDs}}<li>반대 근거 <code>{{join .CounterevidenceIDs ","}}</code></li>{{end}}

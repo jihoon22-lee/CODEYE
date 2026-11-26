@@ -439,7 +439,8 @@
      "then": {"required": ["builder"], "properties": {"builder": {"properties": {"version": {"pattern": "^(1[4-9]|[2-9][0-9]|[1-9][0-9]{2,})$"}}}}}},
     {"if": {"anyOf": [
         {"required": ["artifacts"], "properties": {"artifacts": {"contains": {"required": ["decoder"], "properties": {"decoder": {"const": "application/vnd.codeye.review+json;schema_version=0.9"}}}}}},
-        {"required": ["coverage"], "properties": {"coverage": {"required": ["review_calls"], "properties": {"review_calls": {"contains": {"required": ["role"], "properties": {"role": {"const": "leads"}}}}}}}}
+        {"required": ["coverage"], "properties": {"coverage": {"required": ["review_calls"], "properties": {"review_calls": {"contains": {"required": ["role"], "properties": {"role": {"const": "leads"}}}}}}}},
+        {"required": ["findings"], "properties": {"findings": {"contains": {"required": ["lead_refinement"]}}}}
       ]},
      "then": {"required": ["builder"], "properties": {"builder": {"properties": {"version": {"pattern": "^(2[6-9]|[3-9][0-9]|[1-9][0-9]{2,})$"}}}}}},
     {"if": {"required": ["artifacts"], "properties": {"artifacts": {"contains": {"required": ["decoder"], "properties": {"decoder": {"const": "application/vnd.codeye.review+json;schema_version=0.6"}}}}}},

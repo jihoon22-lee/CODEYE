@@ -6,6 +6,7 @@ import withSlices from '../../examples/report-slices.json';
 import pullRequest from '../../examples/report-pull-request.json';
 import { parseAnalysisReport, type AnalysisReport, type Finding } from './analysisReport';
 import { ReportDocument } from './ReportPanel';
+import { FindingCard } from './ReportParts';
 import { actionPlan } from './reportActions';
 import { readingSummary } from './reportGroups';
 import { reportKo as t } from './locales/report-ko';
@@ -333,5 +334,28 @@ describe('action-first overview', () => {
     const { overview } = overviewOf(report);
     expect(within(overview).getByText(a.nonePartial)).toBeTruthy();
     expect(within(overview).getByText(a.noneNotAProof)).toBeTruthy();
+  });
+});
+
+describe('a finding a lead follow-up refined', () => {
+  it('shows the original candidate, its lead and the follow-up, and only on an investigation finding', () => {
+    const doc = example('report.json');
+    const lineage = { task_key: 'review.leads', candidate_id: 'investigate_1', lead: 'lead_1', original_title: '재시도 뒤 오류를 잃을 수 있음' };
+    doc.findings.find((f: Doc) => f.id === 'review_investigate_1').lead_refinement = lineage;
+    const report = parseAnalysisReport(doc, doc.run_id);
+    expect(report.findings.find(f => f.id === 'review_investigate_1')!.refinement).toEqual(
+      { task: 'review.leads', candidate: 'investigate_1', lead: 'lead_1', originalTitle: lineage.original_title });
+    render(<FindingCard f={report.findings.find(f => f.id === 'review_investigate_1')!} />);
+    expect(screen.getAllByText(t.refinement).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(`${t.refinementLineage('investigate_1', 'lead_1', 'review.leads')} — ${lineage.original_title}`).length).toBeGreaterThan(0);
+
+    const other = example('report.json');
+    other.findings.find((f: Doc) => f.id === 'review_interpret_1').lead_refinement = lineage;
+    expect(() => parseAnalysisReport(other, other.run_id)).toThrow();
+    const older = example('report.json');
+    older.builder.version = '25';
+    delete older.code_review.lead_followups;
+    older.findings.find((f: Doc) => f.id === 'review_investigate_1').lead_refinement = lineage;
+    expect(() => parseAnalysisReport(older, older.run_id)).toThrow();
   });
 });

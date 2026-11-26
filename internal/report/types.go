@@ -428,6 +428,9 @@ type Finding struct {
 	// DispositionVersion is the human review version stamped at publication
 	// when Disposition is not open.
 	DispositionVersion *int64 `json:"disposition_version,omitempty"`
+	// LeadRefinement marks a review finding whose candidate a lead
+	// follow-up refined (builder 26 on).
+	LeadRefinement *LeadRefinement `json:"lead_refinement,omitempty"`
 }
 
 type Condition struct {

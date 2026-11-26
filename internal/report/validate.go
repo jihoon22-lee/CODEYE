@@ -614,6 +614,12 @@ func Project(r Report, includeCode bool) Report {
 		// code-free export therefore carries no identity; comparison and
 		// dispositions read it through the project-ACL API.
 		g.Fingerprint, g.FingerprintBasis, g.DispositionVersion = "", nil, nil
+		if x := f.LeadRefinement; x != nil {
+			// The original title is model text like the title.
+			copy := *x
+			copy.OriginalTitle = textOmitted
+			g.LeadRefinement = &copy
+		}
 		out.Findings[i] = g
 	}
 	projectSections(&out, r)

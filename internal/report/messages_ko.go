@@ -196,6 +196,7 @@ var koSectionLabels = map[string]string{
 	"opening.comparison_reason":         "구현 대조",
 	"opening.comparison_unknown_reason": "확인하지 못한 이유",
 	"opening.disposition":               "게시 시점 판정",
+	"finding.lead_refinement":           "단서 후속 조사가 고친 후보",
 	"opening.condition.assumed":         "발생 조건(가정)",
 	"opening.condition.verified":        "확인된 발생 조건",
 	"opening.claim.observed":            "관찰",

@@ -1255,7 +1255,8 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 <ul>
 <li>id: <code>{{.ID}}</code></li>
 <li>category / severity: <code>{{.Category}}</code> / <code>{{.Severity}}</code> — {{.SeverityReason}}</li>
-<li>validation / disposition: <code>{{.Validation}}</code> / <code>{{.Disposition}}</code></li>
+<li>validation / disposition: <code>{{.Validation}}</code> / <code>{{.Disposition}}</code></li>{{with .LeadRefinement}}
+<li>{{$l.Label "finding.lead_refinement"}}: <code>{{.CandidateID}}</code> · <code>{{.Lead}}</code> · <code>{{.TaskKey}}</code> — {{.OriginalTitle}}</li>{{end}}
 {{range .Locations}}<li>location: <code>{{.Path}}:{{.StartLine}}-{{.EndLine}}</code></li>{{end}}
 {{range .Conditions}}<li>발생 조건 (<code>{{.Status}}</code>) {{.Statement}} <code>{{join .EvidenceIDs ","}}</code></li>{{end}}
 {{if .CounterevidenceIDs}}<li>반대 근거 <code>{{join .CounterevidenceIDs ","}}</code></li>{{end}}

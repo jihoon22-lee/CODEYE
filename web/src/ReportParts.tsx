@@ -258,6 +258,12 @@ function FindingDetails({ f, history }: { f: Finding; history?: ReactNode }) {
         </dd>
         <dt>{t.severityReason}</dt>
         <dd>{f.severityReason}</dd>
+        {f.refinement && (
+          <>
+            <dt>{t.refinement}</dt>
+            <dd>{t.refinementLineage(f.refinement.candidate, f.refinement.lead, f.refinement.task)} — {f.refinement.originalTitle}</dd>
+          </>
+        )}
         <dt>{t.verification}</dt>
         <dd>
           <TextList values={f.verification} />

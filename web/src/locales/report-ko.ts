@@ -234,6 +234,8 @@ export const reportKo = {
   observed: '관찰',
   inferred: '추론',
   severityReason: '심각도 근거',
+  refinement: '단서 후속 조사가 고친 후보',
+  refinementLineage: (candidate: string, lead: string, task: string) => `원래 후보 ${candidate} · 단서 ${lead} · ${task}`,
   severityBadge: (label: string) => `심각도 ${label}`,
   evidenceToggle: (n: number) => `근거 ${n}개와 판단 과정`,
   morePlaces: (n: number) => ` 외 ${n}곳`,

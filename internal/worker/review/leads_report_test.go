@@ -147,6 +147,66 @@ func TestLeadFollowupReachesTheReport(t *testing.T) {
 		}
 	}
 
+	// Each refined finding names the candidate it replaced, its lead and
+	// the follow-up, with the original title; the lineage cannot be forged.
+	originalTitle := chainCandidate("")["title"].(string)
+	refinedIDs := []string{}
+	for _, f := range r.Findings {
+		x := f.LeadRefinement
+		if x == nil {
+			continue
+		}
+		slot := strings.TrimSuffix(strings.TrimPrefix(f.ID, "review_"), "_"+x.CandidateID)
+		if x.TaskKey != record.LeadsTaskKey(slot) || x.CandidateID != "investigate_1" || x.Lead != "lead_1" || x.OriginalTitle != originalTitle {
+			t.Fatalf("finding %s lineage %+v", f.ID, *x)
+		}
+		refinedIDs = append(refinedIDs, f.ID)
+	}
+	if len(refinedIDs) != want.Dispositions[record.DispositionRefined] {
+		t.Fatalf("refined findings %v for %d refinements", refinedIDs, want.Dispositions[record.DispositionRefined])
+	}
+	detail := string(report.RenderMarkdownAt(r, report.Digest(raw), report.Korean, report.DetailFull))
+	html, err := report.RenderHTMLAt(r, report.Digest(raw), report.Korean, report.DetailFull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, out := range []string{detail, string(html)} {
+		if !strings.Contains(out, report.Korean.Label("finding.lead_refinement")) || !strings.Contains(out, originalTitle) {
+			t.Fatal("the rendered report does not show the refinement lineage")
+		}
+	}
+	if free := report.Project(r, false); slices.ContainsFunc(free.Findings, func(f report.Finding) bool {
+		return f.LeadRefinement != nil && f.LeadRefinement.OriginalTitle == originalTitle
+	}) {
+		t.Fatal("the code-free export keeps the original title")
+	}
+	for name, forge := range map[string]func(r *report.Report){
+		"unmarked refinement": func(r *report.Report) {
+			for i := range r.Findings {
+				r.Findings[i].LeadRefinement = nil
+			}
+		},
+		"another task": func(r *report.Report) {
+			i := slices.IndexFunc(r.Findings, func(f report.Finding) bool { return f.LeadRefinement != nil })
+			x := *r.Findings[i].LeadRefinement
+			x.TaskKey = record.TaskLeads
+			r.Findings[i].LeadRefinement = &x
+		},
+		"a candidate of another role": func(r *report.Report) {
+			i := slices.IndexFunc(r.Findings, func(f report.Finding) bool { return f.LeadRefinement != nil })
+			x := *r.Findings[i].LeadRefinement
+			x.CandidateID = "interpret_1"
+			r.Findings[i].LeadRefinement = &x
+		},
+	} {
+		bad := r
+		bad.Findings = slices.Clone(r.Findings)
+		forge(&bad)
+		if err := report.ValidateReport(bad); err == nil {
+			t.Fatalf("%s: forged lineage accepted", name)
+		}
+	}
+
 	for _, name := range []string{"investigate." + first, "leads." + first, "verify." + first} {
 		b, err := os.ReadFile(recordPath(j, name))
 		if err != nil {

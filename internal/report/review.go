@@ -389,7 +389,7 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 			}
 		}
 	}
-	addFindings(r, "", candidates, verdicts, evidence, obs, aside)
+	addFindings(r, "", candidates, verdicts, evidence, obs, aside, leadRefinements(leadsFor(states, ""), record.TaskLeads))
 	// Each slice's candidates, verified by its own verify; their finding IDs
 	// carry the slice key (review_sNNN_<candidate>).
 	for _, key := range sliceKeys(states) {
@@ -416,14 +416,17 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 		for _, e := range from.Evidence {
 			evidence[e.ID] = e
 		}
-		addFindings(r, key+"_", from.Candidates, verdicts, evidence, obs, record.PackSetsAside(from.Pack.Version) && !r.scopeNonShipped)
+		addFindings(r, key+"_", from.Candidates, verdicts, evidence, obs, record.PackSetsAside(from.Pack.Version) && !r.scopeNonShipped,
+			leadRefinements(leadsFor(states, key), record.LeadsTaskKey(key)))
 	}
 	composeTriage(r, states, obs)
 }
 
 // addFindings turns accepted candidates into findings; prefix is the slice
-// key part of a slice candidate's finding ID.
-func addFindings(r *Report, prefix string, candidates []record.Candidate, verdicts map[string]record.Verification, evidence map[string]record.Excerpt, obs map[string]Observation, aside bool) {
+// key part of a slice candidate's finding ID and refined marks the
+// candidates a lead follow-up refined (leadRefinements).
+func addFindings(r *Report, prefix string, candidates []record.Candidate, verdicts map[string]record.Verification, evidence map[string]record.Excerpt, obs map[string]Observation, aside bool,
+	refined map[string]LeadRefinement) {
 	// Parts of one triage group (one rule in one file) read alike to the
 	// fingerprint, which names no line: where several candidates would share
 	// it, the lines of their diagnostics tell them apart.
@@ -461,6 +464,9 @@ func addFindings(r *Report, prefix string, candidates []record.Candidate, verdic
 			f.Limitations = append(f.Limitations, record.LimHypothesisNotShipped)
 		}
 		f.ID = "review_" + prefix + c.ID
+		if x, ok := refined[c.ID]; ok && c.Origin == record.StageInvestigate {
+			f.LeadRefinement = &x
+		}
 		f.ObservationIDs = append([]string{}, c.ObservationIDs...)
 		linked := linkedObservations(obs, c.ObservationIDs)
 		distinct := ""

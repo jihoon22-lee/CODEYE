@@ -1,9 +1,12 @@
 package report
 
 import (
+	"regexp"
 	"slices"
 	"sort"
+	"strings"
 
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
@@ -116,6 +119,33 @@ func leadsLineage(rec *record.Record, key string, states map[string]*taskState) 
 	return record.LeadFollowupMatches(*rec, *st.reviewResult.Record)
 }
 
+// LeadRefinement is the lineage of a finding whose candidate a lead
+// follow-up refined: the follow-up task, the investigation's candidate it
+// replaced, the lead whose resolved code the refinement rests on and that
+// candidate's title, so a reader sees what changed. The follow-up record
+// keeps the whole original text (record.LeadDisposition.Original).
+type LeadRefinement struct {
+	TaskKey       string `json:"task_key"`
+	CandidateID   string `json:"candidate_id"`
+	Lead          string `json:"lead"`
+	OriginalTitle string `json:"original_title"`
+}
+
+// leadRefinements maps each refined final candidate of an accepted
+// follow-up record (nil: none) to its lineage.
+func leadRefinements(fu *record.Record, task string) map[string]LeadRefinement {
+	if fu == nil || fu.LeadFollowup == nil {
+		return nil
+	}
+	out := map[string]LeadRefinement{}
+	for _, d := range fu.LeadFollowup.Dispositions {
+		if d.Disposition == record.DispositionRefined && d.Original != nil {
+			out[d.FinalID] = LeadRefinement{TaskKey: task, CandidateID: d.CandidateID, Lead: d.Lead, OriginalTitle: d.Original.Title}
+		}
+	}
+	return out
+}
+
 // leadsFor is the accepted follow-up record of an investigation (slot "" for
 // the whole run), nil without one.
 func leadsFor(states map[string]*taskState, slot string) *record.Record {
@@ -223,6 +253,47 @@ func notRunReason(f TaskFacts) string {
 		return *f.Reason
 	}
 	return f.Status
+}
+
+var leadCandidateID = regexp.MustCompile(`^investigate_[1-9][0-9]*$`)
+
+// validateLeadRefinements checks the lineage of refined findings: only in a
+// builder-26 report, on an investigation finding whose follow-up task (the
+// whole run's or its slot's) succeeded, naming an investigation candidate
+// and a lead, with the original title as model text (the omission text in a
+// code-free export); and one finding for every refined disposition the
+// lead_followups object counts.
+func validateLeadRefinements(r Report) error {
+	succeeded := map[string]bool{}
+	for _, t := range r.Tasks {
+		succeeded[t.Key] = t.Status == string(domain.TaskSucceeded)
+	}
+	limit := proseLimit(r.Builder.Version)
+	n := 0
+	for _, f := range r.Findings {
+		x := f.LeadRefinement
+		if x == nil {
+			continue
+		}
+		n++
+		task := record.TaskLeads
+		if strings.HasPrefix(f.ID, "review_s") && len(f.ID) > len("review_s000_") {
+			task = record.LeadsTaskKey(f.ID[len("review_") : len("review_")+4])
+		}
+		if !builderAtLeast(r.Builder.Version, LeadsSince) || !investigateFindingID.MatchString(f.ID) || x.TaskKey != task || !succeeded[task] ||
+			!leadCandidateID.MatchString(x.CandidateID) || !record.ValidLeadID(x.Lead) ||
+			!record.ProseText(x.OriginalTitle, limit) || (x.OriginalTitle == textOmitted) == r.Export.IncludeCode {
+			return invalidf("finding %s: lead_refinement is invalid", f.ID)
+		}
+	}
+	want := 0
+	if r.CodeReview != nil && r.CodeReview.LeadFollowups != nil {
+		want = r.CodeReview.LeadFollowups.Dispositions[record.DispositionRefined]
+	}
+	if n != want {
+		return invalidf("%d refined findings for %d refined lead dispositions", n, want)
+	}
+	return nil
 }
 
 // validateLeadFollowups checks the object against the report: present only
