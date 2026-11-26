@@ -643,6 +643,20 @@ export const reportKo = {
         modules: '모듈',
       },
     },
+    // Lead follow-ups (docs/REPORT.md#단서-후속-조사); the same words as the
+    // Markdown and HTML report (internal/report/messages_ko.go, leads.*).
+    leads: {
+      heading: '단서 후속 조사',
+      lead: '조사가 요청에 없는 코드에 달린 의심을 단서로 남기면 플랫폼이 고정 스냅샷에서 그 정의나 호출부를 찾아 후속 조사 한 번에 보냅니다. 찾은 코드는 실행 결과가 아닙니다. 찾지 못한 단서와 실행하지 않은 후속 조사는 이유와 함께 셉니다.',
+      asked: (asked: number, resolved: number) => `조사가 남긴 단서 ${asked}개 중 ${resolved}개를 스냅샷에서 찾았습니다.`,
+      tasks: (planned: number, run: number, accepted: number, calls: number) =>
+        `후속 조사 작업 ${planned}개 중 ${run}개가 모델을 호출했고, 그중 ${accepted}개의 결과를 받아들였습니다(호출 ${calls}회).`,
+      added: (excerpts: number, lines: number) => `후속 조사가 새로 보낸 발췌 ${excerpts}개, ${lines}줄.`,
+      unresolved: '찾지 못한 단서',
+      notRun: '모델을 호출하지 않은 후속 조사',
+      dispositions: '후속 조사 뒤 후보',
+      disposition: { kept: '그대로 둠', refined: '고침', added: '새로 더함', contested: '반박함(검증으로 감)' } as Record<string, string>,
+    },
     appendix: '부록: 작업·호출 기록',
     // The summary view (docs/REPORT.md#내보내기-상세도): grouped rows first,
     // every row behind a disclosure that renders only when opened.

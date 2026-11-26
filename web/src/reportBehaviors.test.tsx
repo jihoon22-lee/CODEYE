@@ -128,8 +128,10 @@ it('opens three related positions without changing the comparison and keeps only
   const doc: Record<string, any> = structuredClone(example);
   doc.demo = false;
   doc.builder.version = '16';
-  // Builder 22 added the diagnostic triage; an older revision has none.
+  // Builder 22 added the diagnostic triage and builder 26 the lead
+  // follow-ups; an older revision has neither.
   delete doc.code_review.diagnostic_triage;
+  delete doc.code_review.lead_followups;
   const contract = workflowDocuments.contracts[0];
   const { contract_index: _index, ...comparison } = workflowInvestigation.contract_comparisons[0];
   const { read_evidence_id, change_evidence_id, test_evidence_id } = workflowInvestigation.workflow_reading;

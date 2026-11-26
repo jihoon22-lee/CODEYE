@@ -281,7 +281,8 @@ describe('action-first overview', () => {
       edit(d);
       return () => parseAnalysisReport(d, d.run_id);
     };
-    expect(broken(d => { d.builder.version = '22'; d.observations[0].path_class = 'test'; })).toThrow();
+    expect(broken(d => { d.builder.version = '22'; delete d.code_review.lead_followups; })).not.toThrow();
+    expect(broken(d => { d.builder.version = '22'; delete d.code_review.lead_followups; d.observations[0].path_class = 'test'; })).toThrow();
     expect(broken(d => { d.observations[0].path_class = 'unknown'; })).toThrow();
     expect(broken(d => { d.observations[0].path_class = 'test'; d.observations[0].location = null; d.observations[0].location_state = 'unresolved'; })).toThrow();
   });

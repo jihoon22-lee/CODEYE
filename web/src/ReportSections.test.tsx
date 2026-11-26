@@ -8,7 +8,7 @@ import unscreened from '../../internal/report/testdata/report-unscreened.json';
 import screenUnusable from '../../internal/report/testdata/report-screen-unusable.json';
 import { parseAnalysisReport, sourceEvidenceURL } from './analysisReport';
 import { ReportDocument } from './ReportPanel';
-import { ReportPreview } from './ReportParts';
+import { ReportPreview, explainReason } from './ReportParts';
 import { reportKo as t } from './locales/report-ko';
 
 afterEach(cleanup);
@@ -41,10 +41,12 @@ function example(name: 'report.json' | 'report-go-vet.json' | 'report-slices.jso
 }
 
 // olderBuilder relabels doc as a revision of an earlier builder. Builder 22
-// added the diagnostic triage, which an older revision does not carry.
+// added the diagnostic triage and builder 26 the lead follow-ups, which an
+// older revision does not carry.
 function olderBuilder(doc: Record<string, any>, version: string) {
   doc.builder.version = version;
   if (Number(version) < 22 && doc.code_review) delete doc.code_review.diagnostic_triage;
+  if (Number(version) < 26 && doc.code_review) delete doc.code_review.lead_followups;
 }
 
 describe('code-derived documentation coverage', () => {
@@ -202,10 +204,56 @@ describe('existing test results', () => {
 });
 
 describe('analysis sections', () => {
+  it('shows the lead follow-ups in the code review tab with the shared reason words and rejects counts the rows do not give', () => {
+    const doc = example('report.json');
+    doc.project = { name: 'Leads' };
+    Object.assign(doc.tasks.find((x: { key: string }) => x.key === 'review.leads'), { status: 'succeeded', reason: null });
+    doc.coverage.review_calls.push({ ...doc.coverage.review_calls[0], task_key: 'review.leads', role: 'leads' });
+    const leads = doc.code_review.lead_followups;
+    const slots = leads.tasks_planned - 1;
+    expect(leads.tasks_not_run.no_review_scope).toBe(slots);
+    Object.assign(leads, {
+      leads_asked: 2, leads_resolved: 1, leads_unresolved: { lead_definition_not_found: 1 },
+      tasks_run: 1, tasks_accepted: 1, tasks_not_run: { no_review_scope: slots }, calls: 1, new_excerpts: 1, new_lines: 12,
+      dispositions: { refined: 1, contested: 1 },
+    });
+    render(<ReportDocument report={parseAnalysisReport(doc, doc.run_id)} />);
+    const name = t.sections.titles.code_review;
+    fireEvent.click(screen.getByRole('tab', { name }));
+    const block = screen.getByRole('tabpanel', { name }).querySelector<HTMLElement>('.report-lead-followups')!;
+    const l = t.sections.leads;
+    expect(within(block).getByText(l.heading)).toBeTruthy();
+    expect(within(block).getByText(l.asked(2, 1))).toBeTruthy();
+    expect(within(block).getByText(l.tasks(slots + 1, 1, 1, 1))).toBeTruthy();
+    expect(within(block).getByText(l.added(1, 12))).toBeTruthy();
+    // Reasons in the words of the shared catalog, never the bare codes.
+    for (const code of ['lead_definition_not_found', 'no_review_scope']) {
+      expect(explainReason(code)).not.toBe(code);
+      expect(within(block).getByText(explainReason(code))).toBeTruthy();
+      expect(within(block).queryByText(code)).toBeNull();
+    }
+    expect(within(block).getByText(l.disposition.contested)).toBeTruthy();
+    expect(within(block).getByText(l.disposition.refined)).toBeTruthy();
+
+    const broken = (edit: (x: Record<string, any>, d: Record<string, any>) => void) => {
+      const d = structuredClone(doc);
+      edit(d.code_review.lead_followups, d);
+      return () => parseAnalysisReport(d, d.run_id);
+    };
+    expect(broken(() => {})).not.toThrow();
+    expect(broken(x => { x.tasks_run = 2; })).toThrow();
+    expect(broken(x => { x.calls = 2; })).toThrow();
+    expect(broken(x => { x.tasks_not_run = { no_review_scope: slots, no_leads: 1 }; })).toThrow();
+    expect(broken(x => { x.leads_unresolved = {}; })).toThrow();
+    expect(broken(x => { x.dispositions = { withdrawn: 1 }; })).toThrow();
+    expect(broken(x => { x.tasks_accepted = 0; })).toThrow();
+    expect(broken((_, d) => { d.builder.version = '25'; })).toThrow();
+  });
+
   it('counts the hypotheses about diagnostics outside shipped code, from builder 25 on', () => {
     const withCount = (builder: string) => {
       const doc = example('report-slices.json');
-      doc.builder.version = builder;
+      olderBuilder(doc, builder);
       doc.code_review.hypotheses_not_shipped = 1;
       doc.overview.sections.find((x: { key: string }) => x.key === 'code_review').counts.hypotheses_not_shipped = 1;
       return doc;
@@ -221,7 +269,7 @@ describe('analysis sections', () => {
   it('counts the candidates left out because their evidence is not shipped code, from builder 24 on', () => {
     const withCount = (builder: string) => {
       const doc = example('report-slices.json');
-      doc.builder.version = builder;
+      olderBuilder(doc, builder);
       doc.code_review.candidates_not_shipped = 2;
       doc.overview.sections.find((x: { key: string }) => x.key === 'code_review').counts.candidates_not_shipped = 2;
       return doc;
@@ -401,7 +449,8 @@ describe('analysis sections', () => {
     expect(within(overview.querySelector<HTMLElement>('.report-executive')!).queryByText(text, { exact: false })).toBeNull();
     const name = t.sections.titles.code_review;
     fireEvent.click(screen.getByRole('tab', { name }));
-    expect(within(screen.getByRole('tabpanel', { name })).getByText(text, { exact: false })).toBeTruthy();
+    // The role row, and the slot follow-ups that the same reason left unrun.
+    expect(within(screen.getByRole('tabpanel', { name })).getAllByText(text, { exact: false }).length).toBeGreaterThan(0);
   });
 
   it('keeps Python and Rust API citations at their source lines and retains the authored guide', () => {
