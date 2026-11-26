@@ -329,7 +329,7 @@
         "disposition":{"enum":["kept","refined","contested","added"]},"lead":{"$ref":"#/$defs/lead_id"},
         "reason":{"$ref":"#/$defs/text"},"evidence_ids":{"type":"array","minItems":1,"maxItems":6,"uniqueItems":true,"items":{"$ref":"#/$defs/id"}},
         "original":{"type":"object","additionalProperties":false,"required":["title","condition","impact","improvement","counterpoint","evidence_ids"],
-          "description":"refined only: the text of the investigation's candidate the refinement replaced (its ID is candidate_id). The refined candidate keeps every one of these evidence IDs and adds one or two, each in a whole resolved excerpt.",
+          "description":"refined only: the text of the investigation's candidate the refinement replaced (its ID is candidate_id). The refined candidate cites these evidence IDs first and in order and adds one or two after them, each in a whole resolved excerpt of the lead the disposition names.",
           "properties":{"title":{"$ref":"#/$defs/text"},"condition":{"$ref":"#/$defs/text"},"mechanism":{"$ref":"#/$defs/mechanism"},"impact":{"$ref":"#/$defs/text"},"improvement":{"$ref":"#/$defs/text"},"counterpoint":{"$ref":"#/$defs/text"},"evidence_ids":{"$ref":"#/$defs/citations"}}}
       },
       "allOf":[

@@ -610,18 +610,17 @@ func TestLeadRefinementKeepsItsCitationsAndRestsOnNewCode(t *testing.T) {
 				}
 				if len(d) != 1 || d[0].Disposition != record.DispositionKept || d[0].Original != nil ||
 					!slices.Contains(fu.Limitations, limLeadResultOmitted) || fu.Candidates[0].Condition != original.Condition ||
-					!slices.Equal(fu.Calls[0].OutputErrors, []string{c.want}) {
+					!slices.Equal(fu.Calls[0].OutputErrors, []string{c.want}) || !record.LeadFollowupMatches(fu, inv) {
 					t.Fatalf("%s dispositions %+v, limitations %v, calls %+v", p.Key, d, fu.Limitations, fu.Calls)
 				}
 			}
 			if run == 0 || repairs != 0 || slices.Contains(conditions, condition) != (c.want == "") {
 				t.Fatalf("%d follow-ups, %d repairs; verify read the refinement: %v", run, repairs, slices.Contains(conditions, condition))
 			}
-			if c.want != "" {
-				return
-			}
 			// The verify record and the report take a refined candidate of
-			// up to MaxRefinedEvidence citations.
+			// up to MaxRefinedEvidence citations, and a follow-up whose
+			// refinement was left out (its code an output error of the
+			// accepted call) with no refined finding.
 			r, err := report.Build(exampleInput(t, j, h, plan, results, &exampleIDs{n: 0xd00}), report.DefaultRegistry())
 			if err != nil {
 				t.Fatal(err)
@@ -631,8 +630,8 @@ func TestLeadRefinementKeepsItsCitationsAndRestsOnNewCode(t *testing.T) {
 					t.Fatalf("limitation %s in %v", lim, r.Limitations)
 				}
 			}
-			if !slices.ContainsFunc(r.Findings, func(f report.Finding) bool { return f.LeadRefinement != nil }) {
-				t.Fatal("no refined finding in the report")
+			if slices.ContainsFunc(r.Findings, func(f report.Finding) bool { return f.LeadRefinement != nil }) != (c.want == "") {
+				t.Fatalf("refined findings in the report: %v", slices.ContainsFunc(r.Findings, func(f report.Finding) bool { return f.LeadRefinement != nil }))
 			}
 			if err := report.ValidateReport(r); err != nil {
 				t.Fatal(err)
@@ -712,8 +711,22 @@ func TestLeadRefinementRestsOnItsOwnLead(t *testing.T) {
 				t.Fatalf("%d repairs, calls %+v, dispositions %+v", repairs, fu.Calls, d)
 			}
 			if c.want == "" {
-				if d[0].Disposition != record.DispositionRefined || d[0].Lead != inv.Leads[1].ID || len(fu.Calls[0].OutputErrors) != 0 {
+				if d[0].Disposition != record.DispositionRefined || d[0].Lead != inv.Leads[1].ID || len(fu.Calls[0].OutputErrors) != 0 || !record.LeadFollowupMatches(fu, inv) {
 					t.Fatalf("dispositions %+v, calls %+v", d, fu.Calls)
+				}
+				// The lineage check binds the new citation to the lead the
+				// disposition names: the same record naming F's lead fails.
+				var other record.Record
+				b, err := json.Marshal(fu)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := json.Unmarshal(b, &other); err != nil {
+					t.Fatal(err)
+				}
+				other.LeadFollowup.Dispositions[0].Lead = inv.Leads[0].ID
+				if record.LeadFollowupMatches(other, inv) {
+					t.Fatal("the lineage check accepted a refinement naming a lead whose code it does not cite")
 				}
 				return
 			}
