@@ -335,3 +335,27 @@ func TestLeadReasonsFollowTheirOwnCall(t *testing.T) {
 		}
 	}
 }
+
+// A Go definition the call binds across packages is sent whole when the
+// declaration fits one window (here 34 lines, past the 24 lines of the
+// bounded return the call binding keeps). A longer one is sent as that
+// bounded return.
+func TestLeadDefinitionWindowHoldsTheDeclaration(t *testing.T) {
+	body := func(pad int) string {
+		return "package quote\n\n// Price returns the price of n items; a negative count gives -1.\nfunc Price(n int) int {\n" +
+			strings.Repeat("\t// Each item costs the same.\n", pad) + "\tif n < 0 {\n\t\treturn -1\n\t}\n\treturn n * 3\n}\n"
+	}
+	caller := "package main\n\nimport \"example.org/shop/quote\"\n\nfunc main() {\n\tprintln(quote.Price(2))\n}\n"
+	for _, c := range []struct {
+		pad        int
+		start, end int
+	}{{28, 4, 37}, {70, 75, 78}} {
+		j := treeJob(t, map[string]string{"go.mod": "module example.org/shop\n\ngo 1.23\n", "main.go": caller, "quote/price.go": body(c.pad)})
+		s := leadStage(t, j)
+		window, anchor := leadWindow(t, s, "main.go", "quote.Price(2)", 0)
+		l := resolveOne(t, s, record.LeadNeedDefinition, "Price", window, anchor)
+		if !l.Resolved() || len(l.Targets) != 1 || l.Targets[0].Path != "quote/price.go" || l.Targets[0].Start != c.start || l.Targets[0].End != c.end {
+			t.Fatalf("pad %d: lead %+v", c.pad, l)
+		}
+	}
+}

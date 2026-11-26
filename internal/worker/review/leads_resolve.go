@@ -236,6 +236,10 @@ type leadHit struct {
 	loc    sourceCallLocation
 	origin string
 	symbol string
+	// extent is the whole declaration of a Go definition whose bound
+	// location (loc) is only its closing return: the window holds the whole
+	// declaration when it fits one window.
+	extent sourceCallLocation
 	// excerpt is the window when the resolver already built it (the Go
 	// caller expansion).
 	excerpt *record.Excerpt
@@ -344,9 +348,9 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 		return nil, "", err
 	}
 	var hits []leadHit
-	add := func(loc sourceCallLocation) {
+	add := func(loc, extent sourceCallLocation) {
 		if !slices.ContainsFunc(hits, func(h leadHit) bool { return h.loc == loc }) {
-			hits = append(hits, leadHit{loc: loc, origin: "context"})
+			hits = append(hits, leadHit{loc: loc, origin: "context", extent: extent})
 		}
 	}
 	// A call bound under another name (an import alias) is matched by the
@@ -361,21 +365,22 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 		}
 		return strings.Join(lines[lo:hi+1], "\n")
 	}
-	var aliased []sourceCallLocation
+	var aliased []sourceCall
 	for _, link := range links {
 		if !rangesContain([]record.Excerpt{anchor}, link.caller) {
 			continue
 		}
 		switch {
 		case link.symbol == symbol:
-			add(link.callee)
-		case symbolAt(callText(link.caller), symbol) && !callAt(callText(link.caller), link.symbol) && !slices.Contains(aliased, link.callee):
-			aliased = append(aliased, link.callee)
+			add(link.callee, link.calleeExtent)
+		case symbolAt(callText(link.caller), symbol) && !callAt(callText(link.caller), link.symbol) &&
+			!slices.ContainsFunc(aliased, func(a sourceCall) bool { return a.callee == link.callee }):
+			aliased = append(aliased, link)
 		}
 	}
 	if len(hits) == 0 {
-		for _, loc := range aliased {
-			add(loc)
+		for _, link := range aliased {
+			add(link.callee, link.calleeExtent)
 		}
 	}
 	if len(hits) == 0 && strings.HasSuffix(anchor.Path, ".go") {
@@ -384,7 +389,7 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 			return nil, "", err
 		}
 		for _, loc := range locs {
-			add(loc)
+			add(loc, sourceCallLocation{})
 		}
 	}
 	switch {
@@ -576,6 +581,15 @@ func (r *leadResolver) window(scan *leadScan, h leadHit) (record.Excerpt, bool) 
 	end = min(end, start+record.MaxLeadWindowLines-1, len(lines))
 	if start < 1 || end < start {
 		return record.Excerpt{}, false
+	}
+	if w := h.extent; w.path == h.loc.path && w.start >= 1 && w.start <= start && end <= w.end && w.end <= len(lines) &&
+		w.end-w.start+1 <= record.MaxLeadWindowLines {
+		if x, ok := r.s.boundedExcerpt(e, kind, origin, w.start, lines[w.start-1:w.end], maxWindowBytes); ok && x.End == w.end {
+			if origin != "context" && record.ValidEvidenceSymbol(h.symbol) {
+				x.Symbol = h.symbol
+			}
+			return x, true
+		}
 	}
 	x, ok := r.s.boundedExcerpt(e, kind, origin, start, lines[start-1:end], maxWindowBytes)
 	if !ok || (origin != "context" && x.End < h.loc.end) {
