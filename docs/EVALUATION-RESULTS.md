@@ -886,3 +886,20 @@ pyright 진단이 준 것은 대부분 해석하지 못한 import와 그 뒤의 
 - C/C++: 범위 안 번역 단위 91개 중 compile DB에 있는 것은 25개다. 나머지 66개 중 배포 코드 경로는 3개이고 하나는 프로젝트의 기본 build에서 빠지는 선택 라이브러리 소스, 둘은 fuzz harness와 시험 프로그램(경로 규칙으로는 배포 코드)이다. 63개는 시험 경로다.
 - GCC 분석은 세 사례 모두 단위 대부분이 `-Wanalyzer-too-complex`(탐색 한도)를 내어 작업 전체가 실패했고, 끝까지 분석한 단위가 있어도 처리 파일 0이었다.
 - 채점기 집계 "tool diagnostic hits label, before": dev 1/11, holdout 2/9.
+
+### Rust: 컴파일되지 않는 시험·벤치 대상
+
+Rust 변형 3개(dev 2, holdout 1)만 같은 도구 목록·설정으로 다시 실행했다. 기준에서 실패한 cargo check·clippy 작업 넷은 모두 안정 toolchain이 nightly 전용 벤치의 `#![feature]`를 거부한 것(E0554)이 원인이었다.
+
+| 분석기 | 기준 | 실패한 종류를 뺀 재실행(A69) |
+|---|---|---|
+| cargo check 작업 상태 | succeeded 1, failed `package_errors` 2 | succeeded 2, failed `lints_denied` 1 |
+| cargo check 처리 파일(배포 / 배포 아님) | 3 / 0 | 4 / 1 |
+| clippy 작업 상태 | succeeded 1, failed `package_errors` 2 | succeeded 3 |
+| clippy 처리 파일(배포 / 배포 아님) | 3 / 0 | 10 / 1 |
+| crate 상태 | `analyzed_clean` 4, `analyzed_with_findings` 1, `failed_compile` 2 | `analyzed_clean` 4, `analyzed_with_findings` 3 |
+| 배포 코드 진단(cargo check / clippy) | 72 / 126 | 72 / 126 |
+
+- 재실행한 작업 넷은 모두 벤치만 뺐다(`excluded_target_kinds=bench`).
+- 남은 cargo check 실패 하나는 배포 코드의 deny 기본 lint다. 벤치의 컴파일 오류가 그 사유를 `package_errors`로 가리고 있었다.
+- 관찰 집합(규칙·경로·줄)은 여섯 작업 모두 전후가 같다. 실패한 작업도 관찰을 보존했기 때문이다. 늘어난 진단이 없으므로 정밀도 표본은 읽지 않았고, 채점기의 "tool diagnostic hits label" 집계도 기준과 같다.
