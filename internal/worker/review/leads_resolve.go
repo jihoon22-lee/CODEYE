@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
@@ -802,7 +803,8 @@ func (r *leadResolver) window(scan *leadScan, h leadHit) (x record.Excerpt, part
 		if x.End-x.Start+1 > record.MaxLeadWindowLines || record.JSONLen(x.Text) > maxWindowBytes {
 			return record.Excerpt{}, false, nil, false
 		}
-		// The expansion window's call is the line calling the symbol.
+		// The expansion window's call is the line calling the symbol; with
+		// none found the whole window stands for it.
 		call := h.loc
 		for i, line := range strings.Split(x.Text, "\n") {
 			if callAt(line, h.symbol) {
@@ -861,10 +863,14 @@ func (r *leadResolver) window(scan *leadScan, h leadHit) (x record.Excerpt, part
 // unsent clips a window to the lines the investigate request did not send,
 // so every line a follow-up reads as resolved code is new to it (a caller
 // window, a Go caller expansion window or a partial definition window may
-// overlap the request's excerpts). Of the runs of unsent lines with text it
-// keeps the one holding a line of the hit (the call), else the larger, the
-// first of equal ones. With no such run, held names the sent excerpts the
-// window overlaps.
+// overlap the request's excerpts). A call window (origin caller or test)
+// whose call (hit) the request sent any line of is already in the request:
+// held names the sent excerpts holding the call. Of the runs of unsent
+// lines that hold code (not only blank lines, brackets and punctuation) a
+// call window keeps the one holding its call; a definition window the one
+// holding a line of its bound location (hit), else the larger, the first of
+// equal ones. With no such run, held names the sent excerpts the window
+// overlaps.
 func (r *leadResolver) unsent(x record.Excerpt, hit sourceCallLocation) (out record.Excerpt, held []string, ok bool) {
 	var over []record.Excerpt
 	for _, e := range r.carried {
@@ -874,6 +880,26 @@ func (r *leadResolver) unsent(x record.Excerpt, hit sourceCallLocation) (out rec
 	}
 	if len(over) == 0 {
 		return x, nil, true
+	}
+	heldBy := func(list []record.Excerpt) []string {
+		var ids []string
+		for _, e := range list {
+			ids = addLim(ids, e.ID)
+		}
+		return ids
+	}
+	call := x.Origin == "caller" || x.Origin == "test"
+	if call {
+		// The call is the hit's lines inside the window; a hit outside it
+		// leaves the call unknown, so any sent line may be the call.
+		first, last := max(hit.start, x.Start), min(hit.end, x.End)
+		if hit.path != x.Path || first > last {
+			return record.Excerpt{}, heldBy(over), false
+		}
+		holding := slices.DeleteFunc(slices.Clone(over), func(e record.Excerpt) bool { return e.End < first || last < e.Start })
+		if len(holding) > 0 {
+			return record.Excerpt{}, heldBy(holding), false
+		}
 	}
 	lines := strings.Split(x.Text, "\n")
 	if len(lines) != x.End-x.Start+1 {
@@ -892,14 +918,15 @@ func (r *leadResolver) unsent(x record.Excerpt, hit sourceCallLocation) (out rec
 		}
 	}
 	text := func(p run) string { return strings.Join(lines[p.start-x.Start:p.end-x.Start+1], "\n") }
-	runs = slices.DeleteFunc(runs, func(p run) bool { return strings.TrimSpace(text(p)) == "" })
-	if len(runs) == 0 {
-		for _, e := range over {
-			held = addLim(held, e.ID)
-		}
-		return record.Excerpt{}, held, false
-	}
+	runs = slices.DeleteFunc(runs, func(p run) bool { return !codeText(text(p)) })
 	atHit := func(p run) bool { return hit.path == x.Path && p.start <= hit.end && hit.start <= p.end }
+	if call {
+		// The call's lines are unsent, so one run holds them.
+		runs = slices.DeleteFunc(runs, func(p run) bool { return !atHit(p) })
+	}
+	if len(runs) == 0 {
+		return record.Excerpt{}, heldBy(over), false
+	}
 	best := 0
 	for i, p := range runs[1:] {
 		b := runs[best]
@@ -918,6 +945,13 @@ func (r *leadResolver) unsent(x record.Excerpt, hit sourceCallLocation) (out rec
 	out.Start, out.End, out.Text = p.start, p.end, text(p)
 	out.ID = record.ExcerptID(r.s.j.Snapshot.Digest, x.Path, x.SHA256, p.start, p.end)
 	return out, nil, true
+}
+
+// codeText reports text that holds code: a letter or digit, not only blank
+// lines, brackets and punctuation (a clipped run of closing braces shows
+// nothing to rest a result on).
+func codeText(text string) bool {
+	return strings.IndexFunc(text, func(c rune) bool { return unicode.IsLetter(c) || unicode.IsDigit(c) }) >= 0
 }
 
 // errLeadsCancelled: the attempt ended while the leads were resolved.

@@ -216,6 +216,18 @@ func TestLeadResolutionOutcomes(t *testing.T) {
 		l.Targets[0].Origin != "caller" || l.Targets[0].Symbol != "Save" || !strings.Contains(sentLines(t, s, callers.Path, l.Targets[0].Start, l.Targets[0].End).Text, "Save(") {
 		t.Fatalf("caller window under a sent unit %+v (window %+v)", l, callers)
 	}
+	// A caller window whose call line the request sent is already in the
+	// request, whichever of its context lines it did not send: no remainder
+	// without the call (closing braces) is a target.
+	call := callers.Start + slices.IndexFunc(strings.Split(sentLines(t, s, callers.Path, callers.Start, callers.End).Text, "\n"),
+		func(line string) bool { return strings.Contains(line, "Save(") })
+	for _, sent := range [][2]int{{callers.Start, call}, {call, call}, {call - 1, call + 1}} {
+		unit := sentLines(t, s, callers.Path, sent[0], sent[1])
+		l = resolveOne(t, s, record.LeadNeedCallers, "Save", decl, declAnchor, unit)
+		if call <= callers.Start || l.Reason != record.LeadInRequest || len(l.InRequest) != 1 || l.InRequest[0] != unit.ID || len(l.Targets) != 0 {
+			t.Fatalf("caller window %+v with lines %v sent (call on line %d): %+v", callers, sent, call, l)
+		}
+	}
 
 	ruby, rubyAnchor := leadWindow(t, s, "tools/gen.rb", "write(key)", 0)
 	if l = resolveOne(t, s, record.LeadNeedDefinition, "write", ruby, rubyAnchor); l.Reason != record.LeadLanguage {
@@ -537,54 +549,66 @@ func TestGoCallersLeadReadsThroughItsScan(t *testing.T) {
 }
 
 // unsent keeps a window's lines the investigate request did not send: the
-// whole window when it sent none, the run holding the call, else the
-// largest run (the first of equal ones); a window with no unsent line of
-// text left names the sent excerpts it overlaps.
+// whole window when it sent none; for a call window the run holding the
+// call, and none when the request sent a line of the call; for a definition
+// window the run holding its bound lines, else the largest (the first of
+// equal ones). A run without code (blank lines, brackets, punctuation) is
+// dropped, and a window with no run left names the sent excerpts.
 func TestUnsentKeepsTheNewLinesOfAWindow(t *testing.T) {
 	j := treeJob(t, map[string]string{"go.mod": "module example.org/w\n\ngo 1.23\n", "w.go": "package w\n"})
 	digest := j.Snapshot.Digest
-	excerpt := func(start, end int, blank ...int) record.Excerpt {
+	excerpt := func(origin string, start, end int, other map[int]string) record.Excerpt {
 		var lines []string
 		for n := start; n <= end; n++ {
-			if slices.Contains(blank, n) {
-				lines = append(lines, "")
+			if line, ok := other[n]; ok {
+				lines = append(lines, line)
 			} else {
 				lines = append(lines, "\tv += "+strconv.Itoa(n))
 			}
 		}
 		return record.Excerpt{ID: record.ExcerptID(digest, "w.go", "blob", start, end), Path: "w.go", SHA256: "blob", Start: start, End: end,
-			Kind: "code", Origin: "caller", Symbol: "F", Text: strings.Join(lines, "\n")}
+			Kind: "code", Origin: origin, Symbol: "F", Text: strings.Join(lines, "\n")}
 	}
+	braces := map[int]string{14: "\t}", 15: "})", 16: "}"}
 	for name, c := range map[string]struct {
-		sent       [][2]int
-		window     [2]int
-		blank      []int
-		call       [2]int
-		want       [2]int // the kept lines; zero when none is left
-		heldExcept int    // the sent excerpts named when none is left
+		origin string
+		sent   [][2]int
+		window [2]int
+		other  map[int]string // lines without code
+		call   [2]int         // the call, or a definition's bound lines
+		want   [2]int         // the kept lines; zero when none is left
+		held   int            // the sent excerpts named when none is left
 	}{
-		"no line sent":                         {[][2]int{{20, 30}}, [2]int{10, 16}, nil, [2]int{13, 13}, [2]int{10, 16}, 0},
-		"three sent lines before the call":     {[][2]int{{1, 11}}, [2]int{9, 15}, nil, [2]int{12, 12}, [2]int{12, 15}, 0},
-		"split: the run of the call":           {[][2]int{{10, 12}}, [2]int{8, 16}, nil, [2]int{9, 9}, [2]int{8, 9}, 0},
-		"split, the call sent: the larger run": {[][2]int{{11, 12}, {13, 13}}, [2]int{9, 16}, nil, [2]int{12, 13}, [2]int{14, 16}, 0},
-		"split, equal runs: the first":         {[][2]int{{11, 13}}, [2]int{9, 15}, nil, [2]int{12, 12}, [2]int{9, 10}, 0},
-		"every line sent":                      {[][2]int{{9, 12}, {13, 16}}, [2]int{9, 16}, nil, [2]int{12, 13}, [2]int{}, 2},
-		"only a blank line left":               {[][2]int{{9, 12}, {14, 16}}, [2]int{9, 16}, []int{13}, [2]int{12, 14}, [2]int{}, 2},
+		"no line sent":                              {"caller", [][2]int{{20, 30}}, [2]int{10, 16}, nil, [2]int{13, 13}, [2]int{10, 16}, 0},
+		"three sent lines before the call":          {"caller", [][2]int{{1, 11}}, [2]int{9, 15}, nil, [2]int{12, 12}, [2]int{12, 15}, 0},
+		"split: the run of the call":                {"caller", [][2]int{{10, 12}}, [2]int{8, 16}, nil, [2]int{9, 9}, [2]int{8, 9}, 0},
+		"split: a test window's call":               {"test", [][2]int{{10, 12}}, [2]int{8, 16}, nil, [2]int{13, 13}, [2]int{13, 16}, 0},
+		"the call line sent":                        {"caller", [][2]int{{12, 12}}, [2]int{9, 15}, nil, [2]int{12, 12}, [2]int{}, 1},
+		"the call sent in two pieces":               {"caller", [][2]int{{11, 12}, {13, 13}}, [2]int{9, 16}, nil, [2]int{12, 13}, [2]int{}, 2},
+		"the context before the call sent":          {"caller", [][2]int{{9, 11}, {13, 14}}, [2]int{9, 16}, nil, [2]int{12, 12}, [2]int{12, 12}, 0},
+		"the call beside a run of braces":           {"caller", [][2]int{{12, 13}}, [2]int{9, 16}, braces, [2]int{10, 10}, [2]int{9, 11}, 0},
+		"definition split, bound lines sent":        {"context", [][2]int{{11, 12}, {13, 13}}, [2]int{9, 16}, nil, [2]int{12, 13}, [2]int{14, 16}, 0},
+		"definition split, equal runs: the first":   {"context", [][2]int{{11, 13}}, [2]int{9, 15}, nil, [2]int{12, 12}, [2]int{9, 10}, 0},
+		"definition: only braces left":              {"context", [][2]int{{9, 13}}, [2]int{9, 16}, braces, [2]int{10, 10}, [2]int{}, 1},
+		"definition: only a blank line left":        {"context", [][2]int{{9, 12}, {14, 16}}, [2]int{9, 16}, map[int]string{13: ""}, [2]int{12, 12}, [2]int{}, 2},
+		"definition: braces beside code: the code":  {"context", [][2]int{{11, 13}}, [2]int{9, 16}, braces, [2]int{12, 12}, [2]int{9, 10}, 0},
+		"every line sent":                           {"caller", [][2]int{{9, 12}, {13, 16}}, [2]int{9, 16}, nil, [2]int{12, 13}, [2]int{}, 2},
+		"a window nothing was sent of keeps braces": {"context", [][2]int{{20, 30}}, [2]int{14, 16}, braces, [2]int{14, 14}, [2]int{14, 16}, 0},
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := &leadResolver{s: &roleStage{ctx: t.Context(), j: j}}
 			for _, s := range c.sent {
-				r.carried = append(r.carried, excerpt(s[0], s[1]))
+				r.carried = append(r.carried, excerpt("context", s[0], s[1], nil))
 			}
-			x := excerpt(c.window[0], c.window[1], c.blank...)
+			x := excerpt(c.origin, c.window[0], c.window[1], c.other)
 			out, held, ok := r.unsent(x, sourceCallLocation{"w.go", c.call[0], c.call[1]})
 			if c.want == ([2]int{}) {
-				if ok || len(held) != c.heldExcept {
+				if ok || len(held) != c.held {
 					t.Fatalf("kept %+v, held %v", out, held)
 				}
 				return
 			}
-			want := excerpt(c.want[0], c.want[1], c.blank...)
+			want := excerpt(c.origin, c.want[0], c.want[1], c.other)
 			if !ok || held != nil || out != want {
 				t.Fatalf("kept %+v, held %v; want %+v", out, held, want)
 			}
