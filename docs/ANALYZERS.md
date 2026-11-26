@@ -1368,7 +1368,7 @@ C/C++ 진단의 관련 위치는 도구가 반환한 순서로 한 건의 상세
 
 ## 문서 참조와 오류 반환 검사
 
-- **Go errcheck.** go vet과 같은 패키지 패턴·모듈 캐시·오프라인 빌드 환경으로 호출자가 버린 오류의 위치를 찾는다. `go list`의 실제 선택 파일과 진단 줄을 고정 스냅샷에 연결한다. 코드에 명시적으로 처리한 오류나 활성 빌드에서 제외된 파일을 검사 완료로 보고하지 않는다.
+- **Go errcheck.** go vet과 같은 패키지 패턴·모듈 캐시·오프라인 빌드 환경으로 호출자가 버린 오류의 위치를 찾는다. `go list`의 실제 선택 파일과 진단 줄을 고정 스냅샷에 연결한다. 코드에 명시적으로 처리한 오류나 활성 빌드에서 제외된 파일을 검사 완료로 보고하지 않는다. 패키지는 `-mod=readonly`로 읽는다. 모듈에 `vendor/modules.txt`가 있으면 go vet·Staticcheck(go 명령의 기본)처럼 `-mod=vendor`로 vendor 디렉터리에서 읽고 `vendor_directory_used`를 남긴다. 선택(`rule_pack.selection`)이 실제 플래그다. 이전에는 vendor를 쓰는 모듈에서도 `-mod=readonly`가 오프라인 proxy에 모듈을 물어 `errcheck_packages_unavailable`로 실패했다.
 - **Rust rustdoc.** 저장소 코드 실행을 허용한 노드에서 `cargo doc --offline --locked --workspace --no-deps`로 현재 빌드 구성의 문서 참조를 확인한다. rustdoc 진단만 남긴다. 생성한 문서의 crate 진입 파일과 실제 진단 위치를 처리 범위에 기록한다. 나머지 하위 모듈의 문서화 여부는 이 결과로 확정할 수 없다. 두 패키지가 같은 이름의 라이브러리를 문서화해 cargo가 workspace를 거부하면(`document output filename collision`, C API 래퍼 crate가 본 crate의 라이브러리 이름을 쓰는 경우), 각 쌍에서 디렉터리가 더 깊은 패키지를 `--exclude`로 빼고 한 번 더 실행한다(`cargo.doc.packages`). 뺀 패키지는 `target.properties.excluded_packages`, 한계 `doc_colliding_packages_excluded`, 선택의 `--exclude`로 남고 그 패키지는 문서화하지 않는다. [A71](DECISIONS.md)
 
 ## Go 내부 패키지 의존 관계
