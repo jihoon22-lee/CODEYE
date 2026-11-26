@@ -72,7 +72,7 @@ func checkWorkflowReading(r Record, catalog map[string]Excerpt) error {
 	if w == nil {
 		return nil
 	}
-	if (r.Schema != SchemaVersionWorkflowReading && r.Schema != SchemaVersionCitedLines) || w.ContractIndex < 1 || w.ContractIndex > MaxContractComparisons ||
+	if (r.Schema != SchemaVersionWorkflowReading && r.Schema != SchemaVersionCitedLines && r.Schema != SchemaVersionLeads) || w.ContractIndex < 1 || w.ContractIndex > MaxContractComparisons ||
 		!hex64.MatchString(w.RouteDigest) || w.ReadEvidenceID == w.ChangeEvidenceID ||
 		!refs([]string{w.ReadEvidenceID, w.ChangeEvidenceID}, catalog, 2, "code") ||
 		!refs([]string{w.TestEvidenceID}, catalog, 1, "test") {

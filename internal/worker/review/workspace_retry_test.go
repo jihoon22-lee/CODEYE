@@ -192,9 +192,9 @@ func TestVerifyWorkspaceProofRetryKeepsPending(t *testing.T) {
 		var out []map[string]any
 		for _, c := range in.Candidates {
 			if n == 1 && c.Origin == "interpret" {
-				out = append(out, inconclusiveFor(c, "ev_000000000000000000000000"))
+				out = append(out, inconclusiveFor(c.Candidate, "ev_000000000000000000000000"))
 			} else {
-				out = append(out, inconclusiveFor(c, c.Evidence[0]))
+				out = append(out, inconclusiveFor(c.Candidate, c.Evidence[0]))
 			}
 		}
 		if n > 1 && (len(in.Candidates) != 1 || in.Candidates[0].Origin != "interpret" || in.Repair == nil) {

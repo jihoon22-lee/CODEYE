@@ -11,11 +11,13 @@ import (
 
 // Source leads and their follow-up (docs/REVIEW.md#단서-후속-조사).
 //
-// An investigation may name a short list of leads: a suspected problem
-// whose cause or trigger depends on code the request did not carry, each
-// starting from sent code lines (an evidence ID with a range) and a symbol,
-// with what it needs (the definition of the symbol called there, or the
-// callers of the function defined there). The platform resolves every lead
+// An investigation may name a short list of leads: the open premise of one
+// of its candidates whose cause or trigger depends on code the request did
+// not carry, each starting from sent code lines (an evidence ID with a
+// range) and a symbol, with what it needs (the definition of the symbol
+// called there, or the callers of the function defined there). Every lead
+// names its candidate, so an unresolved or refused lead never loses a
+// suspicion: the candidate goes to verify as it was. The platform resolves every lead
 // from the snapshot with the review's source resolvers at the end of the
 // investigate task and records the outcome on the lead: the locations it
 // found (not evidence of the investigate record, which holds what that
@@ -50,11 +52,18 @@ const (
 	LeadResolved   = "resolved"
 	LeadUnresolved = "unresolved"
 
+	// A follow-up never removes a candidate: it keeps, refines or contests
+	// each one and may add one per lead. A contested candidate goes to
+	// verify unchanged with the follow-up's reason and cited lines as
+	// counter-evidence; verify decides.
 	DispositionKept      = "kept"
 	DispositionRefined   = "refined"
 	DispositionAdded     = "added"
-	DispositionWithdrawn = "withdrawn"
+	DispositionContested = "contested"
 )
+
+// Dispositions are the dispositions of a follow-up's candidates.
+var Dispositions = []string{DispositionKept, DispositionRefined, DispositionContested, DispositionAdded}
 
 // Why a lead was not followed up (Lead.Reason). Every one is a platform
 // decision from the snapshot, the scope and the caps; none is a guess.
@@ -92,10 +101,13 @@ const (
 var LeadReasons = []string{LeadInRequest, LeadSymbolNotAtAnchor, LeadDefinitionMissing, LeadCallersMissing, LeadAmbiguous,
 	LeadOutsideScope, LeadOutsideChange, LeadWithheld, LeadGenerated, LeadSecondary, LeadScanLimit, LeadOverCap, LeadLanguage, LeadReadFailed}
 
-// Task reasons of a follow-up that made no call.
+// Task reasons of a follow-up that made no call (domain.LeadsNotRun).
 const (
-	ReasonNoLeads         = domain.ReasonNoLeads
-	ReasonNoLeadsResolved = domain.ReasonNoLeadsResolved
+	ReasonLeadsNotOffered  = domain.ReasonLeadsNotOffered
+	ReasonNoLeads          = domain.ReasonNoLeads
+	ReasonNoLeadsResolved  = domain.ReasonNoLeadsResolved
+	ReasonLeadsNotAdmitted = domain.ReasonLeadsNotAdmitted
+	ReasonLeadsSlotNotRun  = domain.ReasonLeadsSlotNotRun
 )
 
 // Lead is one lead of an investigation with the platform's resolution.
@@ -109,9 +121,9 @@ type Lead struct {
 	// entry of the record, usually the narrowed cited range).
 	EvidenceID string `json:"evidence_id"`
 	Suspicion  string `json:"suspicion"`
-	// CandidateID is the candidate of the same record the lead concerns;
-	// empty for a suspicion that is no candidate yet.
-	CandidateID string `json:"candidate_id,omitempty"`
+	// CandidateID is the candidate of the same record whose premise the
+	// lead follows.
+	CandidateID string `json:"candidate_id"`
 	Resolution  string `json:"resolution"`
 	Reason      string `json:"reason,omitempty"`
 	// InRequest names the sent excerpts holding what the lead needs
@@ -124,16 +136,20 @@ type Lead struct {
 }
 
 // LeadTarget is one resolved location: a definition (origin context), a
-// caller window (caller) or a test window (test).
+// caller window (caller) or a test window (test). Partial marks a
+// definition window that is not the whole declaration (it does not fit one
+// window, or the request already sent some of its lines): it cannot show
+// that a candidate's condition never happens.
 type LeadTarget struct {
-	ID     string `json:"id"`
-	Path   string `json:"path"`
-	SHA256 string `json:"sha256"`
-	Start  int    `json:"start_line"`
-	End    int    `json:"end_line"`
-	Kind   string `json:"kind"`
-	Origin string `json:"origin"`
-	Symbol string `json:"symbol,omitempty"`
+	ID      string `json:"id"`
+	Path    string `json:"path"`
+	SHA256  string `json:"sha256"`
+	Start   int    `json:"start_line"`
+	End     int    `json:"end_line"`
+	Kind    string `json:"kind"`
+	Origin  string `json:"origin"`
+	Symbol  string `json:"symbol,omitempty"`
+	Partial bool   `json:"partial,omitempty"`
 }
 
 // Excerpt is the target as an evidence entry (no text).
@@ -143,19 +159,22 @@ func (t LeadTarget) Excerpt() Excerpt {
 
 // LeadFollowup is what one follow-up sent and decided: the leads and
 // excerpts its request carried, the resolved excerpts among them (new to
-// the investigation) and their line count, and one disposition per
+// the investigation), the partial windows among those, the count of their
+// lines no excerpt of the investigation holds, and one disposition per
 // original candidate in order, then one per added candidate.
 type LeadFollowup struct {
 	Leads        []string          `json:"leads"`
 	Sent         []string          `json:"sent_evidence_ids"`
 	New          []string          `json:"new_evidence_ids"`
+	Partial      []string          `json:"partial_evidence_ids,omitempty"`
 	NewLines     int               `json:"new_lines"`
 	Dispositions []LeadDisposition `json:"dispositions"`
 }
 
 // LeadDisposition is what became of one candidate: kept as it was, refined
-// (the model's corrected text), added from a lead, or withdrawn with the
-// model's reason and the new code lines that show it cannot happen.
+// (the model's corrected text), contested (unchanged, with the model's
+// reason and the lines of a whole resolved declaration it cites as
+// counter-evidence for verify) or added from a lead.
 type LeadDisposition struct {
 	CandidateID string   `json:"candidate_id,omitempty"`
 	FinalID     string   `json:"final_id,omitempty"`
@@ -203,16 +222,17 @@ func (l Lead) Resolved() bool { return l.Resolution == LeadResolved }
 func checkLeads(r Record, catalog map[string]Excerpt, snapshot string, lookup func(string) (string, bool), b bounds) error {
 	switch {
 	case r.Schema != SchemaVersionLeads:
-		if r.Leads != nil || r.LeadFollowup != nil {
+		if r.Leads != nil || r.LeadFollowup != nil || r.LeadLimit != 0 {
 			return invalid("leads outside a 0.9 record")
 		}
 		return nil
 	case r.Stage == StageInvestigate:
-		if len(r.Leads) == 0 || len(r.Leads) > MaxLeads || r.LeadFollowup != nil || !r.Accepted() {
+		// A 0.9 investigation was offered leads; it may have named none.
+		if r.LeadLimit != MaxLeads || len(r.Leads) > r.LeadLimit || r.LeadFollowup != nil || !r.Accepted() {
 			return invalid("investigate leads")
 		}
 	case r.Stage == StageLeads:
-		if r.Leads != nil || r.Accepted() != (r.LeadFollowup != nil) {
+		if r.Leads != nil || r.LeadLimit != 0 || r.Accepted() != (r.LeadFollowup != nil) {
 			return invalid("lead follow-up content")
 		}
 	default:
@@ -235,7 +255,7 @@ func checkLeads(r Record, catalog map[string]Excerpt, snapshot string, lookup fu
 			return invalid("lead evidence")
 		case !ProseText(l.Suspicion, b.text):
 			return invalid("lead suspicion")
-		case l.CandidateID != "" && !candidates[l.CandidateID]:
+		case !candidates[l.CandidateID]:
 			return invalid("lead candidate")
 		}
 		switch l.Resolution {
@@ -277,7 +297,8 @@ func checkLeadTarget(t LeadTarget, snapshot string, lookup func(string) (string,
 		return invalid("lead target location")
 	case t.ID != ExcerptID(snapshot, t.Path, t.SHA256, t.Start, t.End):
 		return invalid("lead target id")
-	case (t.Kind != "code" && t.Kind != "test") || (t.Origin != "context" && t.Origin != "caller" && t.Origin != "test") || (t.Symbol != "" && !symbol.MatchString(t.Symbol)):
+	case (t.Kind != "code" && t.Kind != "test") || (t.Origin != "context" && t.Origin != "caller" && t.Origin != "test") || (t.Symbol != "" && !symbol.MatchString(t.Symbol)) ||
+		(t.Partial && t.Origin != "context"):
 		return invalid("lead target attributes")
 	}
 	return nil
@@ -306,31 +327,45 @@ func checkLeadFollowup(r Record, catalog map[string]Excerpt, b bounds) error {
 			return invalid("lead follow-up new evidence")
 		}
 	}
-	if f.NewLines != LeadLines(f.New, catalog) {
+	for i, id := range f.Partial {
+		if !slices.Contains(f.New, id) || slices.Contains(f.Partial[:i], id) {
+			return invalid("lead follow-up partial evidence")
+		}
+	}
+	// The new lines are those no excerpt of the investigation holds
+	// (LeadFollowupMatches counts them against it).
+	if f.NewLines < 0 || f.NewLines > LeadLines(f.New, catalog) {
 		return invalid("lead follow-up new lines")
 	}
-	final := map[string]bool{}
+	whole := slices.DeleteFunc(slices.Clone(f.New), func(id string) bool { return slices.Contains(f.Partial, id) })
+	final := map[string]Candidate{}
 	for _, c := range r.Candidates {
 		if c.Origin != StageInvestigate || len(c.ObservationIDs) > 0 {
 			return invalid("lead follow-up candidate origin")
 		}
-		final[c.ID] = true
+		final[c.ID] = c
 	}
 	seenFinal, seenOriginal := map[string]bool{}, map[string]bool{}
 	added := false
 	for _, d := range f.Dispositions {
+		_, isFinal := final[d.FinalID]
 		switch d.Disposition {
 		case DispositionKept, DispositionRefined:
-			if d.CandidateID == "" || !final[d.FinalID] || d.Reason != "" || d.EvidenceIDs != nil || added || (d.Lead == "") != (d.Disposition == DispositionKept) {
+			if d.CandidateID == "" || !isFinal || d.Reason != "" || d.EvidenceIDs != nil || added || (d.Lead == "") != (d.Disposition == DispositionKept) {
 				return invalid("lead disposition")
 			}
-		case DispositionWithdrawn:
-			if d.CandidateID == "" || d.FinalID != "" || d.Lead == "" || !ProseText(d.Reason, b.text) || !refs(d.EvidenceIDs, catalog, 6, "code") || added ||
-				!slices.ContainsFunc(d.EvidenceIDs, func(id string) bool { return leadNewLines(id, f.New, catalog) }) {
-				return invalid("lead withdrawal")
+		case DispositionContested:
+			// The counter-evidence cites lines of a whole resolved
+			// declaration: a partial window cannot show the condition never
+			// happens.
+			if d.CandidateID == "" || !isFinal || d.Lead == "" || !ProseText(d.Reason, b.text) || !refs(d.EvidenceIDs, catalog, 6, "code") || added ||
+				!slices.ContainsFunc(d.EvidenceIDs, func(id string) bool { return leadNewLines(id, whole, catalog) }) {
+				return invalid("lead contest")
 			}
 		case DispositionAdded:
-			if d.CandidateID != "" || !final[d.FinalID] || !slices.Contains(f.Leads, d.Lead) || d.Reason != "" || d.EvidenceIDs != nil {
+			// An added candidate is found in the new code.
+			if d.CandidateID != "" || !isFinal || !slices.Contains(f.Leads, d.Lead) || d.Reason != "" || d.EvidenceIDs != nil ||
+				!slices.ContainsFunc(final[d.FinalID].Evidence, func(id string) bool { return leadNewLines(id, f.New, catalog) }) {
 				return invalid("lead addition")
 			}
 			added = true
@@ -371,6 +406,41 @@ func leadNewLines(id string, newIDs []string, catalog map[string]Excerpt) bool {
 	})
 }
 
+// LeadNewLineSet is, per file blob (path and SHA-256), the lines the
+// listed new excerpts hold that no excerpt of the investigation does: what
+// the follow-up let the model read for the first time.
+func LeadNewLineSet(ids []string, catalog map[string]Excerpt, investigation []Excerpt) map[string]map[int]bool {
+	out := map[string]map[int]bool{}
+	for _, id := range ids {
+		e, ok := catalog[id]
+		if !ok {
+			continue
+		}
+		key := e.Path + "\x00" + e.SHA256
+		for line := e.Start; line <= e.End; line++ {
+			if slices.ContainsFunc(investigation, func(x Excerpt) bool {
+				return x.Path == e.Path && x.SHA256 == e.SHA256 && x.Start <= line && line <= x.End
+			}) {
+				continue
+			}
+			if out[key] == nil {
+				out[key] = map[int]bool{}
+			}
+			out[key][line] = true
+		}
+	}
+	return out
+}
+
+// LineCount counts the lines of a LeadNewLineSet.
+func LineCount(set map[string]map[int]bool) int {
+	n := 0
+	for _, lines := range set {
+		n += len(lines)
+	}
+	return n
+}
+
 // LeadLines counts the distinct lines of the listed excerpts.
 func LeadLines(ids []string, catalog map[string]Excerpt) int {
 	seen := map[string]map[int]bool{}
@@ -396,12 +466,14 @@ func LeadLines(ids []string, catalog map[string]Excerpt) int {
 
 // LeadFollowupMatches checks a follow-up record against the investigate
 // record it read: every original candidate has one disposition in order, a
-// kept one is unchanged, a withdrawn or refined one is a candidate of a sent
-// lead, an added one comes from a sent lead without a candidate, the sent
-// leads are resolved leads of the investigation whose anchors travelled, the
-// new excerpts are exactly targets of those leads and every excerpt the
-// investigation also holds is its entry unchanged. The worker checks its
-// record with it before writing; the report checks it again.
+// kept or contested one is unchanged, a contested or refined one is a
+// candidate of a sent lead, an added one comes from a sent lead, the sent
+// leads are resolved leads of the investigation whose anchors travelled,
+// the new excerpts are exactly targets of those leads with their partial
+// marks, the new line count is theirs less the investigation's lines, and
+// the record's evidence is the investigation's entries unchanged, those
+// targets and ranges narrowed from what the request sent. The worker checks
+// its record with it before writing; the report checks it again.
 func LeadFollowupMatches(fu, inv Record) bool {
 	f := fu.LeadFollowup
 	if f == nil || !fu.Accepted() || !inv.Accepted() || fu.Stage != StageLeads || inv.Stage != StageInvestigate {
@@ -433,14 +505,34 @@ func LeadFollowupMatches(fu, inv Record) bool {
 		}
 	}
 	catalog := catalogOf(fu.Evidence)
+	var partial []string
 	for _, id := range f.New {
 		t, ok := targets[id]
 		if !ok || catalog[id] != t.Excerpt() {
 			return false
 		}
+		if t.Partial {
+			partial = append(partial, id)
+		}
+	}
+	if !slices.Equal(partial, f.Partial) || f.NewLines != LineCount(LeadNewLineSet(f.New, catalog, inv.Evidence)) {
+		return false
 	}
 	if !CarriesUpstreamEvidence(fu, inv) {
 		return false
+	}
+	investigated := catalogOf(inv.Evidence)
+	for _, e := range fu.Evidence {
+		t, target := targets[e.ID]
+		switch {
+		case investigated[e.ID] == e, target && t.Excerpt() == e:
+		case e.Origin == OriginCited && slices.ContainsFunc(f.Sent, func(id string) bool {
+			x := catalog[id]
+			return x.ID != e.ID && x.Path == e.Path && x.SHA256 == e.SHA256 && x.Start <= e.Start && e.End <= x.End
+		}):
+		default:
+			return false
+		}
 	}
 	final := map[string]Candidate{}
 	for _, c := range fu.Candidates {
@@ -449,7 +541,7 @@ func LeadFollowupMatches(fu, inv Record) bool {
 	i := 0
 	for _, d := range f.Dispositions {
 		if d.CandidateID == "" {
-			if d.Disposition != DispositionAdded || leads[d.Lead].CandidateID != "" {
+			if d.Disposition != DispositionAdded || !slices.Contains(f.Leads, d.Lead) {
 				return false
 			}
 			continue
@@ -459,15 +551,13 @@ func LeadFollowupMatches(fu, inv Record) bool {
 		}
 		original := inv.Candidates[i]
 		i++
-		switch d.Disposition {
-		case DispositionKept:
+		if d.Disposition != DispositionKept && (!linked[d.CandidateID] || leads[d.Lead].CandidateID != d.CandidateID) {
+			return false
+		}
+		if d.Disposition == DispositionKept || d.Disposition == DispositionContested {
 			c := final[d.FinalID]
 			c.ID = original.ID
 			if !sameCandidate(c, original) {
-				return false
-			}
-		case DispositionRefined, DispositionWithdrawn:
-			if !linked[d.CandidateID] {
 				return false
 			}
 		}

@@ -308,7 +308,7 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 			// go-vet.m02 (svc/b, go 1.30) fails on a node older than go1.30,
 			// as in TestDiscoveryTasksThroughTheWorker.
 			want := []string{"env.discover=succeeded", "docs.discover=succeeded", "go-vet=succeeded", "go-vet.m01=succeeded", "go-vet.m02=failed:" + govet.ReasonToolchain,
-				"review.environment=succeeded", "review.documents=succeeded", "review.investigate=succeeded", tc.interpret, "review.leads=skipped_policy:" + record.ReasonNoLeads, "review.verify=succeeded"}
+				"review.environment=succeeded", "review.documents=succeeded", "review.investigate=succeeded", tc.interpret, "review.leads=skipped_policy:" + record.ReasonLeadsNotOffered, "review.verify=succeeded"}
 			want = append(want, "review.scope=succeeded", "review.contract=skipped_policy:no_review_scope")
 			// The two diagnostic triage slots, last in the plan, have
 			// nothing to classify: no diagnostic, or the one the
@@ -360,7 +360,7 @@ func TestReviewThroughTheWorkerAndReport(t *testing.T) {
 				optional = append(optional, row)
 			}
 			if ai.Status != report.AIReviewPerformed || !slices.Equal(required, []string{"review.documents=accepted", "review.investigate=accepted", "review.verify=accepted"}) ||
-				!slices.Equal(optional, append(slices.Clone(tc.optional), "review.contract=skipped:no_review_scope", "review.leads=skipped:"+record.ReasonNoLeads)) {
+				!slices.Equal(optional, append(slices.Clone(tc.optional), "review.contract=skipped:no_review_scope", "review.leads=skipped:"+record.ReasonLeadsNotOffered)) {
 				t.Fatalf("ai review %s required %v optional %v limitations %v", ai.Status, required, optional, r.Limitations)
 			}
 			if len(r.Coverage.ReviewCalls) != len(strings.Split(tc.calls, ",")) || r.Coverage.LLMExposedFiles == nil || *r.Coverage.LLMExposedFiles == 0 {

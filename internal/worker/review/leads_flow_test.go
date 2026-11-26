@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/progress"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
@@ -75,12 +76,15 @@ func chainCandidate(cite string) map[string]any {
 // leadsScript answers every role validly; the investigation cites a chain
 // call and, when offered, names its definition as a lead of candidate 1;
 // leads answers the follow-up (nil: the follow-up refines candidate 1
-// with a resolved line). requests keeps every follow-up request.
+// with a resolved line). The first reply of every request of a role in
+// repaired is invalid, so each of those requests needs its format repair.
+// requests keeps every follow-up request.
 type leadsScript struct {
 	mu       sync.Mutex
 	requests []opencode.Request
 	asked    bool
 	leads    func(n int, q opencode.Request) opencode.Reply
+	repaired []string
 }
 
 func (l *leadsScript) script(t *testing.T) map[string]func(int, opencode.Request) opencode.Reply {
@@ -119,7 +123,39 @@ func (l *leadsScript) script(t *testing.T) map[string]func(int, opencode.Request
 		refined["basis"], refined["disposition"] = in.Candidates[0].ID, "refined"
 		return asJSON(map[string]any{"results": []map[string]any{refined}})
 	}
+	for _, role := range l.repaired {
+		answer := s[role]
+		s[role] = func(n int, q opencode.Request) opencode.Reply {
+			if !strings.Contains(string(q.Input), `"repair"`) {
+				return opencode.Reply{Reason: "model_output_invalid"}
+			}
+			return answer(n, q)
+		}
+	}
 	return s
+}
+
+// sameOtherTasks fails unless every task but the follow-ups ends the same
+// way in both runs: asking for leads never takes a call another task would
+// have made.
+func sameOtherTasks(t *testing.T, plan []analysis.TaskSpec, base, asked map[string]analysis.TaskResult) {
+	t.Helper()
+	for _, p := range plan {
+		if _, ok := record.LeadsTask(p.Key); !ok && (base[p.Key].Status != asked[p.Key].Status || base[p.Key].Reason != asked[p.Key].Reason) {
+			t.Fatalf("%s: %+v without leads, %+v with: %v", p.Key, base[p.Key], asked[p.Key], rows(plan, asked))
+		}
+	}
+}
+
+// codeReviewStage is the code_review display stage of a run's results.
+func codeReviewStage(plan []analysis.TaskSpec, res map[string]analysis.TaskResult) progress.State {
+	var tasks []progress.Task
+	for _, p := range plan {
+		if p.Stage == domain.StageCodeReview {
+			tasks = append(tasks, progress.Task{Stage: p.Stage, Status: res[p.Key].Status, Reason: res[p.Key].Reason})
+		}
+	}
+	return progress.TaskStage(string(domain.StageCodeReview), tasks, true).State
 }
 
 // bodyChainTree is chainTree with the long comment inside each function,
@@ -211,45 +247,84 @@ func TestLeadFollowupRefinesSlotCandidates(t *testing.T) {
 }
 
 // The follow-up is planned for every investigation and makes no call when
-// none asks: the same plan, statuses and calls of every other task, and
-// each follow-up skipped with no_leads.
+// none asks: the same plan, statuses and calls of every other task. Each
+// follow-up is skipped with no_leads when its request offered leads and
+// leads_not_offered when it did not (the record's lead_limit tells), and
+// with leads_slot_not_run when the ceiling refused its slot.
 func TestLeadFollowupWithoutLeadsChangesNothing(t *testing.T) {
 	for _, c := range []struct{ packages, ceiling int }{{12, record.WholeRunMaxCalls}, {12, record.WholeRunMaxCalls + 5}, {12, 0}, {16, record.WholeRunMaxCalls}} {
 		t.Run(fmt.Sprint(c), func(t *testing.T) {
-			_, plan, base := chainRun(t, &leadsScript{}, c.packages, c.ceiling)
+			j, plan, base := chainRun(t, &leadsScript{}, c.packages, c.ceiling)
 			_, _, asked := chainRun(t, &leadsScript{asked: true}, c.packages, c.ceiling)
+			reasons := map[string]int{}
 			for _, p := range plan {
-				if _, ok := record.LeadsTask(p.Key); ok {
-					if r := base[p.Key]; r.Status != domain.TaskSkippedPolicy || (r.Reason != record.ReasonNoLeads && r.Reason != domain.ReasonNoReviewScope && r.Reason != reasonDependency) {
-						t.Fatalf("%s %+v", p.Key, r)
-					}
+				slot, ok := record.LeadsTask(p.Key)
+				if !ok {
 					continue
 				}
-				// Asking for leads never takes a call another task would
-				// have made: every other task ends the same way.
-				if base[p.Key].Status != asked[p.Key].Status || base[p.Key].Reason != asked[p.Key].Reason {
-					t.Fatalf("%s: %+v without leads, %+v with", p.Key, base[p.Key], asked[p.Key])
+				r := base[p.Key]
+				reasons[r.Reason]++
+				switch {
+				case r.Status != domain.TaskSkippedPolicy:
+					t.Fatalf("%s %+v", p.Key, r)
+				case r.Reason == record.ReasonNoLeads || r.Reason == record.ReasonLeadsNotOffered:
+					inv := readRecord(t, j, strings.TrimPrefix(sliceTaskKey(record.StageInvestigate, slot), "review."))
+					if offered := inv.LeadLimit == record.MaxLeads; offered != (r.Reason == record.ReasonNoLeads) || len(inv.Leads) != 0 {
+						t.Fatalf("%s %+v with lead_limit %d", p.Key, r, inv.LeadLimit)
+					}
+				case r.Reason == record.ReasonLeadsSlotNotRun:
+					if inv := base[sliceTaskKey(record.StageInvestigate, slot)]; slot == "" || inv.Status != domain.TaskBudgetExhausted {
+						t.Fatalf("%s %+v after %+v", p.Key, r, inv)
+					}
+				case r.Reason != domain.ReasonNoReviewScope && r.Reason != reasonDependency:
+					t.Fatalf("%s %+v", p.Key, r)
 				}
 			}
+			if reasons[record.ReasonNoLeads] == 0 {
+				t.Fatalf("no offered follow-up: %v", reasons)
+			}
+			sameOtherTasks(t, plan, base, asked)
 		})
+	}
+}
+
+// A follow-up is admitted only while the ceiling keeps, after both of its
+// calls, every later task's call cap: with every verify, or every
+// investigation, answered first with invalid output (each needs its
+// repair), every other task ends as it does without leads at every
+// ceiling.
+func TestLeadFollowupLeavesTheLaterRepairs(t *testing.T) {
+	for _, roles := range [][]string{{"verify"}, {"investigate"}, {"investigate", "verify"}} {
+		for ceiling := 15; ceiling <= 30; ceiling++ {
+			t.Run(fmt.Sprint(roles, ceiling), func(t *testing.T) {
+				_, plan, base := chainRun(t, &leadsScript{repaired: roles}, 12, ceiling)
+				l := &leadsScript{asked: true, repaired: roles}
+				_, _, asked := chainRun(t, l, 12, ceiling)
+				sameOtherTasks(t, plan, base, asked)
+				if codeReviewStage(plan, base) != codeReviewStage(plan, asked) {
+					t.Fatalf("stage %s without leads, %s with", codeReviewStage(plan, base), codeReviewStage(plan, asked))
+				}
+			})
+		}
 	}
 }
 
 // The overview's follow-up counts the slots the scope will give lines (the
 // same computation as review.scope) and runs at the default ceiling; its
-// verify checks the refined candidates. At every ceiling the other tasks
-// end as they do without leads: the follow-up never takes a slot's call.
+// verify checks the refined candidates. At every ceiling, also when every
+// verify or investigation needs its repair, the other tasks end as they do
+// without leads: the follow-up never takes a slot's call.
 func TestOverviewLeadFollowupKeepsTheSlots(t *testing.T) {
-	for _, ceiling := range []int{0, 20, record.WholeRunMaxCalls} {
-		t.Run(fmt.Sprint(ceiling), func(t *testing.T) {
-			_, plan, base := treeRun(t, &leadsScript{}, bodyChainTree(8), ceiling)
-			l := &leadsScript{asked: true}
+	for _, c := range []struct {
+		ceiling  int
+		repaired []string
+	}{{0, nil}, {20, nil}, {record.WholeRunMaxCalls, nil}, {0, []string{"verify"}}, {20, []string{"verify"}}, {20, []string{"investigate"}}, {30, []string{"investigate", "verify"}}} {
+		ceiling := c.ceiling
+		t.Run(fmt.Sprint(c), func(t *testing.T) {
+			_, plan, base := treeRun(t, &leadsScript{repaired: c.repaired}, bodyChainTree(8), ceiling)
+			l := &leadsScript{asked: true, repaired: c.repaired}
 			j, _, asked := treeRun(t, l, bodyChainTree(8), ceiling)
-			for _, p := range plan {
-				if _, ok := record.LeadsTask(p.Key); !ok && (base[p.Key].Status != asked[p.Key].Status || base[p.Key].Reason != asked[p.Key].Reason) {
-					t.Fatalf("%s: %+v without leads, %+v with", p.Key, base[p.Key], asked[p.Key])
-				}
-			}
+			sameOtherTasks(t, plan, base, asked)
 			slices := 0
 			for _, p := range plan {
 				if stage, _, ok := record.SliceTask(p.Key); ok && stage == record.StageInvestigate && asked[p.Key].Status == domain.TaskSucceeded {
@@ -257,7 +332,7 @@ func TestOverviewLeadFollowupKeepsTheSlots(t *testing.T) {
 				}
 			}
 			r := asked[record.TaskLeads]
-			if ceiling != 0 {
+			if ceiling != 0 || c.repaired != nil {
 				if r.Status == domain.TaskSucceeded {
 					t.Logf("ceiling %d: overview follow-up admitted with %d slices", ceiling, slices)
 				}
@@ -279,20 +354,32 @@ func slicesContainUpstream(list []record.Upstream, source string) bool {
 }
 
 // Under a tight ceiling the follow-ups are dropped first: a follow-up is
-// refused (budget_exhausted, no call) while the slots after it still need
-// their admission pair, and its verify checks the investigation's own
-// candidates.
+// refused (skipped_policy, leads_not_admitted, no call) while the work after
+// it still needs its calls, and its verify checks the investigation's own
+// candidates. The refusal is not a failure of the review: the code review
+// stage ends as it does without leads (chainTree(16) at ceilings 15 and 16).
 func TestLeadFollowupRefusedUnderTightCeiling(t *testing.T) {
-	l := &leadsScript{asked: true}
-	j, plan, res := chainRun(t, l, 16, record.WholeRunMaxCalls)
+	for _, ceiling := range []int{record.WholeRunMaxCalls, record.WholeRunMaxCalls + 1} {
+		_, plan, base := chainRun(t, &leadsScript{}, 16, ceiling)
+		l := &leadsScript{asked: true}
+		j, _, res := chainRun(t, l, 16, ceiling)
+		if codeReviewStage(plan, base) != codeReviewStage(plan, res) {
+			t.Fatalf("ceiling %d: stage %s without leads, %s with", ceiling, codeReviewStage(plan, base), codeReviewStage(plan, res))
+		}
+		refusedFollowups(t, j, plan, res, l)
+	}
+}
+
+func refusedFollowups(t *testing.T, j analysis.Job, plan []analysis.TaskSpec, res map[string]analysis.TaskResult, l *leadsScript) {
+	t.Helper()
 	refused := 0
 	for _, p := range plan {
 		slot, ok := record.LeadsTask(p.Key)
-		if !ok || slot == "" || res[p.Key].Status != domain.TaskBudgetExhausted {
+		if !ok || slot == "" || res[p.Key].Reason != record.ReasonLeadsNotAdmitted {
 			continue
 		}
 		refused++
-		if res[p.Key].Reason != reasonBudgetExhausted || slices.Contains(countedCalls(t, j), p.Key) {
+		if res[p.Key].Status != domain.TaskSkippedPolicy || !domain.LeadsNotRun(res[p.Key].Reason) || slices.Contains(countedCalls(t, j), p.Key) {
 			t.Fatalf("%s %+v", p.Key, res[p.Key])
 		}
 		if res["review.verify."+slot].Status == domain.TaskSucceeded {
@@ -305,6 +392,13 @@ func TestLeadFollowupRefusedUnderTightCeiling(t *testing.T) {
 	}
 	if refused == 0 {
 		t.Fatalf("no follow-up refused: %v", rows(plan, res))
+	}
+	// The follow-up of a slot the ceiling refused says so, without a call.
+	for _, p := range plan {
+		if slot, ok := record.LeadsTask(p.Key); ok && slot != "" && res[sliceTaskKey(record.StageInvestigate, slot)].Status == domain.TaskBudgetExhausted &&
+			(res[p.Key].Status != domain.TaskSkippedPolicy || res[p.Key].Reason != record.ReasonLeadsSlotNotRun) {
+			t.Fatalf("%s after a refused slot %+v", p.Key, res[p.Key])
+		}
 	}
 	if len(l.requests) != 0 {
 		// A follow-up admitted at this ceiling keeps the later pairs' calls;
@@ -414,5 +508,90 @@ func TestOverviewScopeComputedEarlyIsTheScope(t *testing.T) {
 	b, _ := json.Marshal(stored)
 	if string(a) != string(b) {
 		t.Fatalf("early scope\n%s\nstored scope\n%s", a, b)
+	}
+}
+
+// A follow-up record holds only what its request sent: a cited range lies
+// in a sent excerpt (record.Decode), and the evidence is the
+// investigation's entries, the resolved targets and ranges narrowed from
+// sent excerpts (record.LeadFollowupMatches); an excerpt of another slot's
+// file is neither.
+func TestLeadFollowupRecordHoldsWhatItSent(t *testing.T) {
+	j, plan, res := chainRun(t, &leadsScript{asked: true}, 12, 0)
+	slot := ""
+	var others []record.Excerpt
+	for _, p := range plan {
+		s, ok := record.LeadsTask(p.Key)
+		if !ok || s == "" {
+			continue
+		}
+		if slot == "" && res[p.Key].Status == domain.TaskSucceeded {
+			slot = s
+		} else if res[sliceTaskKey(record.StageInvestigate, s)].Status == domain.TaskSucceeded {
+			others = append(others, readRecord(t, j, "investigate."+s).Evidence...)
+		}
+	}
+	if slot == "" {
+		t.Fatalf("no follow-up ran: %v", rows(plan, res))
+	}
+	name := "leads." + slot
+	fu, inv := readRecord(t, j, name), readRecord(t, j, "investigate."+slot)
+	if !record.LeadFollowupMatches(fu, inv) {
+		t.Fatal("the follow-up does not match its investigation")
+	}
+	i := slices.IndexFunc(others, func(x record.Excerpt) bool {
+		return x.End > x.Start && !slices.ContainsFunc(fu.Evidence, func(e record.Excerpt) bool { return e.Path == x.Path })
+	})
+	if i < 0 {
+		t.Fatal("no excerpt of another file")
+	}
+	foreign := others[i]
+	cited := fu
+	cited.Evidence = append(slices.Clone(fu.Evidence), record.Narrow(foreign, j.Snapshot.Digest, foreign.Start, foreign.Start))
+	b, err := json.Marshal(cited)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := record.Decode(b, expectRecord(j, name)); err == nil || !strings.Contains(err.Error(), "cited range outside the sent evidence") {
+		t.Fatalf("a cited range of a file the follow-up never sent: %v", err)
+	}
+	whole := fu
+	whole.Evidence = append(slices.Clone(fu.Evidence), foreign)
+	if record.LeadFollowupMatches(whole, inv) {
+		t.Fatal("an excerpt the follow-up never sent matches")
+	}
+}
+
+// The lead contract travels only in an investigate request that offers
+// leads (scope.lead_limit): a request that offers none carries the role's
+// guide and contract alone, the same instruction text as before leads, and
+// no guide file but the follow-up's speaks of leads.
+func TestLeadContractOnlyWhereLeadsAreOffered(t *testing.T) {
+	l := &leadsScript{asked: true}
+	script := l.script(t)
+	investigate := script["investigate"]
+	var mu sync.Mutex
+	offered, plain := 0, 0
+	script["investigate"] = func(n int, q opencode.Request) opencode.Reply {
+		in := decodeAs[investigateInput](t, q)
+		mu.Lock()
+		defer mu.Unlock()
+		lead := strings.Contains(q.Instructions, `Optionally return up to`)
+		if (in.Scope.LeadLimit > 0) != lead || strings.Contains(q.Instructions, "단서") {
+			t.Errorf("lead_limit %d, lead contract %v", in.Scope.LeadLimit, lead)
+		}
+		if lead {
+			offered++
+		} else {
+			plain++
+		}
+		return investigate(n, q)
+	}
+	j := treeJob(t, chainTree(12))
+	runRoleWith(t, j, Handler{Static: vetStub{}, Caller: &scriptedCaller{script: script}, Budget: smallBudget}, "1.27.4")
+	whole := treeJob(t, chainTree(2))
+	runRoleWith(t, whole, Handler{Static: vetStub{}, Caller: &scriptedCaller{script: script}, Budget: smallBudget}, "1.27.4")
+	if offered == 0 || plain == 0 {
+		t.Fatalf("%d offering requests, %d plain", offered, plain)
 	}
 }

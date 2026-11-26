@@ -58,7 +58,7 @@ func runHypothesis(t *testing.T, observed string, line int, mode string) hypothe
 		var out []any
 		for _, c := range in.Candidates {
 			if c.Origin != record.StageInterpret {
-				out = append(out, inconclusiveFor(c, c.Evidence[0]))
+				out = append(out, inconclusiveFor(c.Candidate, c.Evidence[0]))
 				continue
 			}
 			switch mode {
@@ -257,7 +257,7 @@ func TestInterpretReordersObservationsAndTheRecordsStayValid(t *testing.T) {
 		var out []any
 		for _, c := range in.Candidates {
 			if c.Origin != record.StageInterpret {
-				out = append(out, inconclusiveFor(c, c.Evidence[0]))
+				out = append(out, inconclusiveFor(c.Candidate, c.Evidence[0]))
 				continue
 			}
 			out = append(out, verdict(c.ID, "supported", func(m map[string]any) {

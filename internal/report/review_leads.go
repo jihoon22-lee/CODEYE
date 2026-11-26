@@ -4,7 +4,6 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
@@ -27,24 +26,26 @@ type LeadFollowups struct {
 	LeadsAsked      int            `json:"leads_asked"`
 	LeadsResolved   int            `json:"leads_resolved"`
 	LeadsUnresolved map[string]int `json:"leads_unresolved"`
-	// TasksPlanned are the planned follow-up tasks; TasksRun those that made
-	// or attempted a model call and TasksAccepted those whose record the
-	// report kept. TasksNotRun counts the others by task reason: no_leads,
-	// no_leads_resolved, review_budget_exhausted (refused by the call
-	// ceiling) and the reasons of a follow-up whose investigation or slot
-	// did not run.
+	// TasksPlanned are the planned follow-up tasks; TasksRun those with at
+	// least one model call in coverage.review_calls and TasksAccepted those
+	// whose record the report kept. TasksNotRun counts the others by task
+	// reason (their status without one): leads_not_offered, no_leads,
+	// no_leads_resolved, leads_not_admitted, leads_slot_not_run, the reasons
+	// of a follow-up whose investigation did not run, and a failure before
+	// any call.
 	TasksPlanned  int            `json:"tasks_planned"`
 	TasksRun      int            `json:"tasks_run"`
 	TasksAccepted int            `json:"tasks_accepted"`
 	TasksNotRun   map[string]int `json:"tasks_not_run"`
 	// Calls are the follow-ups' model calls in coverage.review_calls.
 	Calls int `json:"calls"`
-	// NewExcerpts and NewLines are the resolved excerpts the accepted
-	// follow-ups sent and their distinct lines.
+	// NewExcerpts are the resolved excerpts the accepted follow-ups sent and
+	// NewLines the union, per file, of their lines that no excerpt of the
+	// investigation they follow holds (record.LeadNewLineSet).
 	NewExcerpts int `json:"new_excerpts"`
 	NewLines    int `json:"new_lines"`
 	// Dispositions count what the accepted follow-ups did with each
-	// candidate: kept, refined, added, withdrawn.
+	// candidate (record.Dispositions): kept, refined, contested, added.
 	Dispositions map[string]int `json:"dispositions"`
 }
 
@@ -137,23 +138,34 @@ func leadsKeyOf(rec *record.Record) string {
 // held no follow-up task.
 func (c sectionContext) leadFollowups() *LeadFollowups {
 	l := &LeadFollowups{LeadsUnresolved: map[string]int{}, TasksNotRun: map[string]int{}, Dispositions: map[string]int{}}
+	calls := leadCallsByTask(c.r.Coverage.ReviewCalls)
+	lines := map[string]map[int]bool{}
 	for k, st := range c.states {
 		if st == nil {
 			continue
 		}
 		if isLeadsTask(k) {
 			l.TasksPlanned++
-			switch {
-			case noCallStatus(st.facts.Status) || st.facts.Status == string(domain.TaskCancelled) && (st.reviewResult == nil || st.reviewResult.Record == nil):
-				l.TasksNotRun[notRunReason(st.facts)]++
-			default:
+			if calls[k] > 0 {
 				l.TasksRun++
+			} else {
+				l.TasksNotRun[notRunReason(st.facts)]++
 			}
 			if reviewAccepted(st) && st.reviewResult.Record.LeadFollowup != nil {
 				l.TasksAccepted++
-				f := st.reviewResult.Record.LeadFollowup
+				rec := st.reviewResult.Record
+				f := rec.LeadFollowup
 				l.NewExcerpts += len(f.New)
-				l.NewLines += f.NewLines
+				if inv := c.states[investigationOf(k)]; reviewAccepted(inv) {
+					for file, set := range record.LeadNewLineSet(f.New, excerptCatalog(rec.Evidence), inv.reviewResult.Record.Evidence) {
+						if lines[file] == nil {
+							lines[file] = map[int]bool{}
+						}
+						for n := range set {
+							lines[file][n] = true
+						}
+					}
+				}
 				for _, d := range f.Dispositions {
 					l.Dispositions[d.Disposition]++
 				}
@@ -177,12 +189,31 @@ func (c sectionContext) leadFollowups() *LeadFollowups {
 	if l.TasksPlanned == 0 {
 		return nil
 	}
-	for _, call := range c.r.Coverage.ReviewCalls {
+	for _, n := range calls {
+		l.Calls += n
+	}
+	l.NewLines = record.LineCount(lines)
+	return l
+}
+
+// excerptCatalog indexes evidence by ID.
+func excerptCatalog(list []record.Excerpt) map[string]record.Excerpt {
+	out := make(map[string]record.Excerpt, len(list))
+	for _, e := range list {
+		out[e.ID] = e
+	}
+	return out
+}
+
+// leadCallsByTask counts the follow-up calls of each follow-up task.
+func leadCallsByTask(calls []ReviewCall) map[string]int {
+	out := map[string]int{}
+	for _, call := range calls {
 		if isLeadsTask(call.TaskKey) {
-			l.Calls++
+			out[call.TaskKey]++
 		}
 	}
-	return l
+	return out
 }
 
 // notRunReason is the key of a task that made no call: its reason, else its
@@ -196,20 +227,20 @@ func notRunReason(f TaskFacts) string {
 
 // validateLeadFollowups checks the object against the report: present only
 // in a builder-26 report that planned follow-up tasks, the task counts
-// follow from the task rows and the AI review items, the calls from
-// coverage.review_calls, and the lead counts add up with known reasons.
+// follow from the task rows, coverage.review_calls and the AI review items,
+// and the lead counts add up with known reasons.
 func validateLeadFollowups(r Report) error {
+	byTask := leadCallsByTask(r.Coverage.ReviewCalls)
 	planned, notRun, run, accepted := 0, map[string]int{}, 0, 0
 	for _, t := range r.Tasks {
 		if !isLeadsTask(t.Key) {
 			continue
 		}
 		planned++
-		f := TaskFacts{Status: t.Status, Reason: t.Reason}
-		if noCallStatus(t.Status) || t.Status == string(domain.TaskCancelled) {
-			notRun[notRunReason(f)]++
-		} else {
+		if byTask[t.Key] > 0 {
 			run++
+		} else {
+			notRun[notRunReason(TaskFacts{Status: t.Status, Reason: t.Reason})]++
 		}
 	}
 	for _, t := range append(slices.Clone(r.Coverage.AIReview.RequiredTasks), r.Coverage.AIReview.OptionalTasks...) {
@@ -229,14 +260,9 @@ func validateLeadFollowups(r Report) error {
 	case planned == 0 || !builderAtLeast(r.Builder.Version, LeadsSince):
 		return invalidf("lead_followups without follow-up tasks or in a builder %s revision", r.Builder.Version)
 	}
-	// A cancelled follow-up that wrote a record counts as run in the
-	// builder; the task row alone cannot tell, so either side is accepted.
-	cancelled := notRun[string(domain.TaskCancelled)]
 	calls := 0
-	for _, c := range r.Coverage.ReviewCalls {
-		if isLeadsTask(c.TaskKey) {
-			calls++
-		}
+	for _, n := range byTask {
+		calls += n
 	}
 	unresolved := 0
 	for reason, n := range l.LeadsUnresolved {
@@ -246,7 +272,7 @@ func validateLeadFollowups(r Report) error {
 		unresolved += n
 	}
 	for d, n := range l.Dispositions {
-		if !slices.Contains([]string{record.DispositionKept, record.DispositionRefined, record.DispositionAdded, record.DispositionWithdrawn}, d) || n <= 0 {
+		if !slices.Contains(record.Dispositions, d) || n <= 0 {
 			return invalidf("lead_followups.dispositions has %q", d)
 		}
 	}
@@ -256,19 +282,19 @@ func validateLeadFollowups(r Report) error {
 			return invalidf("lead_followups.tasks_not_run has %q", reason)
 		}
 		notRunTotal += n
-		if reason != string(domain.TaskCancelled) && notRun[reason] != n {
+		if notRun[reason] != n {
 			return invalidf("lead_followups.tasks_not_run.%s does not match the task rows", reason)
 		}
 	}
 	switch {
-	case l.TasksPlanned != planned || l.TasksRun+notRunTotal != planned || l.TasksRun < run || l.TasksRun > run+cancelled:
-		return invalidf("lead_followups task counts do not match the task rows")
+	case l.TasksPlanned != planned || l.TasksRun != run || l.TasksRun+notRunTotal != planned:
+		return invalidf("lead_followups task counts do not match the task rows and calls")
 	case l.TasksAccepted != accepted || l.TasksAccepted > l.TasksRun:
 		return invalidf("lead_followups.tasks_accepted does not match the AI review items")
 	case l.Calls != calls:
 		return invalidf("lead_followups.calls does not match coverage.review_calls")
-	case l.LeadsAsked != l.LeadsResolved+unresolved || l.LeadsResolved < 0 || l.NewExcerpts < 0 || l.NewLines < l.NewExcerpts ||
-		(l.TasksAccepted == 0 && (l.NewExcerpts != 0 || len(l.Dispositions) != 0)):
+	case l.LeadsAsked != l.LeadsResolved+unresolved || l.LeadsResolved < 0 || l.NewExcerpts < 0 || l.NewLines < 0 ||
+		(l.NewExcerpts == 0 && l.NewLines != 0) || (l.TasksAccepted == 0 && (l.NewExcerpts != 0 || len(l.Dispositions) != 0)):
 		return invalidf("lead_followups lead counts do not add up")
 	}
 	return nil

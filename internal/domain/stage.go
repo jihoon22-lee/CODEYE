@@ -44,11 +44,19 @@ const (
 	// ReasonNoReviewScope: a review slice whose planned files the overview
 	// already sent, or that are all withheld or unreadable.
 	ReasonNoReviewScope = "no_review_scope"
-	// ReasonNoLeads: a lead follow-up whose investigation named no lead
-	// (docs/REVIEW.md#단서-후속-조사); ReasonNoLeadsResolved: one whose
-	// leads the platform found none of (each lead keeps its reason).
-	ReasonNoLeads         = "no_leads"
-	ReasonNoLeadsResolved = "no_leads_resolved"
+	// Lead follow-ups that made no call (docs/REVIEW.md#단서-후속-조사):
+	// ReasonLeadsNotOffered, the investigate request held its whole scope and
+	// offered no leads; ReasonNoLeads, it offered leads and the investigation
+	// named none; ReasonNoLeadsResolved, the platform found none of the
+	// leads (each lead keeps its reason); ReasonLeadsNotAdmitted, the call
+	// ceiling kept the calls for the work after it (follow-ups are dropped
+	// first); ReasonLeadsSlotNotRun, the ceiling refused its slot, so there
+	// was no investigation to follow.
+	ReasonLeadsNotOffered  = "leads_not_offered"
+	ReasonNoLeads          = "no_leads"
+	ReasonNoLeadsResolved  = "no_leads_resolved"
+	ReasonLeadsNotAdmitted = "leads_not_admitted"
+	ReasonLeadsSlotNotRun  = "leads_slot_not_run"
 )
 
 // Controlled skip reasons for a planned dependency task that had nothing to
@@ -83,7 +91,18 @@ func NothingToDo(reason string) bool { return NothingToReview(reason) || Nothing
 // exclusion and unreadable inputs are not in this set.
 func NothingToReview(reason string) bool {
 	switch reason {
-	case ReasonNoDocuments, ReasonNoToolObservations, ReasonNoEnvironmentGap, ReasonNoReviewScope, ReasonNoLeads, ReasonNoLeadsResolved:
+	case ReasonNoDocuments, ReasonNoToolObservations, ReasonNoEnvironmentGap, ReasonNoReviewScope:
+		return true
+	}
+	return LeadsNotRun(reason)
+}
+
+// LeadsNotRun reports a lead follow-up skipped without a call. An optional
+// deeper reading the run did not need or could not afford: it never makes
+// the review stage partial, and its reason stays visible.
+func LeadsNotRun(reason string) bool {
+	switch reason {
+	case ReasonLeadsNotOffered, ReasonNoLeads, ReasonNoLeadsResolved, ReasonLeadsNotAdmitted, ReasonLeadsSlotNotRun:
 		return true
 	}
 	return false

@@ -280,12 +280,13 @@ func validScript(t *testing.T) map[string]func(int, opencode.Request) opencode.R
 
 // wholeRunRole reports one of the five whole-run role tasks (not
 // review.scope or a slice task).
-// leadsSkip reports a lead follow-up that made no call because its
-// investigation named no lead or ran no slice.
+// leadsSkip reports a lead follow-up that made no call: its request
+// offered no lead, its investigation named or resolved none, or it ran no
+// slice.
 func leadsSkip(key, status, reason string) bool {
 	_, ok := record.LeadsTask(key)
 	return ok && status == string(domain.TaskSkippedPolicy) &&
-		(reason == record.ReasonNoLeads || reason == record.ReasonNoLeadsResolved || reason == domain.ReasonNoReviewScope || reason == reasonDependency)
+		(domain.LeadsNotRun(reason) || reason == domain.ReasonNoReviewScope || reason == reasonDependency)
 }
 
 func leadsNotRun(key string, r analysis.TaskResult) bool {

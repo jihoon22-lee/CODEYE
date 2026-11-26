@@ -117,7 +117,7 @@ func answerAll(in verifyInput, cite func(record.Candidate) []string) opencode.Re
 	var out []any
 	for _, c := range in.Candidates {
 		out = append(out, verdict(c.ID, "inconclusive", func(v map[string]any) {
-			v["supporting_evidence_ids"] = cite(c)
+			v["supporting_evidence_ids"] = cite(c.Candidate)
 			v["unresolved_assumptions"] = []string{"호출자가 수량을 제한하는지 확인하지 못했다."}
 		}))
 	}

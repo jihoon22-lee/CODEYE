@@ -226,8 +226,11 @@ type Record struct {
 	Verifications       []Verification          `json:"verifications,omitempty"`
 	// TriageGroups are the diagnostic groups of a triage record (0.8).
 	TriageGroups []TriageGroup `json:"triage_groups,omitempty"`
-	// Leads are an investigation's leads with their resolution and
-	// LeadFollowup what a follow-up sent and decided (0.9).
+	// LeadLimit is how many leads the investigate request offered
+	// (MaxLeads; absent when it offered none), Leads are the investigation's
+	// leads with their resolution and LeadFollowup what a follow-up sent and
+	// decided (0.9).
+	LeadLimit    int           `json:"lead_limit,omitempty"`
 	Leads        []Lead        `json:"leads,omitempty"`
 	LeadFollowup *LeadFollowup `json:"lead_followup,omitempty"`
 	Limitations  []string      `json:"limitations"`
@@ -910,27 +913,29 @@ func candidateTextWithin(c CandidateText, b bounds) bool {
 // candidates as they came (the report binds them to the upstream record),
 // and may narrow one of those further.
 func checkCitedRanges(r Record) error {
-	// A lead follow-up sends the cited lines of its leads and candidates as
-	// excerpts of their own, as the investigation recorded them, whether or
-	// not its call succeeded: each is bound to the snapshot like any excerpt
-	// and the report binds it to the investigate record.
-	if r.Stage == StageLeads {
-		return nil
-	}
 	cited := map[string]bool{}
-	if r.Stage == StageVerify {
+	if r.Stage == StageVerify || r.Stage == StageLeads {
 		for _, c := range r.Candidates {
 			for _, id := range c.Evidence {
 				cited[id] = true
 			}
 		}
 	}
+	// A lead follow-up sends the cited lines of its leads and candidates as
+	// excerpts of their own, as the investigation recorded them: an accepted
+	// record lists what it sent, and a failed one records only what it sent.
+	sent := map[string]bool{}
+	if r.Stage == StageLeads {
+		for _, e := range r.Evidence {
+			sent[e.ID] = r.LeadFollowup == nil || slices.Contains(r.LeadFollowup.Sent, e.ID)
+		}
+	}
 	for _, e := range r.Evidence {
-		if e.Origin != OriginCited || cited[e.ID] {
+		if e.Origin != OriginCited || cited[e.ID] || sent[e.ID] {
 			continue
 		}
 		if !slices.ContainsFunc(r.Evidence, func(x Excerpt) bool {
-			return (x.Origin != OriginCited || cited[x.ID]) && x.ID != e.ID && x.Path == e.Path && x.SHA256 == e.SHA256 && x.Start <= e.Start && e.End <= x.End
+			return (x.Origin != OriginCited || cited[x.ID] || sent[x.ID]) && x.ID != e.ID && x.Path == e.Path && x.SHA256 == e.SHA256 && x.Start <= e.Start && e.End <= x.End
 		}) {
 			return invalid("cited range outside the sent evidence")
 		}

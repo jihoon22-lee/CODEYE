@@ -144,7 +144,8 @@ var outputCodes = map[string]codeClass{
 	// whatever the class (the candidate stays as the investigation gave it).
 	errLeadResultInvalid:   classIntegrity,
 	errLeadResultDuplicate: classForm,
-	errLeadWithdrawalLines: classIntegrity,
+	errLeadContestLines:    classIntegrity,
+	errLeadAdditionLines:   classIntegrity,
 }
 
 // integrityCode reports a code that keeps rejecting after the repair; an

@@ -3,16 +3,19 @@ package review
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/report"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/discovery"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
@@ -60,6 +63,9 @@ func TestLeadFollowupReachesTheReport(t *testing.T) {
 
 	// The counts the records give.
 	want := report.LeadFollowups{LeadsUnresolved: map[string]int{}, TasksNotRun: map[string]int{}, Dispositions: map[string]int{}}
+	// The new lines are counted once per file however many follow-ups sent
+	// them.
+	newLines := map[string]map[int]bool{}
 	first := ""
 	for _, p := range plan {
 		slot, ok := record.LeadsTask(p.Key)
@@ -92,7 +98,14 @@ func TestLeadFollowupReachesTheReport(t *testing.T) {
 		want.TasksAccepted++
 		want.Calls += len(fu.Calls)
 		want.NewExcerpts += len(fu.LeadFollowup.New)
-		want.NewLines += fu.LeadFollowup.NewLines
+		for file, set := range record.LeadNewLineSet(fu.LeadFollowup.New, catalogOf(fu.Evidence), readRecord(t, j, inv).Evidence) {
+			if newLines[file] == nil {
+				newLines[file] = map[int]bool{}
+			}
+			for n := range set {
+				newLines[file][n] = true
+			}
+		}
 		for _, d := range fu.LeadFollowup.Dispositions {
 			want.Dispositions[d.Disposition]++
 		}
@@ -100,6 +113,7 @@ func TestLeadFollowupReachesTheReport(t *testing.T) {
 			first = slot
 		}
 	}
+	want.NewLines = record.LineCount(newLines)
 	have := r.CodeReview.LeadFollowups
 	if have == nil || first == "" || want.TasksAccepted == 0 || want.Dispositions[record.DispositionRefined] != want.TasksAccepted {
 		t.Fatalf("lead_followups %+v, records %+v", have, want)
@@ -156,5 +170,106 @@ func TestLeadFollowupReachesTheReport(t *testing.T) {
 	inv := readRecord(t, j, "investigate."+first)
 	if !slices.ContainsFunc(inv.Leads, record.Lead.Resolved) {
 		t.Fatalf("example investigation %+v", inv.Leads)
+	}
+}
+
+// A contested candidate goes to verify unchanged, with the follow-up's
+// reason and cited lines as counter-evidence and the contract sentence that
+// says how to weigh them (only in a request that carries a contest); verify
+// decides, and a refuted result is listed in the report as any refuted
+// candidate.
+func TestContestedCandidateGoesToVerify(t *testing.T) {
+	j := treeJob(t, chainTree(12))
+	j.RunID, j.AttemptID = "0195f3a0-0000-7000-8000-000000000c01", "0195f3a0-0000-7000-8000-000000000c02"
+	pinExampleSnapshot(t, &j)
+	reason := "끝 패키지는 0 이하의 입력에 0이나 그 값을 돌려주므로 인용한 줄의 합계에 음수가 더해지지 않는다."
+	l := &leadsScript{asked: true, leads: func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[leadsInput](t, q)
+		target := catalogOf(in.Scope.Excerpts)[in.Leads[0].Resolved[0]]
+		line := target.Start
+		for i, x := range strings.Split(target.Text, "\n") {
+			if strings.Contains(x, "if n") {
+				line = target.Start + i
+			}
+		}
+		return asJSON(map[string]any{"results": []map[string]any{{"basis": in.Candidates[0].ID, "disposition": "contested", "reason": reason,
+			"evidence_ids": []string{fmt.Sprintf("%s:%d-%d", target.ID, line, line)}}}})
+	}}
+	script := l.script(t)
+	verify := script["verify"]
+	var mu sync.Mutex
+	contested := 0
+	script["verify"] = func(n int, q opencode.Request) opencode.Reply {
+		in := decodeAs[verifyInput](t, q)
+		if !slices.ContainsFunc(in.Candidates, func(c verifyCandidate) bool { return c.Contested != nil }) {
+			if strings.Contains(q.Instructions, verifyContestContract) {
+				t.Error("the contest sentence travels without a contested candidate")
+			}
+			return verify(n, q)
+		}
+		sent := catalogOf(in.Scope.Excerpts)
+		var out []any
+		for _, c := range in.Candidates {
+			if c.Contested == nil {
+				out = append(out, inconclusiveFor(c.Candidate, c.Evidence[0]))
+				continue
+			}
+			if c.Contested.Reason != reason || !strings.Contains(q.Instructions, verifyContestContract) ||
+				slices.ContainsFunc(c.Contested.EvidenceIDs, func(id string) bool { _, ok := sent[id]; return !ok }) {
+				t.Errorf("contested candidate %+v without its counter-evidence", c)
+			}
+			mu.Lock()
+			contested++
+			mu.Unlock()
+			out = append(out, verdict(c.ID, "refuted", func(v map[string]any) {
+				v["counterevidence_ids"] = c.Contested.EvidenceIDs
+				v["invalid_conditions"] = []string{"끝 패키지가 0 이하의 입력에 음수를 돌려주지 않는다."}
+			}))
+		}
+		return asJSON(map[string]any{"verifications": out})
+	}
+	h, err := discovery.Wrap(Handler{Static: vetStub{}, Caller: &scriptedCaller{script: script}, Budget: smallBudget}, discovery.Config{Observer: exampleObserver{t: t}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := h.Plan(t.Context(), j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results := map[string]analysis.TaskResult{}
+	for _, task := range plan {
+		results[task.Key] = h.Run(t.Context(), j, task, nil)
+	}
+	accepted := 0
+	for _, p := range plan {
+		if slot, ok := record.LeadsTask(p.Key); ok && results[p.Key].Status == domain.TaskSucceeded {
+			fu := readRecord(t, j, strings.TrimPrefix(record.LeadsTaskKey(slot), "review."))
+			if len(fu.LeadFollowup.Dispositions) != 1 || fu.LeadFollowup.Dispositions[0].Disposition != record.DispositionContested {
+				t.Fatalf("%s dispositions %+v", p.Key, fu.LeadFollowup.Dispositions)
+			}
+			accepted++
+		}
+	}
+	if accepted == 0 || contested != accepted {
+		t.Fatalf("%d contested follow-ups, %d contested verify candidates", accepted, contested)
+	}
+	r, err := report.Build(exampleInput(t, j, h, plan, results, &exampleIDs{n: 0xc00}), report.DefaultRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := report.ValidateReport(r); err != nil {
+		t.Fatal(err)
+	}
+	if lf := r.CodeReview.LeadFollowups; lf == nil || lf.Dispositions[record.DispositionContested] != accepted {
+		t.Fatalf("lead_followups %+v", lf)
+	}
+	refuted := 0
+	for _, f := range r.Findings {
+		if f.Title == chainCandidate("")["title"] && f.Validation == "refuted" {
+			refuted++
+		}
+	}
+	if refuted != accepted {
+		t.Fatalf("%d refuted findings for %d contested candidates", refuted, accepted)
 	}
 }

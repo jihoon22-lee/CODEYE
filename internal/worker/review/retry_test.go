@@ -44,7 +44,7 @@ func TestVerifyNonJSONRepairGetsRetry(t *testing.T) {
 					}))
 					continue
 				}
-				out = append(out, inconclusiveFor(c, c.Evidence[0]))
+				out = append(out, inconclusiveFor(c.Candidate, c.Evidence[0]))
 			}
 			return asJSON(map[string]any{"verifications": out})
 		case 2:
@@ -52,7 +52,7 @@ func TestVerifyNonJSONRepairGetsRetry(t *testing.T) {
 		default:
 			var out []map[string]any
 			for _, c := range in.Candidates {
-				out = append(out, inconclusiveFor(c, c.Evidence[0]))
+				out = append(out, inconclusiveFor(c.Candidate, c.Evidence[0]))
 			}
 			return asJSON(map[string]any{"verifications": out})
 		}
@@ -105,7 +105,7 @@ func TestVerifyDropsNonEvidenceID(t *testing.T) {
 			if c.Origin == "interpret" {
 				ids = append(ids, fixtureObservation)
 			}
-			out = append(out, inconclusiveFor(c, ids...))
+			out = append(out, inconclusiveFor(c.Candidate, ids...))
 		}
 		return asJSON(map[string]any{"verifications": out})
 	}
@@ -208,7 +208,7 @@ func TestVerifyFabricatedIDBesideValidIsRepaired(t *testing.T) {
 			if n == 1 && c.Origin == "interpret" {
 				ids = append(ids, "ev_000000000000000000000000")
 			}
-			out = append(out, inconclusiveFor(c, ids...))
+			out = append(out, inconclusiveFor(c.Candidate, ids...))
 		}
 		return asJSON(map[string]any{"verifications": out})
 	}
@@ -242,10 +242,10 @@ func TestVerifyLaterCallFailureKeepsAccepted(t *testing.T) {
 		var out []map[string]any
 		for _, c := range in.Candidates {
 			if c.Origin == "interpret" {
-				out = append(out, inconclusiveFor(c, "ev_000000000000000000000000"))
+				out = append(out, inconclusiveFor(c.Candidate, "ev_000000000000000000000000"))
 				continue
 			}
-			out = append(out, inconclusiveFor(c, c.Evidence[0]))
+			out = append(out, inconclusiveFor(c.Candidate, c.Evidence[0]))
 		}
 		return asJSON(map[string]any{"verifications": out})
 	}

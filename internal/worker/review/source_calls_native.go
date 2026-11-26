@@ -273,7 +273,7 @@ func (c *sourceCalls) rustCalls(p, scope string) ([]sourceCall, error) {
 			continue
 		}
 		for _, i := range sites {
-			out = append(out, sourceCall{caller: sourceCallLocation{p, tokens[i].line, tokens[tokens[i+1].close].line}, callee: sourceCallLocation{target, start, end}, symbol: symbol})
+			out = append(out, sourceCall{caller: sourceCallLocation{p, tokens[i].line, tokens[tokens[i+1].close].line}, callee: sourceCallLocation{target, start, end}, symbol: symbol, local: local})
 		}
 	}
 	return out, nil

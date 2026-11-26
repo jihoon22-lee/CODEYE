@@ -55,7 +55,7 @@ func TestCandidatesAboutNonShippedPathsAreNotVerified(t *testing.T) {
 		var out []any
 		for _, c := range in.Candidates {
 			sentCandidates = append(sentCandidates, c.Title)
-			out = append(out, inconclusiveFor(c, c.Evidence[0]))
+			out = append(out, inconclusiveFor(c.Candidate, c.Evidence[0]))
 		}
 		return asJSON(map[string]any{"verifications": out})
 	}

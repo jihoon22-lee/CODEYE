@@ -75,9 +75,35 @@ type verifyInput struct {
 	} `json:"scope"`
 	Contracts    []record.Contract       `json:"contracts"`
 	Observations []record.ObservationRef `json:"observations"`
-	Candidates   []record.Candidate      `json:"candidates"`
+	Candidates   []verifyCandidate       `json:"candidates"`
 	Repair       *repairInput            `json:"repair,omitempty"`
 }
+
+// verifyCandidate is a candidate as the verify request carries it. A
+// candidate a lead follow-up contested (record.DispositionContested) carries
+// the follow-up's reason and cited lines as counter-evidence; without one
+// the candidate encodes exactly as record.Candidate.
+type verifyCandidate struct {
+	record.Candidate
+	Contested *candidateContest `json:"contested,omitempty"`
+}
+
+type candidateContest struct {
+	Reason      string   `json:"reason"`
+	EvidenceIDs []string `json:"evidence_ids"`
+}
+
+func withContests(list []record.Candidate, contests map[string]*candidateContest) []verifyCandidate {
+	out := make([]verifyCandidate, len(list))
+	for i, c := range list {
+		out[i] = verifyCandidate{Candidate: c, Contested: contests[c.ID]}
+	}
+	return out
+}
+
+// verifyContestContract travels only in a request with a contested
+// candidate.
+const verifyContestContract = " A candidate with contested carries a lead follow-up's reason and the resolved lines it cites as counter-evidence: weigh them like any refuting evidence and cite the lines that decide."
 
 // limVerifyBudget marks candidates left unreviewed because the verifier
 // request could not carry them within the request budget.
@@ -181,6 +207,29 @@ func (s *roleStage) verify() analysis.TaskResult {
 		}
 	}
 	followed := uInv.State == record.UpstreamAccepted && uLeads.State == record.UpstreamAccepted
+	// A contested candidate travels with its counter-evidence: the cited
+	// lines and the resolved excerpts holding them.
+	contests := map[string]*candidateContest{}
+	contestIDs := map[string][]string{}
+	if followed && leadsRec.LeadFollowup != nil {
+		catalog := catalogOf(leadsRec.Evidence)
+		for _, d := range leadsRec.LeadFollowup.Dispositions {
+			if d.Disposition != record.DispositionContested {
+				continue
+			}
+			contests[d.FinalID] = &candidateContest{Reason: d.Reason, EvidenceIDs: d.EvidenceIDs}
+			ids := slices.Clone(d.EvidenceIDs)
+			for _, id := range d.EvidenceIDs {
+				e := catalog[id]
+				for _, n := range leadsRec.LeadFollowup.New {
+					if t := catalog[n]; t.Path == e.Path && t.SHA256 == e.SHA256 && t.Start <= e.Start && e.End <= t.End {
+						ids = addLim(ids, n)
+					}
+				}
+			}
+			contestIDs[d.FinalID] = ids
+		}
+	}
 	if uInv.State != record.UpstreamAccepted && uInt.State != record.UpstreamAccepted {
 		return result(domain.TaskSkippedPolicy, reasonDependency)
 	}
@@ -286,7 +335,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 	// resend travels as a reference to that unit (requestExcerpts).
 	anchors := slices.DeleteFunc(slices.Clone(withText), func(x record.Excerpt) bool { return !cited[x.ID] })
 	extra, lims, err := expandWithin(s.ctx, s.j.Snapshot, normalizedScope(s.j.Scope), anchors, plain, s.secretFiles(), changed,
-		expansionCaps{s.limit().expansion, s.limit().expansionBytes})
+		expansionCaps{count: s.limit().expansion, bytes: s.limit().expansionBytes})
 	if err != nil {
 		s.setEvidence(context)
 		return *s.inputUnavailable()
@@ -334,6 +383,9 @@ func (s *roleStage) verify() analysis.TaskResult {
 	in := verifyInput{Observations: s.rec.Observations}
 	in.Scope.Snapshot, in.Scope.Subject = s.j.Snapshot.Digest, s.subject()
 	contract := verifyContract + s.subjectContract()
+	if slices.ContainsFunc(candidates, func(c record.Candidate) bool { return contests[c.ID] != nil }) {
+		contract += verifyContestContract
+	}
 	if len(s.j.TestEvidence) > 0 {
 		contract += " Use an observed test to assess its cited assertion. State the code inference only; CODEYE reports the recorded outcome separately."
 	}
@@ -345,7 +397,7 @@ func (s *roleStage) verify() analysis.TaskResult {
 	for n := len(candidates); n >= 1 && !fitted; n-- {
 		citedBy := map[string]bool{}
 		for _, c := range candidates[:n] {
-			for _, id := range c.Evidence {
+			for _, id := range append(slices.Clone(c.Evidence), contestIDs[c.ID]...) {
 				citedBy[id] = true
 			}
 		}
@@ -393,7 +445,9 @@ func (s *roleStage) verify() analysis.TaskResult {
 		} {
 			x := in
 			x.Contracts = []record.Contract{}
-			x.Candidates, x.Observations, _ = requestObservations(candidates[:n], s.rec.Observations)
+			var sentCandidates []record.Candidate
+			sentCandidates, x.Observations, _ = requestObservations(candidates[:n], s.rec.Observations)
+			x.Candidates = withContests(sentCandidates, contests)
 			if variant.withContracts {
 				x.Contracts = contracts
 			}
@@ -496,7 +550,9 @@ func (s *roleStage) verify() analysis.TaskResult {
 			return *s.fail(result(domain.TaskCancelled, "cancelled"))
 		}
 		x := in
-		x.Candidates, x.Observations, _ = requestObservations(pending, s.rec.Observations)
+		var pendingCandidates []record.Candidate
+		pendingCandidates, x.Observations, _ = requestObservations(pending, s.rec.Observations)
+		x.Candidates = withContests(pendingCandidates, contests)
 		x.Repair = repair
 		query, err := marshalVerifyInput(x, omitHashes)
 		if err != nil {

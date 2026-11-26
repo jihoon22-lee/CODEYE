@@ -1195,7 +1195,12 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		if err != nil {
 			return *s.fail(result(domain.TaskCancelled, "cancelled"))
 		}
-		s.rec.Schema, s.rec.Leads = record.SchemaVersionLeads, resolved
+		s.rec.Leads = resolved
+	}
+	if offered && cite != nil {
+		// The record keeps the offer, so a follow-up tells an offer the
+		// investigation did not use (no_leads) from none (leads_not_offered).
+		s.rec.Schema, s.rec.LeadLimit = record.SchemaVersionLeads, record.MaxLeads
 	}
 	s.rec.Limitations = addLim(s.rec.Limitations, outputLims...)
 	if probe != nil {

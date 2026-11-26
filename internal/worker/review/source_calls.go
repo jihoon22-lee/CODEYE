@@ -20,6 +20,9 @@ type sourceCall struct {
 	caller, callee sourceCallLocation
 	symbol         string
 	calleeExtent   sourceCallLocation
+	// local is the name a Python, JavaScript or Rust call site uses for the
+	// imported symbol (an import alias makes it differ); empty elsewhere.
+	local string
 }
 
 type sourceCallLocation struct {
@@ -114,7 +117,7 @@ func (c *sourceCalls) from(p, scope string) ([]sourceCall, error) {
 			return nil, err
 		}
 		if callee.start != 0 {
-			out = append(out, sourceCall{caller: sourceCallLocation{p, site.line, site.end}, callee: callee, symbol: symbol})
+			out = append(out, sourceCall{caller: sourceCallLocation{p, site.line, site.end}, callee: callee, symbol: symbol, local: site.local})
 		}
 	}
 	return out, nil

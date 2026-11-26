@@ -133,9 +133,9 @@ func leadsGoJob(t *testing.T, extra map[string]string) analysis.Job {
 }
 
 // Go leads inside one package: a definition in another file of the
-// package, the callers of a function, two methods of one name (ambiguous),
-// a symbol the cited line does not hold, code the request already carried
-// and a language no resolver reads.
+// package, the callers of a function, a method of two that share a name
+// bound by its receiver's type, a symbol the cited line does not hold, code
+// the request already carried and a language no resolver reads.
 func TestLeadResolutionOutcomes(t *testing.T) {
 	j := leadsGoJob(t, map[string]string{"tools/gen.rb": "def save(key)\n  write(key)\nend\n"})
 	s := leadStage(t, j)
@@ -152,9 +152,14 @@ func TestLeadResolutionOutcomes(t *testing.T) {
 		t.Fatalf("callers %+v", l)
 	}
 
-	flush, flushAnchor := leadWindow(t, s, "store/run.go", "_ = m.Flush()", 1)
-	if l = resolveOne(t, s, record.LeadNeedDefinition, "Flush", flush, flushAnchor); l.Resolved() || l.Reason != record.LeadAmbiguous {
-		t.Fatalf("two methods named Flush %+v", l)
+	flush, flushAnchor := leadWindow(t, s, "store/run.go", "_ = m.Flush()", 0)
+	if l = resolveOne(t, s, record.LeadNeedDefinition, "Flush", flush, flushAnchor); !l.Resolved() || len(l.Targets) != 1 ||
+		l.Targets[0].Path != "store/helper.go" || l.Targets[0].Start != 16 || l.Targets[0].End != 16 {
+		t.Fatalf("memory's Flush %+v", l)
+	}
+	flush, flushAnchor = leadWindow(t, s, "store/run.go", "_ = d.Flush()", 0)
+	if l = resolveOne(t, s, record.LeadNeedDefinition, "Flush", flush, flushAnchor); !l.Resolved() || l.Targets[0].Start != 20 {
+		t.Fatalf("disk's Flush %+v", l)
 	}
 
 	if l = resolveOne(t, s, record.LeadNeedDefinition, "Missing", window, anchor); l.Reason != record.LeadSymbolNotAtAnchor {
@@ -294,8 +299,13 @@ func TestLeadParsing(t *testing.T) {
 	var many []leadOutput
 	for _, sym := range []string{"write", "Save", "errEmpty", "key"} {
 		x := ok
-		x.Symbol, x.Candidate = sym, 0
+		x.Symbol = sym
 		many = append(many, x)
+	}
+	noCandidate := ok
+	noCandidate.Candidate = 0
+	if leads, omitted = s.checkLeads([]leadOutput{noCandidate}, true, reply, kept); len(leads) != 0 || !omitted {
+		t.Fatalf("a lead without a candidate %+v", leads)
 	}
 	if leads, omitted = s.checkLeads(many, true, reply, kept); len(leads) != record.MaxLeads || !omitted {
 		t.Fatalf("more than %d leads: %d", record.MaxLeads, len(leads))
@@ -340,7 +350,7 @@ func TestLeadReasonsFollowTheirOwnCall(t *testing.T) {
 // declaration fits one window (here 34 lines, past the 24 lines of the
 // bounded return the call binding keeps). A longer one, or one whose first
 // lines the investigate request already carried, is sent as that bounded
-// return.
+// return and marked partial.
 func TestLeadDefinitionWindowHoldsTheDeclaration(t *testing.T) {
 	body := func(pad int) string {
 		return "package quote\n\n// Price returns the price of n items; a negative count gives -1.\nfunc Price(n int) int {\n" +
@@ -350,12 +360,14 @@ func TestLeadDefinitionWindowHoldsTheDeclaration(t *testing.T) {
 	for _, c := range []struct {
 		pad        int
 		start, end int
-	}{{28, 4, 37}, {70, 75, 78}} {
+		partial    bool
+	}{{28, 4, 37, false}, {70, 75, 78, true}} {
 		j := treeJob(t, map[string]string{"go.mod": "module example.org/shop\n\ngo 1.23\n", "main.go": caller, "quote/price.go": body(c.pad)})
 		s := leadStage(t, j)
 		window, anchor := leadWindow(t, s, "main.go", "quote.Price(2)", 0)
 		l := resolveOne(t, s, record.LeadNeedDefinition, "Price", window, anchor)
-		if !l.Resolved() || len(l.Targets) != 1 || l.Targets[0].Path != "quote/price.go" || l.Targets[0].Start != c.start || l.Targets[0].End != c.end {
+		if !l.Resolved() || len(l.Targets) != 1 || l.Targets[0].Path != "quote/price.go" || l.Targets[0].Start != c.start || l.Targets[0].End != c.end ||
+			l.Targets[0].Partial != c.partial {
 			t.Fatalf("pad %d: lead %+v", c.pad, l)
 		}
 		if c.pad != 28 {
@@ -363,8 +375,121 @@ func TestLeadDefinitionWindowHoldsTheDeclaration(t *testing.T) {
 		}
 		head, _ := leadWindow(t, s, "quote/price.go", "func Price(", 2)
 		l = resolveOne(t, s, record.LeadNeedDefinition, "Price", window, anchor, head)
-		if !l.Resolved() || len(l.Targets) != 1 || l.Targets[0].Start != 33 || l.Targets[0].End != 36 {
+		if !l.Resolved() || len(l.Targets) != 1 || l.Targets[0].Start != 33 || l.Targets[0].End != 36 || !l.Targets[0].Partial {
 			t.Fatalf("declaration head already sent: lead %+v", l)
+		}
+	}
+}
+
+// A Go definition lead binds the call on its cited line, never a
+// declaration that only shares the name: os.Open is not the package's own
+// Open, Sync on an *os.File or through an interface is not conn's Sync, and
+// a field assignment calls nothing. A function the package declares and a
+// method on the receiver type the package fixes bind. Two declarations of
+// one function across build variants are ambiguous.
+func TestGoDefinitionLeadsBindTheCall(t *testing.T) {
+	files := "package app\n\ntype conn struct{ Timeout int }\n\n// Sync flushes the connection.\nfunc (c *conn) Sync() error {\n\treturn nil\n}\n\n" +
+		"// Open opens a connection; os.Open is another function.\nfunc Open(p string) (*conn, error) {\n\treturn &conn{}, nil\n}\n\n" +
+		"// Timeout is the default timeout.\nfunc Timeout() int {\n\treturn 5\n}\n\ntype flusher interface{ Sync() error }\n"
+	load := "package app\n\nimport \"os\"\n\nfunc Load(p string, w flusher) error {\n\tf, err := os.Open(p)\n\tif err != nil {\n\t\treturn err\n\t}\n" +
+		"\tc := &conn{}\n\tc.Timeout = 5\n\tif err := f.Sync(); err != nil {\n\t\treturn err\n\t}\n\tif err := w.Sync(); err != nil {\n\t\treturn err\n\t}\n" +
+		"\tif _, err := Open(p); err != nil {\n\t\treturn err\n\t}\n\treturn c.Sync()\n}\n"
+	variant := "package app\n\nfunc write(b []byte) int {\n\treturn len(b)\n}\n"
+	j := treeJob(t, map[string]string{"go.mod": "module example.org/app\n\ngo 1.23\n", "app/files.go": files, "app/load.go": load,
+		"app/write.go": variant, "app/write_windows.go": variant, "app/use.go": "package app\n\nfunc use() int {\n\treturn write(nil)\n}\n"})
+	s := leadStage(t, j)
+	for _, c := range []struct {
+		line, symbol string
+		reason       string
+		// start and end are the declaration sent from app/files.go.
+		start, end int
+	}{
+		{"f, err := os.Open(p)", "Open", record.LeadDefinitionMissing, 0, 0},
+		{"c.Timeout = 5", "Timeout", record.LeadSymbolNotAtAnchor, 0, 0},
+		{"if err := f.Sync(); err != nil {", "Sync", record.LeadDefinitionMissing, 0, 0},
+		{"if err := w.Sync(); err != nil {", "Sync", record.LeadDefinitionMissing, 0, 0},
+		{"if _, err := Open(p); err != nil {", "Open", "", 11, 13},
+		{"return c.Sync()", "Sync", "", 6, 8},
+	} {
+		window, anchor := leadWindow(t, s, "app/load.go", c.line, 0)
+		l := resolveOne(t, s, record.LeadNeedDefinition, c.symbol, window, anchor)
+		if c.reason != "" {
+			if l.Resolved() || l.Reason != c.reason || l.Targets != nil {
+				t.Fatalf("%s: lead %+v", c.line, l)
+			}
+			continue
+		}
+		if !l.Resolved() || len(l.Targets) != 1 || l.Targets[0].Path != "app/files.go" || l.Targets[0].Start != c.start || l.Targets[0].End != c.end || l.Targets[0].Partial {
+			t.Fatalf("%s: lead %+v", c.line, l)
+		}
+	}
+	window, anchor := leadWindow(t, s, "app/use.go", "return write(nil)", 0)
+	if l := resolveOne(t, s, record.LeadNeedDefinition, "write", window, anchor); l.Resolved() || l.Reason != record.LeadAmbiguous {
+		t.Fatalf("build variants: lead %+v", l)
+	}
+}
+
+// A script definition lead names the callee itself: the call's name or the
+// imported name its alias binds, never an argument on the line. The
+// definition is sent whole when it fits, not only up to its first return; a
+// longer one is sent as the bounded window up to that return and marked
+// partial.
+func TestScriptDefinitionLeadsNameTheCallee(t *testing.T) {
+	calc := func(pad int) string {
+		return "export function calc(mode: string) {\n  if (mode === 'fast') {\n    return 2;\n  }\n" +
+			strings.Repeat("  // Each other mode has the same rate.\n", pad) + "  return 1;\n}\n"
+	}
+	run := "import { calc as compute } from './calc.js';\n\nexport function run(mode: string) {\n  return compute(mode);\n}\n"
+	for _, c := range []struct {
+		pad        int
+		start, end int
+		partial    bool
+	}{{0, 1, 6, false}, {70, 1, 3, true}} {
+		j := treeJob(t, map[string]string{"app/run.ts": run, "app/calc.ts": calc(c.pad)})
+		s := leadStage(t, j)
+		window, anchor := leadWindow(t, s, "app/run.ts", "return compute(mode)", 0)
+		if l := resolveOne(t, s, record.LeadNeedDefinition, "mode", window, anchor); l.Resolved() || l.Reason != record.LeadSymbolNotAtAnchor {
+			t.Fatalf("pad %d: an argument of the call %+v", c.pad, l)
+		}
+		for _, symbol := range []string{"compute", "calc"} {
+			l := resolveOne(t, s, record.LeadNeedDefinition, symbol, window, anchor)
+			if !l.Resolved() || len(l.Targets) != 1 || l.Targets[0].Path != "app/calc.ts" || l.Targets[0].Start != c.start || l.Targets[0].End != c.end ||
+				l.Targets[0].Partial != c.partial {
+				t.Fatalf("pad %d, %s: lead %+v", c.pad, symbol, l)
+			}
+		}
+	}
+}
+
+// A callers lead reads through the lead's one scan: a generated caller is
+// neither read nor sent (the same caller in a plain file is), and the
+// caller expansion's reads count against the lead's file limit.
+func TestGoCallersLeadReadsThroughItsScan(t *testing.T) {
+	caller := "package store\n\nfunc generated() {\n\t_ = Save(\"k\", 1)\n}\n"
+	for _, generated := range []bool{false, true} {
+		text := caller
+		if generated {
+			text = "// Code generated by tool; DO NOT EDIT.\n\n" + caller
+		}
+		j := treeJob(t, map[string]string{"go.mod": "module example.org/store\n\ngo 1.23\n", "store/save.go": leadsGoTree, "store/gen.go": text})
+		s := leadStage(t, j)
+		decl, anchor := leadWindow(t, s, "store/save.go", "func Save(", 1)
+		l := resolveOne(t, s, record.LeadNeedCallers, "Save", decl, anchor)
+		switch {
+		case !generated && (!l.Resolved() || l.Targets[0].Path != "store/gen.go"):
+			t.Fatalf("plain caller: lead %+v", l)
+		case generated && (l.Resolved() || l.Reason != record.LeadGenerated || l.Targets != nil):
+			t.Fatalf("generated caller: lead %+v", l)
+		}
+		if generated {
+			continue
+		}
+		r := s.newLeadResolver([]record.Excerpt{decl})
+		scan := r.scan()
+		scan.files = maxScanFiles - 1
+		hits, reason, err := r.callers(scan, "Save", anchor)
+		if err != nil || len(hits) != 0 || reason != record.LeadScanLimit {
+			t.Fatalf("spent scan: %d hits, %q, %v", len(hits), reason, err)
 		}
 	}
 }

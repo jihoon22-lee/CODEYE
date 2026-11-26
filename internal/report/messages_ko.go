@@ -711,7 +711,7 @@ var koSectionLabels = map[string]string{
 	"leads.disposition.kept":      "그대로 둠",
 	"leads.disposition.refined":   "고침",
 	"leads.disposition.added":     "새로 더함",
-	"leads.disposition.withdrawn": "거둠",
+	"leads.disposition.contested": "반박함(검증으로 감)",
 
 	"ledger.heading":                   "모듈별 검토 장부",
 	"ledger.extended":                  "확장 코드 검토가 선택됐다. 실제 조사 범위는 호출 상한과 입력 한도에 따른다.",
