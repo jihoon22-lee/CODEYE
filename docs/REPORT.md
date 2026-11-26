@@ -10,7 +10,7 @@
 |---|---|
 | `schema_version` | `0.1`. 새 필드는 모두 선택 필드로 추가했다. |
 | `demo` | 제품이 게시한 보고서는 항상 `false`다. [`examples/report.json`](../examples/report.json)은 현재 builder가 실제 worker 파이프라인과 대본 모델 응답으로 만든 합성 예시(`demo: true`)이고, [`examples/report-go-vet.json`](../examples/report-go-vet.json)은 builder 1 시절의 실제 코드 미포함 내보내기다(분석 종류별 절 없음). |
-| `builder.id` / `builder.version` | `codeye-report` / `22`. 생성 시점의 버전을 저장한다. 이전 보고서에 없는 필드는 비워 두고, 화면은 저장된 절과 근거만 표시한다. |
+| `builder.id` / `builder.version` | `codeye-report` / `26`. 생성 시점의 버전을 저장한다. 이전 보고서에 없는 필드는 비워 두고, 화면은 저장된 절과 근거만 표시한다. |
 | `builder.input_digest` | run·snapshot·attempt 사실, task 행, 결과 manifest, 산출물 행, 게시 시점 판정 집합과 builder ID·버전·스키마 버전을 SHA-256으로 계산한다. 프로젝트 정보가 있으면 프로젝트명·소스 경로·분석 시작 및 종료 시각을 포함한다. PR 실행에는 고정한 PR 정보도 포함한다. 보고서 ID·리비전·보고서 생성 시각은 제외한다. |
 | `export.include_code` | 저장본은 `true`다. 코드 미포함 내보내기는 같은 저장본의 projection이며 `false`다. |
 
@@ -66,7 +66,7 @@ builder 5부터 보고서는 위 필드에 더해 분석 종류마다 한 블록
 | 4 | 정적 분석 | `static_analysis` | 생태계(`languages[].ecosystem`)별, 그 안에서 분석기 task별 한 행: 목적, 작업 상태·사유, 결과 수락 여부, exit class, 규칙 팩, 범위·처리 파일 수, 규칙별 관찰 수, 관찰·발견 ID |
 | 5 | 구조·중복 지표 | `metrics` | 복잡도·중복 분석기 작업과 측정값(이름·단위·임계값·최댓값·관찰 ID), Go 내부 패키지 의존 관계 |
 | 6 | 비밀정보 | `secrets` | 비밀정보 분석기 task, 탐지마다 규칙·위치·근거 상태·관찰 ID·도구 발견 ID, 모델 입력에서 비밀값을 걸렀는지(`model_input`) |
-| 7 | 코드 분석(모델 검토) | `code_review` | 지침 팩, 역할별 결과, 호출 수·수락 수·요청 바이트, 모델에 노출한 파일 수, 해석 한계, 모델 후보 발견 ID, slice가 계획된 실행이면 [모듈별 검토 장부](#모듈별-검토-장부)(`ledger`), 분류 slot이 계획된 실행이면 [도구 진단 분류](#도구-진단-분류)(`diagnostic_triage`, builder 22부터) |
+| 7 | 코드 분석(모델 검토) | `code_review` | 지침 팩, 역할별 결과, 호출 수·수락 수·요청 바이트, 모델에 노출한 파일 수, 해석 한계, 모델 후보 발견 ID, slice가 계획된 실행이면 [모듈별 검토 장부](#모듈별-검토-장부)(`ledger`), 분류 slot이 계획된 실행이면 [도구 진단 분류](#도구-진단-분류)(`diagnostic_triage`, builder 22부터), 단서 후속 조사가 계획된 실행이면 [단서 후속 조사](#단서-후속-조사)(`lead_followups`, builder 26부터) |
 | 8 | 분석 공백 | `gaps` | 분석하지 못했거나 일부만 분석한 범위(`section`, `code`, 선택 `subject`·`detail`). 비어 있으면 생략한다. |
 
 "이전 실행과 비교"는 저장 문서의 절이 아니다. 비교는 요청마다 계산하므로([run 비교](#run-비교)) 웹 화면만 종합 아래에 그 결과를 따로 보여주고, 내보내기에는 넣지 않는다.
@@ -144,6 +144,25 @@ builder 22부터 분류 slot(`review.triage.tNNN`·`review.verify.tNNN`, [검토
 - builder 24부터 코드 분석 절의 `candidates_not_shipped`와 종합의 같은 이름의 수("시험·예제 등 배포 코드가 아닌 경로만 인용해 검증하지 않은 모델 후보")는 인용한 코드·시험 근거가 모두 배포 코드가 아닌 경로에 있어 검증에 보내지 않은 조사 후보의 수다([모델 검토](REVIEW.md#검토-대상은-배포-코드다)). 보고서는 이 결정을 후보의 기록된 근거에서 다시 정한다(검증이 실패했거나 없어도 같다). 검토 범위에 배포 코드가 없으면(예제만 있는 저장소, 시험만 바꾼 PR) 아무 후보도 가리지 않고 코드 분석 절의 `subject`가 `non_shipped`다. 표지가 근거와 맞지 않는 보고서는 거부한다. 그 후보는 지워지지 않는다. 검증 상태 `unreviewed`와 한계 `candidate_not_shipped`를 가진 발견으로 남고, "예제·시험 입력 등에서 발견한 항목" 접힘(웹·Markdown·HTML)에 제목·위치와 고정 문구("검증하지 않음: 배포 코드가 아닌 경로의 줄만 인용한 조사 후보라 검증 요청에 보내지 않았다")로 나오며 접힘의 요약에 그 수가 붙는다. 조치 항목과 미확정 후보(요약의 `pending_candidates`)로 세지 않고 우선순위에 오르지 않아 `quality_verdict`와 `status`를 바꾸지 않는다(검증 호출이 없을 뿐 후보를 낸 모델 검토가 없는 실행과 같은 판정이다). PR 댓글의 짧은 목록에는 오르지 않는다. 코드 미포함 내보내기는 제목 대신 위치와 같은 고정 문구를 남긴다. `candidates_not_shipped`는 이 발견의 수와 같아야 한다(검증이 확인한다).
 - builder 25부터 해석 가설(`review_interpret_N`) 가운데 가설의 관찰이 모두 시험·예제·벤치마크·생성물·외부 코드 경로에 위치하고 가설이 인용한 코드·시험 근거도 모두 그런 경로에 있는 것은 발견에 한계 `hypothesis_not_shipped`를 갖는다([모델 검토](REVIEW.md#검토-대상은-배포-코드다), [A65](DECISIONS.md)). 이 가설은 검증을 그대로 거치므로 검증 상태는 모델 검증의 결과(`supported`·`inconclusive`·`refuted`·실패하면 `unreviewed`)이고 바뀌지 않는다. 그러나 조치 항목 카드, 요약의 `actionable_findings`·`pending_candidates`·`priorities`와 그에 따른 `quality_verdict`, PR 댓글의 짧은 목록에는 들지 않고 "예제·시험 입력 등에서 발견한 항목" 접힘(웹·Markdown·HTML)에 검증 상태와 함께 실린다. 접힘의 요약에는 그 수가, 행에는 고정 문구("조치 항목 아님: …")가 붙는다. 반증된(`refuted`) 가설은 기존 반증 목록에 있고 `hypotheses_not_shipped`에 세지 않는다. 보고서는 이 결정을 가설의 관찰 위치와 가설 자신의 인용(첫 주장의 근거)에서 다시 정한다. 검증이 더한 근거나 호출자 확장은 결정을 바꾸지 않고, 검증이 성공·불완전·실패·부재 어느 경우든 같다. 검토 범위에 배포 코드가 없으면(`subject: non_shipped`) 아무 가설도 가리지 않는다. 표지가 근거와 맞지 않거나 수가 다르거나 builder 25 이전 보고서에 있으면 거부한다. 코드 분석 절의 `hypotheses_not_shipped`와 종합의 같은 이름의 수("시험·예제 등 배포 코드가 아닌 경로의 도구 진단에 대한 모델 해석 가설")가 그 수다. 조사 후보의 `candidate_not_shipped`와 달리 검증은 하고 결과를 숨기지 않는다. 가설 자신의 관찰과 인용이 모두 그런 경로에 있으면 검증의 지지 근거가 배포 코드여도 조치 항목에서 빠지지만, 그 발견은 예제·시험 경로 목록에 검증 결과와 함께 계속 보이며, 시험 코드의 진단이 배포 코드의 결함을 가리키면 그 배포 코드를 인용하는 발견(조사 후보나 분류 문제 후보)으로 드러나리라고 본다(조사 후보의 결정과 같은 기준이다). 웹 화면(프로젝트 첫 화면, 조치 목록, 요약, 코드 분석 절)은 이 한계와 `candidate_not_shipped`를 그대로 읽고 같은 경로를 다시 추측하지 않는다. 이 한계가 없는 이전 리비전만 화면의 경로 규칙을 쓰고, builder 25 이전·24 이전 리비전에서 이 문자열은 모델 문장일 뿐이어서 검증도 처리도 하지 않는다(Go 판독기와 웹 파서가 같은 규칙으로 그 문자열을 뺀다).
 - builder 23부터 도구 진단 접힘과 그 분류 결과별 구간(확인이 필요한 진단·반증된 진단·무해하다고 판단한 진단·분류하지 않은 진단)은 배포 코드가 아닌 경로의 진단이 하나라도 있으면 "경로별: 시험·예제 등 배포 코드가 아닌 경로 N건, 배포 코드 M건" 한 줄을 보인다. 수는 관찰의 `path_class`(배포 코드가 아닌 경로의 종류. 위치가 있고 배포 코드가 아닐 때만 있다)에서 센다. 분류하지 않은 진단 구간에도 같은 줄이 있어 호출 상한에 밀린 진단이 어느 경로의 것인지 보인다. 웹·Markdown·HTML이 같은 값을 읽고 builder 22 이전 리비전에는 이 줄이 없다.
+
+### 단서 후속 조사
+
+builder 26부터 단서 후속 조사(`review.leads`·`review.leads.sNNN`, [검토](REVIEW.md#단서-후속-조사))가 계획된 보고서의 코드 분석 절은 `lead_followups`를 싣는다. 이전 리비전에는 없다. 단서를 남긴 조사 기록과 후속 조사 기록(review 기록 0.9)은 자기 task에 붙은 것만 받고, 후속 조사 기록은 같은 조사 기록의 후보·단서와 대조한다(`record.LeadFollowupMatches`). [생성과 검증](../internal/report/review_leads.go)
+
+| 필드 | 내용 |
+|---|---|
+| `leads_asked`, `leads_resolved` | 수락된 조사 기록이 남긴 단서와 그중 플랫폼이 스냅샷에서 찾은 단서 |
+| `leads_unresolved` | 찾지 못한 단서의 이유별 수(`lead_definition_not_found`·`lead_secret_withheld` 등). `leads_asked = leads_resolved + 합`이다 |
+| `tasks_planned`, `tasks_run`, `tasks_accepted` | 계획된 후속 조사 task, 그중 모델을 호출했거나 호출하려 한 task, 결과를 받아들인 task |
+| `tasks_not_run` | 호출하지 않은 task의 이유별 수(`no_leads`, `no_leads_resolved`, `review_budget_exhausted`, 조사나 slot이 실행되지 않은 이유). task 행과 같아야 한다 |
+| `calls` | `coverage.review_calls` 가운데 후속 조사 task의 호출 수 |
+| `new_excerpts`, `new_lines` | 수락된 후속 조사가 새로 보낸 찾은 발췌와 그 서로 다른 줄 수 |
+| `dispositions` | 수락된 후속 조사 뒤 후보의 처리별 수(`kept`·`refined`·`added`·`withdrawn`) |
+
+- 수는 모두 기록과 task 행에서 센다. 모델이 쓴 숫자는 쓰지 않는다. 검증(`ValidateReport`)이 task 행, AI 검토 항목, 호출 목록과 다시 대조하고, 맞지 않거나 builder 26 이전 리비전에 있으면 거부한다.
+- 수락된 후속 조사의 최종 후보가 그 조사의 발견이 되고 같은 조사의 검증 판정을 싣는다. 후속 조사가 실행되지 않았거나 실패하면 조사의 후보가 그대로 발견이 된다. 거둔 후보는 발견이 아니고 `dispositions.withdrawn`에 센다.
+- 장부의 `calls_used`는 slot 후속 조사 기록의 호출을 slice처럼 더하고, 전체 조사의 후속 조사 호출은 `calls_before_slices`에 들어 있다.
+- Markdown·HTML의 코드 분석 절에 "단서 후속 조사" 단락이 있고, 찾지 못한 단서와 호출하지 않은 후속 조사는 이유 문구와 함께 따로 센다. 웹 보고서 패널은 이 객체를 아직 보이지 않는다(task 목록의 사유 문구는 보인다).
 
 ### 의존성 목록
 
