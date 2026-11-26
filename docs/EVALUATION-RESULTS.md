@@ -952,3 +952,23 @@ Go 변형 4개(dev 2, holdout 2, 모듈 작업 10개)만 같은 도구 목록·�
 
 - 다른 아홉 작업의 관찰 집합은 전후가 같다. 늘어난 진단 74건은 모두 시험·예제 경로이고 배포 코드에는 없다. 그래서 배포 코드의 정밀도 표본은 0건이다.
 - 배포 코드 진단이 그대로이므로 채점기의 "tool diagnostic hits label" 집계가 바뀐다면 시험·예제 경로의 진단 때문이다. Go 사례만 다시 돌린 batch의 수는 적지 않는다.
+
+### JS/TS 하위 설치 루트와 rustdoc 이름 충돌
+
+JS/TS 변형 3개와 Rust 변형 3개만 같은 도구 목록·설정으로 다시 실행했다.
+
+| 분석기 | 기준 | 변경 뒤 |
+|---|---|---|
+| tsc 작업 상태 | succeeded 2, skipped_policy `node_modules_outside_snapshot` 1 | succeeded 3 |
+| tsc 처리 파일(배포 / 배포 아님) | 18 / 2 | 19 / 2 |
+| type-aware ESLint 작업 상태 | succeeded 2, `node_modules_outside_snapshot` 1, 입력 예산 초과 1 | succeeded 3, 입력 예산 초과 1 |
+| type-aware ESLint 처리 파일(배포 / 배포 아님) | 9 / 2 | 10 / 2 |
+| type-aware ESLint 배포 코드 진단 | 4 | 6 |
+| rustdoc 작업 상태 | succeeded 2, failed `doc_output_collision` 1 | succeeded 3 |
+| rustdoc 처리 파일(배포) | 2 | 3 |
+| rustdoc 배포 코드 진단 | 2 | 2 |
+
+- 건너뛰던 JS 작업은 하위 디렉터리에 자기 lockfile이 있는 벤치마크 스크립트 모듈이었다. 두 설치가 모두 성공했지만 상위 루트의 `node_modules`가 그 모듈의 기록에 없어 출처 미상으로 거부되었다.
+- 늘어난 type-aware ESLint 진단 2건은 그 벤치마크 스크립트에 있다(경로 규칙으로는 배포 코드). 소스와 대조한 결과 실제 문제 0, 잡음 1(`JSON.parse` 결과를 `Object.keys`에 넘긴 것), 불분명 1(구조 분해한 함수 값의 `this` 결속)이다.
+- rustdoc 실패는 C API 래퍼 패키지가 본 패키지와 같은 라이브러리 이름을 쓴 workspace였다. 래퍼를 뺀 재실행이 성공했고, 늘어난 진단은 없다.
+- 다른 작업의 관찰 집합은 전후가 같다.

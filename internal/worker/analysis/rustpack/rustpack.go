@@ -574,6 +574,21 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 			}
 		}
 	}
+	// cargo doc refuses a workspace whose packages document libraries of
+	// the same name; it is run again without the deeper package of each
+	// pair (decision A71).
+	if a.kind == KindDoc && !writeFailed && !in.Cancelled && ctx.Err() == nil {
+		if pkgs := DocCollisionExcludes(in.Main); pkgs != nil {
+			res := runner.Run(ctx, spec(env, a.cargo, DocRetryArgs(pkgs)...))
+			e, err := analysis.WriteExecution(dirs["exec"], a.kind.retryName(), res)
+			if err != nil {
+				writeFailed = true
+			} else {
+				in.Executions = append(in.Executions, e)
+				in.First, in.Main, in.ExcludedPackages = in.Main, &res, pkgs
+			}
+		}
+	}
 	// The workspace copy must still be the snapshot: a build script may write
 	// into its working directory.
 	in.Drift = workspaceDrift(workspace, files, mod.Dir)
