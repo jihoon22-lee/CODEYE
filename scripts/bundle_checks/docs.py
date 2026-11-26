@@ -28,8 +28,8 @@ def check_holdout_corpus() -> None:
 
 # Sealed digest of the project-defects holdout split (docs/EVALUATION.md, 봉인 표) and the main commit
 # the sealed baseline build comes from.
-PROJECT_HOLDOUT_SEAL = "cecd11170a5975ee97e8a5d8292c5a446fe952b524f5e2c77dd623fdb5704079"
-PROJECT_HOLDOUT_BASELINE = "44f53fc38c8b1c5abf45f58341399e8fa38daf46"
+PROJECT_HOLDOUT_SEAL = "60ee262c6ec9cd8937401b68e640e2f868094a1645e631bbd8afb148e05bc8ac"
+PROJECT_HOLDOUT_BASELINE = "2f7ee0d0e3097d64c93c92edf9da9d4329dc2b96"
 # The earlier holdout split, spent by one evaluation on 2026-11-26. Its cases moved to the `spent` split;
 # the split name is part of each case's digest, so the digest is recomputed under the earlier name.
 PROJECT_SPENT_SEAL = "d4cec596f2f7b17619113848663d7031f55102b244a9b77294e90ec71875107f"

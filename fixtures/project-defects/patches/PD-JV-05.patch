@@ -1,11 +1,11 @@
---- a/picocli-codegen/src/main/java/picocli/codegen/annotation/processing/AbstractCommandSpecProcessor.java
-+++ b/picocli-codegen/src/main/java/picocli/codegen/annotation/processing/AbstractCommandSpecProcessor.java
-@@ -470,7 +470,7 @@
-             return;
-         }
-         TypeElement type = (TypeElement) ((DeclaredType) element.asType()).asElement();
--        CommandSpec mixin = buildCommand(type, context, roundEnv);
-+        CommandSpec mixin = buildCommand(false, type, context, roundEnv);
- 
-         logger.fine("Built mixin: " + mixin + " from " + element);
-         if (EnumSet.of(ElementKind.FIELD, ElementKind.PARAMETER).contains(element.getKind())) {
+--- a/animation/src/main/java/org/pushingpixels/radiance/animation/api/TimelineEngine.java
++++ b/animation/src/main/java/org/pushingpixels/radiance/animation/api/TimelineEngine.java
+@@ -287,7 +287,7 @@
+                     case PLAYING_FORWARD:
+                         if (!timelineWasInReadyState) {
+                             timeline.durationFraction = timeline.durationFraction
+-                                    + (float) passedSinceLastIteration / (float) timeline.getDuration();
++                                    + passedSinceLastIteration / timeline.getDuration();
+                         }
+                         updateAndEnforceTimelinePosition(timeline);
+                         if (DEBUG_MODE) {
