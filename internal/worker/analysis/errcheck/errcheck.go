@@ -94,9 +94,20 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	doc.Module.Dir = module
 	doc.Patterns = run.Task.Patterns
 	doc.Tool.Name, doc.Tool.Version, doc.Tool.VersionTested = Name, anypack.Ptr(a.version), a.version == "v1.30.0"
-	doc.RulePack = obsdoc.RulePack{ID: "codeye-go-errcheck", Version: "1", Selection: []string{"-mod=readonly"}, RepositoryConfig: obsdoc.RepoConfigNone, SourceSuppressions: obsdoc.SuppressNone, ConfigFiles: []obsdoc.ConfigFile{}, UnreportedSuppressionRules: []string{}}
+	files := govet.IncludedFiles(job.Snapshot.Manifest)
+	// A module that vendors its dependencies is loaded from vendor/, as go
+	// vet and Staticcheck load it by the go command's default; -mod=readonly
+	// would ask the (offline) module proxy instead.
+	modFlag := "-mod=readonly"
+	if _, vendored := files[govet.JoinRel(module, "vendor/modules.txt")]; vendored {
+		modFlag = "-mod=vendor"
+	}
+	doc.RulePack = obsdoc.RulePack{ID: "codeye-go-errcheck", Version: "1", Selection: []string{modFlag}, RepositoryConfig: obsdoc.RepoConfigNone, SourceSuppressions: obsdoc.SuppressNone, ConfigFiles: []obsdoc.ConfigFile{}, UnreportedSuppressionRules: []string{}}
 	doc.Coverage.FilesInScope = run.Task.FilesInScope
 	doc.Limitations = []string{"active_go_build_context"}
+	if modFlag == "-mod=vendor" {
+		doc.Limitations = append(doc.Limitations, "vendor_directory_used")
+	}
 	cache, err := run.Mkdir("gocache")
 	if err != nil {
 		return pack.Failed("scratch_unavailable")
@@ -138,10 +149,10 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 		} else {
 			listSpec := spec
 			listSpec.Executable = a.goTool.Executable()
-			listSpec.Args = append([]string{"list", "-mod=readonly", "-json=" + govet.ListFields}, run.Task.Patterns...)
+			listSpec.Args = append([]string{"list", modFlag, "-json=" + govet.ListFields}, run.Task.Patterns...)
 			list = run.Exec(ctx, runner, "go.list", listSpec)
 			results = append(results, list)
-			spec.Args = append([]string{"-mod=readonly"}, run.Task.Patterns...)
+			spec.Args = append([]string{modFlag}, run.Task.Patterns...)
 			if pack.ExitedZero(list) && pack.StreamsComplete(list) {
 				check = run.Exec(ctx, runner, "errcheck.check", spec)
 				results = append(results, check)
@@ -152,7 +163,6 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 	if !outcome.Failed() && (check == nil || !pack.StreamsComplete(check) || pack.ExitCode(check) > 1 || len(check.Stderr.Data) > 0) {
 		outcome.Fail(domain.TaskFailed, "errcheck_packages_unavailable", obsdoc.ExitExecutionError)
 	}
-	files := govet.IncludedFiles(job.Snapshot.Manifest)
 	dirs := govet.ModuleDirs(files)
 	var selected []source.Entry
 	for _, p := range govet.GoFilesInScope(files, dirs, module, run.Task.Patterns) {
