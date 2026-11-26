@@ -410,6 +410,82 @@ func TestContestedCallerWindowReachesVerifyWithItsDeclaration(t *testing.T) {
 	}
 }
 
+// A resolved window holds only lines the investigate request did not send.
+// The investigation sends app/run.go's first unit (Share) and not Other, and
+// Other calls Ratio on the line after that unit, so the caller window (the
+// call and three lines around it) would overlap three sent lines. It starts
+// at the call instead, every line of it counts as new, and a refinement that
+// adds the call line stands.
+func TestCallerWindowLeavesTheSentLinesOut(t *testing.T) {
+	run := "package app\n\nimport \"example.org/guard/calc\"\n\n// Share splits the bill.\nfunc Share(total, people int) int {\n\tif people <= 0 {\n\t\treturn 0\n\t}\n\treturn total / people\n}\n" +
+		"func Other(total int) int { v := calc.Ratio(total, 3)\n" + strings.Repeat("\tv += total % 7\n", 120) + "\treturn v\n}\n"
+	tree := map[string]string{
+		"go.mod":      "module example.org/guard\n\ngo 1.23\n",
+		"README.md":   "# Guard\n\nThe bill is split between the people present.\n",
+		"calc/div.go": "package calc\n\n// Ratio divides total by parts.\nfunc Ratio(total, parts int) int {\n\treturn total / parts\n}\n",
+		"app/run.go":  run,
+	}
+	// Padding files take the request budget, so Other is not sent.
+	for i := range 8 {
+		tree[fmt.Sprintf("pad/p%02d.go", i)] = fmt.Sprintf("package pad\n\n// P%02d pads.\nfunc P%02d(v int) int {\n", i, i) + strings.Repeat("\tv += v % 3\n", 100) + "\treturn v\n}\n"
+	}
+	call := slices.IndexFunc(strings.Split(run, "\n"), func(l string) bool { return strings.Contains(l, "calc.Ratio(") }) + 1
+	j := treeJob(t, tree)
+	var mu sync.Mutex
+	sentEnd := 0
+	l := &leadsScript{asked: true, leads: func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[leadsInput](t, q)
+		window := catalogOf(in.Scope.Excerpts)[in.Leads[0].Resolved[0]]
+		refined := chainCandidate(in.Candidates[0].Evidence[0])
+		refined["condition"] = "Other가 3으로 나누는 호출"
+		refined["evidence_ids"] = append(slices.Clone(in.Candidates[0].Evidence), citeLine(window, "calc.Ratio("))
+		refined["basis"], refined["disposition"] = in.Candidates[0].ID, "refined"
+		return asJSON(map[string]any{"results": []map[string]any{refined}})
+	}}
+	script := l.script(t)
+	script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[investigateInput](t, q)
+		i := slices.IndexFunc(in.Scope.Excerpts, func(e record.Excerpt) bool { return e.Path == "calc/div.go" })
+		if !in.Scope.WholeRun || i < 0 {
+			return asJSON(map[string]any{"candidates": []any{}})
+		}
+		mu.Lock()
+		for _, e := range in.Scope.Excerpts {
+			if e.Path == "app/run.go" {
+				sentEnd = max(sentEnd, e.End)
+			}
+		}
+		mu.Unlock()
+		div := in.Scope.Excerpts[i]
+		candidate := chainCandidate(citeLine(div, "total / parts"))
+		candidate["title"], candidate["condition"] = "parts가 0이면 0으로 나눈다", "parts가 0인 호출"
+		out := map[string]any{"candidates": []map[string]any{candidate}}
+		if in.Scope.LeadLimit > 0 {
+			out["leads"] = []map[string]any{{"need": "callers", "evidence_id": citeLine(div, "func Ratio("), "symbol": "Ratio",
+				"suspicion": "호출부가 0을 넘기는지 이 요청에 없다.", "candidate": 1}}
+		}
+		return asJSON(out)
+	}
+	_, results := runRoleWith(t, j, Handler{Static: vetStub{}, Caller: &scriptedCaller{script: script}, Budget: smallBudget}, "1.27.4")
+	inv := readRecord(t, j, record.StageInvestigate)
+	if len(inv.Leads) != 1 || !inv.Leads[0].Resolved() || len(inv.Leads[0].Targets) != 1 {
+		t.Fatalf("leads %+v", inv.Leads)
+	}
+	target := inv.Leads[0].Targets[0]
+	if sentEnd != call-1 || target.Path != "app/run.go" || target.Start != call || target.End != call+3 {
+		t.Fatalf("sent app/run.go up to line %d, call on line %d, caller window %+v", sentEnd, call, target)
+	}
+	fu := readRecord(t, j, record.StageLeads)
+	d := fu.LeadFollowup.Dispositions
+	if results[record.TaskLeads].Status != domain.TaskSucceeded || len(d) != 1 || d[0].Disposition != record.DispositionRefined || d[0].Lead != inv.Leads[0].ID ||
+		len(fu.Calls) != 1 || len(fu.Calls[0].OutputErrors) != 0 || fu.LeadFollowup.NewLines != target.End-target.Start+1 || !record.LeadFollowupMatches(fu, inv) {
+		t.Fatalf("follow-up %+v, dispositions %+v, calls %+v, new lines %d", results[record.TaskLeads], d, fu.Calls, fu.LeadFollowup.NewLines)
+	}
+	if results["review.verify"].Status != domain.TaskSucceeded {
+		t.Fatalf("verify %+v", results["review.verify"])
+	}
+}
+
 // A refinement rewrites a candidate's text from the resolved code: it keeps
 // every citation of the candidate it refines first and in order and adds one
 // or two, each a line of a whole resolved declaration, so it cites at most

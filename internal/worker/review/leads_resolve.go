@@ -40,7 +40,10 @@ import (
 // record.MaxLeadWindowLines lines and maxWindowBytes bytes, within the
 // follow-up's excerpt and byte caps (limits.leadExcerpts, leadBytes): a
 // definition's whole declaration when it fits and the investigation sent
-// none of its lines, else a window marked partial.
+// none of its lines, else a window marked partial. A window leaves out the
+// lines the investigate request sent (unsent), so every line of a resolved
+// excerpt is new to the follow-up; one with none left counts as already in
+// the request.
 
 // leadResolver resolves the leads of one investigation.
 type leadResolver struct {
@@ -318,7 +321,8 @@ func (r *leadResolver) resolve(l record.Lead, anchor record.Excerpt) (record.Lea
 		l.InRequest = inRequest
 		return unresolved(record.LeadInRequest)
 	}
-	blockedBy, overCap := "", false
+	// sentAll: a hit's window held no line the request did not send.
+	blockedBy, overCap, sentAll := "", false, false
 	for _, h := range outside {
 		if len(l.Targets) == record.MaxLeadTargets {
 			break
@@ -331,7 +335,16 @@ func (r *leadResolver) resolve(l record.Lead, anchor record.Excerpt) (record.Lea
 			blockedBy = cmpReason(blockedBy, why)
 			continue
 		}
-		x, partial, ok := r.window(scan, h)
+		x, partial, held, ok := r.window(scan, h)
+		if len(held) > 0 {
+			sentAll = true
+			for _, id := range held {
+				if len(inRequest) < record.MaxLeadTargets {
+					inRequest = addLim(inRequest, id)
+				}
+			}
+			continue
+		}
 		if !ok {
 			continue
 		}
@@ -354,6 +367,9 @@ func (r *leadResolver) resolve(l record.Lead, anchor record.Excerpt) (record.Lea
 		return unresolved(record.LeadOverCap)
 	case blockedBy != "":
 		return unresolved(blockedBy)
+	case sentAll:
+		l.InRequest = inRequest
+		return unresolved(record.LeadInRequest)
 	case l.Need == record.LeadNeedDefinition:
 		return unresolved(record.LeadDefinitionMissing)
 	}
@@ -767,27 +783,30 @@ func (r *leadResolver) callers(scan *leadScan, symbol string, anchor record.Exce
 // it fits one window and the investigate request sent none of its lines,
 // else the definition from its bound location; a call site with three
 // lines around it. A window holds at most record.MaxLeadWindowLines lines
-// and maxWindowBytes bytes, bound to the snapshot blob. partial reports a
-// definition window that is not its whole declaration.
-func (r *leadResolver) window(scan *leadScan, h leadHit) (x record.Excerpt, partial, ok bool) {
+// and maxWindowBytes bytes, bound to the snapshot blob, and only lines the
+// investigate request did not send (unsent); held names the sent excerpts
+// of a window with none left. partial reports a definition window that is
+// not its whole declaration.
+func (r *leadResolver) window(scan *leadScan, h leadHit) (x record.Excerpt, partial bool, held []string, ok bool) {
 	kind := windowKind(h.loc.path)
 	if kind != "code" && kind != "test" {
-		return record.Excerpt{}, false, false
+		return record.Excerpt{}, false, nil, false
 	}
 	if h.excerpt != nil {
 		x := *h.excerpt
 		if x.End-x.Start+1 > record.MaxLeadWindowLines || record.JSONLen(x.Text) > maxWindowBytes {
-			return record.Excerpt{}, false, false
+			return record.Excerpt{}, false, nil, false
 		}
-		return x, false, true
+		x, held, ok := r.unsent(x, h.loc)
+		return x, false, held, ok
 	}
 	e, ok := r.catalog.files[h.loc.path]
 	if !ok || e.Kind != "file" || e.Size == nil || e.SHA256 == "" || e.ExcludedReason != "" {
-		return record.Excerpt{}, false, false
+		return record.Excerpt{}, false, nil, false
 	}
 	text, readable, err := scan.read(e)
 	if err != nil || !readable {
-		return record.Excerpt{}, false, false
+		return record.Excerpt{}, false, nil, false
 	}
 	lines := strings.Split(text, "\n")
 	start, end := h.loc.start, h.loc.end
@@ -800,7 +819,7 @@ func (r *leadResolver) window(scan *leadScan, h leadHit) (x record.Excerpt, part
 	}
 	end = min(end, start+record.MaxLeadWindowLines-1, len(lines))
 	if start < 1 || end < start {
-		return record.Excerpt{}, false, false
+		return record.Excerpt{}, false, nil, false
 	}
 	whole := h.declaration()
 	if origin == "context" && whole.path == h.loc.path && whole.start >= 1 && whole.start <= h.loc.start && h.loc.end <= whole.end &&
@@ -809,17 +828,83 @@ func (r *leadResolver) window(scan *leadScan, h leadHit) (x record.Excerpt, part
 			return x.Path == whole.path && x.Start <= whole.end && whole.start <= x.End
 		}) {
 		if x, ok := r.s.boundedExcerpt(e, kind, origin, whole.start, lines[whole.start-1:whole.end], maxWindowBytes); ok && x.End == whole.end {
-			return x, false, true
+			return x, false, nil, true
 		}
 	}
 	x, ok = r.s.boundedExcerpt(e, kind, origin, start, lines[start-1:end], maxWindowBytes)
 	if !ok || (origin != "context" && x.End < h.loc.end) {
-		return record.Excerpt{}, false, false
+		return record.Excerpt{}, false, nil, false
 	}
 	if origin != "context" && record.ValidEvidenceSymbol(h.symbol) {
 		x.Symbol = h.symbol
 	}
-	return x, origin == "context" && (x.Start > whole.start || x.End < whole.end), true
+	x, held, ok = r.unsent(x, h.loc)
+	if !ok {
+		return record.Excerpt{}, false, held, false
+	}
+	return x, origin == "context" && (x.Start > whole.start || x.End < whole.end), nil, true
+}
+
+// unsent clips a window to the lines the investigate request did not send,
+// so every line a follow-up reads as resolved code is new to it (a caller
+// window, a Go caller expansion window or a partial definition window may
+// overlap the request's excerpts). Of the runs of unsent lines with text it
+// keeps the one holding a line of the hit (the call), else the larger, the
+// first of equal ones. With no such run, held names the sent excerpts the
+// window overlaps.
+func (r *leadResolver) unsent(x record.Excerpt, hit sourceCallLocation) (out record.Excerpt, held []string, ok bool) {
+	var over []record.Excerpt
+	for _, e := range r.sent {
+		if e.Path == x.Path && e.SHA256 == x.SHA256 && e.Start <= x.End && x.Start <= e.End {
+			over = append(over, e)
+		}
+	}
+	if len(over) == 0 {
+		return x, nil, true
+	}
+	lines := strings.Split(x.Text, "\n")
+	if len(lines) != x.End-x.Start+1 {
+		return record.Excerpt{}, nil, false
+	}
+	type run struct{ start, end int }
+	var runs []run
+	for n := x.Start; n <= x.End; n++ {
+		if slices.ContainsFunc(over, func(e record.Excerpt) bool { return e.Start <= n && n <= e.End }) {
+			continue
+		}
+		if k := len(runs) - 1; k >= 0 && runs[k].end == n-1 {
+			runs[k].end = n
+		} else {
+			runs = append(runs, run{n, n})
+		}
+	}
+	text := func(p run) string { return strings.Join(lines[p.start-x.Start:p.end-x.Start+1], "\n") }
+	runs = slices.DeleteFunc(runs, func(p run) bool { return strings.TrimSpace(text(p)) == "" })
+	if len(runs) == 0 {
+		for _, e := range over {
+			held = addLim(held, e.ID)
+		}
+		return record.Excerpt{}, held, false
+	}
+	atHit := func(p run) bool { return hit.path == x.Path && p.start <= hit.end && hit.start <= p.end }
+	best := 0
+	for i, p := range runs[1:] {
+		b := runs[best]
+		if atHit(p) != atHit(b) {
+			if atHit(p) {
+				best = i + 1
+			}
+			continue
+		}
+		if p.end-p.start > b.end-b.start {
+			best = i + 1
+		}
+	}
+	p := runs[best]
+	out = x
+	out.Start, out.End, out.Text = p.start, p.end, text(p)
+	out.ID = record.ExcerptID(r.s.j.Snapshot.Digest, x.Path, x.SHA256, p.start, p.end)
+	return out, nil, true
 }
 
 // errLeadsCancelled: the attempt ended while the leads were resolved.

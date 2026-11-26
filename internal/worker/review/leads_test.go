@@ -1,6 +1,7 @@
 package review
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -36,6 +37,21 @@ func leadWindow(t *testing.T, s *roleStage, path, content string, around int) (w
 	window = record.Excerpt{ID: record.ExcerptID(s.j.Snapshot.Digest, path, e.SHA256, start, end), Path: path, SHA256: e.SHA256, Start: start, End: end,
 		Kind: windowKind(path), Origin: "context", Text: strings.Join(lines[start-1:end], "\n")}
 	return window, record.Narrow(window, s.j.Snapshot.Digest, n, n)
+}
+
+// sentLines is a sent excerpt of path's lines start to end with text.
+func sentLines(t *testing.T, s *roleStage, path string, start, end int) record.Excerpt {
+	t.Helper()
+	e, ok := s.entries()[path]
+	if !ok {
+		t.Fatalf("no %s", path)
+	}
+	lines, ok, err := s.sourceLines(e, nil)
+	if err != nil || !ok || start < 1 || end > len(lines) {
+		t.Fatalf("read %s %d-%d: %v", path, start, end, err)
+	}
+	return record.Excerpt{ID: record.ExcerptID(s.j.Snapshot.Digest, path, e.SHA256, start, end), Path: path, SHA256: e.SHA256, Start: start, End: end,
+		Kind: windowKind(path), Origin: "context", Text: strings.Join(lines[start-1:end], "\n")}
 }
 
 func leadStage(t *testing.T, j analysis.Job) *roleStage {
@@ -173,6 +189,15 @@ func TestLeadResolutionOutcomes(t *testing.T) {
 	l = resolveOne(t, s, record.LeadNeedDefinition, "write", window, anchor, helper)
 	if l.Reason != record.LeadInRequest || len(l.InRequest) != 1 || l.InRequest[0] != helper.ID || l.Targets != nil {
 		t.Fatalf("definition already sent %+v", l)
+	}
+	// Sent in two pieces, neither holding the whole declaration, the
+	// definition leaves no line a window may send (unsent).
+	write := resolveOne(t, s, record.LeadNeedDefinition, "write", window, anchor).Targets[0]
+	mid := (write.Start + write.End) / 2
+	first, second := sentLines(t, s, write.Path, write.Start-1, mid), sentLines(t, s, write.Path, mid+1, write.End+1)
+	l = resolveOne(t, s, record.LeadNeedDefinition, "write", window, anchor, first, second)
+	if write.End <= write.Start || l.Reason != record.LeadInRequest || (len(l.InRequest) != 2 || !slices.Contains(l.InRequest, first.ID) || !slices.Contains(l.InRequest, second.ID)) || l.Targets != nil {
+		t.Fatalf("definition sent in two pieces %+v (declaration %+v)", l, write)
 	}
 
 	ruby, rubyAnchor := leadWindow(t, s, "tools/gen.rb", "write(key)", 0)
@@ -491,5 +516,61 @@ func TestGoCallersLeadReadsThroughItsScan(t *testing.T) {
 		if err != nil || len(hits) != 0 || reason != record.LeadScanLimit {
 			t.Fatalf("spent scan: %d hits, %q, %v", len(hits), reason, err)
 		}
+	}
+}
+
+// unsent keeps a window's lines the investigate request did not send: the
+// whole window when it sent none, the run holding the call, else the
+// largest run (the first of equal ones); a window with no unsent line of
+// text left names the sent excerpts it overlaps.
+func TestUnsentKeepsTheNewLinesOfAWindow(t *testing.T) {
+	j := treeJob(t, map[string]string{"go.mod": "module example.org/w\n\ngo 1.23\n", "w.go": "package w\n"})
+	digest := j.Snapshot.Digest
+	excerpt := func(start, end int, blank ...int) record.Excerpt {
+		var lines []string
+		for n := start; n <= end; n++ {
+			if slices.Contains(blank, n) {
+				lines = append(lines, "")
+			} else {
+				lines = append(lines, "\tv += "+strconv.Itoa(n))
+			}
+		}
+		return record.Excerpt{ID: record.ExcerptID(digest, "w.go", "blob", start, end), Path: "w.go", SHA256: "blob", Start: start, End: end,
+			Kind: "code", Origin: "caller", Symbol: "F", Text: strings.Join(lines, "\n")}
+	}
+	for name, c := range map[string]struct {
+		sent       [][2]int
+		window     [2]int
+		blank      []int
+		call       [2]int
+		want       [2]int // the kept lines; zero when none is left
+		heldExcept int    // the sent excerpts named when none is left
+	}{
+		"no line sent":                         {[][2]int{{20, 30}}, [2]int{10, 16}, nil, [2]int{13, 13}, [2]int{10, 16}, 0},
+		"three sent lines before the call":     {[][2]int{{1, 11}}, [2]int{9, 15}, nil, [2]int{12, 12}, [2]int{12, 15}, 0},
+		"split: the run of the call":           {[][2]int{{10, 12}}, [2]int{8, 16}, nil, [2]int{9, 9}, [2]int{8, 9}, 0},
+		"split, the call sent: the larger run": {[][2]int{{11, 12}, {13, 13}}, [2]int{9, 16}, nil, [2]int{12, 13}, [2]int{14, 16}, 0},
+		"split, equal runs: the first":         {[][2]int{{11, 13}}, [2]int{9, 15}, nil, [2]int{12, 12}, [2]int{9, 10}, 0},
+		"every line sent":                      {[][2]int{{9, 12}, {13, 16}}, [2]int{9, 16}, nil, [2]int{12, 13}, [2]int{}, 2},
+		"only a blank line left":               {[][2]int{{9, 12}, {14, 16}}, [2]int{9, 16}, []int{13}, [2]int{12, 14}, [2]int{}, 2},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := &leadResolver{s: &roleStage{ctx: t.Context(), j: j}}
+			for _, s := range c.sent {
+				r.sent = append(r.sent, excerpt(s[0], s[1]))
+			}
+			x := excerpt(c.window[0], c.window[1], c.blank...)
+			out, held, ok := r.unsent(x, sourceCallLocation{"w.go", c.call[0], c.call[1]})
+			if c.want == ([2]int{}) {
+				if ok || len(held) != c.heldExcept {
+					t.Fatalf("kept %+v, held %v", out, held)
+				}
+				return
+			}
+			want := excerpt(c.want[0], c.want[1], c.blank...)
+			if !ok || held != nil || out != want {
+				t.Fatalf("kept %+v, held %v; want %+v", out, held, want)
+			}
+		})
 	}
 }
