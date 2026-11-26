@@ -160,6 +160,25 @@ class LeadsTest(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual([x["symbol"] for x in f.result_for("investigate", request, leads="project")["leads"]], ["compute"])
 
+    def test_project_mode_leaves_out_names_the_sent_code_declares(self):
+        lines = {
+            # a JS/TS method head with no type before its name, with and
+            # without a return type; a call that opens a callback block is
+            # still a call
+            "a/w.ts": ["class Widget {", "  load(x) {", "    return compute(x)", "  }", "  size(): number {", "    return 1", "  }",
+                       "}", "run(() => {", "  Widget.load(1)", "})"],
+            # a Python class with a base, a Rust struct and a C struct
+            "a/m.py": ["class Store(Base):", "    def save(self, x):", "        return Store(compute(x))"],
+            "a/s.rs": ["struct Pair(i32, i32);", "fn make() -> Pair {", "    Pair(compute(), 1)", "}"],
+        }
+        for path, body in lines.items():
+            text = "\n".join(f"{i + 1}| {line}" for i, line in enumerate(body))
+            request = {"scope": {"snapshot_manifest_digest": "0" * 64, "lead_limit": 3, "excerpts": [
+                {"id": "ev_" + "a" * 24, "path": path, "start_line": 1, "end_line": len(body), "kind": "code", "text": text}]}}
+            want = ["compute", "run"] if path == "a/w.ts" else ["compute"]
+            with self.subTest(path=path):
+                self.assertEqual([x["symbol"] for x in f.result_for("investigate", request, leads="project")["leads"]], want)
+
 
 if __name__ == "__main__":
     unittest.main()

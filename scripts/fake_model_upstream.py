@@ -174,10 +174,16 @@ DECLARATION = re.compile(r"\bfunc (?:\([^)]*\) )?([A-Za-z_][A-Za-z0-9_]*)\(")
 # then the name), the declarations of the six languages a sent excerpt may
 # hold (Go, Python, Rust and JS functions by keyword; a Java, C/C++ or JS/TS
 # method or function head is a line ending in "{" whose first call-like name
-# is not a keyword), comment lines, and the names no project holds.
+# is not a keyword, with or without a type before it; a class, struct,
+# interface, enum, trait or type by keyword), comment lines, and the names
+# no project holds.
 ANY_CALL = re.compile(r"(?:\b([A-Za-z_][A-Za-z0-9_]*)\s*(?:\.|->|::)\s*)?\b([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 KEYWORD_DECLARATION = re.compile(r"\b(?:func(?:\s*\([^)]*\))?|def|fn|function)\s+([A-Za-z_][A-Za-z0-9_]*)")
 HEAD_DECLARATION = re.compile(r"^\s*(?:[A-Za-z_][\w<>\[\],:*&.?]*\s+)+[*&]*([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)[^;]*\{\s*$")
+# A JS/TS method head has no type before its name; its parameters hold no
+# call, so a call that opens a callback block is not taken for one.
+METHOD_HEAD = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^;()]*\)\s*(?::\s*[^;{}()]*)?\{\s*$")
+TYPE_DECLARATION = re.compile(r"\b(?:class|struct|interface|enum|trait|type|union)\s+([A-Za-z_][A-Za-z0-9_]*)")
 COMMENT = re.compile(r"^\s*(?://|#|/\*|\*|--)")
 # A line opening with one of these is a statement, not a declaration head.
 CONTROL = frozenset(("if", "for", "while", "switch", "catch", "return", "else", "do", "try", "case", "defer", "go", "await", "yield",
@@ -255,8 +261,9 @@ def _project_leads(review_input, limit: int) -> list[dict]:
             numbered = NUMBERED.match(line)
             body = numbered.group(2) if numbered else line
             declared.update(KEYWORD_DECLARATION.findall(body))
-            head = HEAD_DECLARATION.match(body)
-            if head and body.split()[0] not in CONTROL:
+            declared.update(TYPE_DECLARATION.findall(body))
+            head = HEAD_DECLARATION.match(body) or METHOD_HEAD.match(body)
+            if head and body.split()[0] not in CONTROL and head.group(1) not in CONTROL:
                 declared.add(head.group(1))
     dirs = {d for e in excerpts if isinstance(e.get("path"), str) for d in e["path"].split("/")[:-1]}
     calls = []
