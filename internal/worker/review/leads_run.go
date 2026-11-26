@@ -75,7 +75,7 @@ const (
 	// order, which would move the finding's location.
 	errLeadRefinementOrder = "lead_refinement_citations_reordered"
 	// A refinement adds no citation, or adds one outside the whole resolved
-	// declarations of one lead of its candidate, or none of its new
+	// declarations of the leads of its candidate, or none of its new
 	// citations holds a line the investigation did not send.
 	errLeadRefinementLines = "lead_refinement_evidence_not_resolved"
 	// A refinement adds more than record.MaxRefinementNewEvidence citations.
@@ -575,13 +575,14 @@ func (s *roleStage) leadsFollowup(inv record.Record, upstream []record.Upstream)
 				if !isLead {
 					// A refinement rewrites the text from the resolved code: it
 					// keeps the citations it started from first and in order
-					// (the finding keeps its location) and adds one or two, all
-					// lines of the whole resolved declarations of one lead of
-					// its candidate and one of them new to the investigation
-					// (record.RefinementGrounded); the lineage records that
-					// lead. One outside those bounds is left out at once,
-					// asking no repair, and the candidate goes to verify as the
-					// investigation gave it.
+					// (the finding keeps its location) and adds one or two,
+					// each a line of the whole resolved declarations of a lead
+					// of its candidate (two may come from two of its leads) and
+					// one of them new to the investigation
+					// (record.RefinementGrounded); the lineage records the lead
+					// of the first. One outside those bounds is left out at
+					// once, asking no repair, and the candidate goes to verify
+					// as the investigation gave it.
 					original, ev := citedBy[basis], r.text.Evidence
 					fresh := slices.DeleteFunc(slices.Clone(ev), func(id string) bool { return slices.Contains(original, id) })
 					code, from := "", ""
@@ -593,13 +594,19 @@ func (s *roleStage) leadsFollowup(inv record.Record, upstream []record.Upstream)
 					case len(fresh) > record.MaxRefinementNewEvidence:
 						code = errLeadRefinementOverCap
 					default:
-						for _, l := range leadsOf[basis] {
-							whole := targetsOf(l, false)
-							if len(fresh) > 0 && !slices.ContainsFunc(fresh, func(id string) bool { return !within(cited, id, whole) }) &&
-								slices.ContainsFunc(fresh, func(id string) bool { return newCode(cited, id) }) {
-								from = l.ID
-								break
+						// leadOf is the first lead of the candidate whose whole
+						// resolved declarations hold the citation.
+						leadOf := func(id string) string {
+							for _, l := range leadsOf[basis] {
+								if within(cited, id, targetsOf(l, false)) {
+									return l.ID
+								}
 							}
+							return ""
+						}
+						if len(fresh) > 0 && !slices.ContainsFunc(fresh, func(id string) bool { return leadOf(id) == "" }) &&
+							slices.ContainsFunc(fresh, func(id string) bool { return newCode(cited, id) }) {
+							from = leadOf(fresh[0])
 						}
 						if from == "" {
 							code = errLeadRefinementLines

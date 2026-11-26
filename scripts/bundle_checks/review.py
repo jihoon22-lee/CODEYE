@@ -776,9 +776,9 @@ def check_leads_examples(raw: dict, validators: dict) -> int:
     line count is their lines the investigation did not send, every original
     candidate has one disposition in order and a kept one is unchanged, a
     refined one keeps the original text and every citation of it first and
-    in order and adds one or two, each a line of a whole new excerpt of the
-    lead its disposition names and one of them a line the investigation did
-    not send (record.RefinementGrounded, record.LeadFollowupMatches), and
+    in order and adds one or two, each a line of a whole new excerpt of a
+    lead of its candidate (its disposition names the lead of the first) and
+    one of them a line the investigation did not send (record.RefinementGrounded, record.LeadFollowupMatches), and
     only a refined one cites more than six; the verify names the
     follow-up by its digest and checks its candidates. The
     chain tree of the Go test is synthetic, so the blobs are not read here;
@@ -854,8 +854,13 @@ def check_leads_examples(raw: dict, validators: dict) -> int:
                 ensure(cited[:n] == original["evidence_ids"], "refinement does not keep its candidate's citations first and in order: " + d["candidate_id"])
                 new = cited[n:]
                 ensure(1 <= len(new) <= 2, "refinement adds no citation or more than two: " + d["candidate_id"])
-                own = [t["id"] for t in leads[d["lead"]]["targets"] if not t.get("partial")]
-                ensure(all(any(inside(i, w) for w in own) for i in new), "refinement adds a line outside the whole resolved excerpts of its lead: " + d["candidate_id"])
+                # The new citations lie in the whole resolved excerpts of the
+                # candidate's leads, and the disposition names the lead of the
+                # first.
+                own = [[t["id"] for t in leads[x]["targets"] if not t.get("partial")] for x in f["leads"] if leads[x].get("candidate_id") == d["candidate_id"]]
+                ensure(all(any(inside(i, w) for ws in own for w in ws) for i in new), "refinement adds a line outside the whole resolved excerpts of its candidate's leads: " + d["candidate_id"])
+                first = next((x for x, ws in zip([x for x in f["leads"] if leads[x].get("candidate_id") == d["candidate_id"]], own) if any(inside(new[0], w) for w in ws)), None)
+                ensure(d["lead"] == first, "refinement names another lead than the one of its first new citation: " + d["candidate_id"])
                 ensure(any({(catalog[i]["path"], catalog[i]["sha256"], k) for k in range(catalog[i]["start_line"], catalog[i]["end_line"] + 1)} - sent_before for i in new),
                        "refinement adds no line the investigation did not send: " + d["candidate_id"])
         ensure(carries_upstream_evidence(fu, inv), "follow-up evidence changes an excerpt of the investigation")

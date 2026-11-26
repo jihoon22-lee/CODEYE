@@ -640,21 +640,27 @@ func TestLeadRefinementKeepsItsCitationsAndRestsOnNewCode(t *testing.T) {
 	}
 }
 
-// A refinement rests on the code of a lead that names its candidate, and
-// the lineage records that lead. Two leads anchor on one call line: F's for
-// candidate 1 and G's for candidate 2 or also for candidate 1. A refinement
-// of candidate 1 that cites only G's resolved declaration is left out at
-// once (lead_refinement_evidence_not_resolved, no repair) when G's lead
-// names candidate 2, and stands with G's lead in its disposition when it
-// names candidate 1.
+// A refinement rests on the code of the leads that name its candidate, and
+// the lineage records the lead of its first new citation. Two leads anchor
+// on one call line: F's for candidate 1 and G's for candidate 2 or also for
+// candidate 1. A refinement of candidate 1 whose new citations include a
+// line of G's resolved declaration is left out at once
+// (lead_refinement_evidence_not_resolved, no repair) when G's lead names
+// candidate 2. When it names candidate 1 the refinement stands, also with
+// one new citation from each lead, and its disposition names the lead of
+// the first; naming the other lead fails the lineage check.
 func TestLeadRefinementRestsOnItsOwnLead(t *testing.T) {
 	tree := twoPartsTree()
 	for name, c := range map[string]struct {
-		second int // the candidate G's lead names
+		second int      // the candidate G's lead names
+		cites  []string // the leads whose resolved declarations hold the new citations, in order
 		want   string
+		lead   string // the lead the disposition names
 	}{
-		"on the lead of another candidate":    {2, errLeadRefinementLines},
-		"on the second lead of its candidate": {1, ""},
+		"on the lead of another candidate":         {2, []string{"G"}, errLeadRefinementLines, ""},
+		"on the second lead of its candidate":      {1, []string{"G"}, "", "G"},
+		"split across the leads of its candidate":  {1, []string{"G", "F"}, "", "G"},
+		"split onto the lead of another candidate": {2, []string{"F", "G"}, errLeadRefinementLines, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			j := treeJob(t, tree)
@@ -692,11 +698,15 @@ func TestLeadRefinementRestsOnItsOwnLead(t *testing.T) {
 					repairs++
 					mu.Unlock()
 				}
-				g := slices.IndexFunc(in.Leads, func(l leadInput) bool { return l.Symbol == "G" })
-				target := catalogOf(in.Scope.Excerpts)[in.Leads[g].Resolved[0]]
 				refined := chainCandidate(in.Candidates[0].Evidence[0])
 				refined["condition"] = "G가 음수를 받는 호출"
-				refined["evidence_ids"] = append(slices.Clone(in.Candidates[0].Evidence), fmt.Sprintf("%s:%d-%d", target.ID, target.Start+1, target.Start+1))
+				ev := slices.Clone(in.Candidates[0].Evidence)
+				for _, symbol := range c.cites {
+					k := slices.IndexFunc(in.Leads, func(l leadInput) bool { return l.Symbol == symbol })
+					target := catalogOf(in.Scope.Excerpts)[in.Leads[k].Resolved[0]]
+					ev = append(ev, fmt.Sprintf("%s:%d-%d", target.ID, target.Start+1, target.Start+1))
+				}
+				refined["evidence_ids"] = ev
 				refined["basis"], refined["disposition"] = in.Candidates[0].ID, "refined"
 				return asJSON(map[string]any{"results": []map[string]any{refined}})
 			}
@@ -710,12 +720,17 @@ func TestLeadRefinementRestsOnItsOwnLead(t *testing.T) {
 			if repairs != 0 || len(fu.Calls) != 1 || len(d) == 0 || d[0].CandidateID != inv.Candidates[0].ID {
 				t.Fatalf("%d repairs, calls %+v, dispositions %+v", repairs, fu.Calls, d)
 			}
+			leadOf := func(symbol string) string {
+				return inv.Leads[slices.IndexFunc(inv.Leads, func(l record.Lead) bool { return l.Symbol == symbol })].ID
+			}
 			if c.want == "" {
-				if d[0].Disposition != record.DispositionRefined || d[0].Lead != inv.Leads[1].ID || len(fu.Calls[0].OutputErrors) != 0 || !record.LeadFollowupMatches(fu, inv) {
-					t.Fatalf("dispositions %+v, calls %+v", d, fu.Calls)
+				if d[0].Disposition != record.DispositionRefined || d[0].Lead != leadOf(c.lead) || len(fu.Calls[0].OutputErrors) != 0 ||
+					len(fu.Candidates[0].Evidence) != len(inv.Candidates[0].Evidence)+len(c.cites) || !record.LeadFollowupMatches(fu, inv) {
+					t.Fatalf("dispositions %+v, candidate %+v, calls %+v", d, fu.Candidates[0], fu.Calls)
 				}
-				// The lineage check binds the new citation to the lead the
-				// disposition names: the same record naming F's lead fails.
+				// The lineage check binds the first new citation to the lead
+				// the disposition names: the same record naming the other
+				// lead fails.
 				var other record.Record
 				b, err := json.Marshal(fu)
 				if err != nil {
@@ -724,9 +739,9 @@ func TestLeadRefinementRestsOnItsOwnLead(t *testing.T) {
 				if err := json.Unmarshal(b, &other); err != nil {
 					t.Fatal(err)
 				}
-				other.LeadFollowup.Dispositions[0].Lead = inv.Leads[0].ID
+				other.LeadFollowup.Dispositions[0].Lead = leadOf("F")
 				if record.LeadFollowupMatches(other, inv) {
-					t.Fatal("the lineage check accepted a refinement naming a lead whose code it does not cite")
+					t.Fatal("the lineage check accepted a refinement naming another lead than the one of its first new citation")
 				}
 				return
 			}

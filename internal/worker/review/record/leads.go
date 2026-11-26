@@ -420,7 +420,8 @@ func checkLeadFollowup(r Record, catalog map[string]Excerpt, b bounds) error {
 // MaxCandidateEvidence; the finding keeps its location) and add one or two
 // (MaxRefinementNewEvidence), each in a whole resolved excerpt (whole: the
 // new excerpts that are not partial windows). LeadFollowupMatches also binds
-// them to the disposition's lead and to lines the investigation lacked.
+// them to the leads of the candidate, the disposition's lead to the first,
+// and one of them to lines the investigation lacked.
 func RefinementGrounded(refined, original, whole []string, catalog map[string]Excerpt) bool {
 	if len(original) > MaxCandidateEvidence || len(refined) < len(original) || !slices.Equal(refined[:len(original)], original) {
 		return false
@@ -444,6 +445,27 @@ func leadTargets(l Lead, partial bool) []string {
 		}
 	}
 	return out
+}
+
+// candidateLeadTargets are the whole resolved excerpts of the sent leads
+// (ids, in order) that name candidate, and first the first of those leads
+// whose whole excerpts hold a citation.
+func candidateLeadTargets(ids []string, leads map[string]Lead, candidate string) (whole []string, first func(id string, catalog map[string]Excerpt) string) {
+	var own []Lead
+	for _, id := range ids {
+		if l := leads[id]; l.CandidateID == candidate {
+			own = append(own, l)
+			whole = append(whole, leadTargets(l, false)...)
+		}
+	}
+	return whole, func(id string, catalog map[string]Excerpt) string {
+		for _, l := range own {
+			if leadNewLines(id, leadTargets(l, false), catalog) {
+				return l.ID
+			}
+		}
+		return ""
+	}
 }
 
 // restsOnLead reports a citation of ids in the listed excerpts of a lead
@@ -529,8 +551,9 @@ func LeadLines(ids []string, catalog map[string]Excerpt) int {
 // kept or contested one is unchanged, a contested or refined one is a
 // candidate of a sent lead, an added one comes from a sent lead, a contest,
 // refinement or addition cites lines of its lead's resolved code that no
-// excerpt of the investigation holds (a refinement only in that lead's
-// whole excerpts, after its original's citations in order), the sent
+// excerpt of the investigation holds (a refinement only in the whole
+// excerpts of its candidate's leads, after its original's citations in
+// order, naming the lead of its first new citation), the sent
 // leads are resolved leads of the investigation whose anchors travelled,
 // the new excerpts are exactly targets of those leads with their partial
 // marks, the new line count is theirs less the investigation's lines, and
@@ -634,14 +657,17 @@ func LeadFollowupMatches(fu, inv Record) bool {
 		case DispositionRefined:
 			// The record keeps the investigation's text, and the refinement
 			// keeps the original's citations first and adds one or two in
-			// the whole resolved excerpts of the lead it names, one of them
-			// on a line the investigation lacked.
+			// the whole resolved excerpts of its candidate's leads, one of
+			// them on a line the investigation lacked; it names the lead of
+			// its first new citation.
 			text := original.CandidateText
 			text.ID = ""
 			c, ok := final[d.FinalID]
+			whole, first := candidateLeadTargets(f.Leads, leads, d.CandidateID)
 			if !ok || d.Original == nil || !sameText(*d.Original, text) || c.Origin != original.Origin ||
-				!RefinementGrounded(c.Evidence, original.Evidence, leadTargets(leads[d.Lead], false), catalog) ||
-				!restsOnLead(c.Evidence[len(original.Evidence):], leadTargets(leads[d.Lead], false), catalog, inv.Evidence) {
+				!RefinementGrounded(c.Evidence, original.Evidence, whole, catalog) ||
+				!restsOnLead(c.Evidence[len(original.Evidence):], whole, catalog, inv.Evidence) ||
+				first(c.Evidence[len(original.Evidence)], catalog) != d.Lead {
 				return false
 			}
 		}
