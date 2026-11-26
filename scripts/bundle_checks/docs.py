@@ -26,13 +26,19 @@ def check_holdout_corpus() -> None:
     print(f"PASS: holdout corpus (structure, locations, digests, leakage scan; sealed digest {sealed[:12]})")
 
 
-# Sealed digest of the project-defects holdout split (docs/EVALUATION.md, 봉인 표).
-PROJECT_HOLDOUT_SEAL = "d4cec596f2f7b17619113848663d7031f55102b244a9b77294e90ec71875107f"
+# Sealed digest of the project-defects holdout split (docs/EVALUATION.md, 봉인 표) and the main commit
+# the sealed baseline build comes from.
+PROJECT_HOLDOUT_SEAL = "cecd11170a5975ee97e8a5d8292c5a446fe952b524f5e2c77dd623fdb5704079"
+PROJECT_HOLDOUT_BASELINE = "44f53fc38c8b1c5abf45f58341399e8fa38daf46"
+# The earlier holdout split, spent by one evaluation on 2026-11-26. Its cases moved to the `spent` split;
+# the split name is part of each case's digest, so the digest is recomputed under the earlier name.
+PROJECT_SPENT_SEAL = "d4cec596f2f7b17619113848663d7031f55102b244a9b77294e90ec71875107f"
 
 
 def check_project_defect_corpus() -> None:
-    """Project-defects corpus offline: metadata, patches and label locations of every case, and the
-    holdout split's digest against its seal. Repositories are not fetched (verify does that)."""
+    """Project-defects corpus offline: metadata, patches and label locations of every case, the
+    holdout split's digest against its seal and the spent split's digest against the digest it was
+    sealed with. Repositories are not fetched (verify does that)."""
     import subprocess
 
     corpus = ROOT / "fixtures/project-defects/corpus.py"
@@ -40,12 +46,21 @@ def check_project_defect_corpus() -> None:
     result = subprocess.run([sys.executable, "-I", str(corpus), "validate"], capture_output=True, text=True, timeout=300, env=env)
     tail = " | ".join((result.stdout + result.stderr).strip().splitlines()[-5:])
     ensure(result.returncode == 0, "project-defects corpus validate failed: " + tail)
-    out = subprocess.run([sys.executable, "-I", str(corpus), "digest", "--split", "holdout"], capture_output=True, text=True,
-                         timeout=300, env=env)
-    ensure(out.returncode == 0 and out.stdout.split(), "project-defects holdout digest failed")
-    ensure(out.stdout.split()[-1] == PROJECT_HOLDOUT_SEAL, "project-defects holdout digest differs from its seal; a changed "
-           "holdout split needs a new seal recorded in docs/EVALUATION.md")
-    print(f"PASS: project-defects corpus (offline structure, patches, label locations; holdout seal {PROJECT_HOLDOUT_SEAL[:12]})")
+    for name, argv, seal, what in (
+            ("holdout", ["--split", "holdout"], PROJECT_HOLDOUT_SEAL,
+             "a changed holdout split needs a new seal recorded in docs/EVALUATION.md"),
+            ("spent", ["--split", "spent", "--as-split", "holdout"], PROJECT_SPENT_SEAL,
+             "the spent split's cases must stay as they were when their seal was spent")):
+        out = subprocess.run([sys.executable, "-I", str(corpus), "digest", *argv], capture_output=True, text=True,
+                             timeout=300, env=env)
+        ensure(out.returncode == 0 and out.stdout.split(), f"project-defects {name} digest failed")
+        ensure(out.stdout.split()[-1] == seal, f"project-defects {name} digest differs from its seal; {what}")
+    recorded = (ROOT / "docs/EVALUATION.md").read_text(encoding="utf-8")
+    ensure(re.fullmatch(r"[0-9a-f]{40}", PROJECT_HOLDOUT_BASELINE) is not None, "PROJECT_HOLDOUT_BASELINE must be a full commit SHA")
+    for value in (PROJECT_HOLDOUT_SEAL, PROJECT_HOLDOUT_BASELINE, PROJECT_SPENT_SEAL):
+        ensure(value in recorded, "docs/EVALUATION.md seal table lacks " + value[:12])
+    print(f"PASS: project-defects corpus (offline structure, patches, label locations; holdout seal "
+          f"{PROJECT_HOLDOUT_SEAL[:12]}, spent seal {PROJECT_SPENT_SEAL[:12]})")
 
 
 def heading_anchors(text: str) -> set:

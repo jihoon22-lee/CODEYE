@@ -1,0 +1,126 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-GO-07",
+ "split": "holdout",
+ "language": "go",
+ "kind": "seeded",
+ "category": "data_integrity",
+ "family": "subtest-key-cut-at-first-separator",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/gruntwork-io/terratest",
+  "license": "Apache-2.0",
+  "license_file": "LICENSE"
+ },
+ "scope": "modules/core",
+ "before": {
+  "commit": "a0a921a187ba8a50cc4fcda8496187ca10b2d9b5",
+  "patch": "patches/PD-GO-07.patch"
+ },
+ "after": {
+  "commit": "a0a921a187ba8a50cc4fcda8496187ca10b2d9b5"
+ },
+ "trees": {
+  "before": {
+   "digest": "067719d15d256ee2ac53dab3e9ac6f9382282663e620347578117954f4c6969a",
+   "scope_lines": 2012,
+   "scope_files": 13,
+   "files": 1571
+  },
+  "after": {
+   "digest": "21ed6c253de8b1bad67e9d0ad55a371d48f2c894f7ef5c48111d7c4c18cfc467",
+   "scope_lines": 2012,
+   "scope_files": 13,
+   "files": 1571
+  }
+ },
+ "label": {
+  "trigger": "A terratest helper logs from inside a subtest (t.Run or a table-driven case), so the running test's name is a slash-separated path such as TestParent/case_a, and the run's output is later split into one file per test by the log parser.",
+  "expected_impact": "The prefix that DoLog writes keeps only the segment of the name ahead of the first slash, so every logged line of a subtest is tagged with its top-level test. The parser files each line under the name it reads from that prefix, so subtest lines end up in the parent's log file, parallel subtests of one parent are interleaved there, and each subtest's own file keeps only its status and result lines.",
+  "positive_locations": [
+   {
+    "path": "modules/core/logger/logger.go",
+    "symbol": "DoLog",
+    "anchors": {
+     "start": "prefix := fmt.Sprintf(\"%s %s %s:\", strings.Split(t.Name(), \"/\")[0]"
+    },
+    "start_line": 148,
+    "end_line": 148
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "modules/core/logger/parser/parser.go",
+    "symbol": "parseAndStoreTestOutput",
+    "anchors": {
+     "start": "case strings.HasPrefix(data, \"Test\"):",
+     "end": "testName := GetTestNameFromIndentedTerratestLogLine(data)"
+    },
+    "start_line": 188,
+    "end_line": 207,
+    "note": "Both log-line branches take the test name straight from the line: the first space-separated token on the stdout path, the token after the t.Log decoration otherwise. Whatever DoLog puts there decides which per-test file the line goes to."
+   },
+   {
+    "path": "modules/core/logger/parser/store.go",
+    "symbol": "LogWriter.GetOrCreateFile",
+    "anchors": {
+     "start": "func (logWriter LogWriter) GetOrCreateFile(logger *logrus.Logger, testName string) (*os.File, error) {",
+     "end": "filename := filepath.Join(logWriter.OutputDir, testName+\".log\")"
+    },
+    "start_line": 22,
+    "end_line": 28,
+    "note": "Files are keyed and named by the full test name, and createLogFile makes the nested directory for names with a slash, so the parser expects subtest names intact in every line."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "modules/core/logger/parser/parser.go",
+    "symbol": "parseAndStoreTestOutput",
+    "anchors": {
+     "start": "case IsStatusLine(data):"
+    },
+    "start_line": 180,
+    "end_line": 180,
+    "note": "Status and result lines come from the Go test framework with the complete subtest name, so they still reach the subtest's file; only lines produced through the terratest logger move."
+   },
+   {
+    "note": "Top-level tests have no slash in their names and log exactly as intended, which is why the existing logger tests stay green."
+   }
+  ],
+  "fix_summary": "Write the complete t.Name(), subtest path included, into the log line prefix rather than only the part ahead of the first slash.",
+  "distinctive_tokens": [
+   "parent-only test tag",
+   "subtest path dropped from the prefix"
+  ]
+ },
+ "check": {
+  "summary": "Independent test in the parser package: DoLog writes one line for a fake TestingT named TestParent/child_case and one for TestParent into a buffer, SpawnParsers splits it, and the test fails unless the child line is in TestParent/child_case.log and not in TestParent.log.",
+  "argv": [
+   "{go}",
+   "test",
+   "-count=1",
+   "-run",
+   "^TestSubtestLogLineReachesSubtestFile$",
+   "./logger/parser"
+  ],
+  "cwd": "modules/core",
+  "env": {
+   "GOWORK": "off"
+  },
+  "failure_signature": "--- FAIL: TestSubtestLogLineReachesSubtestFile",
+  "timeout_seconds": 900,
+  "files": [
+   {
+    "path": "modules/core/logger/parser/subtest_log_routing_check_test.go",
+    "source": "checks/PD-GO-07/subtest_log_routing_check_test.go"
+   }
+  ]
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "Pinned commit a0a921a1 is the head of main when the repository was selected, committed 2026-11-16T16:37:24Z. verify --run-checks with go1.27.4 on a 12-CPU host, four runs: before=violation and after=pass every time. Network was on for the module dependencies (logrus, go-junit-report, testify), and GOWORK=off makes the check build modules/core alone, because the repository go.work file rejects -mod=mod. The project's own tests do not catch the patch: go test ./... in modules/core on the patched tree passed every package (files, formatting, logger, logger/parser, random, retry, shell, teststate). TestDoLog uses a top-level test name, and the parser tests read stored fixture logs. The check is therefore independent. Outside verify, a standalone run on before showed both lines filed under TestParent.log with no child_case.log.",
+  "toolchain": "go1.27.4 linux/amd64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

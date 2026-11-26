@@ -8,8 +8,8 @@
 
 - 검토 지침(`prompts/`)을 작성하는 사람은 이 디렉터리를 읽지 않는다. 사례와 라벨을 다른 문서에 요약해 옮기지도 않는다.
 - 사례 작성자는 검토 지침과 과거 모델 결과를 읽지 않고 사례를 만들었다.
-- `holdout` 분할은 봉인한다. 봉인 digest는 [평가](../../docs/EVALUATION.md#보류-집합과-봉인)의 봉인 표와 `scripts/bundle_checks/docs.py`에 있다. `dev` 분할은 runner와 입력 개선을 조정하는 데 쓴다.
-- 두 분할은 저장소와 결함 계열(`family`)이 겹치지 않는다. `validate`가 검사한다.
+- `holdout` 분할은 봉인한다. 봉인 digest는 [평가](../../docs/EVALUATION.md#보류-집합과-봉인)의 봉인 표와 `scripts/bundle_checks/docs.py`에 있다. `dev` 분할은 runner와 입력 개선을 조정하는 데 쓴다. `spent` 분할은 평가에 한 번 쓰여 봉인이 소진된 이전 holdout 사례이고 독립 평가에 쓰지 않는다.
+- 분할은 저장소와 결함 계열(`family`)이 겹치지 않는다. `validate`가 검사한다.
 
 ## 두 가지 사례
 
@@ -133,11 +133,40 @@
 2. 검사는 같은 저장소의 형제 모듈을 제3자 import 없이 `javac --source-path`에 올릴 수 있다. 범위 줄 수는 여전히 범위 디렉터리만으로 센다.
 3. 나머지는 그대로다: 라이선스, 범위 1,500~6,000줄, 고정 커밋의 최근성, 두 번째 파일, 배포 코드, 한 가지 동작 변경, 검사의 before 실패·after 통과, jar·Maven·Gradle 없음, 결과 순서의 첫 후보. 2차로도 두 사례를 채우지 못하면 채운 만큼으로 멈추고 부족을 기록한다. 3차 절차는 묻지 않고 더하지 않는다. 2차 절차로 얻은 사례는 아래 구성 집계에 표시한다. 의존성 없는 Java 라이브러리로 기운 선택이다.
 
+### 구성 집계
+
+봉인 시점(2026-11-26)의 `holdout` 분할이다. 집계만 적고 사례 내용은 이 디렉터리 밖에 옮기지 않는다.
+
+| 언어 | 실제 수정(`real_fix`) | 심은 사례(`seeded`) |
+|---|---|---|
+| Go | 2 | 1 |
+| Python | 2 | 1 |
+| JS/TS | 2 | 1 |
+| Java | 1 | 2 |
+| C/C++ | 1 | 2 |
+| Rust | 1 | 2 |
+
+| 범주 | 사례 수 |
+|---|---|
+| 오류 처리(`error_handling`) | 3 |
+| 자원 수명(`resource_lifecycle`) | 3 |
+| 동시성(`concurrency`) | 3 |
+| 경계·정확성(`boundary_correctness`) | 3 |
+| API 계약(`api_contract`) | 2 |
+| 데이터 무결성(`data_integrity`) | 2 |
+| 입력에서 위험한 사용처까지의 보안(`input_to_sink_security`) | 2 |
+
+- 두 번째 파일이 필요한 사례(`needs_cross_file`)는 14개다. 한 파일 안에서 알아볼 수 있는 `real_fix` 네 개가 나머지다.
+- 실제 수정은 모두 병합일이 2026-01-01 이후이고 2차 기준(2025년 이후)을 쓴 사례는 없다. 심은 사례의 고정 커밋도 모두 2026-01-01 이후다.
+- 사례 18개 모두 `verification.status`가 `verified`이고, 사례 검사가 before 실패·after 통과다. 프로젝트 자체의 시험이 심은 변경을 잡는지는 사례마다 `verification.summary`에 적었다. 실행하지 못한 프로젝트 시험은 그렇게 적었다.
+- PD-JV-05, PD-JV-06는 2차 절차(의존성 없는 Java 라이브러리로 기운 선택)로 얻었다.
+
 ## 명령
 
 ```bash
 python3 -I fixtures/project-defects/corpus.py validate            # 오프라인: 메타데이터·패치·라벨 위치·분할 규칙
 python3 -I fixtures/project-defects/corpus.py digest --split holdout   # 오프라인: 봉인 digest
+python3 -I fixtures/project-defects/corpus.py digest --split spent --as-split holdout   # 소진된 분할을 봉인 당시의 이름으로 계산한 이력 값
 python3 -I fixtures/project-defects/corpus.py materialize PD-GO-01 before DEST --cache CACHE
 python3 -I fixtures/project-defects/corpus.py verify --cache CACHE [--split S] [--case ID] \
   [--run-checks --go /abs/go --python /abs/python3 ...] [--network]

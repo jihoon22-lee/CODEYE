@@ -1,0 +1,25 @@
+[package]
+name = "devenv-activity"
+version = "2.4.1"
+edition = "2024"
+publish = false
+
+[lib]
+path = "../../devenv-activity/src/lib.rs"
+
+[dependencies]
+arc-swap = "1.9.2"
+tracing = { version = "0.1.44", features = ["valuable"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json", "valuable", "registry"] }
+tokio = { version = "1.52.1", features = ["sync", "rt"] }
+humantime = "2"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+serde_with = "3"
+strum = { version = "0.28", features = ["derive"] }
+valuable = { version = "0.1", features = ["derive"] }
+devenv-activity-macros = { path = "../macros" }
+
+[features]
+default = []
+test-helpers = []

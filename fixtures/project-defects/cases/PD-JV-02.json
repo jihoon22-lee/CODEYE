@@ -1,7 +1,7 @@
 {
  "schema": "codeye-project-defect-case",
  "id": "PD-JV-02",
- "split": "holdout",
+ "split": "spent",
  "language": "java",
  "kind": "seeded",
  "category": "error_handling",

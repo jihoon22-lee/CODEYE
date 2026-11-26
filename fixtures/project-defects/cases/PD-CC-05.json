@@ -1,0 +1,132 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-CC-05",
+ "split": "holdout",
+ "language": "cpp",
+ "kind": "seeded",
+ "category": "resource_lifecycle",
+ "family": "old-array-dropped-on-failed-growth",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/nelhage/reptyr",
+  "license": "MIT",
+  "license_file": "COPYING"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "33040fedc494fee0e23072d8f3053fdff86a46e3",
+  "patch": "patches/PD-CC-05.patch"
+ },
+ "after": {
+  "commit": "33040fedc494fee0e23072d8f3053fdff86a46e3"
+ },
+ "trees": {
+  "before": {
+   "digest": "09bb401eae6b745a24814b70a4392d94a3130ff5539b4ed595cc1a8cccd0ca97",
+   "scope_lines": 4019,
+   "scope_files": 29,
+   "files": 51
+  },
+  "after": {
+   "digest": "2b73f9325d1e5c2c25daba622871b40d91a8a403bac508045fab3d953d47bfd0",
+   "scope_lines": 4020,
+   "scope_files": 29,
+   "files": 51
+  }
+ },
+ "label": {
+  "trigger": "fd_array_push is asked to append when the array is already full, so it doubles the capacity, and that growth through xreallocarray fails: the underlying realloc cannot satisfy the request, or the element count times the element size would overflow. reptyr reaches this while it gathers the descriptors that alias the target terminal or its pty master.",
+  "expected_impact": "The failure branch clears the pointer and the capacity of the struct without giving the old block back. A failed xreallocarray returns NULL but, like realloc, leaves the original allocation in place and still owned by the caller, so the descriptor numbers collected so far stay allocated with no reference left anywhere: every failed growth leaks the whole previous array.",
+  "positive_locations": [
+   {
+    "path": "attach.c",
+    "symbol": "fd_array_push",
+    "anchors": {
+     "start": "if (tmp == NULL) {",
+     "end": "return -1;"
+    },
+    "start_line": 54,
+    "end_line": 57
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "reallocarray.c",
+    "symbol": "xreallocarray",
+    "anchors": {
+     "start": "xreallocarray(void *optr, size_t nmemb, size_t size)",
+     "end": "return realloc(optr, size * nmemb);"
+    },
+    "start_line": 32,
+    "end_line": 39,
+    "note": "On a size overflow the helper returns NULL without touching its first argument, and otherwise it is plain realloc, which keeps the original block allocated when it cannot grow it. Either way the caller still owns the old array after a NULL result."
+   },
+   {
+    "path": "platform/linux/linux.c",
+    "symbol": "get_child_tty_fds",
+    "anchors": {
+     "start": "if (fd_array_push(&fds, atoi(d->d_name)) != 0) {",
+     "end": "return fds.fds;"
+    },
+    "start_line": 250,
+    "end_line": 260,
+    "note": "The caller leaves its loop on a failed push and returns the struct's pointer, which the failure branch has already set to NULL, so no other code keeps the earlier array and nobody can release it later."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "note": "Growth only fails when memory is exhausted or the size product would overflow, which a short list of descriptor numbers almost never reaches, and the process usually exits soon after such an error. The loss is a small block on a path that already reports failure."
+   }
+  ],
+  "fix_summary": "When the growth fails, return the old array to the allocator before clearing the pointer, because a failed xreallocarray leaves that block allocated.",
+  "distinctive_tokens": [
+   "every failed growth leaks",
+   "no reference left anywhere"
+  ]
+ },
+ "check": {
+  "summary": "Compiles attach.c, reallocarray.c and the Linux platform files with AddressSanitizer and UBSan together with a driver that stands in for the logging helpers of reptyr.c. realloc and free are wrapped at link time: after two successful appends the driver makes the next growth fail and requires that the block held before that growth was handed to free.",
+  "setup": [
+   [
+    "{cc}",
+    "-g",
+    "-O1",
+    "-fno-omit-frame-pointer",
+    "-fsanitize=address,undefined",
+    "-D_GNU_SOURCE",
+    "-I.",
+    "-Wl,--wrap=realloc",
+    "-Wl,--wrap=free",
+    "-o",
+    "{home}/push_failure_check",
+    "pd_check/push_failure_check.c",
+    "attach.c",
+    "reallocarray.c",
+    "platform/linux/linux.c",
+    "platform/linux/linux_ptrace.c"
+   ]
+  ],
+  "argv": [
+   "{home}/push_failure_check"
+  ],
+  "cwd": ".",
+  "env": {
+   "ASAN_OPTIONS": "detect_leaks=0"
+  },
+  "files": [
+   {
+    "path": "pd_check/push_failure_check.c",
+    "source": "checks/PD-CC-05/push_failure_check.c"
+   }
+  ],
+  "failure_signature": "FD ARRAY BLOCK NOT RELEASED",
+  "timeout_seconds": 300
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with gcc 15.2.0 (-fsanitize=address,undefined, realloc and free wrapped at link time): on before the forced growth failure returns -1 without the old block reaching free, so the driver prints its not-released line and exits 1; on after the block is released and the driver exits 0. Pinned commit is the default-branch head when selected (master, committed 2026-10-19). The project's own tests (test/basic.py and test/tty-steal.py, Python 2 scripts that attach to a live victim process through ptrace) were not run: no Python 2 here, and they never make an allocation fail, so they would not exercise this path.",
+  "toolchain": "gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0, linux x86_64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

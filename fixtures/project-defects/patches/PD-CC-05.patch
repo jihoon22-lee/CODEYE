@@ -1,0 +1,10 @@
+--- a/attach.c
++++ b/attach.c
+@@ -52,7 +52,6 @@
+         fda->allocated = fda->allocated ? 2 * fda->allocated : 2;
+         tmp = xreallocarray(fda->fds, fda->allocated, sizeof *tmp);
+         if (tmp == NULL) {
+-            free(fda->fds);
+             fda->fds = NULL;
+             fda->allocated = 0;
+             return -1;

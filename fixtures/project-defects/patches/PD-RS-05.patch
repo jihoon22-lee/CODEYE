@@ -1,0 +1,11 @@
+--- a/mistralrs-code-exec/src/files.rs
++++ b/mistralrs-code-exec/src/files.rs
+@@ -102,7 +102,7 @@
+             value
+         })
+         .collect();
+-    let status = if files.iter().any(ExecuteFile::is_error) {
++    let status = if files.iter().all(ExecuteFile::is_error) {
+         "error"
+     } else {
+         "success"

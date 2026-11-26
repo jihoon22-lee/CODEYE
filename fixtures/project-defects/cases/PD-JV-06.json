@@ -1,0 +1,164 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-JV-06",
+ "split": "holdout",
+ "language": "java",
+ "kind": "seeded",
+ "category": "input_to_sink_security",
+ "family": "requirement-tested-on-parent-node",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/Mojang/brigadier",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "9ba4f13c0fe82b07c08c2dc2d8043f075ffd0d98",
+  "patch": "patches/PD-JV-06.patch"
+ },
+ "after": {
+  "commit": "9ba4f13c0fe82b07c08c2dc2d8043f075ffd0d98"
+ },
+ "trees": {
+  "before": {
+   "digest": "2173ac4980ee913e65446b3b20e99626c73424f27dd8268f2cf06d31312f40f1",
+   "scope_lines": 3834,
+   "scope_files": 47,
+   "files": 87
+  },
+  "after": {
+   "digest": "514a3629868faa7cd6a2d8920e9235f59e60c13f9fdbbaa90368ce02f9213487",
+   "scope_lines": 3834,
+   "scope_files": 47,
+   "files": 87
+  }
+ },
+ "label": {
+  "trigger": "A source that fails a node's requires predicate submits input that ends at that node while the node has its own command: a restricted top-level literal that executes, or a restricted executable child under a parent that the source may use, such as a wipe literal that only operators may run below an open tools literal.",
+  "expected_impact": "While walking the children of a node, parseNodes now asks whether the source may use the node it is standing on rather than the child it is about to parse, so each predicate is applied one level late: it no longer keeps the source out of its own node and only stops the walk from going below it. The root accepts every source and execution does not test predicates again, so input that ends at a restricted node with a command runs for a source without permission; in the check a guest runs both stop and tools wipe, which are registered for operators only, while the guest's op all, which continues below an operator-only node, is still refused.",
+  "positive_locations": [
+   {
+    "path": "src/main/java/com/mojang/brigadier/CommandDispatcher.java",
+    "symbol": "CommandDispatcher.parseNodes",
+    "anchors": {
+     "start": "if (!node.canUse(source)) {"
+    },
+    "start_line": 301,
+    "end_line": 301
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "src/main/java/com/mojang/brigadier/tree/CommandNode.java",
+    "symbol": "CommandNode.canUse",
+    "anchors": {
+     "start": "public boolean canUse(final S source) {",
+     "end": "return requirement.test(source);"
+    },
+    "start_line": 64,
+    "end_line": 65,
+    "note": "Each node keeps the predicate it was built with and canUse tests only that node's predicate, so asking the parent says nothing about the child."
+   },
+   {
+    "path": "src/main/java/com/mojang/brigadier/builder/ArgumentBuilder.java",
+    "symbol": "ArgumentBuilder.requires",
+    "anchors": {
+     "start": "public T requires(final Predicate<S> requirement) {",
+     "end": "return getThis();"
+    },
+    "start_line": 55,
+    "end_line": 57,
+    "note": "The predicate is attached to the node being built and defaults to accepting every source (line 19), which is why an unrestricted parent lets its restricted children through."
+   },
+   {
+    "path": "src/main/java/com/mojang/brigadier/tree/RootCommandNode.java",
+    "symbol": "RootCommandNode",
+    "anchors": {
+     "start": "super(null, c -> true, null, s -> Collections.singleton(s.getSource()), false);"
+    },
+    "start_line": 20,
+    "end_line": 20,
+    "note": "The root is created with a predicate that always passes, so at the first level the test never refuses a top-level command."
+   },
+   {
+    "path": "src/main/java/com/mojang/brigadier/context/ContextChain.java",
+    "symbol": "ContextChain.runExecutable",
+    "anchors": {
+     "start": "public static <S> int runExecutable(",
+     "end": "final int result = executable.getCommand().run(contextToUse);"
+    },
+    "start_line": 70,
+    "end_line": 73,
+    "note": "Running a parsed chain calls the command directly without consulting any predicate, so the test during parsing is the only gate before execution."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "src/main/java/com/mojang/brigadier/CommandDispatcher.java",
+    "symbol": "CommandDispatcher.getSmartUsage",
+    "anchors": {
+     "start": "if (!node.canUse(source)) {"
+    },
+    "start_line": 454,
+    "end_line": 454,
+    "note": "In getSmartUsage and getAllUsage the node being tested is the node being rendered, so testing node there is correct; only the parse loop has to test each child."
+   },
+   {
+    "path": "src/main/java/com/mojang/brigadier/CommandDispatcher.java",
+    "symbol": "CommandDispatcher.getCompletionSuggestions",
+    "anchors": {
+     "start": "for (final CommandNode<S> node : parent.getChildren()) {"
+    },
+    "start_line": 538,
+    "end_line": 538,
+    "note": "Completion suggestions are listed for every child without a predicate test on both revisions; that behaviour is unchanged and is not this case."
+   }
+  ],
+  "fix_summary": "Inside the loop over relevant children, test the predicate of the child that is about to be parsed and skip that child when the source may not use it, so every node's own requirement decides whether the source can reach and run it.",
+  "distinctive_tokens": [
+   "predicate read from the parent node",
+   "guest runs operator commands"
+  ]
+ },
+ "check": {
+  "summary": "A main program compiled with javac against src/main/java registers an operator-only top-level literal, an operator-only child below an open parent and an open child below an operator-only parent, runs the inputs through the dispatcher for an operator and for a guest source, and fails when the guest reaches either of the first two commands; the third input is only reported.",
+  "setup": [
+   [
+    "{javac}",
+    "-encoding",
+    "UTF-8",
+    "-nowarn",
+    "-proc:none",
+    "-d",
+    "{work}/out",
+    "--source-path",
+    "src/main/java",
+    "pdcheck/CheckRequirementGate.java"
+   ]
+  ],
+  "argv": [
+   "{java}",
+   "-cp",
+   "{work}/out",
+   "CheckRequirementGate"
+  ],
+  "cwd": ".",
+  "env": {},
+  "files": [
+   {
+    "path": "pdcheck/CheckRequirementGate.java",
+    "source": "checks/PD-JV-06/CheckRequirementGate.java"
+   }
+  ],
+  "failure_signature": "CHECK-VIOLATION: a source without the required permission ran \\d+ operator command\\(s\\)",
+  "timeout_seconds": 300
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "Chosen by the second-stage Java seeded procedure (index 78 of the stars 50..8000 list, the next repository after the one used for PD-JV-05); the library has no dependencies, so no sibling module is needed. verify --run-checks with OpenJDK 21: the check program compiles with javac against src/main/java (no jars). On before the guest source runs both operator-only commands, stop through the root, whose predicate always passes, and tools wipe through its open parent (exit 1, CHECK-VIOLATION); on after the guest gets an unknown-command error for stop and an incorrect-argument error for tools wipe, and only the operator runs them (exit 0). The guest's op all, which continues below an operator-only node, is refused on both revisions (at position 0 on after, at position 3 on before, where the predicate is applied one level late). The project's own tests were not run (they need JUnit, Hamcrest, Mockito and Gradle). By reading, CommandDispatcherTest.testExecuteImpermissibleCommand registers a literal whose predicate always fails and expects an unknown-command error at cursor 0; a program of the same shape run on both revisions here got the error at cursor 0 on after and at cursor 3 on before, so that test would fail on before.",
+  "toolchain": "openjdk 21.0.13.1 (javac 21.0.13.1)",
+  "before": "violation",
+  "after": "pass"
+ }
+}

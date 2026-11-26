@@ -1,0 +1,160 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-JS-04",
+ "split": "holdout",
+ "language": "javascript",
+ "kind": "real_fix",
+ "category": "boundary_correctness",
+ "family": "completion-caret-margin-reused-for-hover",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/graphql/graphiql",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": "packages/graphql-language-service",
+ "before": {
+  "commit": "f1a210ea1989825afa5e9a5cbabdd68e9300aa82"
+ },
+ "after": {
+  "commit": "914a547637366b4bea91c5b2e3cfdbf2438f38cb"
+ },
+ "fix_diff": "diffs/PD-JS-04.diff",
+ "fix_commit_url": "https://github.com/graphql/graphiql/commit/914a547637366b4bea91c5b2e3cfdbf2438f38cb",
+ "trees": {
+  "before": {
+   "digest": "a8db5d2f90c4e0e51b38cbc7ae48b938a9a0262a6bdac997e6aa10dff4430b3e",
+   "scope_lines": 5237,
+   "scope_files": 27,
+   "files": 798
+  },
+  "after": {
+   "digest": "47aff28061050e98f164c2facfdfb305a5cfdfd6b896e0b357d1ea9fb6badfe1",
+   "scope_lines": 5239,
+   "scope_files": 27,
+   "files": 799
+  }
+ },
+ "label": {
+  "trigger": "An editor asks for hover information with the pointer on the opening character of a name (a field, argument, variable or directive) and passes no precomputed token. The shared context helper always scans with a one-column margin, so a token that ends exactly where that name begins is accepted as the token under the pointer.",
+  "expected_impact": "Hover answers are shifted one column to the right of the text they describe: the opening character of every name yields an empty tooltip, while the separator just past the name (a space, parenthesis or colon) shows that name's documentation. Users who point at the start of a field see nothing, and pointing at punctuation shows information for the neighbouring name.",
+  "positive_locations": [
+   {
+    "path": "packages/graphql-language-service/src/parser/api.ts",
+    "symbol": "getContextAtPosition",
+    "anchors": {
+     "start": "const token: ContextToken =",
+     "end": "contextToken || getTokenAtPosition(queryText, cursor, 1);"
+    },
+    "start_line": 185,
+    "end_line": 186
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "packages/graphql-language-service/src/interface/getHoverInformation.ts",
+    "symbol": "getHoverInformation",
+    "anchors": {
+     "start": "const context = getContextAtPosition(queryText, cursor, schema, contextToken);"
+    },
+    "start_line": 39,
+    "end_line": 39,
+    "note": "Hover hands the pointer column straight to the shared helper with no token of its own, so it inherits whatever column margin that helper builds in; the pointer column names the character under the mouse, not a caret placed after typed text."
+   },
+   {
+    "path": "packages/graphql-language-service/src/parser/api.ts",
+    "symbol": "getTokenAtPosition",
+    "anchors": {
+     "start": "index !== cursor.line ||",
+     "end": "stream.getCurrentPosition() + offset < cursor.character + 1"
+    },
+    "start_line": 147,
+    "end_line": 148,
+    "note": "The scan stops at the first token whose end plus the margin reaches past the cursor column; with a margin of one, the whitespace or punctuation token that ends where the next name starts satisfies the test first."
+   },
+   {
+    "path": "packages/graphql-language-service/src/interface/getAutocompleteSuggestions.ts",
+    "symbol": "getAutocompleteSuggestions",
+    "anchors": {
+     "start": "const context = getContextAtPosition(",
+     "end": ");"
+    },
+    "start_line": 145,
+    "end_line": 151,
+    "note": "Completion is the caller the margin was made for: its caret stands right after the characters being typed, so the token ending at the caret is the one to complete."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "packages/graphql-language-service/src/interface/getAutocompleteSuggestions.ts",
+    "symbol": "getAutocompleteSuggestions",
+    "anchors": {
+     "start": "const context = getContextAtPosition("
+    },
+    "start_line": 145,
+    "end_line": 145,
+    "note": "For completion the one-column margin is intended and has to stay; a report that the completion path looks at the token before the caret describes correct behaviour."
+   },
+   {
+    "note": "With the pointer in the middle of a name or on its last character the tooltip is already right in the faulty version; only the opening column of a name and the column just after it disagree."
+   }
+  ],
+  "fix_summary": "Give the shared context helper a margin parameter that defaults to zero and pass one only from the completion path, so hover resolves the token under the pointer.",
+  "distinctive_tokens": [
+   "one-column margin",
+   "completion caret margin"
+  ]
+ },
+ "check": {
+  "summary": "Independent node script run on a work copy. Setup installs pinned typescript, graphql, nullthrows, vscode-languageserver-types and debounce-promise under the check home and transpiles the package sources to CommonJS there; the script then asks for hover text at each character of a field name and at two columns of a root field and prints a MISMATCH line for every column whose tooltip is not the field documentation.",
+  "setup": [
+   [
+    "/usr/bin/env",
+    "npm",
+    "install",
+    "--prefix",
+    "{home}/deps",
+    "--no-save",
+    "--no-package-lock",
+    "--no-audit",
+    "--no-fund",
+    "--ignore-scripts",
+    "typescript@5.9.3",
+    "graphql@16.13.2",
+    "nullthrows@1.1.1",
+    "vscode-languageserver-types@3.17.3",
+    "debounce-promise@3.1.2"
+   ],
+   [
+    "{node}",
+    "pd_check/build.cjs",
+    "{home}/deps"
+   ]
+  ],
+  "argv": [
+   "{node}",
+   "pd_check/hover_positions.cjs",
+   "{home}/deps"
+  ],
+  "cwd": ".",
+  "failure_signature": "MISMATCH hover\\(0,\\d+\\)",
+  "timeout_seconds": 600,
+  "files": [
+   {
+    "path": "pd_check/build.cjs",
+    "source": "checks/PD-JS-04/build.cjs"
+   },
+   {
+    "path": "pd_check/hover_positions.cjs",
+    "source": "checks/PD-JS-04/hover_positions.cjs"
+   }
+  ]
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks --network with node v24.18.0 and the npm of the same install: setup installs the five pinned packages into the check home (nothing is written to the work copy) and transpiles src with typescript transpileModule, because the sources use an enum, directory imports and value-style type imports that node's own type stripping does not run. On before the script prints two MISMATCH lines (the opening column of the nested field and of the root field give an empty tooltip) and exits 1; on after all eight columns give the documentation and it exits 0. A wider probe over a query with a variable, an argument and a directive showed the same one-column shift for each name on before and none on after. The upstream vitest file was not run; vitest is not installed. Nine symlinks in the monorepo are not written to the trees; the check does not use them.",
+  "toolchain": "node v24.18.0 linux-x64, npm 11.16.0 via PATH, typescript 5.9.3 transpileModule",
+  "before": "violation",
+  "after": "pass"
+ }
+}

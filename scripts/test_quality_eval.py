@@ -750,6 +750,48 @@ class ProjectCorpusTests(unittest.TestCase):
         errors, _ = m["validate"]([a, b], partial=True)
         self.assertTrue(any("appears in both splits" in e for e in errors), errors)
 
+    def test_a_spent_split_is_labelled_and_a_fresh_digest_starts_a_fresh_registry(self):
+        spent = quality_eval.Corpus("project-defects", "spent")
+        holdout = quality_eval.Corpus("project-defects", "holdout")
+        self.assertEqual(quality_eval.spent_labels(spent), [quality_eval.SPENT_LABEL])
+        self.assertEqual(quality_eval.spent_labels(PROJECT), [])
+        self.assertEqual(quality_eval.spent_labels(holdout), [])
+        self.assertNotEqual(spent.digest, holdout.digest)
+        pack = {"pack_id": PACK_ID, "condition": "review", "first_run_at": "t", "dry_run": False}
+        with tempfile.TemporaryDirectory() as root:
+            # a real run of an earlier build on the spent split is on record; the holdout digest has no history
+            quality_eval.register(root, dict(pack, pack_digest="a" * 64, corpus_digest=spent.digest))
+            entries = quality_eval.registry_entries(root)
+            self.assertEqual(quality_eval.holdout_labels(entries, PACK_ID, "b" * 64, spent.digest),
+                             ([quality_eval.HOLDOUT_LABEL], ["a" * 64]))
+            self.assertEqual(quality_eval.holdout_labels(entries, PACK_ID, "b" * 64, holdout.digest), ([], []))
+
+    def test_the_sealed_split_has_a_fixed_shape_and_the_spent_digest_is_reproducible(self):
+        m = PROJECT.module
+        cases = [dict(language=lang, kind=kind, category=cat, needs_cross_file=True)
+                 for lang, kind, cat in [
+                     ("go", "real_fix", "concurrency"), ("go", "real_fix", "resource_lifecycle"), ("go", "seeded", "data_integrity"),
+                     ("python", "real_fix", "resource_lifecycle"), ("python", "real_fix", "boundary_correctness"),
+                     ("python", "seeded", "input_to_sink_security"),
+                     ("javascript", "real_fix", "boundary_correctness"), ("javascript", "real_fix", "error_handling"),
+                     ("javascript", "seeded", "api_contract"),
+                     ("java", "real_fix", "error_handling"), ("java", "seeded", "concurrency"), ("java", "seeded", "data_integrity"),
+                     ("cpp", "real_fix", "data_integrity"), ("cpp", "seeded", "boundary_correctness"),
+                     ("cpp", "seeded", "input_to_sink_security"),
+                     ("rust", "real_fix", "api_contract"), ("rust", "seeded", "error_handling"), ("rust", "seeded", "concurrency")]]
+        self.assertEqual(m["holdout_composition"](cases), [])
+        self.assertEqual(m["holdout_composition"]([]), [])
+        broken = [dict(c) for c in cases]
+        broken[1]["category"] = "concurrency"  # repeats a category inside one language and tips the category counts
+        self.assertTrue(any("repeat a category" in e for e in m["holdout_composition"](broken)))
+        self.assertTrue(any("need 9" in e for e in m["holdout_composition"](cases[:-1])))
+        few = [dict(c, needs_cross_file=i < 13) for i, c in enumerate(cases)]
+        self.assertTrue(any("second file" in e for e in m["holdout_composition"](few)))
+        # the earlier holdout's cases keep the digest they were sealed with (docs/EVALUATION.md seal table)
+        self.assertEqual(m["split_digest"]("spent", "holdout"),
+                         "d4cec596f2f7b17619113848663d7031f55102b244a9b77294e90ec71875107f")
+        self.assertNotEqual(m["split_digest"]("spent"), m["split_digest"]("spent", "holdout"))
+
     def test_forbidden_list_loads_in_the_relay(self):
         import model_budget_relay as gateway
         m = PROJECT.module

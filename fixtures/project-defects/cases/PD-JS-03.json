@@ -1,7 +1,7 @@
 {
  "schema": "codeye-project-defect-case",
  "id": "PD-JS-03",
- "split": "holdout",
+ "split": "spent",
  "language": "javascript",
  "kind": "seeded",
  "category": "input_to_sink_security",

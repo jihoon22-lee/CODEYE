@@ -1,0 +1,137 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-CC-06",
+ "split": "holdout",
+ "language": "cpp",
+ "kind": "seeded",
+ "category": "concurrency",
+ "family": "neighbour-list-read-without-node-lock",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/nmslib/hnswlib",
+  "license": "Apache-2.0",
+  "license_file": "LICENSE"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "ca426729609b3221563047ceb269cc1213e0d376",
+  "patch": "patches/PD-CC-06.patch"
+ },
+ "after": {
+  "commit": "ca426729609b3221563047ceb269cc1213e0d376"
+ },
+ "trees": {
+  "before": {
+   "digest": "d997f354a8f71b2cde03c92daa0cda946af5f1b25b0e521779f2f347b694adff",
+   "scope_lines": 4381,
+   "scope_files": 8,
+   "files": 67
+  },
+  "after": {
+   "digest": "e7bdd8703d119d29c7c3f934077e5f32415d126ebe4c24d0a7e19c17c3bbe01f",
+   "scope_lines": 4383,
+   "scope_files": 8,
+   "files": 67
+  }
+ },
+ "label": {
+  "trigger": "Several threads insert into the same HierarchicalNSW index at once, as the Python binding does when add_items spreads rows over worker threads. While one insertion walks the graph in searchBaseLayer, another insertion links its new element into the neighbour lists of existing nodes and rewrites their counts and entries.",
+  "expected_impact": "The construction-time walk reads a node's neighbour count and entries without taking that node's link-list mutex, while a concurrent insertion holds the mutex and is changing the same list. The reader can see a count that does not match the entries, follow a half-written or stale neighbour id, or read vectors still being copied in, so the graph built in parallel can get wrong or missing links and the walk can go out of bounds: a data race on the index structure.",
+  "positive_locations": [
+   {
+    "path": "hnswlib/hnswalg.h",
+    "symbol": "searchBaseLayer",
+    "anchors": {
+     "start": "tableint curNodeNum = curr_el_pair.second;",
+     "end": "tableint *datal = (tableint *) (data + 1);"
+    },
+    "start_line": 273,
+    "end_line": 283
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "python_bindings/bindings.cpp",
+    "symbol": "addItems",
+    "anchors": {
+     "start": "ParallelFor(start, rows, num_threads, [&](size_t row, size_t threadId) {",
+     "end": "appr_alg->addPoint((void*)items.data(row), (size_t)id, replace_deleted);"
+    },
+    "start_line": 289,
+    "end_line": 291,
+    "note": "The binding hands rows to ParallelFor, which runs the insertion call from several std::thread workers at the same time, so the graph walk done during an insertion really overlaps with other insertions."
+   },
+   {
+    "path": "hnswlib/hnswalg.h",
+    "symbol": "mutuallyConnectNewElement",
+    "anchors": {
+     "start": "std::unique_lock <std::mutex> lock(link_list_locks_[selectedNeighbors[idx]]);",
+     "end": "setListCount(ll_other, sz_link_list_other + 1);"
+    },
+    "start_line": 585,
+    "end_line": 618,
+    "note": "The writer side: a new element is appended to each selected neighbour's list under that neighbour's mutex, so a reader is only safe if it takes the same per-node mutex."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "hnswlib/hnswalg.h",
+    "symbol": "searchBaseLayerST",
+    "anchors": {
+     "start": "searchBaseLayerST("
+    },
+    "start_line": 335,
+    "end_line": 335,
+    "note": "The query-time walk reads neighbour lists without any per-node mutex by design, because searches are not meant to overlap with insertions. That makes an unlocked read look normal in this file; the difference is that the construction walk runs inside insertions, which the binding does run concurrently."
+   }
+  ],
+  "fix_summary": "Hold the node's link-list mutex while the construction walk reads that node's neighbour count and entries, as the insertion that writes them does.",
+  "distinctive_tokens": [
+   "construction-time walk reads",
+   "half-written or stale neighbour id"
+  ]
+ },
+ "check": {
+  "summary": "Builds a driver against the header-only library with ThreadSanitizer. It inserts 1,500 random 16-dimensional points into one index from four threads at once, the way the binding's parallel insertion does, then checks that each point finds itself. The suppression file silences one data race that the pinned commit already has (the shared level generator). Lock-order reports are switched off because the pinned commit already has them.",
+  "setup": [
+   [
+    "{cxx}",
+    "-std=c++17",
+    "-g",
+    "-O1",
+    "-fsanitize=thread",
+    "-pthread",
+    "-I.",
+    "-o",
+    "{home}/parallel_insert_check",
+    "pd_check/parallel_insert_check.cpp"
+   ]
+  ],
+  "argv": [
+   "{home}/parallel_insert_check"
+  ],
+  "cwd": ".",
+  "env": {
+   "TSAN_OPTIONS": "detect_deadlocks=0 suppressions={work}/pd_check/tsan.supp"
+  },
+  "files": [
+   {
+    "path": "pd_check/parallel_insert_check.cpp",
+    "source": "checks/PD-CC-06/parallel_insert_check.cpp"
+   },
+   {
+    "path": "pd_check/tsan.supp",
+    "source": "checks/PD-CC-06/tsan.supp"
+   }
+  ],
+  "failure_signature": "WARNING: ThreadSanitizer: data race",
+  "timeout_seconds": 600
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with g++ 15.2.0 (-fsanitize=thread): on before ThreadSanitizer reports data races between the unlocked neighbour-list reads in searchBaseLayer and the locked writes in mutuallyConnectNewElement, and the run exits 66. On after there are no reports and it exits 0. Before verify, eight manual runs per variant gave 24-29 race reports on before every time and none on after. TSan options and why: the pinned commit already has a race in getRandomLevel (suppressed) and lock-order reports (detect_deadlocks=0). Pinned commit is the default-branch head when selected (master, committed 2026-09-14). The project's own multithreaded tests (tests/cpp/multiThreadLoad_test.cpp and multiThread_replace_test.cpp, built directly with g++ -O2 -pthread, no sanitizer) pass on both variants, so they do not catch the change; the Python tests were not run (they need the pybind11 extension built).",
+  "toolchain": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0, linux x86_64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

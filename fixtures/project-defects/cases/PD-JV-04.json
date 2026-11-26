@@ -1,0 +1,162 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-JV-04",
+ "split": "holdout",
+ "language": "java",
+ "kind": "real_fix",
+ "category": "boundary_correctness",
+ "family": "heap-repair-bound-one-short-during-extraction",
+ "needs_cross_file": false,
+ "repo": {
+  "url": "https://github.com/mukel/gemma4.java",
+  "license": "Apache-2.0",
+  "license_file": "LICENSE"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "ea0ab5af78bca88c9d12722e0fd60434224573a6"
+ },
+ "after": {
+  "commit": "613a2337b0cdf1c64fcd6645c6aae26df95a4917"
+ },
+ "fix_diff": "diffs/PD-JV-04.diff",
+ "fix_commit_url": "https://github.com/mukel/gemma4.java/commit/613a2337b0cdf1c64fcd6645c6aae26df95a4917",
+ "trees": {
+  "before": {
+   "digest": "92df90a6427098f61151fd241f9744eb0fb5d50910039d2911471553191fe3cf",
+   "scope_lines": 3907,
+   "scope_files": 1,
+   "files": 4
+  },
+  "after": {
+   "digest": "f8c1f3f1e0b690df9025376cd296beb3dff4ae11dd3f035532741132765f00d5",
+   "scope_lines": 3907,
+   "scope_files": 1,
+   "files": 4
+  }
+ },
+ "label": {
+  "trigger": "Generation runs with a positive temperature and a top-p strictly between 0 and 1 (the command-line defaults 1.0 and 0.95 qualify), at least three tokens survive the cutoff filter, and the most probable survivor does not by itself push the running sum past the threshold. After each extraction that stays below the threshold, the max-heap is repaired over one slot fewer than it still holds, so the element sitting just below the extracted region never takes part in the sift and can be passed over by the next extraction.",
+  "expected_impact": "Tokens stop coming out in descending probability order: a less likely token can be counted into the nucleus while a more likely one is left out, so the threshold is crossed with the wrong set and the final draw can return a token outside the true top-p nucleus. For probabilities 0.50/0.30/0.15/0.05 with top-p 0.75 the 0.15 token becomes sampleable; in an eight-token example at top-p 0.82 a 0.068 token is admitted while a 0.107 token is dropped. Generated text is drawn from a distorted distribution and no error is raised.",
+  "positive_locations": [
+   {
+    "path": "Gemma4.java",
+    "symbol": "ToppSampler.sampleToken",
+    "anchors": {
+     "start": "for (int i = n0 - 1; i >= 0; i--) {",
+     "end": "siftDown(indices, 0, i - 1, comparator);"
+    },
+    "start_line": 3345,
+    "end_line": 3352
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "Gemma4.java",
+    "symbol": "ToppSampler.siftDown",
+    "anchors": {
+     "start": "static void siftDown(int[] array, int from, int n, Comparator<Integer> comparator) {",
+     "end": "while ((next = 2 * prev + 1) < n) {"
+    },
+    "start_line": 3306,
+    "end_line": 3308,
+    "note": "The helper reads its third argument as an exclusive end and only visits children whose index is below it; after the swap the live heap spans indices 0 through i-1, so the end it needs is i."
+   },
+   {
+    "path": "Gemma4.java",
+    "symbol": "ToppSampler.sampleToken",
+    "anchors": {
+     "start": "for (int i = n0 / 2 - 1; i >= 0; --i) {",
+     "end": "siftDown(indices, i, n0, comparator);"
+    },
+    "start_line": 3339,
+    "end_line": 3340,
+    "note": "Heap construction passes the element count as the end, the convention the extraction loop departs from."
+   },
+   {
+    "path": "Gemma4.java",
+    "symbol": "Gemma4.selectSampler",
+    "anchors": {
+     "start": "if (topp <= 0 || topp >= 1) {",
+     "end": "innerSampler = new ToppSampler(vocabularySize, topp, rng);"
+    },
+    "start_line": 3481,
+    "end_line": 3484,
+    "note": "Any non-zero temperature with top-p inside the open unit interval routes every generated token through the nucleus sampler after softmax."
+   },
+   {
+    "path": "Gemma4.java",
+    "symbol": "Gemma4.Options.parseOptions",
+    "anchors": {
+     "start": "float temperature = 1f;",
+     "end": "float topp = 0.95f;"
+    },
+    "start_line": 3767,
+    "end_line": 3768,
+    "note": "Without flags the program uses temperature 1 and top-p 0.95, so ordinary runs take the affected path."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "note": "If the single most probable survivor already exceeds top-p, the loop stops before the first repair and the result is right; temperature 0 (argmax) and top-p of 0 or 1 (plain categorical draw) never reach this code."
+   },
+   {
+    "note": "The listed conditions are necessary but not sufficient: whether the skipped slot matters depends on where the heap layout puts the larger remaining tokens, so the same probabilities in another index order (0.50/0.15/0.30/0.05 at top-p 0.75) give the correct nucleus on both revisions."
+   },
+   {
+    "note": "Every returned index is still a valid vocabulary id that passed the cutoff filter and the draw stays inside the accumulated set, so nothing crashes; the harm shows only when the sampled set is compared with a sorted reference."
+   }
+  ],
+  "fix_summary": "Pass i instead of i - 1 as the sift end, so each repair covers the whole remaining heap and every extraction yields the most probable remaining token.",
+  "distinctive_tokens": [
+   "heap repaired over one slot fewer",
+   "true top-p nucleus"
+  ]
+ },
+ "check": {
+  "summary": "A main program placed in the sampler's package is compiled together with Gemma4.java on JDK 21 with preview features and the incubator vector module, feeds four fixed tie-free probability vectors to the top-p sampler and sweeps the random draw over [0, 1); any returned token outside the sorted-prefix nucleus is a violation.",
+  "setup": [
+   [
+    "{javac}",
+    "--enable-preview",
+    "--release",
+    "21",
+    "--add-modules",
+    "jdk.incubator.vector",
+    "-encoding",
+    "UTF-8",
+    "-nowarn",
+    "-d",
+    "{work}/out",
+    "Gemma4.java",
+    "pdcheck/com/llama4j/CheckToppNucleus.java"
+   ]
+  ],
+  "argv": [
+   "{java}",
+   "--enable-preview",
+   "--add-modules",
+   "jdk.incubator.vector",
+   "-cp",
+   "{work}/out",
+   "com.llama4j.CheckToppNucleus"
+  ],
+  "cwd": ".",
+  "env": {},
+  "files": [
+   {
+    "path": "pdcheck/com/llama4j/CheckToppNucleus.java",
+    "source": "checks/PD-JV-04/CheckToppNucleus.java"
+   }
+  ],
+  "failure_signature": "CHECK-VIOLATION: top-p sampling returned tokens outside the nucleus for \\d+ probability vector",
+  "timeout_seconds": 600
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with OpenJDK 21 (the flags --enable-preview --release 21 tie the check to JDK 21): the check program compiles together with Gemma4.java on the fix parent and on the fix commit. On before the sampler returns a token outside the sorted-prefix nucleus for three of the four vectors (for 0.50/0.30/0.15/0.05 at top-p 0.75 it returns index 2) and the program exits 1 with CHECK-VIOLATION; on after every returned token lies inside the nucleus and the control vector whose top token alone exceeds top-p is unchanged (exit 0). The upstream fix added no test; the check is an independent main program. Selected under the first recency tier (PR merged 2026-04-24).",
+  "toolchain": "openjdk 21.0.13.1 (javac 21.0.13.1)",
+  "before": "violation",
+  "after": "pass"
+ }
+}

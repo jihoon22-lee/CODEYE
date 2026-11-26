@@ -1,0 +1,144 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-PY-05",
+ "split": "holdout",
+ "language": "python",
+ "kind": "real_fix",
+ "category": "resource_lifecycle",
+ "family": "teardown-skips-handlers-attached-later",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/napari/napari-metadata",
+  "license": "BSD-3-Clause",
+  "license_file": "LICENSE"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "28a889e296834bd31ff46d2dc9838299e7b10fdf"
+ },
+ "after": {
+  "commit": "f92b88f8004f4d46c4a112e1c58bf90012756651"
+ },
+ "fix_diff": "diffs/PD-PY-05.diff",
+ "fix_commit_url": "https://github.com/napari/napari-metadata/commit/f92b88f8004f4d46c4a112e1c58bf90012756651",
+ "trees": {
+  "before": {
+   "digest": "770833423e9b949dd039046d0238f422c1182efff4f75ada5055dfafdb4b010f",
+   "scope_lines": 2682,
+   "scope_files": 11,
+   "files": 52
+  },
+  "after": {
+   "digest": "b40923d9af23ea6b1622e163eb7295f0bfbd190e2563ff6bb6c46c1afa602160",
+   "scope_lines": 2679,
+   "scope_files": 11,
+   "files": 53
+  }
+ },
+ "label": {
+  "trigger": "The inheritance panel is created for a viewer and later closed while the viewer stays open. Afterwards the user makes a different layer active, or renames the layer the panel was tracking when it closed (any layer that was active while the panel was open).",
+  "expected_impact": "Closing removes only two of the subscriptions the panel made: the handler for active-layer changes stays on the viewer selection emitter, and the rename handler stays on the tracked layer. The closed panel keeps running its handlers: every change of the active layer moves its rename hook onto the newly active layer, and every rename of the tracked layer rebuilds the closed panel template list and label, so a panel the user dismissed keeps doing work and keeps attaching itself to layers it no longer displays.",
+  "positive_locations": [
+   {
+    "path": "src/napari_metadata/widgets/_inheritance.py",
+    "symbol": "InheritanceWidget.closeEvent",
+    "anchors": {
+     "start": "def closeEvent(self, a0):",
+     "end": "super().closeEvent(a0)"
+    },
+    "start_line": 226,
+    "end_line": 233
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "src/napari_metadata/widgets/_inheritance.py",
+    "symbol": "InheritanceWidget.__init__",
+    "anchors": {
+     "start": "self._update_layers_combobox_callback = self._update_layers_combobox",
+     "end": ")"
+    },
+    "start_line": 99,
+    "end_line": 115,
+    "note": "The constructor registers three handlers on the viewer: one on the layer list and two on active-layer changes. Teardown has to undo every one of them, not only the first two."
+   },
+   {
+    "path": "src/napari_metadata/widgets/_inheritance.py",
+    "symbol": "InheritanceWidget._on_layer_selection_changed",
+    "anchors": {
+     "start": "def _on_layer_selection_changed(self) -> None:",
+     "end": "current_layer,"
+    },
+    "start_line": 208,
+    "end_line": 223,
+    "note": "Each time the active layer changes, this handler unhooks the rename handler from the previously tracked layer and hooks it onto the new one, so a rename subscription exists on whichever layer is tracked when the panel closes."
+   },
+   {
+    "path": "src/napari_metadata/layer_utils.py",
+    "symbol": "connect_callback_to_layer_selection_events",
+    "anchors": {
+     "start": "def connect_callback_to_layer_selection_events(",
+     "end": "layer.events.name.disconnect(cb_function)"
+    },
+    "start_line": 159,
+    "end_line": 211,
+    "note": "The helpers attach the handlers to emitters owned by the viewer's selection model and by each layer, which outlive the panel; nothing is released unless the matching remove helper is called for the same emitter and, for renames, the same layer. The remove helpers already tolerate a handler that is not registered."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "src/napari_metadata/widgets/_inheritance.py",
+    "symbol": "InheritanceWidget.closeEvent",
+    "anchors": {
+     "start": "disconnect_callback_to_list_events("
+    },
+    "start_line": 227,
+    "end_line": 227,
+    "note": "The layer-list handler and the label-refresh handler are removed on close; a finding that claims every subscription survives closing is overstated."
+   },
+   {
+    "note": "As read in napari 0.10.0, its emitters keep bound methods through weak references, so the defect is not a memory retention problem by itself; the closed panel object stays alive through its owner and its handlers keep running."
+   },
+   {
+    "path": "src/napari_metadata/widgets/_inheritance.py",
+    "symbol": "InheritanceWidget._update_layers_combobox",
+    "anchors": {
+     "start": "if (",
+     "end": "return"
+    },
+    "start_line": 133,
+    "end_line": 148,
+    "note": "The same commit rewrites this template-index condition in a shorter form, but the old and new forms select the same index in every case; this rewrite does not contribute to the reported problem."
+   }
+  ],
+  "fix_summary": "On close, also remove the active-layer handler from the viewer and, when a layer is being tracked, remove the rename handler from that layer.",
+  "distinctive_tokens": [
+   "dismissed keeps doing work",
+   "rename hook onto the newly active layer"
+  ]
+ },
+ "check": {
+  "summary": "Standard-library check: loads the panel module and the layer helper module from the work copy with small stand-ins for the Qt bindings and a fake viewer whose emitters record subscribers, makes one layer active, closes the panel and fails if any handler bound to the panel is still subscribed.",
+  "argv": [
+   "{python}",
+   "-I",
+   "check_inheritance_close.py"
+  ],
+  "cwd": ".",
+  "files": [
+   {
+    "path": "check_inheritance_close.py",
+    "source": "checks/PD-PY-05/check_inheritance_close.py"
+   }
+  ],
+  "failure_signature": "STALE SUBSCRIPTIONS AFTER CLOSE: selection\\.active: _on_layer_selection_changed; layer\\.name: _on_layer_name_changed",
+  "timeout_seconds": 120
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks --python /usr/bin/python3 --network with system Python 3.14.4: on before the standard-library check reports the active-layer handler still on the selection emitter and the rename handler still on the tracked layer after close (exit 1, signature matched); on after no handler bound to the panel remains (exit 0). The check stubs qtpy, numpy and pint and loads the two project modules from src/ directly, so no third-party package is needed. Supporting evidence outside verify: the test file added by the fix commit (tests/widgets/test_inheritance.py) was run with napari 0.10.0, PyQt6 6.12.1 and pytest-qt 4.5.0 in a private venv with QT_QPA_PLATFORM=offscreen; on before test_combobox_not_updated_on_rename_after_close failed (1 failed, 11 passed), on after 12 passed. Selected under the primary recency rule (merged 2026-03-09).",
+  "toolchain": "Python 3.14.4 (standard library only)",
+  "before": "violation",
+  "after": "pass"
+ }
+}

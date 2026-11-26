@@ -1,0 +1,134 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-CC-04",
+ "split": "holdout",
+ "language": "cpp",
+ "kind": "real_fix",
+ "category": "error_handling",
+ "family": "element-count-checked-against-byte-length",
+ "needs_cross_file": false,
+ "repo": {
+  "url": "https://github.com/quictls/quictls",
+  "license": "Apache-2.0",
+  "license_file": "LICENSE.txt"
+ },
+ "scope": "crypto/rand",
+ "before": {
+  "commit": "2cc13b7c86fd76e5b45b5faa4ca365a602f92392"
+ },
+ "after": {
+  "commit": "2946518ebfb6b7cbbd640eb66913ae990e92ec82"
+ },
+ "fix_diff": "diffs/PD-CC-04.diff",
+ "fix_commit_url": "https://github.com/quictls/quictls/commit/2946518ebfb6b7cbbd640eb66913ae990e92ec82",
+ "trees": {
+  "before": {
+   "digest": "9a188c059c7ef86014446028da1bf8fb27d9973ef0e3cab093f6032d84027457",
+   "scope_lines": 1903,
+   "scope_files": 8,
+   "files": 4673
+  },
+  "after": {
+   "digest": "f7b3f301da9ff2c9bd5de5c8994c5bec81ef71bd0e4fdca1b1c71cf791c634d4",
+   "scope_lines": 1903,
+   "scope_files": 8,
+   "files": 4673
+  }
+ },
+ "label": {
+  "trigger": "RAND_write_file is called on a path that already names a regular file, and opening it and filling the 256-byte buffer both succeed. The buffer goes to the stdio stream as a single element of 256 bytes, so a complete write makes the stream call report 1, and that element count is then tested against 256.",
+  "expected_impact": "Every save that actually succeeds is reported as a failure: the seed file on disk receives all 256 bytes, yet the function closes the stream and hands back -1 instead of the byte count. A caller that trusts the result treats a good seed file as unwritten, and because the early exit skips OPENSSL_cleanse, the random bytes are left in the stack buffer.",
+  "positive_locations": [
+   {
+    "path": "crypto/rand/randfile.c",
+    "symbol": "RAND_write_file",
+    "anchors": {
+     "start": "if (fwrite(buff, sizeof buff, 1, out) != sizeof buff) {",
+     "end": "return -1;"
+    },
+    "start_line": 72,
+    "end_line": 74
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "crypto/rand/randfile.c",
+    "symbol": "RAND_BUF_SIZE",
+    "anchors": {
+     "start": "#define RAND_BUF_SIZE 256"
+    },
+    "start_line": 30,
+    "end_line": 30,
+    "note": "The buffer is 256 bytes long, so the value the stream result is measured against is 256, while a call that asks for one element can only ever yield 0 or 1."
+   },
+   {
+    "path": "crypto/rand/randfile.c",
+    "symbol": "RAND_write_file",
+    "anchors": {
+     "start": "OPENSSL_cleanse(buff, sizeof buff);",
+     "end": "return (int)sizeof buff;"
+    },
+    "start_line": 78,
+    "end_line": 79,
+    "note": "The intended success exit wipes the buffer and returns the byte length; with the faulty test no write can reach it."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "note": "The bytes do reach the file before the false failure, so a caller that ignores the result or only checks that the file exists sees nothing amiss. No code inside the analysed directory calls the function; the effect shows only through the public interface."
+   }
+  ],
+  "fix_summary": "Test the stream write result against the one element that was requested instead of against the buffer length in bytes.",
+  "distinctive_tokens": [
+   "element count is then tested",
+   "treats a good seed file as unwritten"
+  ]
+ },
+ "check": {
+  "summary": "Builds the unchanged randfile.c against two minimal stand-in headers and a driver that supplies the random source, the cleanse routine and the string copy. The driver creates an empty regular file in the check home, asks the library to save a seed into it, and requires the reported result to equal the size found on disk afterwards.",
+  "setup": [
+   [
+    "{cc}",
+    "-g",
+    "-O1",
+    "-fno-omit-frame-pointer",
+    "-fsanitize=address,undefined",
+    "-Ipd_check/include",
+    "-o",
+    "{home}/seed_write_check",
+    "pd_check/write_file_check.c",
+    "crypto/rand/randfile.c"
+   ]
+  ],
+  "argv": [
+   "{home}/seed_write_check"
+  ],
+  "cwd": ".",
+  "env": {
+   "ASAN_OPTIONS": "detect_leaks=0"
+  },
+  "files": [
+   {
+    "path": "pd_check/write_file_check.c",
+    "source": "checks/PD-CC-04/write_file_check.c"
+   },
+   {
+    "path": "pd_check/include/openssl/crypto.h",
+    "source": "checks/PD-CC-04/include/openssl/crypto.h"
+   },
+   {
+    "path": "pd_check/include/openssl/rand.h",
+    "source": "checks/PD-CC-04/include/openssl/rand.h"
+   }
+  ],
+  "failure_signature": "SEED WRITE MISMATCH: reported -1",
+  "timeout_seconds": 300
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with gcc 15.2.0 (-fsanitize=address,undefined): on before the driver prints that the save reported -1 while the file holds 256 bytes and exits 1; on after it reports 256 for 256 bytes and exits 0. The project's generated public headers are not built: two minimal stand-in headers and driver-defined stand-ins for the random source, the cleanse routine and the string copy replace them, and randfile.c itself is compiled unchanged. The fix was merged 2026-03-10 (first-tier recency rule). needs_cross_file is false: the defect and its evidence sit in one file of the scope; the return contract is also stated in the manual page outside the scope (doc/man3/RAND_load_file.pod), which is not labelled.",
+  "toolchain": "gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0, linux x86_64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

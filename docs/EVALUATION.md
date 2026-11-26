@@ -24,7 +24,7 @@
 | 범위 | 상태 |
 |---|---|
 | 회귀 집합과 실행(`regression_pilot.py`), 보류 집합과 봉인 검사, 평가 runner(`tools`·`review` 조건, 정답 차단, holdout 등록부, 표본·예산 계획과 거절, 판정 양식, 판정 지표와 Wilson 구간, 반복 분산, 보고서 읽기 과제와 채점기), 예산 relay | 구현 |
-| 프로젝트 규모 결함 집합(`fixtures/project-defects/`, 공개 저장소의 실제 수정과 심은 결함, dev·holdout 분할과 봉인), runner의 corpus·분할·범위 선택, `--build-root`, 줄 범위 위치 지표, 블라인드 판정 묶음 | 구현. dev 분할의 일곱 사례로 실모델 기준 측정이 있고, 그중 다섯 사례는 모듈 단위 검토 입력 변경의 전후 비교 한 번이 있다([평가 결과](EVALUATION-RESULTS.md)). 비교는 다섯 사례라 개선을 입증하지 못한다. 그중 일부 사례는 이후 요청 예산 실험과 지침 2.10.0 측정에도 쓰였고, 그 집계 관찰이 지침 작성자에게 전달되었으므로 조정에 쓴 사례다(독립 평가가 아니다). holdout 분할은 2026-11-26에 변경 전 제품과 현재 제품의 짝 측정에 한 번 썼고 봉인은 소진됐다. 그 결과는 이 표본으로 개선을 구분하지 못했다([평가 결과](EVALUATION-RESULTS.md#봉인-보류-분할의-짝-측정품질-작업-전-빌드와-현재-main)). 이후의 독립 주장에는 새 사례와 새 봉인이 필요하다 |
+| 프로젝트 규모 결함 집합(`fixtures/project-defects/`, 공개 저장소의 실제 수정과 심은 결함, dev·holdout·spent 분할과 봉인), runner의 corpus·분할·범위 선택, `--build-root`, 줄 범위 위치 지표, 블라인드 판정 묶음 | 구현. dev 분할의 일곱 사례로 실모델 기준 측정이 있고, 그중 다섯 사례는 모듈 단위 검토 입력 변경의 전후 비교 한 번이 있다([평가 결과](EVALUATION-RESULTS.md)). 비교는 다섯 사례라 개선을 입증하지 못한다. 그중 일부 사례는 이후 요청 예산 실험과 지침 2.10.0 측정에도 쓰였고, 그 집계 관찰이 지침 작성자에게 전달되었으므로 조정에 쓴 사례다(독립 평가가 아니다). 이전 holdout 분할(아홉 사례)은 2026-11-26에 변경 전 제품과 현재 제품의 짝 측정에 한 번 썼고 봉인이 소진되어 `spent` 분할이 됐다. 그 결과는 이 표본으로 개선을 구분하지 못했다([평가 결과](EVALUATION-RESULTS.md#봉인-보류-분할의-짝-측정품질-작업-전-빌드와-현재-main)). 현재 `holdout` 분할은 사례 18개를 선정 규칙을 먼저 고정한 뒤 골라 2026-11-26에 봉인했고 아직 평가에 쓰지 않았다 |
 | 아래 데이터셋 표 중 저장소에 corpus가 없는 집합(사용 허가된 개인 프로젝트의 수정, 레거시 프로젝트, 별도 공격/장애 corpus) | 평가 기준(설계). 공격/장애 경계는 단위 시험이 덮는다 |
 | 도구만·모델 맥락만·도구+모델·도구+모델+반증의 네 갈래 비교 | 평가 기준(설계). runner 조건은 `tools`와 `review` 둘이다 |
 | reversal quality 지표, CPU/RAM·캐시 기록 | 평가 기준(설계). 채점기가 내지 않는다. 철회 경로는 회귀 집합의 반례 입력에서 사람이 판정한다 |
@@ -71,20 +71,21 @@
 |---|---|---|
 | 현재 | `99904b7bdf1239eb3f0732a465a43ec51ff735594f15f23af11ec701bbc424be` | 사례 ID와 디렉터리 이름만 바꾼 뒤의 값이다. 사례 내용과 변형별 입력 digest는 그대로이고, corpus digest가 사례 ID를 포함하므로 값이 달라졌다 |
 | 이름 변경 전 | `ab776f5f68cf34ece0dd32b0f18dab962d07fad1131a35c32a6149eebc045fe4` | 지침 조정에 쓰지 않았고, 작성자는 지침과 과거 모델 결과를 읽지 않았다. 첫 보류 평가가 이 값으로 실행됐다 |
-| 프로젝트 규모 holdout | `d4cec596f2f7b17619113848663d7031f55102b244a9b77294e90ec71875107f` | [프로젝트 규모 결함 집합](#프로젝트-규모-결함-집합)의 `holdout` 분할(`corpus.py digest --split holdout`). 2026-11-23 처음 봉인했다. 작성자는 지침과 과거 모델 결과를 읽지 않았다. **소진:** 2026-11-26에 변경 전 제품과 현재 제품의 짝 측정에 한 번 썼다(기준 문서는 2026-11-25에 첫 유료 호출 전에 기록했다). 이 분할로 하는 이후의 평가는 독립 평가가 아니다. 독립 주장에는 새 사례와 새 봉인이 필요하다. 아래 `PROJECT_HOLDOUT_SEAL` 검사는 사례 내용이 바뀌지 않았음을 확인할 뿐 독립성을 되살리지 않는다 |
+| 프로젝트 규모 holdout(현재) | `cecd11170a5975ee97e8a5d8292c5a446fe952b524f5e2c77dd623fdb5704079` | [프로젝트 규모 결함 집합](#프로젝트-규모-결함-집합)의 `holdout` 분할(`corpus.py digest --split holdout`, 사례 18개). 2026-11-26 봉인했다. 선정 규칙을 사례를 찾기 전에 [fixtures README](../fixtures/project-defects/README.md#보류-분할-선정-규칙)에 먼저 고정했고 작성자는 검토 지침과 평가 결과를 읽지 않았으며 CODEYE를 어떤 후보에도 실행하지 않았다. 기준 빌드는 봉인 시점의 `main` 커밋 `44f53fc38c8b1c5abf45f58341399e8fa38daf46`이다. 이 값으로 처음 실행하는 평가가 독립 평가가 될 수 있고, holdout 등록부는 이 corpus digest로 새로 시작한다 |
+| 프로젝트 규모 holdout(소진) | `d4cec596f2f7b17619113848663d7031f55102b244a9b77294e90ec71875107f` | 이전의 `holdout` 분할(아홉 사례). 2026-11-23 처음 봉인했다. 작성자는 지침과 과거 모델 결과를 읽지 않았다. **소진:** 2026-11-26에 변경 전 제품과 현재 제품의 짝 측정에 한 번 썼다(기준 문서는 2026-11-25에 첫 유료 호출 전에 기록했다). 이 사례들은 `spent` 분할로 옮겼다. 사례 파일의 `split` 값이 digest에 들어가므로 `spent`로 계산하면 값이 다르다. 봉인 당시의 이름으로 계산하면(`corpus.py digest --split spent --as-split holdout`) 이 값과 같고, `PROJECT_SPENT_SEAL` 검사가 이를 확인해 이력이 바뀌지 않았음을 보인다. 이 분할로 하는 이후의 평가는 독립 평가가 아니다 |
 
-- 확인: `python3 scripts/validate_bundle.py`가 `python3 -I fixtures/quality-holdout/corpus.py validate`와 `... digest`를 실행해 구조·위치·digest·누설 검사와 봉인 digest 일치를 확인한다. 프로젝트 규모 집합은 `fixtures/project-defects/corpus.py validate`와 `digest --split holdout`을 네트워크 없이 실행해 메타데이터·패치·라벨 위치와 holdout 봉인을 확인한다(값은 `scripts/bundle_checks/docs.py`의 `PROJECT_HOLDOUT_SEAL`). 불일치면 실패한다.
+- 확인: `python3 scripts/validate_bundle.py`가 `python3 -I fixtures/quality-holdout/corpus.py validate`와 `... digest`를 실행해 구조·위치·digest·누설 검사와 봉인 digest 일치를 확인한다. 프로젝트 규모 집합은 `fixtures/project-defects/corpus.py validate`와 `digest --split holdout`을 네트워크 없이 실행해 메타데이터·패치·라벨 위치와 holdout 봉인을 확인한다(값은 `scripts/bundle_checks/docs.py`의 `PROJECT_HOLDOUT_SEAL`, 기준 빌드는 `PROJECT_HOLDOUT_BASELINE`이고 둘 다 이 표에 있어야 한다). 소진된 분할은 `digest --split spent --as-split holdout`이 `PROJECT_SPENT_SEAL`과 같은지 확인한다. 불일치면 실패한다.
 - 봉인을 바꾸면 이전 봉인으로 얻은 결과와 새 결과는 다른 집합의 결과다. 같은 표에서 비교하지 않는다.
 
 ### 프로젝트 규모 결함 집합
 
 [`fixtures/project-defects/`](../fixtures/project-defects/README.md)는 허용 라이선스 공개 저장소의 실제 코드에서 결함을 찾는지 잰다. 합성 집합은 짧은 함수라서 파일 뒷부분에 있거나 두 번째 파일이 있어야 알아볼 수 있는 결함을 재지 못한다. 이 집합은 그런 결함만 고르므로 모델 입력의 범위·크기를 바꾸기 전후를 비교할 수 있다. 지침 작성자가 읽지 않는 자료이므로 이 문서는 사례 내용을 담지 않는다.
 
-- 측정 상태: 변경 전 제품으로 dev 분할 사례 일곱을 실행했고(장부 상한에서 멈췄다), 변경 뒤 제품으로 그중 다섯을 실행해 같은 다섯 사례를 블라인드 판정으로 비교했다. holdout 분할은 아홉 사례를 변경 전 제품과 현재 제품으로 한 번씩 실행해 라벨 결함 발견을 짝 비교했고(사전 기준의 결론은 구분 불가), 그 봉인은 소진됐다. dev의 손대지 않은 사례 넷은 현재 제품으로만 실행했다. 수치와 한계는 [평가 결과](EVALUATION-RESULTS.md)에 있고, dev 분할 결과는 독립 평가가 아니다([보류 독립성](#보류-독립성)).
+- 측정 상태: 변경 전 제품으로 dev 분할 사례 일곱을 실행했고(장부 상한에서 멈췄다), 변경 뒤 제품으로 그중 다섯을 실행해 같은 다섯 사례를 블라인드 판정으로 비교했다. 이전 holdout 분할(지금의 `spent`)은 아홉 사례를 변경 전 제품과 현재 제품으로 한 번씩 실행해 라벨 결함 발견을 짝 비교했고(사전 기준의 결론은 구분 불가), 그 봉인은 소진됐다. 현재 `holdout` 분할(사례 18개)은 봉인만 했고 측정하지 않았다. dev의 손대지 않은 사례 넷은 현재 제품으로만 실행했다. 수치와 한계는 [평가 결과](EVALUATION-RESULTS.md)에 있고, dev 분할 결과는 독립 평가가 아니다([보류 독립성](#보류-독립성)).
 - 사례 하나는 저장소 URL·커밋 SHA·라이선스와 분석 범위(하위 디렉터리)를 고정한다. 범위 안 주 소스는 1,500~6,000줄이다. 실행은 사례마다 범위 경로를 run scope(`paths`)로 준다. 트리 전체(`.git` 제외)를 스냅샷으로 만들므로 범위 밖 파일도 문맥으로 읽을 수 있다.
 - 종류는 둘이고 대략 절반씩이다. `real_fix`는 실제 결함 수정 커밋의 부모가 before, 수정 커밋이 after이고 라벨은 수정 diff에서 나온다. `seeded`는 고정 커밋에 한 동작만 바꾼 작은 패치를 적용한 트리가 before이고 고정 커밋이 after다. 공개된 수정은 모델이 학습했을 수 있으므로 심은 사례를 대조군으로 둔다.
 - 선정 조건: 양성 위치는 모두 파일의 첫 50줄 밖이다. 대부분은 두 번째 파일(호출자·피호출자·설정·타입 정의)을 읽어야 알아볼 수 있고 `needs_cross_file`로 표시한다. 코드를 읽어 알아볼 수 있는 결함만 쓴다. 범주는 오류 처리·자원 수명·동시성·경계와 정확성·API 계약·데이터 무결성·입력에서 위험한 사용처까지의 보안이고, 언어는 Go·Python·JS/TS·Java·C/C++·Rust다.
-- 분할: `dev` 10개 이상, `holdout` 8개 이상. 두 분할은 저장소와 결함 계열이 겹치지 않는다. 모든 사례에 두 변형이 있어 수정된 코드의 재지적을 잴 수 있다.
+- 분할: `dev` 10개 이상, `holdout` 18개(언어마다 3개, `real_fix`·`seeded` 각 9개, 범주마다 2~3개, 두 번째 파일이 필요한 사례 14개 이상), `spent`(소진된 이전 holdout) 8개 이상. 분할은 저장소와 결함 계열이 겹치지 않는다. 구성은 `validate`가 검사한다. 모든 사례에 두 변형이 있어 수정된 코드의 재지적을 잴 수 있다.
 - 라벨(발생 조건·영향·양성 위치·문맥 위치·반대 근거·수정 요약·검증 상태)은 사례 파일에만 있다. 입력 트리에는 `.git`·사례 ID·변형 이름·라벨이 없고 디렉터리 이름은 무작위다. 라벨 문장의 5-gram과 고유 토큰이 두 트리에 나오면 `verify`가 실패한다. 심은 패치의 추가 줄에는 정답을 암시하는 단어가 없어야 한다.
 - 검증: 사례마다 프로젝트의 기존 시험이나 독립 입출력 검사로 before 실패·after 통과를 확인하고, 실행한 toolchain과 결과를 `verification`에 남긴다. 실행하지 못한 검사는 `partially_verified`·`not_verified`로 남긴다. 사례별 상태는 `validate` 출력의 `counts.verification`에서 본다.
 - 오프라인 검사(`validate`·`digest`)는 메타데이터·패치·diff만 읽는다. 입력을 만드는 `materialize`와 `verify`·`forbidden`은 `--cache` 디렉터리에 고정 커밋을 받아 둔다(네트워크 필요).
@@ -215,7 +216,7 @@
 - 보류 사례나 결과를 본 사람(조정자)은 지침 문구를 쓰지 않는다. 결과에서 알게 된 실패는 지침 문구를 그 사례에 맞추지 않고, 가능하면 구조(플랫폼 검사)로 막는다.
 - 지침 작성 지시에 보류 결과에서 얻은 관찰을 옮기지 않는다. 옮겼다면 그 사실을 결과와 함께 기록한다.
 - 결과는 [평가 결과](EVALUATION-RESULTS.md)에만 둔다. 다른 문서, 코드 주석, 지침, 커밋 메시지에 결과 수치나 사례 내용을 옮기지 않는다.
-- holdout 등록부(아래)가 같은 지침 id의 이전 digest 실행을 표시한다. 프로젝트 규모 `holdout` 분할도 2026-11-26에 짝 측정 한 번에 쓰여 봉인이 소진됐다. 같은 분할로 하는 이후 평가는 독립 비교가 아니다. 현재 보류 집합은 이미 한 번 평가에 쓰였다([평가 결과](EVALUATION-RESULTS.md)). 그 평가는 사례 ID를 바꾸기 전 corpus digest로 등록됐으므로 등록부가 이를 자동으로 연결하지 않는다. 같은 사례로 하는 이후 평가는 독립 비교가 아니고, 독립 보류 평가에는 새 사례(새 봉인)가 필요하다.
+- holdout 등록부(아래)가 같은 지침 id의 이전 digest 실행을 표시한다. 이전의 프로젝트 규모 `holdout` 분할도 2026-11-26에 짝 측정 한 번에 쓰여 봉인이 소진되어 `spent` 분할이 됐다. 같은 분할로 하는 이후 평가는 독립 비교가 아니며 runner는 `spent` 분할의 batch에 `split_seal_spent` 표지를 붙여 `score`가 비교를 독립으로 내지 않게 한다. 현재 `holdout` 분할은 아직 쓰이지 않았다. 현재 보류 집합은 이미 한 번 평가에 쓰였다([평가 결과](EVALUATION-RESULTS.md)). 그 평가는 사례 ID를 바꾸기 전 corpus digest로 등록됐으므로 등록부가 이를 자동으로 연결하지 않는다. 같은 사례로 하는 이후 평가는 독립 비교가 아니고, 독립 보류 평가에는 새 사례(새 봉인)가 필요하다.
 
 ## 회귀 집합 실행
 
@@ -250,7 +251,7 @@
 | `blind` | batch 하나의 블라인드 판정 묶음과 별도 answer key([블라인드 판정](#블라인드-판정)) |
 | `blind-merge` | 판정한 묶음과 answer key를 `score`가 읽는 판정 파일로 되돌린다 |
 
-**corpus와 분할.** `--corpus quality-holdout`(기본)과 `--corpus project-defects`가 있다. 프로젝트 규모 집합에는 `--split dev|holdout`과 `--cache DIR`(저장소 캐시, 처음에는 네트워크 필요)이 필수다. 분할을 생략해서 holdout을 실수로 실행하는 일이 없게 하기 위해서다. `plan`·`run`·`score`·`blind`·`reader`·`capture-list`가 같은 옵션을 받는다. corpus digest는 선택한 분할의 digest이고, 정답 목록은 `corpus.py forbidden --split S`로 같은 분할에서 만든다. 프로젝트 사례는 README를 덧붙이지 않고(저장소 자체 문서만), 변형마다 사례의 범위 경로를 run scope로 준다. 행에 `scope_paths`가 남는다.
+**corpus와 분할.** `--corpus quality-holdout`(기본)과 `--corpus project-defects`가 있다. 프로젝트 규모 집합에는 `--split dev|holdout|spent`와 `--cache DIR`(저장소 캐시, 처음에는 네트워크 필요)이 필수다. 분할을 생략해서 holdout을 실수로 실행하는 일이 없게 하기 위해서다. `plan`·`run`·`score`·`blind`·`reader`·`capture-list`가 같은 옵션을 받는다. corpus digest는 선택한 분할의 digest이고, 정답 목록은 `corpus.py forbidden --split S`로 같은 분할에서 만든다. 프로젝트 사례는 README를 덧붙이지 않고(저장소 자체 문서만), 변형마다 사례의 범위 경로를 run scope로 준다. 행에 `scope_paths`가 남는다.
 
 **제품 빌드 위치.** `run --build-root DIR`은 다른 checkout(예: 기준 커밋)에서 제품 바이너리를 만들고, runner·corpus·채점은 지금 checkout을 쓴다. manifest의 `checkout`·`pack`(지침 트리 digest, holdout 등록부 항목)은 build root를 가리키고 `runner_checkout`이 runner의 커밋을 따로 남긴다. 기준 바이너리를 새 runner로 잴 때 결과가 어느 제품의 것인지 섞이지 않게 하기 위해서다. build root는 `git worktree add`로 만든 checkout이 좋다. `git archive`로 푼 트리처럼 Git 저장소가 아니면 빌드는 되지만 `checkout.commit`이 `null`로 남는다.
 

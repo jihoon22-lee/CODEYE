@@ -1,0 +1,136 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-GO-06",
+ "split": "holdout",
+ "language": "go",
+ "kind": "real_fix",
+ "category": "resource_lifecycle",
+ "family": "watchdog-left-armed-on-handshake-error",
+ "needs_cross_file": false,
+ "repo": {
+  "url": "https://github.com/projectdiscovery/fastdialer",
+  "license": "MIT",
+  "license_file": "LICENSE.md"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "6fb5f8b193988c937be451f8f4292169bb1c4c88"
+ },
+ "after": {
+  "commit": "1cccf498d7af7f07fbc927a57c91063f9d4fac37"
+ },
+ "fix_diff": "diffs/PD-GO-06.diff",
+ "fix_commit_url": "https://github.com/projectdiscovery/fastdialer/commit/1cccf498d7af7f07fbc927a57c91063f9d4fac37",
+ "trees": {
+  "before": {
+   "digest": "910fcf21531cfb4251f86e3a1d87b7fa15a28dfbaea03bb539da7d957fb90b26",
+   "scope_lines": 2436,
+   "scope_files": 23,
+   "files": 45
+  },
+  "after": {
+   "digest": "4ee820ce402d1efb15e7085bdcecaa9ac8d55b9cb4fa0c16fdcee2598615f588",
+   "scope_lines": 2440,
+   "scope_files": 23,
+   "files": 46
+  }
+ },
+ "label": {
+  "trigger": "A TLS dial through the standard crypto/tls path or the uTLS impersonation path reaches a peer that accepts the TCP connection but makes the handshake fail quickly: a plain-text service answering with non-TLS bytes, a server that closes or resets the socket, or one offering no acceptable version or cipher.",
+  "expected_impact": "The error return skips the cancel function of the timer goroutine that was armed just before the handshake and never closes the TLS client whose handshake failed, so every such attempt keeps one goroutine, one timer and one open TCP socket until the dialer timeout (10 seconds by default, never under one second, up to a minute) runs out. A scanner probing many non-TLS ports piles these up and can exhaust file descriptors and memory.",
+  "positive_locations": [
+   {
+    "path": "fastdialer/dialer_private.go",
+    "symbol": "Dialer.dialIPS",
+    "anchors": {
+     "start": "if err := TlsConn.HandshakeContext(ctx); err != nil {",
+     "end": "}"
+    },
+    "start_line": 263,
+    "end_line": 265
+   },
+   {
+    "path": "fastdialer/dialer_private.go",
+    "symbol": "Dialer.dialIPS",
+    "anchors": {
+     "start": "if err := uTLSConn.Handshake(); err != nil {",
+     "end": "}"
+    },
+    "start_line": 295,
+    "end_line": 297
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "fastdialer/dialer_private.go",
+    "symbol": "closeAfterTimeout",
+    "anchors": {
+     "start": "func closeAfterTimeout(d time.Duration, c ...io.Closer) context.CancelFunc {",
+     "end": "}"
+    },
+    "start_line": 434,
+    "end_line": 455,
+    "note": "The helper starts a goroutine that waits for either its timeout or the returned cancel function; only the timeout branch closes the connections, so an attempt that neither cancels nor closes holds both until the deadline."
+   },
+   {
+    "path": "fastdialer/dialer.go",
+    "symbol": "Dialer.GetTimeout",
+    "anchors": {
+     "start": "func (d *Dialer) GetTimeout() time.Duration {",
+     "end": "return to"
+    },
+    "start_line": 565,
+    "end_line": 573,
+    "note": "The watchdog lifetime comes from the configured dial timeout, clamped between one second and one minute, with the default options setting ten seconds; this bounds how long each abandoned attempt stays alive."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "fastdialer/dialer_private.go",
+    "symbol": "Dialer.dialIPS",
+    "anchors": {
+     "start": "handshakeDoneCancel := closeAfterTimeout(d.GetTimeout(), ztlsConn)",
+     "end": "defer handshakeDoneCancel()"
+    },
+    "start_line": 318,
+    "end_line": 319,
+    "note": "The zcrypto branch releases its timer goroutine through a deferred cancel on every return, so a finding about the goroutine on that branch is not this defect."
+   },
+   {
+    "note": "The resources are reclaimed once the timer fires, so this is a bounded pile-up under load rather than a permanent loss; success paths cancel the timer correctly."
+   }
+  ],
+  "fix_summary": "On a handshake error in the crypto/tls and uTLS branches, call the timer's cancel function and close the TLS client before returning the error.",
+  "distinctive_tokens": [
+   "abandoned handshake timer",
+   "unclosed failed-handshake socket"
+  ]
+ },
+ "check": {
+  "summary": "The test the fix commit added: against a loopback listener that closes every accepted socket, 40 TLS dials fail their handshake and the test fails when the goroutine count grew by more than 20.",
+  "argv": [
+   "{go}",
+   "test",
+   "-count=1",
+   "-run",
+   "^TestDialTLSHandshakeFailureNoGoroutineLeak$",
+   "./fastdialer"
+  ],
+  "cwd": ".",
+  "failure_signature": "--- FAIL: TestDialTLSHandshakeFailureNoGoroutineLeak",
+  "timeout_seconds": 900,
+  "files": [
+   {
+    "path": "fastdialer/dialer_tls_leak_test.go",
+    "source": "checks/PD-GO-06/dialer_tls_leak_test.go"
+   }
+  ]
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with go1.27.4 on a 12-CPU host, five runs: before=violation and after=pass every time. Network was on for the module dependencies. The check is the test added by the fix commit, unchanged. Outside verify, a standalone go test on before reported the goroutine count rising from 4 to 44 after 40 failed handshakes, and -count=10 -cpu 1,2,4,12 gave 40/40 failures on before and 40/40 passes on after.",
+  "toolchain": "go1.27.4 linux/amd64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

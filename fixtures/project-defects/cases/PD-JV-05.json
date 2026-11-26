@@ -1,0 +1,170 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-JV-05",
+ "split": "holdout",
+ "language": "java",
+ "kind": "seeded",
+ "category": "data_integrity",
+ "family": "mixin-spec-rebuilt-per-pass",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/remkop/picocli",
+  "license": "Apache-2.0",
+  "license_file": "LICENSE"
+ },
+ "scope": "picocli-codegen",
+ "before": {
+  "commit": "10509c0af89aa3254ca14ba90d9b3b7168e57994",
+  "patch": "patches/PD-JV-05.patch"
+ },
+ "after": {
+  "commit": "10509c0af89aa3254ca14ba90d9b3b7168e57994"
+ },
+ "trees": {
+  "before": {
+   "digest": "794dc9d27fd889cd4fdc61d399e17173ceda1cdd769a211a1654bf27501e7439",
+   "scope_lines": 4942,
+   "scope_files": 36,
+   "files": 1735
+  },
+  "after": {
+   "digest": "64c3a2e054112557ffaf80601c727dcb9c48d1ffe97df2c757fc070a7da4a8c4",
+   "scope_lines": 4942,
+   "scope_files": 36,
+   "files": 1735
+  }
+ },
+ "label": {
+  "trigger": "A subclass of AbstractCommandSpecProcessor (NativeImageConfigGeneratorProcessor or any processor that reads the model) compiles a class annotated with @Command that has a @Mixin field whose type declares options or positional parameters, for instance a Tool command with a field of type Shared that carries --level.",
+  "expected_impact": "The same @Mixin field reaches buildMixin twice in one round, and each visit now wraps a new CommandSpec for the mixin type and replaces the map entry for that type. The MixinInfo set keeps the entry made on the first visit, so the command is connected to the first spec, while connectModel attaches the mixin type's options to the spec stored last. The model handed to handleCommands lists the mixin by name but the command has none of its options (for the Tool example the option list is empty instead of holding --level), so every processor that reads the command's options sees an incomplete command.",
+  "positive_locations": [
+   {
+    "path": "picocli-codegen/src/main/java/picocli/codegen/annotation/processing/AbstractCommandSpecProcessor.java",
+    "symbol": "AbstractCommandSpecProcessor.buildMixin",
+    "anchors": {
+     "start": "CommandSpec mixin = buildCommand(false, type, context, roundEnv);"
+    },
+    "start_line": 473,
+    "end_line": 473
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "picocli-codegen/src/main/java/picocli/codegen/annotation/processing/MixinInfo.java",
+    "symbol": "MixinInfo.equals",
+    "anchors": {
+     "start": "public int hashCode() {",
+     "end": "return true;"
+    },
+    "start_line": 62,
+    "end_line": 87,
+    "note": "Two entries for one field are equal when the mixin name, the field name and the text of the mixin type's element match, whichever CommandSpec object they hold, so the HashSet in buildMixin ignores the second entry and the command keeps the spec from the first visit."
+   },
+   {
+    "path": "picocli-codegen/src/main/java/picocli/codegen/annotation/processing/AbstractCommandSpecProcessor.java",
+    "symbol": "AbstractCommandSpecProcessor.processEnclosedElements",
+    "anchors": {
+     "start": "buildMixin(enclosed, roundEnv, context);"
+    },
+    "start_line": 426,
+    "end_line": 426,
+    "note": "Building a @Command class processes its members, which is the first visit to the field; buildMixins then visits every @Mixin element of the round again (line 462)."
+   },
+   {
+    "path": "picocli-codegen/src/main/java/picocli/codegen/annotation/processing/AbstractCommandSpecProcessor.java",
+    "symbol": "AbstractCommandSpecProcessor.buildCommand",
+    "anchors": {
+     "start": "if (reuseExisting) { // #1440 subcommands should create separate instances",
+     "end": "context.commands.put(element, result);"
+    },
+    "start_line": 253,
+    "end_line": 261,
+    "note": "Without reuse the method wraps a fresh spec and overwrites the map entry for the element, so after the second visit the map points at a different spec than the one recorded for the field."
+   },
+   {
+    "path": "picocli-codegen/src/main/java/picocli/codegen/annotation/processing/AbstractCommandSpecProcessor.java",
+    "symbol": "AbstractCommandSpecProcessor.Context.connectModel",
+    "anchors": {
+     "start": "CommandSpec commandSpec = getOrCreateCommandSpecForArg(option.getKey(), commands);",
+     "end": "commandSpec.addOption(option.getValue().build());"
+    },
+    "start_line": 902,
+    "end_line": 904,
+    "note": "Options of the mixin type go to whatever spec the map holds for their enclosing type, which is the spec from the last visit."
+   },
+   {
+    "path": "picocli-codegen/src/main/java/picocli/codegen/annotation/processing/AbstractCommandSpecProcessor.java",
+    "symbol": "AbstractCommandSpecProcessor.Context.connectModel",
+    "anchors": {
+     "start": "mixee.addMixin(mixinInfo.mixinName(), mixinInfo.mixin(), mixinInfo.annotatedElement());"
+    },
+    "start_line": 981,
+    "end_line": 981,
+    "note": "The command is given the spec stored in the surviving MixinInfo; adding a mixin copies that spec's options, and the first-visit spec never received any."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "picocli-codegen/src/main/java/picocli/codegen/annotation/processing/AbstractCommandSpecProcessor.java",
+    "symbol": "AbstractCommandSpecProcessor.registerSubcommands",
+    "anchors": {
+     "start": "CommandSpec commandSpec = buildCommand(false, subcommandElement, context, roundEnv);"
+    },
+    "start_line": 411,
+    "end_line": 411,
+    "note": "Subcommands are built as separate instances on purpose so that each parent gets its own copy; that call is correct and is not where the options go missing."
+   },
+   {
+    "note": "For a single command with one mixin, the native-image files written by NativeImageConfigGeneratorProcessor came out the same on both revisions in the check's sample, because the map's spec for the mixin type still lists the option and reflection entries are collected per class. The loss shows in the command model, not in that output."
+   },
+   {
+    "note": "MixinInfo identifying an entry by names and the mixin type's element rather than by spec object is consistent with buildMixin handing every visit the same spec; the entry kept by the set is only stale because the spec is rebuilt."
+   }
+  ],
+  "fix_summary": "Have buildMixin look up the spec already built for the mixin type instead of forcing a new one, so the MixinInfo recorded for the field and the spec that receives the mixin type's options in connectModel are the same object.",
+  "distinctive_tokens": [
+   "mixin spec rebuilt on each visit",
+   "options attached to the later mixin spec"
+  ]
+ },
+ "check": {
+  "summary": "A main program compiled with javac against the codegen sources and the picocli core sources runs the JDK compiler in process with a model-capturing subclass of AbstractCommandSpecProcessor over a two-class sample, a @Command class with one @Mixin field whose type declares --level, and requires the command in the captured model to carry --level.",
+  "setup": [
+   [
+    "{javac}",
+    "-encoding",
+    "UTF-8",
+    "-nowarn",
+    "-proc:none",
+    "-d",
+    "{work}/out",
+    "--source-path",
+    "picocli-codegen/src/main/java:src/main/java",
+    "pdcheck/CheckMixinOptions.java"
+   ]
+  ],
+  "argv": [
+   "{java}",
+   "-cp",
+   "{work}/out",
+   "CheckMixinOptions"
+  ],
+  "cwd": ".",
+  "env": {},
+  "files": [
+   {
+    "path": "pdcheck/CheckMixinOptions.java",
+    "source": "checks/PD-JV-05/CheckMixinOptions.java"
+   }
+  ],
+  "failure_signature": "CHECK-VIOLATION: the command model lacks the mixin option --level",
+  "timeout_seconds": 300
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "Chosen by the second-stage Java seeded procedure (index 37 of the stars 50..8000 list); the check puts the same repository's core module on the source path. verify --run-checks with OpenJDK 21: the check program compiles with javac against picocli-codegen/src/main/java and the picocli core sources src/main/java (JDK imports only, no jars), then runs the JDK compiler in process over a two-class sample with a subclass of AbstractCommandSpecProcessor that keeps the model. On before the tool command lists the mixin but has no --level option, and the spec held by its mixin entry is a different object from the map's spec for the mixin type, which alone has --level (exit 1, CHECK-VIOLATION); on after the command has --level and both are the same object (exit 0). For the same sample the native-image files written by NativeImageConfigGeneratorProcessor were identical on both revisions. The project's own tests were not run (they need JUnit, Google compile-testing and Gradle); by reading, AbstractCommandSpecProcessorTest.testCommandWithMixin in picocli-codegen-tests-java9plus compares a YAML dump of the processor model for a @Command class with a @Mixin field against CommandWithMixin.yaml, which lists the mixed-in -x option on the mixee, so it would very likely fail on before.",
+  "toolchain": "openjdk 21.0.13.1 (javac 21.0.13.1)",
+  "before": "violation",
+  "after": "pass"
+ }
+}
