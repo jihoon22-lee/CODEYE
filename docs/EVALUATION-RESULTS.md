@@ -834,3 +834,121 @@ dev 분할의 Python·Rust 사례 4개를 현재 빌드로 실행했다. 어떤 
 - 이 측정의 정성적 관찰 셋(현재 빌드가 찾지 못하는 결함이 남아 있음, 오탐이 줄지 않음, 섞인 진단 분류 묶음이 통째로 무해로 분류될 수 있음)을 로드맵으로 옮겼다. 수치와 사례 내용은 옮기지 않았다.
 - `fixtures/project-defects/`는 holdout 분할을 담고 있다. 앞선 개정 기간에 지침 작성자의 저장소 검색이 이 디렉터리를 지나갔고, 출력은 걸러졌으며 작성자는 내용을 읽지 않았다고 보고했다([앞선 공개](#모듈-단위-검토-입력의-전후-비교와-회귀-기록)). 이 사실은 이번 비교의 독립성을 낮추는 요인으로 남는다.
 - 판정자는 모델 둘(Claude Opus 5.5, Claude Sonnet 5.5)이다. 진단 분류와 손대지 않은 dev 사례의 판정은 Claude Sonnet 5.5 하나가 했다. 사람의 판정은 받지 않았다.
+
+## 분석기 실행 범위(도구만 조건)
+
+정적 분석기가 실제 프로젝트에서 실행되는지와 어느 파일을 처리하는지를 모델 호출 없이 잰다. 프로젝트 규모 집합의 두 분할(dev 11, holdout 9)의 수정 전 변형 20개를 `quality_eval.py run --condition tools`로 실행했다. holdout 봉인은 2026-11-26에 소진됐으므로 이 측정은 두 분할을 모두 쓴다. 판정과 라벨은 읽지 않았고, 라벨과의 관계는 채점기의 집계 "lines: tool diagnostic hits label, before"만 본다. 수치는 집계이며 사례 내용은 적지 않는다.
+
+**공통 조건.** Linux x86-64(WSL2), 도구는 아래 한 목록을 모든 batch에 고정했다. go1.27.4, Staticcheck 2026.2.2, errcheck 1.30.0, gitleaks 8.30.1, cargo·clippy 1.99.1, cppcheck 2.22.0, clang-tidy 23.1.5, GCC 15.2.0, ruff 0.16.3, mypy 2.4.1, pyright 1.1.414, bandit 1.9.4, Import Linter 2.17, lizard 1.26.1, jscpd 5.4.3, node 24.18.0, ESLint 10.15.0, TypeScript 6.0.3, dependency-cruiser 18.8.0, JDK 21, PMD 7.29.0, SpotBugs 4.10.5, 패키지 관리자 npm 11.16·pnpm 11.28·yarn 1.22·uv 0.12.5·Python 3.14. Opengrep은 설치하지 않았다. `--agent-flag python-both-type-checkers --agent-flag dependency-fetch`, 저장소 코드 실행 허가 기본, `--go-mod-cache` 없음, `--max-workers 3`. 처리 파일과 범위 파일의 경로 종류는 보고서와 같은 규칙(`record.PathClass`)으로 나눴다. 진단은 억제되지 않은 진단 분석기 관찰이다.
+
+### 서비스와 같은 도구 설정의 효과
+
+패키지 관리자를 주지 않은 이전 runner 설정과 서비스 탐색과 같은 설정(패키지 관리자 포함)을 같은 빌드(`cad0271`)로 JS·Python 변형 7개에서 비교했다.
+
+| 분석기 | 패키지 관리자 없음 | 서비스와 같은 설정 |
+|---|---|---|
+| `deps.javascript` | unsupported `package_manager_not_configured` 3, 소비자 없음 1 | succeeded 3, 소비자 없음 1 |
+| `deps.python` | unsupported `package_manager_not_configured` 4 | succeeded 2, 받을 것 없음 1, failed `no_binary_distribution` 1 |
+| tsc | failed `dependency_unavailable` 2, succeeded 1 | succeeded 2, skipped_policy `node_modules_outside_snapshot` 1 |
+| type-aware ESLint | failed `dependency_unavailable` 2, 입력 예산 초과 1, succeeded 1 | succeeded 2, 입력 예산 초과 1, skipped_policy `node_modules_outside_snapshot` 1 |
+| mypy 단위의 해석하지 못한 import | 19(stub 없음 3) | 0 |
+| pyright 단위의 해석하지 못한 import | 18 | 0 |
+| pyright 진단(배포 코드) | 303 | 215 |
+
+pyright 진단이 준 것은 대부분 해석하지 못한 import와 그 뒤의 타입 오류였다. `node_modules_outside_snapshot`은 설치가 성공한 하위 모듈에서 tsc·type-aware ESLint가 그 트리를 받아들이지 않은 경우이고, 이 측정에서 원인을 찾지 않았다.
+
+### 기준 측정(현재 main `cad0271`, 서비스와 같은 설정)
+
+범위 안 소스 파일(사례 언어)은 Go 배포 63·시험 64·예제 16, Python 배포 46, JS/TS 배포 76·시험 201·예제 37·벤치마크 6, Rust 배포 11·시험 1, Java 배포 68, C/C++ 번역 단위 배포 9·시험 82였다.
+
+| 분석기 | 작업 상태 | 처리 파일(배포 / 배포 아님) | 범위 파일 | 배포 코드 진단 |
+|---|---|---|---|---|
+| go vet | succeeded 10 | 62 / 76 | 143 | 0 |
+| Staticcheck | succeeded 10 | 62 / 76 | 143 | 5 |
+| errcheck | succeeded 9, failed `errcheck_packages_unavailable` 1 | 50 / 58 | 143 | 10 |
+| cppcheck | succeeded 3 | 6 / 19 | 91 | 17 |
+| clang-tidy | succeeded 3 | 6 / 19 | 91 | 30 |
+| GCC 분석 | failed `gcc_analyzer_too_complex` 3 | 0 / 0 | 91 | 0 |
+| ruff | succeeded 5 | 46 / 2 | 48 | 29 |
+| mypy | succeeded 5 | 46 / 2 | 48 | 31 |
+| pyright | succeeded 5 | 46 / 2 | 48 | 215 |
+| bandit | succeeded 5 | 46 / 2 | 48 | 6 |
+| ESLint | succeeded 4 | 76 / 244 | 320 | 16 |
+| tsc | succeeded 2, `node_modules_outside_snapshot` 1 | 18 / 2 | 189 | 0 |
+| type-aware ESLint | succeeded 2, `node_modules_outside_snapshot` 1, 입력 예산 초과 1 | 9 / 2 | 135 | 4 |
+| cargo check | failed `package_errors` 2, succeeded 1 | 3 / 0 | 12 | 72 |
+| clippy | failed `package_errors` 2, succeeded 1 | 3 / 0 | 12 | 126 |
+| rustdoc | succeeded 2, failed `doc_output_collision` 1 | 2 / 0 | 12 | 2 |
+| PMD | succeeded 3 | 68 / 0 | 68 | 2 |
+| SpotBugs | succeeded 2, failed `java_compilation_failed` 1 | 34 / 0 | 68 | 13 |
+
+- 실패한 작업은 처리 파일을 주장하지 않으므로 그 작업의 파일은 처리 0이다. 실패한 cargo check·clippy·SpotBugs 작업도 성공한 부분의 진단은 남는다.
+- C/C++: 범위 안 번역 단위 91개 중 compile DB에 있는 것은 25개다. 나머지 66개 중 배포 코드 경로는 3개이고 하나는 프로젝트의 기본 build에서 빠지는 선택 라이브러리 소스, 둘은 fuzz harness와 시험 프로그램(경로 규칙으로는 배포 코드)이다. 63개는 시험 경로다.
+- GCC 분석은 세 사례 모두 단위 대부분이 `-Wanalyzer-too-complex`(탐색 한도)를 내어 작업 전체가 실패했고, 끝까지 분석한 단위가 있어도 처리 파일 0이었다.
+- 채점기 집계 "tool diagnostic hits label, before": dev 1/11, holdout 2/9.
+
+### C/C++: GCC 복잡도 한도, 추가 규칙, compile DB 보간
+
+C/C++ 변형 3개(dev 1, holdout 2)만 같은 도구 목록·설정으로 다시 실행했다. 다른 C/C++ 분석기의 코드는 바꾸지 않았다.
+
+| GCC 분석 | 기준 | 한도를 단위의 한계로(A67) |
+|---|---|---|
+| 작업 상태 | failed `gcc_analyzer_too_complex` 3 | succeeded 1, failed `gcc_analyzer_too_complex` 2 |
+| 처리 파일(배포 / 배포 아님) | 0 / 0 | 2 / 2 |
+| compile DB 단위 25개의 상태 | `analyzed_clean` 4, `unknown` 21 | `analyzed_clean` 4, `partial_too_complex` 21 |
+| 배포 코드 진단 | 0 | 0 |
+
+- 실패로 남은 두 작업은 compile DB에 단위가 하나뿐이고 그 단위가 한도에 걸렸다. 처리 파일 없는 성공을 envelope 계약이 받지 않으므로 그대로 실패다.
+- GCC 진단이 전후 모두 0이고 다른 분석기의 진단은 그대로이므로 도구 진단 집합과 채점기의 "tool diagnostic hits label" 집계는 기준과 같다.
+- **추가 규칙.** 누수·이중 해제·해제 뒤 사용·널 역참조 계열 열두 규칙을 더한 실험 규칙 팩으로 같은 변형을 실행했다. 단위 상태는 같고 GCC 실행 시간은 거의 같았다(단위 24개 사례에서 작업 합계 76초 → 81초). 더 나온 진단은 시험 경로 8건, 배포 코드 0건이다. 배포 코드의 정밀도 표본은 0건이라 잴 수 없었다. 시험 경로 8건을 읽은 결과는 오탐 7(단언 매크로가 실패 시 돌아오지 않는 것을 GCC가 모름), 불분명 1(시험의 확인하지 않은 할당)이다. 규칙 팩은 v1로 두었다.
+- **compile DB 보간(A68).** 세 사례의 compile DB에 없는 번역 단위 69개(배포 3, 시험 66)에 가장 가까운 항목의 인자를 빌려 cppcheck·clang-tidy를 제품 선택으로 직접 실행했다(제품 경로 밖의 실험). clang-tidy는 시험 경로 52개에서 컴파일 오류로 끝났고 배포 코드 3개는 컴파일되었다. 진단(헤더 위치 포함)은 clang-tidy 배포 10·시험 13, cppcheck(`missingInclude`·정보 제외) 배포 74·시험 96이었다. 배포 코드 진단의 정밀도 표본은 읽지 않았다.
+
+### Rust: 컴파일되지 않는 시험·벤치 대상
+
+Rust 변형 3개(dev 2, holdout 1)만 같은 도구 목록·설정으로 다시 실행했다. 기준에서 실패한 cargo check·clippy 작업 넷은 모두 안정 toolchain이 nightly 전용 벤치의 `#![feature]`를 거부한 것(E0554)이 원인이었다.
+
+| 분석기 | 기준 | 실패한 종류를 뺀 재실행(A69) |
+|---|---|---|
+| cargo check 작업 상태 | succeeded 1, failed `package_errors` 2 | succeeded 2, failed `lints_denied` 1 |
+| cargo check 처리 파일(배포 / 배포 아님) | 3 / 0 | 4 / 1 |
+| clippy 작업 상태 | succeeded 1, failed `package_errors` 2 | succeeded 3 |
+| clippy 처리 파일(배포 / 배포 아님) | 3 / 0 | 10 / 1 |
+| crate 상태 | `analyzed_clean` 4, `analyzed_with_findings` 1, `failed_compile` 2 | `analyzed_clean` 4, `analyzed_with_findings` 3 |
+| 배포 코드 진단(cargo check / clippy) | 72 / 126 | 72 / 126 |
+
+- 재실행한 작업 넷은 모두 벤치만 뺐다(`excluded_target_kinds=bench`).
+- 남은 cargo check 실패 하나는 배포 코드의 deny 기본 lint다. 벤치의 컴파일 오류가 그 사유를 `package_errors`로 가리고 있었다.
+- 관찰 집합(규칙·경로·줄)은 여섯 작업 모두 전후가 같다. 실패한 작업도 관찰을 보존했기 때문이다. 늘어난 진단이 없으므로 정밀도 표본은 읽지 않았고, 채점기의 "tool diagnostic hits label" 집계도 기준과 같다.
+
+### Java: SpotBugs 컴파일과 모듈 기술자
+
+Java 변형 3개(dev 2, holdout 1)만 같은 도구 목록·설정으로 다시 실행했다.
+
+| SpotBugs | 기준 | 기술자를 뺀 컴파일(A70) | 범위 밖 보고를 따로 셈(A70 5) |
+|---|---|---|---|
+| 작업 상태 | succeeded 2, failed `java_compilation_failed` 1 | succeeded 3 | succeeded 3 |
+| 처리 파일(배포 / 배포 아님) | 34 / 0 | 66 / 0 | 66 / 0 |
+| 컴파일한 클래스 | 514 | 583 | 583 |
+| 배포 코드 진단 | 13 | 16 | 16 |
+| 위치를 연결하지 못한 보고(`java_findings_location_unmapped`) | 360 | 361 | 14 |
+| 선택 범위 밖 문맥 파일의 보고(`java_findings_outside_scope`) | 따로 세지 않음 | 따로 세지 않음 | 347 |
+
+- 실패한 작업의 원인은 모듈 기술자였고 직접 의존성 classpath는 원인이 아니었다. 세 작업 모두 직접 의존성만으로 컴파일되었다(하나는 확인하지 못한 직접 의존성이 있었으나 컴파일에 필요하지 않았다).
+- 기준에서 성공한 두 작업의 관찰 집합은 전후가 같다. 늘어난 배포 코드 진단 3건을 소스와 대조했다. 실제 문제 1(익명 클래스를 static으로 둘 수 있음, 사소한 유지보수), 잡음 2(잠금을 `try` 앞에서 얻는 올바른 관용구를 닫기만 했다고 본 보고, 주석으로 의도한 `null` 배열 반환), 불분명 0이다.
+- 위치를 연결하지 못했다고 센 보고 361건 중 347건은 사례의 경로 범위 밖에 있는 같은 모듈의 운영 소스(컴파일 문맥으로만 넘긴 파일)의 보고였다. 근거를 선택한 소스에만 연결하는 계약대로 관찰이 되지 않는 것이 맞다. 그래서 이 수를 `java_findings_outside_scope`와 한계 `observations_outside_scope_omitted`로 따로 센다. 경로 범위 없이 모듈 전체를 분석하면 이 파일들은 선택 소스이므로 이 보고는 관찰이 된다.
+- 남은 14건은 선택한 소스의 보고인데 BugInstance 바로 아래 줄이 없고 메서드·클래스의 줄만 있는 보고다. 13건이 메서드 수준이고 그중 12건이 한 규칙(`IAOM_DO_NOT_INCREASE_METHOD_ACCESSIBILITY`, 낮은 우선순위)이다. 메서드 줄로 위치를 대신 잡는 변경은 하지 않았다. 정밀도 표본은 읽지 않았다.
+- 두 종류 모두 관찰·finding이 아니므로 보고서의 발견, 조치 항목, 분류 요청에 들지 않는다. 보고서에는 SpotBugs 도구 행의 단위 수와 한계 코드로만 남는다.
+- 늘어난 진단이 시험 결함 줄과 겹치는지는 채점기 집계로만 본다. Java 사례만 다시 돌린 batch의 수는 사례가 적어 사례 정보가 되므로 적지 않는다.
+
+### Go: errcheck와 vendor 디렉터리
+
+Go 변형 4개(dev 2, holdout 2, 모듈 작업 10개)만 같은 도구 목록·설정으로 다시 실행했다. 기준의 errcheck 실패 하나는 의존성을 vendor 디렉터리에 둔 모듈이었다. errcheck의 `go list -mod=readonly`가 오프라인 proxy에 모듈을 물어 실패했고, 같은 모듈의 go vet은 vendor에서 읽어 성공했다.
+
+| errcheck | 기준 | vendor에서 읽음 |
+|---|---|---|
+| 작업 상태 | succeeded 9, failed `errcheck_packages_unavailable` 1 | succeeded 10 |
+| 처리 파일(배포 / 시험 / 예제) | 50 / 52 / 6 | 62 / 64 / 12 |
+| 진단(배포 / 시험 / 예제) | 10 / 78 / 2 | 10 / 113 / 41 |
+
+- 다른 아홉 작업의 관찰 집합은 전후가 같다. 늘어난 진단 74건은 모두 시험·예제 경로이고 배포 코드에는 없다. 그래서 배포 코드의 정밀도 표본은 0건이다.
+- 배포 코드 진단이 그대로이므로 채점기의 "tool diagnostic hits label" 집계가 바뀐다면 시험·예제 경로의 진단 때문이다. Go 사례만 다시 돌린 batch의 수는 적지 않는다.

@@ -354,6 +354,41 @@
 
 [분석기](ANALYZERS.md#opengrep-패턴taint-팩) · [SARIF 입력 어댑터](ANALYZERS.md#sarif-입력-어댑터)
 
+**A67 — GCC 분석의 복잡도 한도는 그 단위의 한계이고, 끝까지 분석한 단위를 실패로 만들지 않는다.** (기록 2026-11-26) REQ-007/008/012, NFR-006과 TC-320에 대해 다음을 확정한다. 실제 C 프로젝트의 분석기만 실행에서 GCC 작업이 모두 `gcc_analyzer_too_complex`로 실패했고, 끝까지 분석한 단위가 있어도 처리 파일이 0이었다([평가 결과](EVALUATION-RESULTS.md#분석기-실행-범위도구만-조건)).
+
+1. **단위 상태.** `-Wanalyzer-too-complex`를 낸 단위는 `partial_too_complex`다. GCC는 한도에 걸린 지점의 경로만 더 따라가지 않으므로 그 단위에서 찾은 진단은 관찰로 남는다. 끝까지 분석하지 않았으므로 처리 파일은 아니다.
+2. **작업 상태.** 끝까지 분석한 단위가 하나라도 있으면 작업은 성공이고, 한계 `gcc_analyzer_too_complex`와 `target.properties.units_too_complex`를 남긴다. 모든 단위가 한도에 걸리면 `failed / gcc_analyzer_too_complex`다. 관찰 envelope 계약은 처리 파일 없는 성공을 받지 않는다(아무것도 끝까지 분석하지 않은 깨끗한 결과로 읽히므로). Opengrep·gitleaks·lizard도 처리 파일이 없으면 성공하지 않는다. 이 계약은 바꾸지 않았으므로 번역 단위 하나짜리 C 프로젝트에서 그 단위가 한도에 걸리면 작업은 전처럼 실패한다. 다른 단위의 컴파일 실패·시간 초과·출력 오류는 그대로 작업을 실패시키고 그 사유가 앞선다.
+3. **채택하지 않은 안.** (가) 한도에 걸린 단위를 처리 파일로 세는 안은 GCC가 끝내지 않은 범위를 주장한다. (나) 탐색 한도를 올리는 안(`--param analyzer-bb-explosion-factor`, `analyzer-max-svalue-depth`, `-fanalyzer-call-summaries`)은 같은 사례에서 한도 경고가 사라진 파일이 하나뿐이어서 GCC 기본값을 유지했다. (다) 이전처럼 작업 전체를 실패시키는 안은 끝까지 분석한 단위의 결과를 버린다.
+4. **게시 규칙은 그대로다.** 메모리·`FILE` 누수, 이중 해제, 해제 뒤 사용, 널 역참조 계열 `-Wanalyzer-*` 열두 규칙을 더한 별도 규칙 팩 버전으로 같은 사례를 다시 쟀다. 더 나온 진단은 모두 시험 코드에 있었고 배포 코드에는 없었다. 시험 코드의 진단은 대부분 시험 framework의 단언 매크로가 실패 시 돌아오지 않는다는 것을 GCC가 모르는 데서 나온 오탐이었다. 배포 코드의 정밀도 표본이 없으므로(0건) 규칙 팩은 파일 디스크립터 일곱 규칙 v1로 두고 기본 심각도도 바꾸지 않았다.
+
+[GCC 파일 디스크립터 검사](ANALYZERS.md#gcc-파일-디스크립터-검사)
+
+**A68 — compile DB에 없는 C/C++ 소스에 다른 항목의 컴파일 인자를 빌려 주지 않는다.** (기록 2026-11-26) REQ-007/008, NFR-006에 대해 다음을 확정한다. compile DB 모드의 범위 안 소스 중 DB에 항목이 없는 것은 전과 같이 `not_in_compile_db`이며 처리 파일이 아니다.
+
+1. **측정.** clangd 식 보간(같은 디렉터리와 가장 긴 공통 경로의 항목, 같은 확장자 우선)으로 C 사례 세 개의 빠진 소스에 인자를 만들어 cppcheck·clang-tidy를 제품 선택 그대로 실행했다. 빠진 소스는 대부분 시험 코드와 시험 framework에 딸린 예제였고, 빌린 인자로는 framework 헤더를 찾지 못해 그 대부분이 clang-tidy 컴파일 오류로 끝났다. 배포 코드 경로의 빠진 소스는 몇 개뿐이었고 컴파일되어 진단을 냈다. 그것은 꺼진 build 옵션의 소스, fuzz harness, 시험 프로그램처럼 구성한 build가 컴파일하지 않는 파일이다. 그 진단이 실제 문제인지의 표본은 읽지 않았다. 수치는 [평가 결과](EVALUATION-RESULTS.md#분석기-실행-범위도구만-조건)에 있다.
+2. **이유.** compile DB는 프로젝트가 구성한 build가 무엇을 어떤 인자로 컴파일하는지의 근거다. 빌린 인자의 결과에는 그 근거가 없고, 시험 경로에서는 컴파일 오류만 늘었다. 배포 코드 경로에서 더 얻는 진단은 구성한 build 밖의 코드이고 정밀도의 근거가 없다. 빌린 인자의 관찰과 DB 근거의 관찰을 한 작업에 섞으면 처리 파일과 작업 상태의 뜻이 흐려진다.
+3. **다시 볼 조건.** 넣는다면 같은 디렉터리의 항목만 빌리고, DB 근거의 작업 결과(상태·처리 파일·단위 상태)를 바꾸지 않는 별도 최선 노력 단계로 둔다. 배포 코드에서 그렇게 얻은 진단이 실제 문제라는 표본이 있을 때 한다.
+
+[번역 단위 범위](ANALYZERS.md#번역-단위-범위와-생성-헤더)
+
+**A69 — cargo check·clippy는 시험·벤치·예제 대상만 컴파일되지 않으면 그 종류를 빼고 다시 실행한다.** (기록 2026-11-26) REQ-007/008/012, NFR-006과 TC-322에 대해 다음을 확정한다. A22 10의 `--all-targets`는 기본 선택으로 유지한다. 실제 Rust 프로젝트의 분석기만 실행에서 cargo check·clippy가 `package_errors`로 실패했고, 원인은 안정 toolchain이 nightly 전용 벤치의 `#![feature]`를 거부한 것(E0554)이었다. 라이브러리와 바이너리는 컴파일되었는데 배포 코드의 결과가 실패한 작업에 갇혔다([평가 결과](EVALUATION-RESULTS.md#분석기-실행-범위도구만-조건)).
+
+1. **조건.** 첫 실행이 exit 101이고 stdout을 끝까지 해석했으며, lint가 아닌 컴파일 오류의 대상 종류가 모두 `test`·`bench`·`example`이고, stderr가 다른 원인(toolchain, lockfile, 의존성, linker, manifest, build script, 문서 충돌)을 말하지 않을 때만 다시 실행한다. 대상 종류는 cargo JSON 레코드의 `target.kind`에서 읽고 stderr 문구로 추측하지 않는다.
+2. **재실행.** 실패한 종류만 뺀 대상 플래그로 한 번만 실행하고, 결과는 재실행의 판정 그대로다. 새 target 디렉터리를 쓴다. 실패한 대상이 남긴 dep-info가 처리 파일로 읽히지 않게 하기 위해서다. 한계 `failing_target_kinds_excluded`와 `excluded_target_kinds`·`targets`·선택으로 무엇을 빼고 검사했는지 남긴다.
+3. **채택하지 않은 안.** (가) 처음부터 `--lib --bins`만 검사하는 안은 컴파일되는 시험 코드의 진단과 처리 범위를 모든 프로젝트에서 잃는다. (나) nightly toolchain으로 바꾸는 안은 운영자가 정한 toolchain을 바꾸고 다른 결과를 낸다. (다) 첫 실행의 실패한 대상 오류를 성공한 envelope의 도구 오류로 싣는 안은 envelope 계약(성공에는 도구 오류가 없음)에 어긋난다. 첫 실행의 원시 stream은 실행 기록으로 남는다.
+
+[Rust 실행](ANALYZERS.md#rust-실행과-lint-수준)
+
+**A70 — SpotBugs 컴파일은 모듈 기술자를 빼고, 전이 classpath는 Java 의존성 받기로 미룬다.** (기록 2026-11-26) REQ-007/008/012/014, NFR-006과 TC-323에 대해 다음을 확정한다. 실제 Java 프로젝트의 분석기만 실행에서 SpotBugs가 `java_compilation_failed`로 실패한 원인은 classpath가 아니라 모듈 기술자였다. `module-info.java`를 다른 소스와 함께 넘기자 javac가 이름 있는 모듈로 컴파일하며 모든 파일을 `file should be on source path, or on patch path for module`로 거부했다([평가 결과](EVALUATION-RESULTS.md#분석기-실행-범위도구만-조건)).
+
+1. **기술자는 컴파일하지 않는다.** 클래스는 이름 없는 모듈로 컴파일한다. 직접 의존성 JAR가 classpath에 있으므로 이름 있는 모듈에서는 읽히지 않는 JAR도 읽힌다. SpotBugs는 같은 바이트코드를 읽는다. 모듈 경계는 검사하지 않으며 한계 `java_module_descriptor_not_compiled`로 남긴다. 기술자만 있으면 컴파일할 것이 없으므로 `unsupported / java_production_sources_unselected`다.
+2. **채택하지 않은 안.** 기술자가 있는 디렉터리를 `-sourcepath`로 주는 안은 이 사례에서도 컴파일되었으나, 모듈이 `requires`하는 다른 모듈을 `--module-path`로 줘야 하고 classpath의 직접 의존성 JAR가 이름 있는 모듈에서 보이지 않는다. 지금의 classpath 계약(직접 의존성만, 카탈로그로 검증)과 맞지 않는다.
+3. **전이 classpath의 범위.** A42~A44의 틀로 넣는다면 `deps.java` 받기 작업(필수 아님, 프로젝트 선택과 노드 스위치가 모두 켜져야 함, 받은 저장소는 Maven 저장소 배치의 공유 캐시)이 저장소 코드를 실행하지 않고 POM을 읽어 의존성을 푼다. 이를 위해서는 부모 POM 사슬, `import` 범위 BOM과 `dependencyManagement`, 속성 치환, 범위(`compile`·`provided`·`runtime`), 제외와 `optional`, 가까운 쪽이 이기는 버전 조정, 버전 범위와 relocation을 Maven과 같게 구현해야 한다. JDK·OS로 켜지는 profile은 평가하지 않는 한계로 남는다. lockfile이 없으므로 고정 근거는 저장소의 체크섬뿐이고 `dependency_versions_not_pinned`가 된다. Gradle은 Gradle을 실행하지 않고는 풀 수 없어 리터럴 선언과 버전 카탈로그까지만 다룬다. 받기 기록 schema·보고서 공백·분석기 연결을 함께 바꾸는 큰 변경이라 이 결정에서는 구현하지 않는다.
+4. **측정이 말하는 우선순위.** 이 집합의 Java 사례에서는 직접 의존성만으로 인한 컴파일 실패가 없었다. 기술자를 뺀 뒤 SpotBugs 작업이 모두 컴파일되었다. 전이 classpath는 실제 프로젝트에서 그 때문에 실패하는 측정이 생길 때 다시 본다.
+5. **범위 밖 보고는 따로 센다.** 위치를 연결하지 못했다고 센 SpotBugs 보고의 대부분은 경로 범위 밖에 있는 같은 모듈 운영 소스의 보고였다. 그 소스는 컴파일 문맥으로만 넘기고 근거는 선택한 소스에만 연결하므로 관찰로 만들지 않는 것이 계약이다. 위치 실패와 섞이지 않게 `java_findings_outside_scope`로 따로 세고 `observations_outside_scope_omitted`를 남긴다(Rust와 같은 한계 코드). 범위 밖 보고를 관찰로 싣는 안은 사용자가 고른 범위를 넘어 발견을 게시하므로 채택하지 않았다. 남은 위치 없는 보고는 클래스·메서드 수준이고 대부분 낮은 우선순위의 한 규칙이어서, 메서드 줄로 위치를 대신 잡는 변경은 정밀도 근거가 생길 때 한다.
+
+[Java 팩](ANALYZERS.md#java-팩) · [Java 로컬 클래스패스](ANALYZERS.md#java-로컬-클래스패스)
+
 ## 모델 검토
 
 **A21 — 단계 기록과 필수 검토 역할.** (기록 2026-11-18) REQ-009/010/011/013/027과 TC-97에 대해 다음을 확정한다.

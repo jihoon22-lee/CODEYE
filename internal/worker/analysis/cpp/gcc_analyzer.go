@@ -31,6 +31,7 @@ const (
 	reasonGCCCompile           = "gcc_analyzer_failed"
 	reasonGCCUnavailable       = "gcc_analyzer_unavailable"
 	reasonGCCLanguage          = "gcc_analyzer_c_only"
+	reasonGCCTooComplex        = "gcc_analyzer_too_complex"
 	gccVersionExecution        = "gcc-analyzer.version"
 	gccTaskTimeout             = 5 * time.Minute
 	gccUnitTimeout             = 45 * time.Second
@@ -284,7 +285,7 @@ func assembleGCCAnalyzer(doc obsdoc.Document, s *session, m Mapping, l layout, v
 		o.fail(domain.TaskFailed, ReasonWorkspaceDrift, obsdoc.ExitExecutionError)
 	}
 	processed := []string{}
-	outside := 0
+	outside, tooComplex := 0, 0
 	for _, b := range checks {
 		before := len(doc.Observations)
 		parse := b.parsed
@@ -321,8 +322,11 @@ func assembleGCCAnalyzer(doc obsdoc.Document, s *session, m Mapping, l layout, v
 			o.fail(domain.TaskFailed, reasonGCCCompile, obsdoc.ExitExecutionError)
 			doc.Coverage.Units[TUFailedCompile]++
 		case parse.tooComplex:
-			o.fail(domain.TaskFailed, "gcc_analyzer_too_complex", obsdoc.ExitExecutionError)
-			doc.Coverage.Units[TUUnknown]++
+			// GCC stopped exploring some paths of this unit at its limit; the
+			// diagnostics it found stay, the unit is not a processed file
+			// and does not fail the units that finished (decision A67).
+			tooComplex++
+			doc.Coverage.Units[TUPartialTooComplex]++
 		default:
 			processed = append(processed, b.unit)
 			if len(doc.Observations) == before {
@@ -339,6 +343,15 @@ func assembleGCCAnalyzer(doc obsdoc.Document, s *session, m Mapping, l layout, v
 	if missing := len(m.Units) - len(checks); missing > 0 {
 		doc.Coverage.Units[TUNotProcessed] += missing
 		o.fail(domain.TaskTimedOut, ReasonTimeout, obsdoc.ExitTimeout)
+	}
+	if tooComplex > 0 {
+		doc.Limitations = append(doc.Limitations, reasonGCCTooComplex)
+		doc.Target.Properties["units_too_complex"] = strconv.Itoa(tooComplex)
+		// Success needs a unit analysed to the end: with none, the task
+		// would read as clean with nothing analysed.
+		if len(processed) == 0 {
+			o.fail(domain.TaskFailed, reasonGCCTooComplex, obsdoc.ExitExecutionError)
+		}
 	}
 	sort.Strings(processed)
 	o.finish(&doc, processed, len(doc.Observations) > 0, true)

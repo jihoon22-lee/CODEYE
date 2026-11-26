@@ -42,13 +42,18 @@ func TestRealJavaAnalyzers(t *testing.T) {
 			if jar == "" {
 				t.Skipf("set %s to the installed JAR", spec.env)
 			}
-			fixture := packtest.NewFixture(t, "", map[string]string{
+			files := map[string]string{
 				"pom.xml":                                "<project><groupId>example</groupId><artifactId>parent</artifactId><version>1</version><modules><module>app</module></modules><properties><maven.compiler.release>" + release + "</maven.compiler.release></properties></project>",
 				"app/pom.xml":                            "<project><parent><groupId>example</groupId><artifactId>parent</artifactId><version>1</version></parent></project>",
 				"app/src/main/java/example/Example.java": javaSource,
 				"app/target/classes/example/Example.class": "not a class file",
 				"outside/Outside.java":                     "this file is outside the selected scope",
-			}, domain.Scope{Kind: "paths", Paths: []string{"app"}})
+			}
+			if spec.name == SpotBugs {
+				// TC-323: a named module compiles in the unnamed module.
+				files["app/src/main/java/module-info.java"] = "module example { exports example; }\n"
+			}
+			fixture := packtest.NewFixture(t, "", files, domain.Scope{Kind: "paths", Paths: []string{"app"}})
 			runner := &executor.Executor{}
 			analyzer, err := New(spec.name, jar, pack.Toolchain{Executable: java, Version: release})
 			if err != nil {
@@ -64,6 +69,9 @@ func TestRealJavaAnalyzers(t *testing.T) {
 			doc, body := packtest.ReadEnvelope(t, fixture.Job, result, "CODEYE_JAVA_DUMP")
 			if result.Status != domain.TaskSucceeded || packtest.Rules(doc)[spec.rule] == 0 || !slices.Equal(doc.Coverage.ProcessedPaths, []string{"app/src/main/java/example/Example.java"}) {
 				t.Fatalf("unexpected %s result %+v\n%s", spec.name, result, body)
+			}
+			if spec.name == SpotBugs && !slices.Contains(doc.Limitations, "java_module_descriptor_not_compiled") {
+				t.Fatalf("limitations %v", doc.Limitations)
 			}
 			if packtest.TreeHash(t, fixture.SourceRoot) != sourceBefore || packtest.TreeHash(t, fixture.Job.Snapshot.SnapshotDir) != snapshotBefore ||
 				packtest.TreeHash(t, fixture.Job.Snapshot.WorkspaceDir) != workspaceBefore {

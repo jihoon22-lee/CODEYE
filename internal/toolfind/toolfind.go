@@ -263,7 +263,7 @@ func Detect(ctx context.Context, opts Options) Result {
 	if npm, node := d.found["npm"], d.found["node"]; npm.Status == Found && node.Status == Found {
 		registry := opts.NpmRegistryEnv
 		if registry == nil {
-			registry = func(ctx context.Context, n, m string) string { return npmRegistry(ctx, n, m, probeDir) }
+			registry = func(ctx context.Context, n, m string) string { return npmRegistry(ctx, n, m, probeDir, env.Home) }
 		}
 		res.NpmRegistry = registryOf(registry(ctx, node.Path, npm.Path))
 	}

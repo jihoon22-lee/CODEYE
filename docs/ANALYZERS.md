@@ -132,6 +132,7 @@ go vet의 규칙 팩은 관찰 문서에 들어 있지 않고 보고서 decoder�
 - **Go 모듈 캐시.** 찾은 go의 `go env GOMODCACHE`(사용자의 실제 환경 기준)가 실제 디렉터리이면 `--go-mod-cache`로 넘긴다. go vet은 `GOPROXY=off`로 실행하므로 의존성이 있는 모듈은 이 캐시가 있어야 분석된다. 캐시는 저장 영역 상한의 `cache` 영역에 센다([운영](OPERATIONS.md#저장-영역과-상한)). 명시한 `agent.go_mod_cache`가 있으면 그것이 우선한다. 의존성 받기를 켜면 의존성은 이 캐시가 아니라 받기 캐시에서 읽고, 이 캐시는 받기의 첫 출처가 된다([Go 의존성 받기](#go-의존성-받기)).
 - **Go 받기 설정.** 같은 go로 `go env -json GOPROXY GOSUMDB GOPRIVATE GONOPROXY GONOSUMDB`를 읽어 Go 기본값과 다른 값만 `tools.json`의 `go_settings`에 남기고, 설정 파일이 비워 둔 `agent.dependencies`의 Go 값을 채운다. 의존성 받기가 꺼져 있으면 채우지 않는다.
 - **npm 레지스트리.** 찾은 npm으로 사용자의 실제 환경에서 `npm config get registry`를 읽어, npm 기본값과 다르고 인증정보가 없으면 `tools.json`의 `npm_registry`에 남기고 설정 파일이 비워 둔 `agent.dependencies.npm_registry`를 채운다. 인증정보가 든 값은 버린다(공개 레지스트리로 받는다).
+- **설정 probe는 홈에 쓰지 않는다.** 위 세 probe는 사용자의 설정을 읽어야 하므로 사용자 환경으로 실행하지만, 쓰는 위치는 탐색의 임시 probe 디렉터리로 옮기고 끝나면 지운다. npm은 명령마다 `~/.npm/_logs`에 debug log를, 캐시에 파일을 쓰고, go 명령은 `go env`에서도 사용자 설정 디렉터리에 telemetry counter를 쓴다(실측). 그래서 npm probe는 `HOME`·캐시(`npm_config_cache`)·로그 디렉터리를 probe 디렉터리에 두고 로그 파일을 끄며(`npm_config_logs_max=0`) 사용자 설정 파일은 `npm_config_userconfig`(사용자가 정했으면 그 값, 아니면 `~/.npmrc`)로 그대로 읽는다. go probe는 `HOME`을 그대로 두고(기본 GOPATH·모듈 캐시가 그 아래다) `XDG_CONFIG_HOME`을 telemetry를 끈 probe 디렉터리로, `GOENV`를 사용자의 go env 파일(사용자가 정했으면 그 값)로 준다. darwin·Windows는 go가 `XDG_CONFIG_HOME`을 읽지 않으므로 go probe의 환경은 바꾸지 않는다(TC-319).
 - **Python 타입 검사기.** 결과 도구 집합에 mypy와 pyright가 모두 있으면 `--python-both-type-checkers`를 함께 준다([타입 검사기 선택](#타입-검사기-선택)). 하나만 있으면 주지 않는다. 에이전트의 검사는 그대로이며(둘 다 있으면서 플래그가 없거나 그 반대면 사용법 오류), `codeye up`은 값을 정할 때 그 규칙을 맞춘다.
 
 결과는 `<state_dir>/tools.json`에 쓴다([schema](../schemas/tools.schema.json), [예시](../examples/tools.json)). 탐색 결과와 명시 설정을 합친 에이전트 인자는 `toolfind.Resolve`가 만든다. 명시 값이 있으면 그 값이, 없으면 `found` 도구의 경로가 쓰이며 쓸 수 없는 탐색 결과는 넘기지 않는다.
@@ -811,7 +812,7 @@ cppcheck가 기준 분석기이고 clang-tidy와 GCC가 추가 검사를 수행�
 | `msvc_driver_unsupported`, `unsupported_driver` | `cl`·`clang-cl`, `nvcc`·형식이 맞지 않는 driver |
 | `unsafe_argument` | 허용 목록을 지난 뒤에도 안전하지 않은 인자가 남은 항목 |
 
-제외 수는 `target.properties.entries_excluded`와 제약 `compile_db_entries_excluded`·`duplicate_compile_db_entries`로 남는다. 범위 안 소스의 모든 항목이 제외되면 그 단위는 `compile_db_entry_excluded`, 항목이 없으면 `not_in_compile_db`이며 처리 파일이 아니다.
+제외 수는 `target.properties.entries_excluded`와 제약 `compile_db_entries_excluded`·`duplicate_compile_db_entries`로 남는다. 범위 안 소스의 모든 항목이 제외되면 그 단위는 `compile_db_entry_excluded`, 항목이 없으면 `not_in_compile_db`이며 처리 파일이 아니다. compile DB에 없는 소스에 가까운 항목의 인자를 빌려 주지 않는다(clangd 식 보간). 그런 소스는 구성한 build가 컴파일하지 않는 파일(꺼진 build 옵션의 소스, 시험 framework에 딸린 예제)이다. 빌린 인자로 시험 경로의 소스는 헤더를 찾지 못해 대부분 컴파일되지 않았고, 배포 코드 경로의 소스가 낸 진단은 정밀도의 근거가 없다. [A68](DECISIONS.md)
 
 **flag 허용 목록.** 분석 의미를 바꾸는 인자만 남긴다.
 
@@ -920,7 +921,8 @@ GCC 13 이상이 설치된 노드에서 `gcc --version`을 확인한다. 실기 
 
 - 설정한 GCC에 정제한 컴파일 인자와 `-fanalyzer -Wanalyzer-too-complex -fdiagnostics-format=json -fdiagnostics-column-unit=byte -fdiagnostics-color=never -fdiagnostics-show-option -S -o /dev/null` 및 작업 사본 파일의 절대 경로를 준다. `-S`의 컴파일러 프런트엔드는 실행되며 어셈블리 출력은 버린다. 프로젝트의 빌드 스크립트·컴파일러 wrapper·플러그인·응답 파일은 사용하지 않는다. 컴파일러 환경변수는 전달하지 않는다.
 - 파일 디스크립터의 접근 모드·유형·상태 오류, 중복 닫기, 누수, 닫힌 디스크립터 사용, 확인하지 않은 디스크립터 사용 등 `-Wanalyzer-fd-*` 일곱 규칙만 게시한다. 다른 GCC 경고는 발견 수에서 제외한다. 닫은 디스크립터를 읽은 합성 예제는 GCC에서 보고하고, 같은 입력을 기본 검사로 실행한 clang-tidy 21.1.8과 cppcheck 2.22.0은 이 진단을 보고하지 않았다. [실측 관찰 예시](../examples/observations-gcc-analyzer.json)
-- 경고가 있어도 종료 코드 0이며 정상 예제는 게시할 경고가 없다. 실패한 단위, 복잡도 한도, 시간 초과, 잘리거나 파싱할 수 없는 진단은 실패 또는 미완료 범위로 남긴다. 종료 코드가 성공한 단위의 분석 내용이 남을 수 있어도 실패한 작업 전체는 처리 완료로 기록하지 않는다.
+- 경고가 있어도 종료 코드 0이며 정상 예제는 게시할 경고가 없다. 실패한 단위, 시간 초과, 잘리거나 파싱할 수 없는 진단은 실패 또는 미완료 범위로 남긴다. 종료 코드가 성공한 단위의 분석 내용이 남을 수 있어도 실패한 작업 전체는 처리 완료로 기록하지 않는다.
+- **복잡도 한도는 그 단위의 한계다.** GCC가 `-Wanalyzer-too-complex`로 한 단위의 경로 탐색을 일부 멈추면 그 단위는 `partial_too_complex`다. 그 단위에서 찾은 진단은 남지만 처리 파일이 아니다. 끝까지 분석한 단위가 하나라도 있으면 작업은 성공하고 한계 `gcc_analyzer_too_complex`와 `target.properties.units_too_complex`(한도에 걸린 단위 수)를 남긴다. 모든 단위가 한도에 걸리면 끝까지 분석한 것이 없으므로 `failed / gcc_analyzer_too_complex`다. 다른 단위의 컴파일 실패·시간 초과·출력 오류는 전과 같이 작업을 실패시키고 그 사유가 앞선다. 탐색 한도(`--param analyzer-*`, `-fanalyzer-call-summaries`)는 GCC 기본값 그대로다. [A67](DECISIONS.md)
 - 저장 stderr는 작업 사본에 위치를 확인한 진단의 구조화된 원문만 사용한다. 기본 진단과 상태 전이의 위치는 스냅샷 해시·줄 및 저장된 JSON의 바이트 범위에 연결한다. 컴파일 DB digest와 소스 안 억제 상태를 함께 기록한다. [GCC 13 정적 분석 옵션](https://gcc.gnu.org/onlinedocs/gcc-13.4.0/gcc/Static-Analyzer-Options.html)
 
 ### C/C++ 규칙 문맥과 억제
@@ -949,6 +951,7 @@ Cppcheck 2.22.0은 개별 규칙 이름으로 `redundantAssignment`를 켤 수 �
 | `possibly_partial_missing_include` | 헤더 안 missingInclude는 포함한 단위 없이 한 번만 보고됨 | 아니오 |
 | `failed_missing_include`, `failed_compile`, `failed_parse` | clang-tidy 컴파일 실패, cppcheck 구문 실패 | 아니오 |
 | `not_processed`, `unknown` | 출력이 처리를 보여 주지 않음, 실행이 끝나지 않음 | 아니오 |
+| `partial_too_complex` | GCC가 복잡도 한도로 일부 경로 탐색을 멈춤(진단은 남음) | 아니오 |
 | `not_in_compile_db`, `compile_db_entry_excluded` | compile DB에 없음, 모든 항목 제외 | 아니오 |
 
 스냅샷 compile DB가 가리키는, configure가 build 디렉터리에 만드는 생성 헤더(`config.h` 등)가 스냅샷에 없으면 두 도구 모두 그 단위에서 `missing_include_files`(configuration_error)로 실패한다. 찾지 못한 헤더는 도구 오류이며 결함이 아니다. 다른 단위의 관찰은 남지만 처리 파일은 주장하지 않는다. 같은 헤더가 compile DB의 `-I`가 가리키는 위치에 스냅샷으로 있으면 성공한다. 헤더 안 위치의 관찰은 남지만 헤더를 처리 파일로 주장하지 않는다. 생성 소스·생성 헤더가 없는 것은 범위 공백이다. [compile DB 생성](#compile-db-생성)으로 만든 DB는 configure가 작업 사본 build 디렉터리에 쓴 헤더를 읽으므로 이 공백이 없다(`generated_include_dirs_used`). 같은 파일을 다른 매크로로 compile하는 두 번째 이후 항목은 분석하지 않는다. MSVC·nvcc 항목은 분석하지 않는다.
@@ -1270,8 +1273,9 @@ cargo check --offline --locked --message-format=json --workspace --all-targets
 cargo-clippy clippy --offline --locked --message-format=json --workspace --all-targets -- --cap-lints warn -W clippy::undocumented_unsafe_blocks -W clippy::multiple_unsafe_ops_per_block -W clippy::panic_in_result_fn -W clippy::unwrap_in_result -W clippy::todo -W clippy::unimplemented
 ```
 
-- 실행 순서는 `rustc.version`(`rustc -vV`) → `cargo.version` → (clippy: `clippy.version`) → `cargo.check` 또는 `clippy.check`다. 모듈 `Cargo.toml`은 실행 전에 manifest SHA-256과 대조한다.
+- 실행 순서는 `rustc.version`(`rustc -vV`) → `cargo.version` → (clippy: `clippy.version`) → `cargo.check` 또는 `clippy.check`다(아래 재실행이 있으면 그 뒤 `cargo.check.targets`·`clippy.check.targets`). 모듈 `Cargo.toml`은 실행 전에 manifest SHA-256과 대조한다.
 - `--all-targets`는 라이브러리, 바이너리, 통합 시험, 예제, 벤치, 단위 시험 하니스를 모두 검사한다. 개발 의존성도 오프라인으로 구해져야 한다. 같은 소스가 두 번 컴파일되어 같은 진단이 두 번 나오므로 코드·수준·위치·메시지가 같은 진단은 합치고 `duplicate_diagnostics_merged`를 남긴다.
+- **시험·벤치·예제 대상만 컴파일되지 않으면 그 종류를 빼고 다시 실행한다.** 첫 실행이 exit 101로 끝났고, stdout을 끝까지 읽었고, lint가 아닌 컴파일 오류가 모두 대상 종류 `test`·`bench`·`example`인 대상에서 났고, stderr가 의존성·lockfile·linker·build script·toolchain 같은 다른 원인을 말하지 않으면, 실패한 종류만 뺀 대상 플래그(`--lib --bins --tests --benches --examples` 중 남은 것)로 한 번 더 실행한다. 안정 toolchain에서 `#![feature]`를 쓰는 nightly 전용 벤치(E0554)가 실제 프로젝트에서 잰 경우다. 재실행은 새 `CARGO_TARGET_DIR`을 쓴다. 실패한 대상이 남긴 dep-info가 처리 파일로 읽히지 않게 하기 위해서다. 결과는 재실행의 판정이고 한계 `failing_target_kinds_excluded`, `target.properties.excluded_target_kinds`(뺀 종류)·`targets`(남은 선택), 선택(`rule_pack.selection`)에는 `--all-targets` 대신 남은 플래그를 적는다. 뺀 대상의 소스는 처리 파일이 아니어서 `rust_files_not_compiled`로 보인다. `--tests`를 빼면 라이브러리의 `#[cfg(test)]` 코드도 검사하지 않는다. 첫 실행의 원시 stream은 실행 기록으로 남는다. 오류가 하나라도 배포 대상(lib·bin·build script·proc macro)에 있으면 재실행하지 않고 전처럼 `package_errors`다. [A69](DECISIONS.md)
 - **clippy는 `cargo-clippy clippy`로 직접 실행한다.** `cargo clippy`는 외부 하위 명령이라 저장소 `[alias] clippy = ...`가 가릴 수 있다. 내장 명령 `check`는 alias로 가릴 수 없다.
 - **rustc 진단 중복 제거.** clippy는 rustc 진단도 함께 내므로 clippy 작업은 코드가 `clippy::`로 시작하는 진단만 남긴다(`rustc_diagnostics_excluded`). clippy 출력의 rustc 진단 집합은 cargo check 관찰 집합과 같다.
 - **deny lint.** deny가 기본인 lint(rustc `overflowing_literals`, clippy correctness 그룹)가 있으면 exit 101이고 의존 crate가 컴파일되지 않는다. cargo check에서 lint 이름 코드의 `error`는 관찰(`raw_severity=error`)로 남기되 작업은 `failed`/`lints_denied`이고 처리 파일은 주장하지 않는다. 저장소가 `-D warnings`나 `#![deny(warnings)]`를 쓰면 경고가 있는 한 cargo check는 실패한다. clippy는 `--cap-lints warn`으로 수준을 낮춰 correctness lint가 실패한 작업에 갇히지 않게 한다(`cap_lints_warn`).
@@ -1314,6 +1318,7 @@ clippy 작업은 allow-by-default인 여섯 lint를 `-W`로 켠다. 소스의 `#
 | exit 0, `build-finished` 하나·`success:true`, 레코드 완독, 도구 오류·drift 없음, 처리 파일 있음 | succeeded |
 | exit 0인데 `build-finished`가 없거나 `success:false` | failed / `build_exit_mismatch` |
 | exit 101 + 컴파일 오류(코드 `E####`·코드 없음) | failed / `package_errors`, 오류는 `tool_errors`, 관찰 보존 |
+| exit 101 + 컴파일 오류가 모두 시험·벤치·예제 대상 | 그 종류를 뺀 재실행의 판정, `failing_target_kinds_excluded` |
 | exit 101 + lint 이름 코드의 `error`만 | failed / `lints_denied`, 관찰 보존 |
 | exit 101 + 오프라인 의존성 없음 | failed / `dependency_unavailable`(configuration_error) |
 | `--locked`인데 Cargo.lock 없음 / 갱신 필요 | failed / `lockfile_missing` / `lockfile_outdated`(configuration_error) |
@@ -1347,8 +1352,8 @@ C/C++ 진단의 관련 위치는 도구가 반환한 순서로 한 건의 상세
 
 - Maven의 `pom.xml`과 정적으로 나열한 reactor 모듈, Gradle의 `build.gradle(.kts)`, `settings.gradle(.kts)`와 문자 그대로 적은 `include`를 읽는다. 선택 범위의 Java 파일은 가장 가까운 모듈에 배정한다. 환경 분석은 프로젝트의 빌드 종류와 빌드 루트, 읽은 컴파일러 release·source 및 Gradle toolchain 선언을 기록한다. Gradle 실행으로 결정되는 모듈, POM profile과 외부 상속·변수는 평가하지 않는다. 확인한 선언과 노드 관측 버전을 구분한다.
 - PMD는 선택한 파일의 읽기 목록과 CODEYE 지정 Best Practices·Error Prone·Multithreading 규칙을 사용한다. 소스의 억제 표기는 적용한다. 캐시와 대상 프로젝트의 규칙·classpath를 사용하지 않는다. 확인한 release가 있으면 Java 구문 버전으로 지정한다. 파싱·규칙 설정 오류가 남으면 작업을 실패로 기록한다.
-- SpotBugs는 같은 JDK의 `javac`로 attempt 작업 사본의 검증된 소스를 컴파일한다. 표준 `src/main/java`가 있으면 같은 모듈의 운영 소스를 컴파일 문맥으로 쓰고 결과의 근거는 사용자가 선택한 운영 소스에만 연결한다. 프로젝트 빌드·플러그인·annotation processor와 저장소의 기존 class/JAR는 사용하지 않는다. 클래스 산출물은 해당 작업의 임시 디렉터리에만 쓴다.
-- SpotBugs의 XML 분석 오류·누락 클래스와 실패 코드는 별도 상태다. 도구가 보고한 클래스와 스냅샷의 선택 소스가 유일하게 대응하는 위치만 근거가 된다. 도구 진단은 스냅샷과 원시 stdout의 바이트 구간에 연결한다. 두 도구 모두 위치를 확인한 파일 수와 더 읽지 못한 범위를 보고한다.
+- SpotBugs는 같은 JDK의 `javac`로 attempt 작업 사본의 검증된 소스를 컴파일한다. 표준 `src/main/java`가 있으면 같은 모듈의 운영 소스를 컴파일 문맥으로 쓰고 결과의 근거는 사용자가 선택한 운영 소스에만 연결한다. 프로젝트 빌드·플러그인·annotation processor와 저장소의 기존 class/JAR는 사용하지 않는다. 클래스 산출물은 해당 작업의 임시 디렉터리에만 쓴다. 모듈 기술자(`module-info.java`)는 javac에 넘기지 않고 클래스를 이름 없는 모듈로 컴파일한다. 기술자를 넘기면 javac가 이름 있는 모듈로 컴파일해 모든 소스가 모듈 소스 경로에 있어야 하고 classpath의 JAR를 읽지 못한다(실측: 모든 파일이 `file should be on source path, or on patch path for module`). 뺀 수는 `java_module_descriptors_not_compiled`, 한계는 `java_module_descriptor_not_compiled`다. SpotBugs는 같은 클래스의 바이트코드를 읽으며 모듈 경계(`exports`·`requires`)는 검사하지 않는다. [A70](DECISIONS.md)
+- SpotBugs의 XML 분석 오류·누락 클래스와 실패 코드는 별도 상태다. 도구가 보고한 클래스와 스냅샷의 선택 소스가 유일하게 대응하는 위치만 근거가 된다. 경로 범위 밖의 같은 모듈 운영 소스(컴파일 문맥)에 대한 보고는 관찰이 되지 않고 `java_findings_outside_scope`와 `observations_outside_scope_omitted`로 센다. 선택한 소스의 보고인데 BugInstance 아래 줄 범위가 없는 것(클래스·메서드 수준 보고)은 `java_findings_location_unmapped`다. 두 수는 보고서의 도구 행에만 남는다. 도구 진단은 스냅샷과 원시 stdout의 바이트 구간에 연결한다. 두 도구 모두 위치를 확인한 파일 수와 더 읽지 못한 범위를 보고한다.
 - 모듈마다 선택한 스냅샷 파일 최대 4,096개를 처리한다. 파일당 2 MiB, 합계 64 MiB를 넘거나 UTF-8로 읽을 수 없는 소스는 제외 건수로 남긴다. 컴파일과 각 분석 명령은 각각 최대 2분이다.
 
 ### Java 로컬 클래스패스
@@ -1363,7 +1368,7 @@ C/C++ 진단의 관련 위치는 도구가 반환한 순서로 한 건의 상세
 
 ## 문서 참조와 오류 반환 검사
 
-- **Go errcheck.** go vet과 같은 패키지 패턴·모듈 캐시·오프라인 빌드 환경으로 호출자가 버린 오류의 위치를 찾는다. `go list`의 실제 선택 파일과 진단 줄을 고정 스냅샷에 연결한다. 코드에 명시적으로 처리한 오류나 활성 빌드에서 제외된 파일을 검사 완료로 보고하지 않는다.
+- **Go errcheck.** go vet과 같은 패키지 패턴·모듈 캐시·오프라인 빌드 환경으로 호출자가 버린 오류의 위치를 찾는다. `go list`의 실제 선택 파일과 진단 줄을 고정 스냅샷에 연결한다. 코드에 명시적으로 처리한 오류나 활성 빌드에서 제외된 파일을 검사 완료로 보고하지 않는다. 패키지는 `-mod=readonly`로 읽는다. 모듈에 `vendor/modules.txt`가 있으면 go vet·Staticcheck(go 명령의 기본)처럼 `-mod=vendor`로 vendor 디렉터리에서 읽고 `vendor_directory_used`를 남긴다. 선택(`rule_pack.selection`)이 실제 플래그다. 이전에는 vendor를 쓰는 모듈에서도 `-mod=readonly`가 오프라인 proxy에 모듈을 물어 `errcheck_packages_unavailable`로 실패했다.
 - **Rust rustdoc.** 저장소 코드 실행을 허용한 노드에서 `cargo doc --offline --locked --workspace --no-deps`로 현재 빌드 구성의 문서 참조를 확인한다. rustdoc 진단만 남긴다. 생성한 문서의 crate 진입 파일과 실제 진단 위치를 처리 범위에 기록한다. 나머지 하위 모듈의 문서화 여부는 이 결과로 확정할 수 없다.
 
 ## Go 내부 패키지 의존 관계

@@ -262,8 +262,27 @@ func (a *Analyzer) runSpotBugs(ctx context.Context, runner executor.Runner, run 
 			doc.Coverage.Units["java_compiler_context_files"] = len(compileFiles) - len(files)
 		}
 	}
+	// A module descriptor would make javac compile a named module: then
+	// every source must be on a module source path and the classpath JARs are
+	// not readable from the module (measured: "file should be on source path,
+	// or on patch path for module" for every file). The classes are compiled
+	// in the unnamed module instead; SpotBugs reads the same bytecode
+	// (decision A70).
+	descriptors := 0
 	for _, file := range compileFiles {
+		if path.Base(file.Path) == "module-info.java" {
+			descriptors++
+			continue
+		}
 		args = append(args, "./"+file.Path)
+	}
+	if descriptors == len(compileFiles) {
+		outcome.Fail(domain.TaskUnsupported, "java_production_sources_unselected", obsdoc.ExitNotRun)
+		return
+	}
+	if descriptors > 0 {
+		doc.Coverage.Units["java_module_descriptors_not_compiled"] = descriptors
+		doc.Limitations = append(doc.Limitations, "java_module_descriptor_not_compiled")
 	}
 
 	for i := range args {
@@ -309,9 +328,12 @@ func (a *Analyzer) runSpotBugs(ctx context.Context, runner executor.Runner, run 
 	if !complete(res, outcome) {
 		return
 	}
-	parseSpotBugs(run, files, doc, outcome, res.Stdout.Data)
+	context := slices.DeleteFunc(slices.Clone(compileFiles), func(f source.Entry) bool {
+		return slices.ContainsFunc(files, func(g source.Entry) bool { return g.Path == f.Path })
+	})
+	parseSpotBugs(run, files, context, doc, outcome, res.Stdout.Data)
 	code := pack.ExitCode(res)
-	if code != 0 && (code != 1 || len(doc.Observations) == 0 && doc.Coverage.Units["java_findings_location_unmapped"] == 0) {
+	if code != 0 && (code != 1 || len(doc.Observations) == 0 && doc.Coverage.Units["java_findings_location_unmapped"] == 0 && doc.Coverage.Units["java_findings_outside_scope"] == 0) {
 		outcome.Fail(domain.TaskFailed, "spotbugs_failed", obsdoc.ExitExecutionError)
 	}
 }
