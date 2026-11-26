@@ -31,6 +31,9 @@ func TestLeadFollowupsValidation(t *testing.T) {
 		"object without follow-up tasks": func(r *Report) {
 			r.Tasks = slices.DeleteFunc(r.Tasks, func(t Task) bool { return isLeadsTask(t.Key) })
 		},
+		// The report schema ties only 0.9 records and leads calls to builder
+		// 26; the object itself is checked here.
+		"object in an earlier builder": func(r *Report) { r.Builder.Version = "25" },
 	}
 	for name, edit := range cases {
 		t.Run(name, func(t *testing.T) {

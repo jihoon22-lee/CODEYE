@@ -438,7 +438,6 @@
     ]},
      "then": {"required": ["builder"], "properties": {"builder": {"properties": {"version": {"pattern": "^(1[4-9]|[2-9][0-9]|[1-9][0-9]{2,})$"}}}}}},
     {"if": {"anyOf": [
-        {"required": ["code_review"], "properties": {"code_review": {"required": ["lead_followups"]}}},
         {"required": ["artifacts"], "properties": {"artifacts": {"contains": {"required": ["decoder"], "properties": {"decoder": {"const": "application/vnd.codeye.review+json;schema_version=0.9"}}}}}},
         {"required": ["coverage"], "properties": {"coverage": {"required": ["review_calls"], "properties": {"review_calls": {"contains": {"required": ["role"], "properties": {"role": {"const": "leads"}}}}}}}}
       ]},
