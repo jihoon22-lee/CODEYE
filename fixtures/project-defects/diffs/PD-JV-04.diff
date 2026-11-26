@@ -1,0 +1,13 @@
+diff --git a/Gemma4.java b/Gemma4.java
+index b32a87c..efc1d33 100644
+--- a/Gemma4.java
++++ b/Gemma4.java
+@@ -3349,7 +3349,7 @@ public int sampleToken(FloatTensor logits) {
+                 lastIndex = i;
+                 break;
+             }
+-            siftDown(indices, 0, i - 1, comparator);
++            siftDown(indices, 0, i, comparator);
+         }
+ 
+         float r = rng.nextFloat(1f) * cumulativeProb;

@@ -1,0 +1,33 @@
+diff --git a/packages/graphql-language-service/src/interface/getAutocompleteSuggestions.ts b/packages/graphql-language-service/src/interface/getAutocompleteSuggestions.ts
+index a1d7c18..11f12b1 100644
+--- a/packages/graphql-language-service/src/interface/getAutocompleteSuggestions.ts
++++ b/packages/graphql-language-service/src/interface/getAutocompleteSuggestions.ts
+@@ -148,6 +148,7 @@ export function getAutocompleteSuggestions(
+     schema,
+     contextToken,
+     options,
++    1,
+   );
+   if (!context) {
+     return [];
+diff --git a/packages/graphql-language-service/src/parser/api.ts b/packages/graphql-language-service/src/parser/api.ts
+index f5fd4bf..8346f74 100644
+--- a/packages/graphql-language-service/src/parser/api.ts
++++ b/packages/graphql-language-service/src/parser/api.ts
+@@ -176,6 +176,7 @@ export function getContextAtPosition(
+   schema: GraphQLSchema,
+   contextToken?: ContextToken,
+   options?: { mode?: GraphQLDocumentMode; uri?: string },
++  offset = 0,
+ ): {
+   token: ContextToken;
+   state: State;
+@@ -183,7 +184,7 @@ export function getContextAtPosition(
+   mode: GraphQLDocumentMode;
+ } | null {
+   const token: ContextToken =
+-    contextToken || getTokenAtPosition(queryText, cursor, 1);
++    contextToken || getTokenAtPosition(queryText, cursor, offset);
+   if (!token) {
+     return null;
+   }

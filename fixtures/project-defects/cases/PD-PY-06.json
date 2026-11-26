@@ -1,0 +1,147 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-PY-06",
+ "split": "holdout",
+ "language": "python",
+ "kind": "real_fix",
+ "category": "api_contract",
+ "family": "nullable-pair-declared-as-required-strings",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/todoist/todoist-api-python",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "ce23a5805c10d76ffc3b12676d3ebfed4c263aad"
+ },
+ "after": {
+  "commit": "47ad7681f00949b2b835f511145c16d1a1df3175"
+ },
+ "fix_diff": "diffs/PD-PY-06.diff",
+ "fix_commit_url": "https://github.com/todoist/todoist-api-python/commit/47ad7681f00949b2b835f511145c16d1a1df3175",
+ "trees": {
+  "before": {
+   "digest": "32a4a45db4119126fe4fce69b21d6b71807ab5470a8f2d4a4b821d98c0985a45",
+   "scope_lines": 3284,
+   "scope_files": 10,
+   "files": 54
+  },
+  "after": {
+   "digest": "cc912a41e0ab5abd90ed25829e33993b5671a81bc5afc78e5681c871a29ae68d",
+   "scope_lines": 3284,
+   "scope_files": 10,
+   "files": 54
+  }
+ },
+ "label": {
+  "trigger": "A task is created through the quick-add call with metadata requested, and the parsed text names no section or no assignee, so the service answers with that pair as two JSON nulls (the shape the project's own fixture uses).",
+  "expected_impact": "The metadata model declares each of the three pairs as two required strings, and the v1 loader converts what it is given to the declared type, so a null pair arrives as the text 'None' twice. Callers that test for a missing section or assignee with an is-None check see a truthy value and treat the literal word as a real section or person name, displaying or forwarding it.",
+  "positive_locations": [
+   {
+    "path": "todoist_api_python/models.py",
+    "symbol": "Meta",
+    "anchors": {
+     "start": "project: tuple[str, str]",
+     "end": "assignee: tuple[str, str]"
+    },
+    "start_line": 92,
+    "end_line": 94
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "tests/data/test_defaults.py",
+    "symbol": "DEFAULT_META_RESPONSE",
+    "anchors": {
+     "start": "DEFAULT_META_RESPONSE: dict[str, Any] = {",
+     "end": "\"assignee\": [None, None],"
+    },
+    "start_line": 41,
+    "end_line": 44,
+    "note": "The recorded service response used by the tests carries the section and assignee pairs as two nulls each, which the declared pair types do not admit."
+   },
+   {
+    "path": "todoist_api_python/api.py",
+    "symbol": "TodoistAPI.add_task_quick",
+    "anchors": {
+     "start": "task_data: dict[str, Any] = post(",
+     "end": "return Task.from_dict(task_data)"
+    },
+    "start_line": 384,
+    "end_line": 391,
+    "note": "The quick-add call requests the metadata block and hands the raw response to the task model unchanged, so whatever the model types say decides what callers receive."
+   },
+   {
+    "path": "todoist_api_python/models.py",
+    "symbol": "Task",
+    "anchors": {
+     "start": "section_id: str | None",
+     "end": "assigner_id: Annotated[str | None, Alias(load=(\"assigned_by_uid\", \"assigner_id\"))]"
+    },
+    "start_line": 109,
+    "end_line": 119,
+    "note": "The task model itself declares the same kinds of value (section, assignee) as optional, showing the convention the metadata pairs break."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "note": "The project pair is always filled for a quick-added task, so a finding limited to it describes no observable failure; the problem is the pairs that can be empty."
+   },
+   {
+    "note": "Parsing does not fail: with the dependency versions used here the loader coerces the nulls silently instead of raising, so a finding that predicts an exception from the quick-add call is inaccurate."
+   }
+  ],
+  "fix_summary": "Declare both members of the project, section and assignee pairs as optional strings so empty pairs stay null after parsing.",
+  "distinctive_tokens": [
+   "literal word as a real section",
+   "truthy value and treat"
+  ]
+ },
+ "check": {
+  "summary": "Installs the pinned third-party dependencies into the run's home directory, parses a task response whose metadata has an empty section and assignee pair through the task model, and fails unless both pairs come back as nulls and the project pair is unchanged.",
+  "setup": [
+   [
+    "{python}",
+    "-m",
+    "pip",
+    "install",
+    "--quiet",
+    "--no-cache-dir",
+    "--disable-pip-version-check",
+    "--no-input",
+    "--target",
+    "{home}/site",
+    "-r",
+    "check-requirements.txt"
+   ]
+  ],
+  "argv": [
+   "{python}",
+   "-I",
+   "check_quick_add_meta.py",
+   "{home}/site"
+  ],
+  "cwd": ".",
+  "files": [
+   {
+    "path": "check_quick_add_meta.py",
+    "source": "checks/PD-PY-06/check_quick_add_meta.py"
+   },
+   {
+    "path": "check-requirements.txt",
+    "source": "checks/PD-PY-06/check-requirements.txt"
+   }
+  ],
+  "failure_signature": "NULL META PAIR NOT KEPT: section=\\('None', 'None'\\), assignee=\\('None', 'None'\\)",
+  "timeout_seconds": 900
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks --python /usr/bin/python3 --network with system Python 3.14.4: the setup step installs the pinned third-party dependencies (check-requirements.txt, from PyPI, into the run home), then the independent check parses a task response with empty section and assignee pairs. On before both pairs come back as the text None twice (exit 1, signature matched); on after they are (None, None) and the project pair is unchanged (exit 0). The fix commit added no test. dataclass-wizard is 0.39.1, inside the project range (>=0.35.0,<1.0); the lock file pins 0.35.0, which fails to import its v1 models on Python 3.14, so the behaviour with the locked version was not observed. Selected under the primary recency rule (merged 2026-01-22).",
+  "toolchain": "Python 3.14.4, pip 25.1.1; dataclass-wizard 0.39.1 and the other pins in checks/PD-PY-06/check-requirements.txt",
+  "before": "violation",
+  "after": "pass"
+ }
+}

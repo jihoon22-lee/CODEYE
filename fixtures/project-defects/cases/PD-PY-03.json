@@ -1,7 +1,7 @@
 {
  "schema": "codeye-project-defect-case",
  "id": "PD-PY-03",
- "split": "holdout",
+ "split": "spent",
  "language": "python",
  "kind": "real_fix",
  "category": "boundary_correctness",

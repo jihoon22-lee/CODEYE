@@ -1,7 +1,7 @@
 {
  "schema": "codeye-project-defect-case",
  "id": "PD-GO-04",
- "split": "holdout",
+ "split": "spent",
  "language": "go",
  "kind": "real_fix",
  "category": "error_handling",

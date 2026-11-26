@@ -1,0 +1,11 @@
+--- a/animation/src/main/java/org/pushingpixels/radiance/animation/api/TimelineEngine.java
++++ b/animation/src/main/java/org/pushingpixels/radiance/animation/api/TimelineEngine.java
+@@ -287,7 +287,7 @@
+                     case PLAYING_FORWARD:
+                         if (!timelineWasInReadyState) {
+                             timeline.durationFraction = timeline.durationFraction
+-                                    + (float) passedSinceLastIteration / (float) timeline.getDuration();
++                                    + passedSinceLastIteration / timeline.getDuration();
+                         }
+                         updateAndEnforceTimelinePosition(timeline);
+                         if (DEBUG_MODE) {

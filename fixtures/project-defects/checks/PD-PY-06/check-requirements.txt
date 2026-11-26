@@ -1,0 +1,7 @@
+annotated-types==0.8.0
+certifi==2026.11.20
+charset-normalizer==3.5.3
+dataclass-wizard==0.39.1
+idna==3.20
+requests==2.32.3
+urllib3==2.8.0

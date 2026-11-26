@@ -1,0 +1,148 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-GO-05",
+ "split": "holdout",
+ "language": "go",
+ "kind": "real_fix",
+ "category": "concurrency",
+ "family": "per-packet-goroutines-duplicate-stream-setup",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/hoophq/hoop",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": "agent",
+ "before": {
+  "commit": "42768c989c531acf67a16ac92600ccdb8f0dcaa1"
+ },
+ "after": {
+  "commit": "88d08261f145d9aeda56cc1ee6cd7ff25b1fe6b6"
+ },
+ "fix_diff": "diffs/PD-GO-05.diff",
+ "fix_commit_url": "https://github.com/hoophq/hoop/commit/88d08261f145d9aeda56cc1ee6cd7ff25b1fe6b6",
+ "trees": {
+  "before": {
+   "digest": "7f71a34aa70929c2b304f02164c11a7e05de5fb88060df36b3db6e12665924b3",
+   "scope_lines": 3529,
+   "scope_files": 29,
+   "files": 1273
+  },
+  "after": {
+   "digest": "1e2365f5f3c97c5847b875f18616d275822f5d136e497c755fa81f576fda9646",
+   "scope_lines": 3551,
+   "scope_files": 29,
+   "files": 1273
+  }
+ },
+ "label": {
+  "trigger": "A client pushes two or more data packets for one proxied client connection in quick succession, before the agent has finished opening the upstream socket for the first of them; a newer OpenSSH client (version 10 in the upstream report) whose first packets arrive back to back, or any TCP client whose first writes arrive together, does this.",
+  "expected_impact": "The receive loop starts a separate goroutine for every packet and nothing orders the packets of one client connection, so each handler goroutine looks for the stored upstream writer, sees none yet, and dials its own. One client stream ends up spread over several upstream connections, the store keeps only the last writer while the others are orphaned, bytes reach the server split or reordered, and the session fails (the SSH handshake breaks).",
+  "positive_locations": [
+   {
+    "path": "agent/controller/agent.go",
+    "symbol": "Agent.processPacket",
+    "anchors": {
+     "start": "func (a *Agent) processPacket(pkt *pb.Packet) {",
+     "end": "received client packet"
+    },
+    "start_line": 125,
+    "end_line": 127
+   },
+   {
+    "path": "agent/controller/agent.go",
+    "symbol": "Agent.Run",
+    "anchors": {
+     "start": "We don't need to wait here for the result",
+     "end": "go a.processPacket(pkt)"
+    },
+    "start_line": 205,
+    "end_line": 206
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "agent/controller/tcp.go",
+    "symbol": "Agent.processTCPWriteServer",
+    "anchors": {
+     "start": "clientConnectionIDKey := fmt.Sprintf(\"%s:%s\", sessionID, string(clientConnectionID))",
+     "end": "a.connStore.Set(clientConnectionIDKey, tcpServer)"
+    },
+    "start_line": 26,
+    "end_line": 48,
+    "note": "The raw TCP handler first asks the store for a writer under the session and client connection key and only stores a new one after parsing credentials and dialling the target; two goroutines for one connection both pass the empty lookup and both dial."
+   },
+   {
+    "path": "agent/controller/ssh.go",
+    "symbol": "Agent.processSSHProtocol",
+    "anchors": {
+     "start": "clientConnectionIDKey := fmt.Sprintf(\"%s:%s\", sid, string(clientConnectionID))",
+     "end": "a.connStore.Set(clientConnectionIDKey, serverWriter)"
+    },
+    "start_line": 30,
+    "end_line": 81,
+    "note": "The SSH handler stores its proxy only after creating it and writing the first payload, which leaves an even longer window in which a second packet of the same client connection builds a second proxy."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "common/memory/memory.go",
+    "symbol": "store.Set",
+    "anchors": {
+     "start": "func (s *store) Set(key string, val any) {",
+     "end": "s.m[key] = val"
+    },
+    "start_line": 22,
+    "end_line": 25,
+    "note": "Every single store operation holds an RWMutex, so the race detector stays silent; the fault is the unguarded gap between the handlers' lookup and their later store, not an unsynchronised map access."
+   },
+   {
+    "note": "Running packets of different client connections in parallel is intended; a finding that only asks for one global lock around all packets, without naming the per-connection ordering, is not this defect."
+   }
+  ],
+  "fix_summary": "Before dispatching, processPacket takes a mutex chosen per session, client connection id and packet type from a lazily filled, separately locked map, so later packets of one connection wait until the first has stored its upstream writer.",
+  "distinctive_tokens": [
+   "duplicate upstream dial",
+   "orphaned upstream writer"
+  ]
+ },
+ "check": {
+  "summary": "Independent in-package test: a scripted transport feeds six raw TCP write packets of one client connection to Agent.Run, with a loopback listener as the target; over 30 rounds it fails when a round opens more than one upstream connection or loses payload bytes.",
+  "argv": [
+   "{go}",
+   "test",
+   "-vet=off",
+   "-count=1",
+   "-run",
+   "^TestBurstOfWritesUsesOneUpstreamConnection$",
+   "./controller"
+  ],
+  "cwd": "agent",
+  "setup": [
+   [
+    "/bin/ln",
+    "-s",
+    "_libhoop",
+    "{work}/libhoop"
+   ]
+  ],
+  "env": {
+   "GOFLAGS": "-mod=readonly"
+  },
+  "failure_signature": "--- FAIL: TestBurstOfWritesUsesOneUpstreamConnection",
+  "timeout_seconds": 900,
+  "files": [
+   {
+    "path": "agent/controller/conn_ordering_check_test.go",
+    "source": "checks/PD-GO-05/controller/conn_ordering_check_test.go"
+   }
+  ]
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks with go1.27.4 on a 12-CPU host, six runs: before=violation and after=pass every time. Network was on so the Go proxy could fill the scratch module cache; the check needs the agent module's third-party dependencies. Upstream added no test (the PR reproduced the fault only with an OpenSSH 10 client), so the check is independent: an in-package test with a scripted transport and a loopback listener. Setup links libhoop to the in-tree _libhoop module as the repository Makefile does, and the check runs in workspace mode with -mod=readonly because the go.work file forbids -mod=mod. Outside verify, a standalone go test on before reported six upstream connections for six packets in the first round, and -count=10 -cpu 1,2,4,12 gave 40/40 failures on before and 40/40 passes on after.",
+  "toolchain": "go1.27.4 linux/amd64",
+  "before": "violation",
+  "after": "pass"
+ }
+}

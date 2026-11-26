@@ -1,0 +1,171 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-JV-05",
+ "split": "holdout",
+ "language": "java",
+ "kind": "seeded",
+ "category": "data_integrity",
+ "family": "forward-fraction-whole-number-step",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/kirill-grouchnikov/radiance",
+  "license": "BSD-3-Clause",
+  "license_file": "LICENSE"
+ },
+ "scope": "animation",
+ "before": {
+  "commit": "aa6c74e2040d3b840aa74027be29fe15f026f22d",
+  "patch": "patches/PD-JV-05.patch"
+ },
+ "after": {
+  "commit": "aa6c74e2040d3b840aa74027be29fe15f026f22d"
+ },
+ "trees": {
+  "before": {
+   "digest": "5b34e7f78197b8712eb34d00b8ed474babece6fb3997848dad7ea1c1a75f4dbd",
+   "scope_lines": 5909,
+   "scope_files": 30,
+   "files": 4623
+  },
+  "after": {
+   "digest": "3efc3f8a670964e63cd0d33384ba8fe7960b2be020cd17a04928cb15a06b1883",
+   "scope_lines": 5909,
+   "scope_files": 30,
+   "files": 4623
+  }
+ },
+ "label": {
+  "trigger": "Any Timeline that plays forward with a duration longer than the interval between two engine pulses, for instance the default 500 ms duration under the default pulse source of about 16 ms, or a 1000 ms timeline that the engine updates every 250 ms.",
+  "expected_impact": "Each update adds the elapsed milliseconds divided by the duration to the timeline's position, but both operands are whole numbers in milliseconds, so the step is computed as an integer quotient and is zero whenever one pulse is shorter than the duration. A forward timeline therefore stays at the start of its duration: pulse callbacks keep reporting zero, interpolated properties never move, the timeline never reaches its end, so it is never marked done and never loops, and it stays in the engine's running set. Only a pulse that is at least as long as the whole duration moves it, and then straight to the end.",
+  "positive_locations": [
+   {
+    "path": "animation/src/main/java/org/pushingpixels/radiance/animation/api/TimelineEngine.java",
+    "symbol": "TimelineEngine.updateTimelines",
+    "anchors": {
+     "start": "timeline.durationFraction = timeline.durationFraction",
+     "end": "+ passedSinceLastIteration / timeline.getDuration();"
+    },
+    "start_line": 289,
+    "end_line": 290
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "animation/src/main/java/org/pushingpixels/radiance/animation/api/Timeline.java",
+    "symbol": "Timeline.getDuration",
+    "anchors": {
+     "start": "public final long getDuration() {",
+     "end": "return this.duration;"
+    },
+    "start_line": 716,
+    "end_line": 717,
+    "note": "The duration is returned as a long number of milliseconds (the field is declared long at line 80 and set from the builder's setDuration(long)), so dividing the long elapsed time by it stays in integer arithmetic."
+   },
+   {
+    "path": "animation/src/main/java/org/pushingpixels/radiance/animation/api/Timeline.java",
+    "symbol": "Timeline.durationFraction",
+    "anchors": {
+     "start": "float durationFraction;"
+    },
+    "start_line": 115,
+    "end_line": 115,
+    "note": "The position is a float between 0 and 1 that the engine accumulates step by step; the integer quotient is only widened to float after the fractional part has already been dropped."
+   },
+   {
+    "path": "animation/src/main/java/org/pushingpixels/radiance/animation/api/TimelineEngine.java",
+    "symbol": "TimelineEngine.updateTimelines",
+    "anchors": {
+     "start": "long passedSinceLastIteration = (System.currentTimeMillis()"
+    },
+    "start_line": 225,
+    "end_line": 225,
+    "note": "The elapsed time since the previous update is a long count of milliseconds, normally one pulse of the pulse source."
+   },
+   {
+    "path": "animation/src/main/java/org/pushingpixels/radiance/animation/api/TimelineEngine.java",
+    "symbol": "TimelineEngine.updateTimelines",
+    "anchors": {
+     "start": "if (timeline.durationFraction > 1.0f) {"
+    },
+    "start_line": 298,
+    "end_line": 298,
+    "note": "The end of a forward cycle, with the done state, looping and the end callbacks, is only reached once the accumulated position passes 1."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "animation/src/main/java/org/pushingpixels/radiance/animation/api/TimelineEngine.java",
+    "symbol": "TimelineEngine.updateTimelines",
+    "anchors": {
+     "start": "- (float) passedSinceLastIteration / (float) timeline.getDuration();"
+    },
+    "start_line": 349,
+    "end_line": 349,
+    "note": "Reverse playback computes its step in floating point and still moves back toward the start; only the forward direction is affected."
+   },
+   {
+    "path": "animation/src/main/java/org/pushingpixels/radiance/animation/api/TimelineEngine.java",
+    "symbol": "TimelineEngine.play",
+    "anchors": {
+     "start": "timeline.durationFraction = (float) -timeline.timeUntilPlay"
+    },
+    "start_line": 562,
+    "end_line": 562,
+    "note": "The initial position for a play that skips part of the duration is still computed in floating point, so a skipped start lands at the right place; the timeline then stops advancing from there."
+   },
+   {
+    "note": "The first update after a timeline leaves its ready state does not add any time, so a single update cannot show the problem; it appears from the second update on."
+   }
+  ],
+  "fix_summary": "Compute the forward step in floating point, converting the elapsed milliseconds and the duration to float before dividing, as the reverse branch and play already do.",
+  "distinctive_tokens": [
+   "forward step truncated to a whole number",
+   "integer quotient of elapsed time and duration"
+  ]
+ },
+ "check": {
+  "summary": "A main program compiled with javac against the animation sources, with a stand-in for the screen refresh-rate pulse source first on the source path, parks the pulse thread, plays a timeline of 1,000,000 ms, back-dates the engine's last update by 250,000 ms before each of five updates and requires the position to grow by a quarter per update and reach the end.",
+  "setup": [
+   [
+    "{javac}",
+    "-encoding",
+    "UTF-8",
+    "-nowarn",
+    "-proc:none",
+    "-d",
+    "{work}/out",
+    "--source-path",
+    "pdstand:animation/src/main/java",
+    "pdcheck/org/pushingpixels/radiance/animation/api/CheckForwardProgress.java"
+   ]
+  ],
+  "argv": [
+   "{java}",
+   "-Djava.awt.headless=true",
+   "-cp",
+   "{work}/out",
+   "org.pushingpixels.radiance.animation.api.CheckForwardProgress"
+  ],
+  "cwd": ".",
+  "env": {},
+  "files": [
+   {
+    "path": "pdstand/org/pushingpixels/radiance/animation/internal/swing/AWTDefaultPulseSource.java",
+    "source": "checks/PD-JV-05/AWTDefaultPulseSource.java"
+   },
+   {
+    "path": "pdcheck/org/pushingpixels/radiance/animation/api/CheckForwardProgress.java",
+    "source": "checks/PD-JV-05/CheckForwardProgress.java"
+   }
+  ],
+  "failure_signature": "CHECK-VIOLATION: a forward timeline did not advance",
+  "timeout_seconds": 300
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "Chosen by the first-tier Java seeded procedure (index 90 of the first list), re-examined after the coordinator ruled that a display dependency is handled with a stand-in as in the Python and C++ cases. Stand-in: on a machine without a display the pinned sources cannot start any timeline, because RadianceAnimationCortex creates AWTDefaultPulseSource in its static initialiser (line 51) and that constructor asks every local screen device for its refresh rate; without the stand-in the check ends with ExceptionInInitializerError caused by java.awt.HeadlessException from HeadlessGraphicsEnvironment.getScreenDevices via AWTDefaultPulseSource.getHighestDisplayRefreshRate (run on the pinned sources). The check therefore puts checks/PD-JV-05/AWTDefaultPulseSource.java, a class of the same name and type that uses that class's own fallback of 60 pulses per second without the screen query, first on the javac source path (pdstand) ahead of animation/src/main/java; no other source is replaced and only JDK classes are used (no jars; the release jars under drop/ in the tree are not used). The check program lives in the engine's package so that it can call the package-private TimelineEngine.updateTimelines and write the package-private lastIterationTimeStamp under TimelineEngine.LOCK; it installs a pulse source that parks the pulse thread on its first pulse, so the only updates are the check's own, and it back-dates the last update by 250,000 ms against a duration of 1,000,000 ms, so ordinary scheduling delays cannot change the outcome. verify --run-checks with OpenJDK 21: on before the position stays [0.0, 0.0, 0.0, 0.0, 0.0] and the timeline is still PLAYING_FORWARD (exit 1, CHECK-VIOLATION); on after it is [0.25, 0.5, 0.75, 1.0, 1.0] and the timeline is IDLE (exit 0); the same results held in repeated runs before recording. No project tests were run: a search of the pinned tree for test paths under animation and for Timeline test classes found none. Cost: the pinned tree is about 382 MB in 4,623 files (release jars under drop/ about 247 MB, PNG images under docs/ about 82 MB), so materialising either revision fetches and writes the whole tree although the scope is 5,909 lines.",
+  "toolchain": "openjdk 21.0.13.1 (javac 21.0.13.1)",
+  "before": "violation",
+  "after": "pass"
+ }
+}

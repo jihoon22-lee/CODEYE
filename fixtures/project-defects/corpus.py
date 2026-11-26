@@ -3,6 +3,7 @@
 하위 명령:
   validate [--split S]                         메타데이터·패치·라벨 구조 검사(네트워크·도구 불필요)
   digest [--split S]                           분할 digest(holdout 봉인용). 메타데이터와 패치만으로 계산
+  digest --split spent --as-split holdout      소진된 분할을 봉인 당시의 분할 이름으로 계산한 이력 digest
   materialize <id> <before|after> <dest> --cache DIR   분석 입력 트리만 쓰고 트리 digest 출력(네트워크 필요)
   verify [--split S] [--case ID] --cache DIR [--run-checks ...]
                                                pin 해석·패치 적용·트리 digest·범위 줄 수·앵커·누설 검사,
@@ -35,7 +36,8 @@ ID_PREFIX = {"go": "GO", "python": "PY", "javascript": "JS", "java": "JV", "cpp"
 CATEGORIES = ("error_handling", "resource_lifecycle", "concurrency", "boundary_correctness", "api_contract",
               "data_integrity", "input_to_sink_security")
 KINDS = ("real_fix", "seeded")
-SPLITS = ("dev", "holdout")
+SPLITS = ("dev", "holdout", "spent")
+SPENT_SPLIT = "spent"  # 한 번 평가에 쓰여 봉인이 소진된 분할. 이 분할의 평가는 독립 평가가 아니다
 VARIANTS = ("before", "after")
 VERIFICATION = ("verified", "partially_verified", "not_verified")
 SOURCE_EXT = {
@@ -55,7 +57,12 @@ NON_PRIMARY = re.compile(
     r"_test\.(c|cc|cpp)|_unittest\.(c|cc|cpp)|\.test-d\.ts|\.d\.ts)$", re.IGNORECASE)
 MIN_SCOPE_LINES, MAX_SCOPE_LINES = 1500, 6000
 FIRST_LINES = 50  # 양성 위치는 파일의 첫 50줄 밖에 있어야 한다
-MIN_SPLIT = {"dev": 10, "holdout": 8}
+MIN_SPLIT = {"dev": 10, "holdout": 18, "spent": 8}
+# 봉인 분할의 구성(README의 보류 분할 선정 규칙): 언어마다 3개, 종류 9/9, 범주마다 2~3개, 다른 파일이 필요한 사례 14개 이상.
+HOLDOUT_PER_LANGUAGE = 3
+HOLDOUT_KINDS = {"real_fix": 9, "seeded": 9}
+HOLDOUT_CATEGORY_RANGE = (2, 3)
+HOLDOUT_MIN_CROSS_FILE = 14
 NGRAM = 5
 REQUIRED_CASE = ("schema", "id", "split", "language", "kind", "category", "family", "needs_cross_file", "repo", "scope",
                  "before", "after", "trees", "label", "verification")
@@ -355,8 +362,13 @@ def corpus_digest(cases):
     return digest.hexdigest()
 
 
-def split_digest(split):
-    return corpus_digest(load_cases(split))
+def split_digest(split, as_split=None):
+    """Digest of one split. as_split renames the cases' split field before hashing: the spent split
+    reproduces the digest it was sealed with under its earlier name."""
+    cases = load_cases(split)
+    if as_split:
+        cases = [{**c, "split": as_split} for c in cases]
+    return corpus_digest(cases)
 
 
 # ---------------------------------------------------------------- fetching (online, cache directory)
@@ -787,7 +799,35 @@ def validate(cases, partial=False):
             langs = {c["language"] for c in cases if c.get("split") == s}
             if len(langs) < 4:
                 errors.append(f"split {s} covers only {sorted(langs)}")
+        errors += holdout_composition([c for c in cases if c.get("split") == "holdout"])
     return errors, counts
+
+
+def holdout_composition(cases):
+    """The sealed split's fixed shape (README, 보류 분할 선정 규칙). Empty when the split has no case."""
+    if not cases:
+        return []
+    errors = []
+    for language in LANGUAGES:
+        n = sum(c.get("language") == language for c in cases)
+        if n != HOLDOUT_PER_LANGUAGE:
+            errors.append(f"holdout: {n} {language} cases, need {HOLDOUT_PER_LANGUAGE}")
+        categories = [c.get("category") for c in cases if c.get("language") == language]
+        if len(categories) != len(set(categories)):
+            errors.append(f"holdout: {language} cases repeat a category")
+    for kind, want in HOLDOUT_KINDS.items():
+        n = sum(c.get("kind") == kind for c in cases)
+        if n != want:
+            errors.append(f"holdout: {n} {kind} cases, need {want}")
+    low, high = HOLDOUT_CATEGORY_RANGE
+    for category in CATEGORIES:
+        n = sum(c.get("category") == category for c in cases)
+        if not low <= n <= high:
+            errors.append(f"holdout: {n} {category} cases, need {low}-{high}")
+    cross = sum(bool(c.get("needs_cross_file")) for c in cases)
+    if cross < HOLDOUT_MIN_CROSS_FILE:
+        errors.append(f"holdout: {cross} cases need a second file, at least {HOLDOUT_MIN_CROSS_FILE}")
+    return errors
 
 
 # ---------------------------------------------------------------- verify (online)
@@ -1069,6 +1109,7 @@ def main():
     v.add_argument("--split", choices=SPLITS)
     d = sub.add_parser("digest", help="split digest (offline)")
     d.add_argument("--split", choices=SPLITS)
+    d.add_argument("--as-split", choices=SPLITS, help="hash the split's cases under this split name (spent history)")
     m = sub.add_parser("materialize", help="write one variant's analysis input (network or a filled cache)")
     m.add_argument("case_id")
     m.add_argument("variant", choices=VARIANTS)
@@ -1099,7 +1140,7 @@ def main():
             raise SystemExit(1)
         print(f"PASS: {len(cases)} cases valid (offline: metadata, patches, label locations)")
     elif args.command == "digest":
-        print(corpus_digest(load_cases(args.split)))
+        print(split_digest(args.split, args.as_split) if args.split else corpus_digest(load_cases()))
     elif args.command == "materialize":
         print(materialize(args.dest, find_case(load_cases(), args.case_id), args.variant, args.cache))
     elif args.command == "verify":

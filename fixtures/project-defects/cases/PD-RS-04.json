@@ -1,0 +1,135 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-RS-04",
+ "split": "holdout",
+ "language": "rust",
+ "kind": "real_fix",
+ "category": "input_to_sink_security",
+ "family": "user-subdirectory-joined-without-containment",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/pwelty/textorium-tui",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "8c5d7e02c1599653c28ac50bd2aba9c5d6c611f1"
+ },
+ "after": {
+  "commit": "0d800017a184e29594e5f2ccddaed8330fc54b86"
+ },
+ "fix_diff": "diffs/PD-RS-04.diff",
+ "fix_commit_url": "https://github.com/pwelty/textorium-tui/commit/0d800017a184e29594e5f2ccddaed8330fc54b86",
+ "trees": {
+  "before": {
+   "digest": "5c1a51c914ab6bf458d610064f191fe6c5a1730968a6b745ce2ee89ec9ef721a",
+   "scope_lines": 3008,
+   "scope_files": 7,
+   "files": 30
+  },
+  "after": {
+   "digest": "a1cebe7bf6b6e9f365c1a690ccb0510f4ae4afedb4d871f21123fde763a9b0f6",
+   "scope_lines": 3080,
+   "scope_files": 7,
+   "files": 30
+  }
+ },
+ "label": {
+  "trigger": "A post is created for a Hugo-type site with a category value taken unchanged from the command line that holds parent-directory segments or separators, for example ../../outside; the same unvetted category and tag strings are also pasted into the generated front matter.",
+  "expected_impact": "The category is used as a path component under the configured content root with no containment test, so the new markdown file and any missing directories are created outside the site's content folder (observed: site/content/../../outside/climb-out.md written two levels above the site), letting the caller write files anywhere the process can reach. Category or tag text that carries brackets, quotes or newlines also breaks out of the YAML list and can add or corrupt front-matter fields.",
+  "positive_locations": [
+   {
+    "path": "src/core/posts.rs",
+    "symbol": "create_post",
+    "anchors": {
+     "start": "// Build file path based on SSG type",
+     "end": "content_path.join(section).join(format!(\"{}.md\", slug))"
+    },
+    "start_line": 579,
+    "end_line": 584
+   },
+   {
+    "path": "src/core/posts.rs",
+    "symbol": "create_post",
+    "anchors": {
+     "start": "if let Some(cat) = &options.category {",
+     "end": "frontmatter.push_str(&format!(\"tags: [{}]\\n\", tags_str));"
+    },
+    "start_line": 604,
+    "end_line": 610
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "src/cli.rs",
+    "symbol": "run",
+    "anchors": {
+     "start": "Some(Commands::New {",
+     "end": "let path = crate::core::posts::create_post(&config, &options)?;"
+    },
+    "start_line": 89,
+    "end_line": 108,
+    "note": "The new-post subcommand hands the raw --category argument and the comma-split --tags list straight into the creation options; nothing between argument parsing and the file writer vets them."
+   },
+   {
+    "path": "src/core/config.rs",
+    "symbol": "Config::content_path",
+    "anchors": {
+     "start": "pub fn content_path(&self) -> PathBuf {",
+     "end": "}"
+    },
+    "start_line": 80,
+    "end_line": 82,
+    "note": "The content root is a plain join of the configured site folder and content directory, so a relative section appended to it can climb above the site with no later normalisation or prefix test."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "src/core/posts.rs",
+    "symbol": "create_post",
+    "anchors": {
+     "start": "SsgType::Jekyll => content_path.join(",
+     "end": "SsgType::Eleventy => content_path.join("
+    },
+    "start_line": 586,
+    "end_line": 587,
+    "note": "Jekyll and Eleventy sites ignore the category when choosing the file location, and the file name comes from the slug helper, which keeps only alphanumerics and dashes; the escape exists only in the Hugo arm, through the category."
+   }
+  ],
+  "fix_summary": "Reject a category containing two dots, either slash or a leading dot before building the Hugo path, and quote (with escaped double quotes) the category and every tag in the front matter.",
+  "distinctive_tokens": [
+   "containment test",
+   "climb above the site"
+  ]
+ },
+ "check": {
+  "summary": "Independent driver copied into the work copy: builds the binary with cargo (crates fetched into the check's own cargo home), points a throwaway home config at a Hugo site, creates a post with a plain section as a control and then one whose section is ../../outside, and fails if a markdown file lands outside the content folder.",
+  "argv": [
+   "{python}",
+   "check/new_post_section.py",
+   "{cargo}",
+   "{work}"
+  ],
+  "cwd": ".",
+  "setup": [],
+  "env": {
+   "CARGO_TARGET_DIR": "{home}/target"
+  },
+  "files": [
+   {
+    "path": "check/new_post_section.py",
+    "source": "checks/PD-RS-04/new_post_section.py"
+   }
+  ],
+  "failure_signature": "SECTION CHECK FAILED: post written outside the content directory",
+  "timeout_seconds": 1500
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks --network with rustc/cargo 1.99.1 (linker gcc 15.2.0) and Python 3.14.4: on before the driver's control post lands in content/notes and the ../../outside post is written two levels above the site (violation); on after the control still succeeds and the escaping section is refused with an error (pass). The binary crate is built by cargo from Cargo.lock (--locked); crates are downloaded into the check's own cargo home under the scratch directory. The front-matter quoting half of the fix is labelled but not exercised by the check. Selected under the first-tier date rule (merged 2026-03-20).",
+  "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13); cargo 1.99.1 (5f94df478 2026-08-27)",
+  "before": "violation",
+  "after": "pass"
+ }
+}

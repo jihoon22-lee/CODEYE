@@ -1,0 +1,11 @@
+--- a/devenv-activity/src/activity.rs
++++ b/devenv-activity/src/activity.rs
+@@ -250,7 +250,7 @@
+         F: FnOnce() -> T,
+     {
+         let mut stack = get_current_stack();
+-        stack.push((self.id, self.level));
++        stack.insert(0, (self.id, self.level));
+         ACTIVITY_STACK.sync_scope(RefCell::new(stack), f)
+     }
+ 

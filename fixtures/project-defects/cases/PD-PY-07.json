@@ -1,0 +1,143 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-PY-07",
+ "split": "holdout",
+ "language": "python",
+ "kind": "seeded",
+ "category": "error_handling",
+ "family": "error-fallback-replaced-with-null",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/happycola233/tchMaterial-parser",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "505475a71c64fcfa3c6f05ebf726ac6dd6400252",
+  "patch": "patches/PD-PY-07.patch"
+ },
+ "after": {
+  "commit": "505475a71c64fcfa3c6f05ebf726ac6dd6400252"
+ },
+ "trees": {
+  "before": {
+   "digest": "cd7131502d32495313bc80ad07fd0dc782d10b3bbc7295ea098f546303fa7824",
+   "scope_lines": 3605,
+   "scope_files": 20,
+   "files": 73
+  },
+  "after": {
+   "digest": "ea8eae3816a03ad90b46c2b137c648ed43f3c951d820b9c5333d002a4e2fd339",
+   "scope_lines": 3605,
+   "scope_files": 20,
+   "files": 73
+  }
+ },
+ "label": {
+  "trigger": "The program starts while the platform's catalogue cannot be fetched (offline machine, blocked host, or the catalogue request raising for any other reason), so the start-up code takes its failure branch.",
+  "expected_impact": "The failure branch warns the user to type resource links by hand, but it leaves the catalogue variable as None instead of an empty mapping. The window construction then hands that value to the resource tree, whose first step walks it with .items(), so start-up aborts with an AttributeError after the warning and the promised manual-entry window never opens; the offline fallback is unusable.",
+  "positive_locations": [
+   {
+    "path": "src/tchmaterial_parser/app.py",
+    "symbol": "main",
+    "anchors": {
+     "start": "except Exception as e:",
+     "end": "messagebox.showwarning("
+    },
+    "start_line": 51,
+    "end_line": 54
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "src/tchmaterial_parser/app.py",
+    "symbol": "main",
+    "anchors": {
+     "start": "build_resource_tree(treeview_pane, resource_list, url_text)"
+    },
+    "start_line": 256,
+    "end_line": 256,
+    "note": "Whatever the failure branch left in the variable is passed unchanged to the tree builder once the window is assembled; nothing in between replaces it."
+   },
+   {
+    "path": "src/tchmaterial_parser/ui/resource_tree.py",
+    "symbol": "iter_leaf_resources",
+    "anchors": {
+     "start": "def iter_leaf_resources(items: dict[str, dict], parent_path: str = \"\") -> Iterator[tuple[str, dict]]:",
+     "end": "yield item_path, option_data"
+    },
+    "start_line": 27,
+    "end_line": 34,
+    "note": "The walker iterates the mapping it receives with .items() and has no guard for a missing catalogue; an empty mapping simply yields nothing."
+   },
+   {
+    "path": "src/tchmaterial_parser/ui/resource_tree.py",
+    "symbol": "build_resource_tree",
+    "anchors": {
+     "start": "def build_resource_tree(pane: ttk.Frame, resource_list: dict[str, dict], url_text: tk.Text) -> None:",
+     "end": "leaf_urls = {item_id: build_resource_url(item_id, data) for item_id, data in iter_leaf_resources(resource_list)}"
+    },
+    "start_line": 90,
+    "end_line": 133,
+    "note": "The builder is typed to take a mapping and walks it unconditionally while creating the tree, so the empty-mapping fallback is what lets the window open without a catalogue."
+   },
+   {
+    "path": "src/tchmaterial_parser/catalog.py",
+    "symbol": "ResourceHelper.fetch_resource_list",
+    "anchors": {
+     "start": "def fetch_resource_list(self) -> dict:",
+     "end": "return { **book_hier }"
+    },
+    "start_line": 123,
+    "end_line": 127,
+    "note": "On success the catalogue is always a mapping, so the fallback has to have the same shape for the downstream code."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "src/tchmaterial_parser/api.py",
+    "symbol": "parse",
+    "anchors": {
+     "start": "except Exception as e:",
+     "end": "return None"
+    },
+    "start_line": 349,
+    "end_line": 351,
+    "note": "The link parser also reports failure as None, but there that is the documented result and its caller in the download panel tests the value for falsiness before use; a finding about that function is not this defect."
+   },
+   {
+    "note": "The successful start-up path is unaffected: the defect only shows when the catalogue fetch raises, and the warning dialog itself still appears before the crash."
+   }
+  ],
+  "distinctive_tokens": [
+   "promised manual-entry window",
+   "offline fallback is unusable"
+  ],
+  "fix_summary": "Fall back to an empty catalogue mapping in the start-up failure branch so the tree builds empty and links can still be typed by hand."
+ },
+ "check": {
+  "summary": "Standard-library check: builds the main window with stand-ins for Tk, Pillow, psutil, requests and the display or network modules, makes the catalogue fetch raise, captures the value passed to the resource tree and feeds it to the real tree walker of the ui package; it fails when the walker cannot use the fallback.",
+  "argv": [
+   "{python}",
+   "-I",
+   "check_startup_fallback.py"
+  ],
+  "cwd": ".",
+  "files": [
+   {
+    "path": "check_startup_fallback.py",
+    "source": "checks/PD-PY-07/check_startup_fallback.py"
+   }
+  ],
+  "failure_signature": "RESOURCE TREE CANNOT USE THE FALLBACK: NoneType -> AttributeError",
+  "timeout_seconds": 120
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks --python /usr/bin/python3 --network with system Python 3.14.4: on before the independent standard-library check reaches the resource tree with None and the real tree walker raises AttributeError (exit 1, signature matched); on after it receives an empty mapping and walks it (exit 0). The real Tk path was not run (no display on this node); Tk, Pillow, psutil, requests and the display or network modules are stand-ins, only app.py and ui/resource_tree.py run as shipped. Project test suite: no test imports app.py. With pillow, psutil, pypdf[crypto], requests and sv-ttk installed under the work directory and the package metadata on the path, tests/ gives 122 passed, 15 skipped on both before and after (the skips need a display), so the suite does not catch the change. Pinned commit is the default-branch head 505475a7 of 2026-11-25T17:52:35Z, re-checked at selection. Five symlinks or submodules in the repository are not written to the trees.",
+  "toolchain": "Python 3.14.4 (standard library only for the check)",
+  "before": "violation",
+  "after": "pass"
+ }
+}

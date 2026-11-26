@@ -1,0 +1,22 @@
+diff --git a/packages/query-db-collection/src/query.ts b/packages/query-db-collection/src/query.ts
+index 47e07be..4038b49 100644
+--- a/packages/query-db-collection/src/query.ts
++++ b/packages/query-db-collection/src/query.ts
+@@ -142,7 +142,7 @@ export interface QueryCollectionConfig<
+  */
+ export type RefetchFn = (opts?: {
+   throwOnError?: boolean
+-}) => Promise<QueryObserverResult<any, any> | void>
++}) => Promise<Array<QueryObserverResult<any, any> | void>>
+ 
+ /**
+  * Utility methods available on Query Collections for direct writes and manual operations.
+@@ -1133,7 +1133,7 @@ export function queryCollectionOptions(
+       })
+     })
+ 
+-    await Promise.all(refetchPromises)
++    return Promise.all(refetchPromises)
+   }
+ 
+   /**

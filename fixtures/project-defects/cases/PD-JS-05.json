@@ -1,0 +1,159 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-JS-05",
+ "split": "holdout",
+ "language": "javascript",
+ "kind": "real_fix",
+ "category": "api_contract",
+ "family": "awaited-result-dropped-from-async-helper",
+ "needs_cross_file": false,
+ "repo": {
+  "url": "https://github.com/TanStack/db",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": "packages/query-db-collection",
+ "before": {
+  "commit": "5e69941578da64747c1bf1b378765b2962c9ec7f"
+ },
+ "after": {
+  "commit": "f32246a782366742c8dd348c956feb914ddb30d1"
+ },
+ "fix_diff": "diffs/PD-JS-05.diff",
+ "fix_commit_url": "https://github.com/TanStack/db/commit/f32246a782366742c8dd348c956feb914ddb30d1",
+ "trees": {
+  "before": {
+   "digest": "a560ffb6f047d34f2a4f320576a09c3afaf8c6bc43f95f0470ba401554376c63",
+   "scope_lines": 2638,
+   "scope_files": 9,
+   "files": 1038
+  },
+  "after": {
+   "digest": "c544e05f91f357d266b065e3f87a60717f06953cdb5d6061c50cba1b528ceb8f",
+   "scope_lines": 2638,
+   "scope_files": 9,
+   "files": 1039
+  }
+ },
+ "label": {
+  "trigger": "Application code calls the manual refetch helper exposed on a query-backed collection's utilities and uses the value its promise settles to, for example to read the fresh data, status or error of each underlying query observer.",
+  "expected_impact": "The helper waits for every observer to refetch and then discards their results, so the promise always settles to undefined although its type comment and doc comment promise observer results. Callers that read data, status or error from it get undefined and either throw or silently skip their handling, while the refetch itself still takes place.",
+  "positive_locations": [
+   {
+    "path": "packages/query-db-collection/src/query.ts",
+    "symbol": "queryCollectionOptions.refetch",
+    "anchors": {
+     "start": "await Promise.all(refetchPromises)"
+    },
+    "start_line": 1136,
+    "end_line": 1136
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "packages/query-db-collection/src/query.ts",
+    "symbol": "RefetchFn",
+    "anchors": {
+     "start": "* Returns the QueryObserverResult from TanStack Query",
+     "end": "}) => Promise<QueryObserverResult<any, any> | void>"
+    },
+    "start_line": 141,
+    "end_line": 145,
+    "note": "The published helper type and its comment say it hands back the observer result of the query library; the void alternative in the union is what lets an empty settlement pass type checking."
+   },
+   {
+    "path": "packages/query-db-collection/src/query.ts",
+    "symbol": "queryCollectionOptions.refetch",
+    "anchors": {
+     "start": "* @returns Promise that resolves when the refetch is complete, with QueryObserverResult",
+     "end": "return queryObserver.refetch({"
+    },
+    "start_line": 1125,
+    "end_line": 1131,
+    "note": "The function's own comment states what it resolves with, and each observer refetch it collects already yields such a result, so the value exists and only has to be passed on."
+   },
+   {
+    "path": "packages/query-db-collection/src/query.ts",
+    "symbol": "QueryCollectionUtilsImpl",
+    "anchors": {
+     "start": "this.refetch = refetch"
+    },
+    "start_line": 241,
+    "end_line": 241,
+    "note": "The same function object is installed unchanged as the public utility, so users receive exactly this settlement value."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "packages/query-db-collection/src/query.ts",
+    "symbol": "QueryCollectionUtilsImpl.clearError",
+    "anchors": {
+     "start": "await this.refetchFn({ throwOnError: true })"
+    },
+    "start_line": 253,
+    "end_line": 253,
+    "note": "Internal callers such as the error reset only wait for completion and ignore the value; a finding limited to them does not describe a visible failure."
+   },
+   {
+    "note": "The refetch still runs and the synced rows of the collection are updated; the defect is in the value handed back, not in loading or writing data."
+   }
+  ],
+  "fix_summary": "Return the combined promise of all observer refetches instead of only awaiting it, and type the helper as resolving to an array of observer results.",
+  "distinctive_tokens": [
+   "awaited-but-unreturned refetch",
+   "observer results discarded"
+  ]
+ },
+ "check": {
+  "summary": "Independent node script run on a work copy. Setup installs pinned typescript, the published core collection package at the version the workspace carries at the pinned commit, the query core and the schema spec types under the check home and transpiles the package sources to CommonJS there; the script starts a collection with a local query function, waits until it is ready, calls the refetch utility and prints a MISMATCH line when the settled value is not a non-empty array of results carrying status and data.",
+  "setup": [
+   [
+    "/usr/bin/env",
+    "npm",
+    "install",
+    "--prefix",
+    "{home}/deps",
+    "--no-save",
+    "--no-package-lock",
+    "--no-audit",
+    "--no-fund",
+    "--ignore-scripts",
+    "typescript@5.9.3",
+    "@tanstack/db@0.5.20",
+    "@tanstack/query-core@5.90.16",
+    "@standard-schema/spec@1.1.0"
+   ],
+   [
+    "{node}",
+    "pd_check/build.cjs",
+    "{home}/deps",
+    "packages/query-db-collection/src"
+   ]
+  ],
+  "argv": [
+   "{node}",
+   "pd_check/refetch_result.cjs",
+   "{home}/deps"
+  ],
+  "cwd": ".",
+  "failure_signature": "MISMATCH refetch resolved to",
+  "timeout_seconds": 600,
+  "files": [
+   {
+    "path": "pd_check/build.cjs",
+    "source": "checks/PD-JS-05/build.cjs"
+   },
+   {
+    "path": "pd_check/refetch_result.cjs",
+    "source": "checks/PD-JS-05/refetch_result.cjs"
+   }
+  ]
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks --network with node v24.18.0 and npm 11.16.0 via PATH: setup installs typescript 5.9.3, @tanstack/db 0.5.20 (the version in packages/db/package.json at the pinned commit; the published build stands in for the workspace package), @tanstack/query-core 5.90.16 (the pnpm-lock version) and @standard-schema/spec 1.1.0 into the check home, nothing in the work copy, then transpiles packages/query-db-collection/src with typescript transpileModule to CommonJS. On before the refetch utility settles to undefined, the script prints one MISMATCH line and exits 1; on after it settles to an array with one success result carrying the refreshed rows and the script exits 0. The upstream vitest case was not run; vitest is not installed. The defect and its contract sit in one source file, so needs_cross_file is false. LICENSE (MIT) is in the before tree and agrees with the package manifest; the PR was squash-merged into the default branch main.",
+  "toolchain": "node v24.18.0 linux-x64, npm 11.16.0 via PATH, typescript 5.9.3 transpileModule",
+  "before": "violation",
+  "after": "pass"
+ }
+}

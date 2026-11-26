@@ -1,7 +1,7 @@
 {
  "schema": "codeye-project-defect-case",
  "id": "PD-CC-02",
- "split": "holdout",
+ "split": "spent",
  "language": "cpp",
  "kind": "seeded",
  "category": "boundary_correctness",

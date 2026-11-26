@@ -1,0 +1,3 @@
+# Races already present in the pinned commit and unrelated to the neighbour lists:
+# the shared level generator is drawn from without a lock.
+race:hnswlib::HierarchicalNSW<*>::getRandomLevel

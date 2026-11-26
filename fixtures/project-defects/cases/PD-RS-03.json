@@ -1,7 +1,7 @@
 {
  "schema": "codeye-project-defect-case",
  "id": "PD-RS-03",
- "split": "holdout",
+ "split": "spent",
  "language": "rust",
  "kind": "real_fix",
  "category": "data_integrity",

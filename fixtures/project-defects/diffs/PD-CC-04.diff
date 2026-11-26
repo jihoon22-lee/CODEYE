@@ -1,0 +1,13 @@
+diff --git a/crypto/rand/randfile.c b/crypto/rand/randfile.c
+index a48a8637ca..87eea08725 100644
+--- a/crypto/rand/randfile.c
++++ b/crypto/rand/randfile.c
+@@ -69,7 +69,7 @@ int RAND_write_file(const char *file)
+         return -1;
+     }
+ 
+-    if (fwrite(buff, sizeof buff, 1, out) != sizeof buff) {
++    if (fwrite(buff, sizeof buff, 1, out) != 1) {
+         fclose(out);
+         return -1;
+     }

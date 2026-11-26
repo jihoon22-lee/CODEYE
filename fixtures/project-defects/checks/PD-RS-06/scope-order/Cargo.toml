@@ -1,0 +1,6 @@
+# Standalone workspace: builds the activity crate and its proc-macro crate from the work copy's
+# sources with explicit dependency versions, instead of the repository workspace (whose other
+# members pull git dependencies and native libraries).
+[workspace]
+resolver = "2"
+members = ["macros", "activity", "probe"]

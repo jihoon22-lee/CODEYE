@@ -1,0 +1,11 @@
+--- a/hnswlib/hnswalg.h
++++ b/hnswlib/hnswalg.h
+@@ -272,8 +272,6 @@
+ 
+             tableint curNodeNum = curr_el_pair.second;
+ 
+-            std::unique_lock <std::mutex> lock(link_list_locks_[curNodeNum]);
+-
+             int *data;  // = (int *)(linkList0_ + curNodeNum * size_links_per_element0_);
+             if (layer == 0) {
+                 data = (int*)get_linklist0(curNodeNum);

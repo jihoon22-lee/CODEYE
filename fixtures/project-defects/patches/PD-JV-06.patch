@@ -1,0 +1,11 @@
+--- a/src/main/java/com/mojang/brigadier/CommandDispatcher.java
++++ b/src/main/java/com/mojang/brigadier/CommandDispatcher.java
+@@ -298,7 +298,7 @@
+         final int cursor = originalReader.getCursor();
+ 
+         for (final CommandNode<S> child : node.getRelevantNodes(originalReader)) {
+-            if (!child.canUse(source)) {
++            if (!node.canUse(source)) {
+                 continue;
+             }
+             final CommandContextBuilder<S> context = contextSoFar.copy();

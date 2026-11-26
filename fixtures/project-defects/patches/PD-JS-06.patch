@@ -1,0 +1,32 @@
+--- a/src/bin.ts
++++ b/src/bin.ts
+@@ -244,14 +244,6 @@
+ export function run(src: string, dest: string, args: RunArgs) {
+ 	const d = degit(src, args as Parameters<typeof degit>[1]);
+ 
+-	d.on('info', (event) => {
+-		console.log(colors.cyan(`> ${event.message.replace('options.', '--')}`));
+-	});
+-
+-	d.on('warn', (event) => {
+-		console.warn(colors.magenta(`! ${event.message.replace('options.', '--')}`));
+-	});
+-
+ 	d.clone(dest).catch((error: Error) => {
+ 		console.error(colors.red(`! ${error.message.replace('options.', '--')}`));
+ 		if (args.verbose) {
+@@ -262,6 +254,14 @@
+ 			}
+ 		}
+ 		process.exit(1);
++	});
++
++	d.on('info', (event) => {
++		console.log(colors.cyan(`> ${event.message.replace('options.', '--')}`));
++	});
++
++	d.on('warn', (event) => {
++		console.warn(colors.magenta(`! ${event.message.replace('options.', '--')}`));
+ 	});
+ }
+ 

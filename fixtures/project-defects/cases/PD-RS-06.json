@@ -1,0 +1,146 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-RS-06",
+ "split": "holdout",
+ "language": "rust",
+ "kind": "seeded",
+ "category": "boundary_correctness",
+ "family": "new-scope-entry-inserted-at-stack-bottom",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/cachix/devenv",
+  "license": "Apache-2.0",
+  "license_file": "LICENSE"
+ },
+ "scope": "devenv-activity",
+ "before": {
+  "commit": "1670921a17418f3657b823a488d074821338e0fe",
+  "patch": "patches/PD-RS-06.patch"
+ },
+ "after": {
+  "commit": "1670921a17418f3657b823a488d074821338e0fe"
+ },
+ "trees": {
+  "before": {
+   "digest": "5aa36ff2534bd02f5a3e712683fcfaeaf6451ed06f11519a87b6f393c45fcf9a",
+   "scope_lines": 5442,
+   "scope_files": 11,
+   "files": 1842
+  },
+  "after": {
+   "digest": "5b38b7b4bed4d3c672dabfcfbac9320d5e0460d7d738fde8e53223e3b8ac9aa7",
+   "scope_lines": 5442,
+   "scope_files": 11,
+   "files": 1842
+  }
+ },
+ "label": {
+  "trigger": "An activity opens a new synchronous task-local scope while another activity scope is already active (the copied stack is not empty), for example an inner activity entering its scope inside an outer activity's scope.",
+  "expected_impact": "The entering activity is put at the front of the copied stack instead of on top, so inside the nested scope the current-activity lookups still return the outermost enclosing activity and its level. Child activities and standalone messages started there are attached to that ancestor rather than to the activity whose scope they run in, and inherit the wrong level (observed: inside the inner scope the current id is the outer activity's id). A scope opened with an empty stack behaves normally.",
+  "positive_locations": [
+   {
+    "path": "devenv-activity/src/activity.rs",
+    "symbol": "Activity::with_new_scope_sync",
+    "anchors": {
+     "start": "let mut stack = get_current_stack();",
+     "end": "ACTIVITY_STACK.sync_scope(RefCell::new(stack), f)"
+    },
+    "start_line": 252,
+    "end_line": 254
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "devenv-activity/src/stack.rs",
+    "symbol": "current_activity_id",
+    "anchors": {
+     "start": "pub fn current_activity_id() -> Option<u64> {",
+     "end": "}"
+    },
+    "start_line": 121,
+    "end_line": 126,
+    "note": "The current activity is read from the last element of the task-local vector, so the innermost scope must be the final entry; the level lookup right below uses the same end."
+   },
+   {
+    "path": "devenv-activity/src/builders.rs",
+    "symbol": "BuildBuilder::prepare_queued",
+    "anchors": {
+     "start": "pub fn prepare_queued(self, id: u64) -> PreparedActivity {",
+     "end": "parent: self.parent.unwrap_or_else(current_activity_id),"
+    },
+    "start_line": 496,
+    "end_line": 501,
+    "note": "Builders without an explicit parent take the current activity as parent, so whichever entry the lookup returns decides where new activities hang in the tree."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "devenv-activity/src/instrument.rs",
+    "symbol": "ActivityInstrument::in_activity",
+    "anchors": {
+     "start": "let mut stack = get_current_stack();",
+     "end": "stack.push((activity.id(), activity.level()));"
+    },
+    "start_line": 44,
+    "end_line": 45,
+    "note": "The async instrumentation path still appends to the end, and the in-place synchronous scope helper in activity.rs appends and pops at the end too; only the scope-creating synchronous helper is affected."
+   }
+  ],
+  "fix_summary": "Push the entering activity as the last element of the copied vector, as the other scope helpers do, so the lookup that reads the last entry sees the innermost scope.",
+  "distinctive_tokens": [
+   "front of the copied stack",
+   "outermost enclosing activity"
+  ]
+ },
+ "check": {
+  "summary": "Independent probe copied into the work copy as a standalone cargo workspace whose library targets point at the crate's and its proc-macro crate's sources in the work copy (the repository workspace pulls git dependencies and native libraries); the lock is the repository lock pruned to this graph and the repository's cargo config supplies its rustflags. The probe starts two activities and compares the reported current activity outside any scope, inside one scope, inside a nested scope and after leaving it.",
+  "argv": [
+   "{cargo}",
+   "run",
+   "--locked",
+   "-q",
+   "-p",
+   "scope-order-probe"
+  ],
+  "cwd": "scope-order",
+  "setup": [],
+  "env": {
+   "CARGO_TARGET_DIR": "{home}/target"
+  },
+  "files": [
+   {
+    "path": "scope-order/Cargo.toml",
+    "source": "checks/PD-RS-06/scope-order/Cargo.toml"
+   },
+   {
+    "path": "scope-order/Cargo.lock",
+    "source": "checks/PD-RS-06/scope-order/Cargo.lock"
+   },
+   {
+    "path": "scope-order/macros/Cargo.toml",
+    "source": "checks/PD-RS-06/scope-order/macros/Cargo.toml"
+   },
+   {
+    "path": "scope-order/activity/Cargo.toml",
+    "source": "checks/PD-RS-06/scope-order/activity/Cargo.toml"
+   },
+   {
+    "path": "scope-order/probe/Cargo.toml",
+    "source": "checks/PD-RS-06/scope-order/probe/Cargo.toml"
+   },
+   {
+    "path": "scope-order/probe/src/main.rs",
+    "source": "checks/PD-RS-06/scope-order/probe/src/main.rs"
+   }
+  ],
+  "failure_signature": "SCOPE ORDER CHECK FAILED: nested scope reports",
+  "timeout_seconds": 1500
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks --network with rustc/cargo 1.99.1 (linker gcc 15.2.0): on before the probe reports the outer activity as current inside the nested scope (violation); on after the nested scope reports the inner activity (pass). The outside-scope, single-scope and after-nested controls agree on both. Pinned commit is the default-branch head when selected, 1670921a dated 2026-11-25; the root Cargo.toml declares APACHE-2.0, the same licence as the GitHub SPDX value Apache-2.0. The probe builds only devenv-activity and devenv-activity-macros from the work copy through a standalone workspace whose versions come from the repository lock (pruned by cargo to this graph); tokio is built with sync and rt only, which is narrower than the feature set the repository workspace unifies. The crate's own tests were not run: they need the repository workspace, whose other members pull git dependencies (nix bindings, libghostty) and native libraries; a grep of the crate's tests and in-file test modules found no call of the nested synchronous scope helper, so they are not expected to catch the patch.",
+  "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13); cargo 1.99.1 (5f94df478 2026-08-27)",
+  "before": "violation",
+  "after": "pass"
+ }
+}

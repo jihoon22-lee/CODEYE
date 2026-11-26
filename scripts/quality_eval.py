@@ -15,7 +15,7 @@ Subcommands:
   reader-score  score supplied human answers; without answers the result is "not_measured"
 
 Corpora (--corpus): quality-holdout (default; small synthetic cases) and project-defects (real-fix and
-seeded defects in pinned public repositories; --split dev|holdout and --cache DIR are required, and
+seeded defects in pinned public repositories; --split dev|holdout|spent and --cache DIR are required, and
 every run is limited to the case's scope path). --build-root builds the product under test from
 another checkout while this runner and corpus stay as checked out here.
 
@@ -63,6 +63,7 @@ PACK_ROLES = (*BASE_REVIEW_ROLES, "triage", "contract")
 MANIFEST_SCHEMA = "codeye-quality-eval-manifest"
 REGISTRY = "holdout-registry.jsonl"
 HOLDOUT_LABEL = "holdout_seen_by_prior_revision"
+SPENT_LABEL = "split_seal_spent"
 BUDGET_REFUSALS = ("budget_exhausted", "request_limit_reached", "relay_halted")
 # Relay settlement prices (microUSD per token; model_budget_relay.PRICE_INPUT_WORST / PRICE_OUTPUT).
 PRICE_IN, PRICE_OUT = 5, 10
@@ -295,6 +296,12 @@ def holdout_labels(entries, pack_id, pack_digest, corpus_digest):
                     if e["pack_id"] == pack_id and e["corpus_digest"] == corpus_digest
                     and e["pack_digest"] != pack_digest and not e.get("dry_run")})
     return ([HOLDOUT_LABEL] if prior else []), prior
+
+
+def spent_labels(corpus):
+    """A spent split was already used for one evaluation: any batch over it is labelled, so a comparison
+    that includes it is never reported as independent."""
+    return [SPENT_LABEL] if corpus.project and corpus.split == corpus.module.get("SPENT_SPLIT") else []
 
 
 def register(results_root, entry):
@@ -867,6 +874,7 @@ def run_batch(args):
                            + extra_args)
         labels, prior = [], []
         reg_entry = {"pack_id": "analyzers", "pack_version": None, "pack_digest": hashlib.sha256(config.encode()).hexdigest()}
+    labels = labels + spent_labels(corpus)
     if budget:
         reg_entry["agent_budget"] = budget
     reg_entry.update(corpus_digest=corpus.digest, condition=args.condition, first_run_at=now(), batch=name,
@@ -1140,7 +1148,7 @@ def capture_list(output, corpus):
 def add_corpus(p):
     p.add_argument("--corpus", choices=sorted(CORPORA), default="quality-holdout",
                    help="case corpus (default quality-holdout)")
-    p.add_argument("--split", help="project-defects: dev or holdout (required); quality-holdout: holdout")
+    p.add_argument("--split", help="project-defects: dev, holdout or spent (required); quality-holdout: holdout")
     p.add_argument("--cache", type=Path, help="project-defects: repository cache directory (filled over the network)")
 
 

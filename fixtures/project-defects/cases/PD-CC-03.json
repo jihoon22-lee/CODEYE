@@ -1,7 +1,7 @@
 {
  "schema": "codeye-project-defect-case",
  "id": "PD-CC-03",
- "split": "holdout",
+ "split": "spent",
  "language": "cpp",
  "kind": "real_fix",
  "category": "input_to_sink_security",

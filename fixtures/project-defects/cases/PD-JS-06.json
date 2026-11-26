@@ -1,0 +1,158 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-JS-06",
+ "split": "holdout",
+ "language": "javascript",
+ "kind": "seeded",
+ "category": "concurrency",
+ "family": "listeners-attached-after-synchronous-emit",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/Rich-Harris/degit",
+  "license": "MIT",
+  "license_file": "LICENSE.md"
+ },
+ "scope": ".",
+ "before": {
+  "commit": "ce5bea671a5424122a2e6e98b8cf3d8f2340dd4b",
+  "patch": "patches/PD-JS-06.patch"
+ },
+ "after": {
+  "commit": "ce5bea671a5424122a2e6e98b8cf3d8f2340dd4b"
+ },
+ "trees": {
+  "before": {
+   "digest": "ec1a7ceea7a3884bf18899bcd1b3a3fa6ccf6eaa6a9908bbec0b2b85b3c19808",
+   "scope_lines": 3606,
+   "scope_files": 20,
+   "files": 76
+  },
+  "after": {
+   "digest": "960766ba621df11d03be8b0210cff38c52828ebfdb92176c4bafe1aec4445f99",
+   "scope_lines": 3606,
+   "scope_files": 20,
+   "files": 76
+  }
+ },
+ "label": {
+  "trigger": "The command-line helper starts a clone into a destination that already holds files with the force option, or into an empty one with verbose output. The clone method checks the destination and emits its progress event synchronously, before its first await, but the terminal printers are subscribed to the emitter only after the clone call has already returned its promise.",
+  "expected_impact": "Events emitted during that synchronous opening stretch reach an emitter with no listeners and are dropped: the notice that a non-empty destination is being written into because of the force option, and the verbose note about an empty destination, never appear. Events emitted after the first await still print, so the output looks normal apart from the missing notice, and a user overwriting existing files is not told.",
+  "positive_locations": [
+   {
+    "path": "src/bin.ts",
+    "symbol": "run",
+    "anchors": {
+     "start": "d.clone(dest).catch((error: Error) => {",
+     "end": "});"
+    },
+    "start_line": 247,
+    "end_line": 265
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "src/core/orchestrator.ts",
+    "symbol": "Degit.clone",
+    "anchors": {
+     "start": "async clone(dest: string): Promise<void> {",
+     "end": "await this.cloneToDestination(dest);"
+    },
+    "start_line": 110,
+    "end_line": 116,
+    "note": "The method runs the destination check before its first await, so anything that check reports is emitted while the caller is still inside the call expression."
+   },
+   {
+    "path": "src/operations/filesystem.ts",
+    "symbol": "checkDirIsEmpty",
+    "anchors": {
+     "start": "export function checkDirIsEmpty(",
+     "end": "message: `destination directory is empty`,"
+    },
+    "start_line": 31,
+    "end_line": 56,
+    "note": "The check reports a forced write into a non-empty directory, and in verbose mode an empty one, by calling the event callbacks immediately rather than after any asynchronous step."
+   },
+   {
+    "path": "src/core/orchestrator.ts",
+    "symbol": "Degit.info",
+    "anchors": {
+     "start": "info(info: EventInfo) {",
+     "end": "this.emit('info', info);"
+    },
+    "start_line": 129,
+    "end_line": 130,
+    "note": "Progress callbacks forward straight to the Node event emitter, which delivers only to listeners present at the moment of the emit and keeps nothing for later subscribers."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "note": "Events emitted after the first await of the clone, such as the success notice or the warning about falling back from the archive download to git, are still printed because the printers are attached by then; a finding about those messages does not describe this defect."
+   },
+   {
+    "path": "src/bin.ts",
+    "symbol": "run",
+    "anchors": {
+     "start": "d.clone(dest).catch((error: Error) => {"
+    },
+    "start_line": 247,
+    "end_line": 247,
+    "note": "The rejection handler is attached in the same expression as the call, so clone failures are still reported and end with exit status 1; failure reporting is not affected."
+   }
+  ],
+  "fix_summary": "Subscribe the info and warn printers on the emitter before starting the clone, so events emitted synchronously at the start of the clone are delivered.",
+  "distinctive_tokens": [
+   "synchronous opening stretch",
+   "late-subscribed printers"
+  ]
+ },
+ "check": {
+  "summary": "Independent node script run on a work copy with node's own type stripping. Setup installs the pinned runtime packages the command-line module imports under the check home; a resolve hook maps relative .js specifiers to the TypeScript sources and package names to that prefix. The script calls the helper with the force option on a directory holding one file, with a local ref lookup and a failing download (no network), captures the terminal output and prints a MISMATCH line when the notice about the non-empty destination is missing.",
+  "setup": [
+   [
+    "/usr/bin/env",
+    "npm",
+    "install",
+    "--prefix",
+    "{home}/deps",
+    "--no-save",
+    "--no-package-lock",
+    "--no-audit",
+    "--no-fund",
+    "--ignore-scripts",
+    "yoctocolors@2.1.2",
+    "enquirer@2.3.6",
+    "fuzzysearch@1.0.3",
+    "mri@1.1.6",
+    "tiny-glob@0.2.8",
+    "tar@7.5.21",
+    "https-proxy-agent@5.0.0"
+   ]
+  ],
+  "argv": [
+   "{node}",
+   "pd_check/cli_events.mjs",
+   "{home}/deps",
+   "{home}/run"
+  ],
+  "cwd": ".",
+  "failure_signature": "MISMATCH progress notice for the non-empty destination",
+  "timeout_seconds": 600,
+  "files": [
+   {
+    "path": "pd_check/cli_events.mjs",
+    "source": "checks/PD-JS-06/cli_events.mjs"
+   },
+   {
+    "path": "pd_check/hooks.mjs",
+    "source": "checks/PD-JS-06/hooks.mjs"
+   }
+  ]
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "Pinned commit ce5bea671a54 is the latest default-branch (master) commit at selection, dated 2026-10-21T13:21:03Z. verify --run-checks --network with node v24.18.0 and npm 11.16.0 via PATH: setup installs the package-lock versions of the seven runtime packages the module graph imports (isomorphic-git is loaded lazily and is not needed because the check passes its own git object) into the check home, nothing in the work copy; node's built-in type stripping runs the TypeScript sources through a resolve hook, with no compile step. The check makes no network access: the ref lookup is local and the download rejects. On before the forced-destination notice is missing from the captured output, the script prints one MISMATCH line and exits 1; on after the notice is printed and it exits 0, in both cases after the expected exit status 1 from the failing download. The project's own suite catches the patch: vitest 5.0.4 (installed under the scratch directory, run by hand on test/unit/bin.test.ts) fails 3 of 34 tests on before (the info and warn event tests in that file, plus one test that needs the built bin) and 1 of 34 on after (only the built-bin test, because no build was run).",
+  "toolchain": "node v24.18.0 linux-x64 (built-in type stripping), npm 11.16.0 via PATH",
+  "before": "violation",
+  "after": "pass"
+ }
+}

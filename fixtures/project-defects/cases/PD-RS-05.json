@@ -1,0 +1,143 @@
+{
+ "schema": "codeye-project-defect-case",
+ "id": "PD-RS-05",
+ "split": "holdout",
+ "language": "rust",
+ "kind": "seeded",
+ "category": "error_handling",
+ "family": "partial-failure-reported-as-overall-success",
+ "needs_cross_file": true,
+ "repo": {
+  "url": "https://github.com/EricLBuehler/mistral.rs",
+  "license": "MIT",
+  "license_file": "LICENSE"
+ },
+ "scope": "mistralrs-code-exec",
+ "before": {
+  "commit": "21da642fdd2210c30ca4028e1eabdd28e9c602fd",
+  "patch": "patches/PD-RS-05.patch"
+ },
+ "after": {
+  "commit": "21da642fdd2210c30ca4028e1eabdd28e9c602fd"
+ },
+ "trees": {
+  "before": {
+   "digest": "b710a1dfa45b88880b6750b75f56432b276c6f12888e57c23b4c9575b69587a1",
+   "scope_lines": 2944,
+   "scope_files": 9,
+   "files": 2224
+  },
+  "after": {
+   "digest": "014ebc966c677acc7d688a57b5062279489bb284c2f5577cb1b5cd110dfb2f86",
+   "scope_lines": 2944,
+   "scope_files": 9,
+   "files": 2224
+  }
+ },
+ "label": {
+  "trigger": "The surface-outputs tool (or anything else that builds the JSON summary of requested output files) is given a list in which at least one file was produced and at least one could not be delivered: it was never written, its name is rejected as escaping the working directory, it is over the size cap, or reading it fails.",
+  "expected_impact": "The top-level status of the summary turns to error only when every listed file failed, so a partly failed request is announced as success; the agent or API client that trusts the overall field goes on to its final answer as if all deliverables were surfaced, while the missing ones are only visible in the per-entry records (observed: one produced plus one missing file gives overall success).",
+  "positive_locations": [
+   {
+    "path": "mistralrs-code-exec/src/files.rs",
+    "symbol": "surface_outputs_json",
+    "anchors": {
+     "start": "let status = if files.iter().all(ExecuteFile::is_error) {",
+     "end": "};"
+    },
+    "start_line": 105,
+    "end_line": 109
+   }
+  ],
+  "context_locations": [
+   {
+    "path": "mistralrs-code-exec/src/protocol.rs",
+    "symbol": "ExecuteFile::is_error",
+    "anchors": {
+     "start": "pub fn is_error(&self) -> bool {",
+     "end": "}"
+    },
+    "start_line": 68,
+    "end_line": 70,
+    "note": "A file record counts as failed when its error text is set; the reader in files.rs sets it for each requested name that is absent, unreadable, outside the working directory or too large, so one list routinely mixes delivered and failed entries."
+   },
+   {
+    "path": "mistralrs-code-exec/src/shell.rs",
+    "symbol": "ShellManager::get_tool_callbacks",
+    "anchors": {
+     "start": "let output_files = collect_output_files(work_dir, &args.outputs);",
+     "end": "let text = surface_outputs_json(work_dir, &output_files);"
+    },
+    "start_line": 284,
+    "end_line": 285,
+    "note": "The surface-outputs callback returns this summary text as the tool result the model reads, so its top-level status is what tells the caller whether the requested deliverables were all handed over."
+   },
+   {
+    "path": "mistralrs-code-exec/src/shell.rs",
+    "symbol": "surface_outputs_reports_existing_and_missing_files",
+    "anchors": {
+     "start": "serde_json::from_str(&surface_outputs_json(dir.path(), &files)).unwrap();",
+     "end": "assert_eq!(json[\"files\"][1][\"status\"], \"error\");"
+    },
+    "start_line": 662,
+    "end_line": 665,
+    "note": "The crate's own expectation: one existing and one missing file must give an overall error status next to per-entry success and error."
+   }
+  ],
+  "known_counterevidence": [
+   {
+    "path": "mistralrs-code-exec/src/files.rs",
+    "symbol": "surface_outputs_json",
+    "anchors": {
+     "start": "if let Some(error) = &file.error {",
+     "end": "}"
+    },
+    "start_line": 96,
+    "end_line": 101,
+    "note": "Each entry still carries its own error status and message, and a list where every file failed is still reported as an error overall; only the top-level field is affected, and only for mixed lists."
+   }
+  ],
+  "fix_summary": "Mark the summary as failed when any listed output carries an error, not only when all of them do (use any instead of all over the per-file error predicate).",
+  "distinctive_tokens": [
+   "partly failed request",
+   "every listed file failed"
+  ]
+ },
+ "check": {
+  "summary": "Independent harness copied into the work copy as a standalone cargo package (own empty workspace table and a lock pinned to the repository's versions of anyhow, base64, serde and serde_json): it compiles the crate's protocol.rs and files.rs from the work copy through path attributes, writes two files into a scratch directory and compares the summary's top-level status for all produced, all missing, and one produced plus one missing.",
+  "argv": [
+   "{cargo}",
+   "run",
+   "--locked",
+   "-q"
+  ],
+  "cwd": "outputs-status",
+  "setup": [],
+  "env": {
+   "CARGO_TARGET_DIR": "{home}/target"
+  },
+  "files": [
+   {
+    "path": "outputs-status/Cargo.toml",
+    "source": "checks/PD-RS-05/outputs-status/Cargo.toml"
+   },
+   {
+    "path": "outputs-status/Cargo.lock",
+    "source": "checks/PD-RS-05/outputs-status/Cargo.lock"
+   },
+   {
+    "path": "outputs-status/src/main.rs",
+    "source": "checks/PD-RS-05/outputs-status/src/main.rs"
+   }
+  ],
+  "failure_signature": "OUTPUT STATUS CHECK FAILED: one produced, one missing",
+  "timeout_seconds": 1200
+ },
+ "verification": {
+  "status": "verified",
+  "summary": "verify --run-checks --network with rustc/cargo 1.99.1 (linker gcc 15.2.0): the harness reports overall success for one produced plus one missing output on before (violation) and the expected statuses for all three lists on after (pass); the all-produced and all-missing controls agree on both. Pinned commit is the default-branch head when selected, 21da642f dated 2026-11-20. The harness compiles only protocol.rs and files.rs with anyhow, base64, serde and serde_json at the versions of the repository's Cargo.lock; the rest of the crate is not built. The project's own test surface_outputs_reports_existing_and_missing_files in src/shell.rs asserts the mixed-list overall error status and would catch the patch by reading its assertions, but it was not run: the crate's test build needs the whole workspace dependency graph (mistralrs-mcp with reqwest/aws-lc-sys, image, tokio), and an attempt ran out of space on this node's shared /tmp.",
+  "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13); cargo 1.99.1 (5f94df478 2026-08-27)",
+  "before": "violation",
+  "after": "pass"
+ }
+}

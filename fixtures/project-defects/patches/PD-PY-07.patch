@@ -1,0 +1,11 @@
+--- a/src/tchmaterial_parser/app.py
++++ b/src/tchmaterial_parser/app.py
+@@ -50,7 +50,7 @@
+         resource_list = ResourceHelper().fetch_resource_list()
+     except Exception as e:
+         print_error(e)
+-        resource_list = {}
++        resource_list = None
+         messagebox.showwarning("警告", "获取资源列表失败，请手动填写资源链接，或重新打开本程序") # 弹出警告窗口
+ 
+     # GUI
