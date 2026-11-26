@@ -395,7 +395,7 @@ describe('analysis sections', () => {
   it('keeps the unselected review reason in code-review details', () => {
     const doc = example('report.json');
     doc.project = { name: 'Billing gateway' };
-    const text = '이 단계에서 검토할 대상이 선택되지 않았습니다.';
+    const text = '이 단계에서 검토할 대상이 선택되지 않음 (미검토)';
     render(<ReportDocument report={parseAnalysisReport(doc, doc.run_id)} />);
     const overview = screen.getByRole('tabpanel', { name: t.sections.overview });
     expect(within(overview.querySelector<HTMLElement>('.report-executive')!).queryByText(text, { exact: false })).toBeNull();

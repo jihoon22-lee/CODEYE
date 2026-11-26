@@ -4,7 +4,7 @@ import { reportURL } from './analysisReport';
 import { Time } from './CopyText';
 import { formatClock, formatInstant, isTerminalRun, orderStages, runStatusText, shorten, stageName, stageStateText } from './format';
 import { ko as t } from './locales/ko';
-import { reportKo } from './locales/report-ko';
+import { reasonWithHint } from './reasonHints';
 
 const s = t.stages;
 
@@ -14,11 +14,8 @@ export function countsText(counts: Record<string, number>): string {
     .map(([k, n]) => s.count(Object.hasOwn(s.countLabels, k) ? s.countLabels[k]! : shorten(k, 40), n))
     .join(' · ');
 }
-// A reason code in words: the stage wording, else the report's, else the code itself.
-export const reasonText = (code: string): string =>
-  s.reasonLabel(Object.hasOwn(s.reasonLabels, code) ? s.reasonLabels[code]!
-    : Object.hasOwn(reportKo.reasons, code) ? reportKo.reasons[code]!
-    : shorten(code, 80));
+// A reason code in words from the shared catalog with the hint of where to act, else the code itself.
+export const reasonText = (code: string): string => s.reasonLabel(reasonWithHint(code) ?? shorten(code, 80));
 export const progressText = (st: StageView): string =>
   st.planned === null ? s.finishedOnly(st.finished) : s.finishedOfPlanned(st.finished, st.planned);
 

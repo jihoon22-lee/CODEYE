@@ -153,7 +153,7 @@ func RenderMarkdown(r Report, digest string, l Locale) []byte {
 	}
 	for _, f := range r.Findings {
 		f.Title = v.FindingTitle[f.ID]
-		mdFinding(p, f, "### ", false)
+		mdFinding(p, l, f, "### ", false)
 	}
 	p("## ", mdText(l.Label("observations")))
 	p()
@@ -250,7 +250,7 @@ func mdAIReview(p func(...string), r Report, l Locale, h string) {
 	ai := r.Coverage.AIReview
 	reason := ""
 	if ai.Reason != nil {
-		reason = " " + mdCode(*ai.Reason)
+		reason = " " + mdReason(l, *ai.Reason)
 	}
 	p("상태: ", mdCode(ai.Status), reason)
 	p()
@@ -263,7 +263,7 @@ func mdAIReview(p func(...string), r Report, l Locale, h string) {
 		}
 		reason := ""
 		if t.Reason != nil {
-			reason = " " + mdCode(*t.Reason)
+			reason = " " + mdReason(l, *t.Reason)
 		}
 		p("| ", mdCode(t.Key), " | ", mdCode(st), " | ", mdCode(t.Result), reason, " |")
 	}
@@ -279,7 +279,7 @@ func mdAIReview(p func(...string), r Report, l Locale, h string) {
 				st = *t.TaskStatus
 			}
 			if t.Reason != nil {
-				reason = " " + mdCode(*t.Reason)
+				reason = " " + mdReason(l, *t.Reason)
 			}
 			p("| ", mdCode(t.Key), " | ", mdCode(st), " | ", mdCode(t.Result), reason, " |")
 		}
@@ -316,8 +316,8 @@ func mdCoverage(p func(...string), r Report, v view, l Locale, h string) {
 	}
 	p()
 	if len(r.Coverage.Tools) > 0 {
-		p("| task | 도구 | 버전 | exit class | 범위 파일 | 처리 파일 | 제외 | 미목록 | 패키지 상태 |")
-		p("|---|---|---|---|---|---|---|---|---|")
+		p("| task | 도구 | 버전 | exit class | 범위 파일 | 처리 파일 | 제외 | 미목록 | 단위 상태 | 한계 |")
+		p("|---|---|---|---|---|---|---|---|---|---|")
 		for _, t := range r.Coverage.Tools {
 			ver := l.Label("unknown")
 			if t.ToolVersion != nil {
@@ -328,7 +328,7 @@ func mdCoverage(p func(...string), r Report, v view, l Locale, h string) {
 				proc = strconv.Itoa(*t.ProcessedFiles)
 			}
 			p("| ", mdCode(t.TaskKey), " | ", mdCode(t.Analyzer), " | ", mdCode(ver), " | ", mdCode(t.ExitClass), " | ", strconv.Itoa(t.FilesInScope), " | ", mdText(proc), " | ",
-				strconv.Itoa(t.IgnoredFiles), " | ", strconv.Itoa(t.UnlistedFiles), " | ", mdCode(packages(t.Packages)), " |")
+				strconv.Itoa(t.IgnoredFiles), " | ", strconv.Itoa(t.UnlistedFiles), " | ", mdUnits(l, t.Packages), " | ", mdLimits(l, t.Limitations), " |")
 		}
 		p()
 	}
@@ -340,17 +340,17 @@ func mdTasks(p func(...string), r Report, l Locale, h string) {
 	p("| task | 필수 | 상태 | 사유 |")
 	p("|---|---|---|---|")
 	for _, t := range r.Tasks {
-		reason := l.Label("none")
+		reason := mdText(l.Label("none"))
 		if t.Reason != nil {
-			reason = *t.Reason
+			reason = mdReason(l, *t.Reason)
 		}
-		p("| ", mdCode(t.Key), " | ", strconv.FormatBool(t.RequiredForVerdict), " | ", mdCode(t.Status), " | ", mdCode(reason), " |")
+		p("| ", mdCode(t.Key), " | ", strconv.FormatBool(t.RequiredForVerdict), " | ", mdCode(t.Status), " | ", reason, " |")
 	}
 	p()
 }
 
 // mdFinding renders one finding under heading level h.
-func mdFinding(p func(...string), f Finding, h string, sectioned bool) {
+func mdFinding(p func(...string), l Locale, f Finding, h string, sectioned bool) {
 	if sectioned {
 		mdReadingAnchor(p, f.ID)
 	}
@@ -399,7 +399,7 @@ func mdFinding(p func(...string), f Finding, h string, sectioned bool) {
 		p("- verification: ", mdText(x))
 	}
 	for _, x := range f.Limitations {
-		p("- limitation: ", mdText(x))
+		p("- limitation: ", mdLimitation(l, x))
 	}
 	p()
 }
@@ -452,20 +452,113 @@ func artRef(id *string, truncated bool) string {
 	return *id
 }
 
-func packages(m map[string]int) string {
+// mdReason is a reason or limitation code in words, with the code itself in a
+// code span for an operator. A code with no text is the code span alone.
+func mdReason(l Locale, c string) string {
+	if t, ok := l.CodeLabel(c); ok {
+		return mdText(t) + " " + mdCode(c)
+	}
+	return mdCode(c)
+}
+
+// mdLimitation is a finding's limitation: a code in words with the code in a
+// code span, or the stored sentence as it is.
+func mdLimitation(l Locale, x string) string {
+	if _, ok := l.CodeLabel(x); ok {
+		return mdReason(l, x)
+	}
+	return mdText(x)
+}
+
+// limitationHTML is a finding's limitation: a code in words with the code in a
+// title, or the stored sentence as it is.
+func limitationHTML(l Locale, x string) template.HTML {
+	if _, ok := l.CodeLabel(x); ok {
+		return reasonHTML(l, x)
+	}
+	return template.HTML(template.HTMLEscapeString(x))
+}
+
+// mdUnits lists a tool row's coverage counters in words, each with its key.
+func mdUnits(l Locale, units map[string]int) string {
+	keys := sortedKeys(units)
+	if len(keys) == 0 {
+		return "-"
+	}
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, mdText(l.Unit(k)+": "+strconv.Itoa(units[k]))+" "+mdCode(k))
+	}
+	return strings.Join(parts, "; ")
+}
+
+// mdLimits lists a tool row's limitation codes in words.
+func mdLimits(l Locale, codes []string) string {
+	if len(codes) == 0 {
+		return "-"
+	}
+	parts := make([]string, 0, len(codes))
+	for _, c := range codes {
+		parts = append(parts, mdReason(l, c))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func sortedKeys(m map[string]int) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
 	sortStrings(keys)
-	parts := make([]string, 0, len(keys))
-	for _, k := range keys {
-		parts = append(parts, k+"="+strconv.Itoa(m[k]))
+	return keys
+}
+
+// reasonHTML is a reason or limitation code in words with the code in a title
+// attribute; a code with no text is shown as the code itself.
+func reasonHTML(l Locale, c string) template.HTML {
+	if t, ok := l.CodeLabel(c); ok {
+		return template.HTML(`<span title="` + template.HTMLEscapeString(c) + `">` + template.HTMLEscapeString(t) + `</span>`)
 	}
-	if len(parts) == 0 {
+	return template.HTML(`<code>` + template.HTMLEscapeString(c) + `</code>`)
+}
+
+// unitsHTML lists a tool row's coverage counters in words, one per line.
+func unitsHTML(l Locale, units map[string]int) template.HTML {
+	keys := sortedKeys(units)
+	if len(keys) == 0 {
 		return "-"
 	}
-	return strings.Join(parts, " ")
+	var b strings.Builder
+	for i, k := range keys {
+		if i > 0 {
+			b.WriteString("<br>")
+		}
+		b.WriteString(`<span title="` + template.HTMLEscapeString(k) + `">` + template.HTMLEscapeString(l.Unit(k)+": "+strconv.Itoa(units[k])) + `</span>`)
+	}
+	return template.HTML(b.String())
+}
+
+// limitsHTML lists a tool row's limitation codes in words, one per line.
+func limitsHTML(l Locale, codes []string) template.HTML {
+	if len(codes) == 0 {
+		return "-"
+	}
+	var b strings.Builder
+	for i, c := range codes {
+		if i > 0 {
+			b.WriteString("<br>")
+		}
+		b.WriteString(string(reasonHTML(l, c)))
+	}
+	return template.HTML(b.String())
+}
+
+// reasonCellHTML is a task's optional reason code for a table cell.
+func reasonCellHTML(l Locale, p *string, def string) template.HTML {
+	if p == nil {
+		return template.HTML(template.HTMLEscapeString(def))
+	}
+	return reasonHTML(l, *p)
 }
 
 func sortStrings(s []string) {
@@ -588,7 +681,11 @@ var htmlFuncs = template.FuncMap{
 	"join":            strings.Join,
 	"short":           short,
 	"code":            func(l Locale, c string) string { return l.Code(c) },
-	"packages":        packages,
+	"reasonHTML":      reasonHTML,
+	"limitationHTML":  limitationHTML,
+	"reasonCell":      reasonCellHTML,
+	"unitsHTML":       unitsHTML,
+	"limitsHTML":      limitsHTML,
 	"artref":          artRef,
 	"pair":            func(l Locale, p secPart) partArgs { return partArgs{L: l, P: p} },
 	"inspectionPair":  func(l Locale, d secTableDetail) inspectionDetailArgs { return inspectionDetailArgs{L: l, D: d} },
@@ -623,13 +720,13 @@ var htmlTemplate = template.Must(template.New("report").Funcs(htmlFuncs).Parse(`
 {{end}}</table>
 {{if .R.Summary.Priorities}}<p>우선 확인:</p><ul>{{range .R.Summary.Priorities}}<li><a href="#{{.}}"><code>{{.}}</code></a></li>{{end}}</ul>{{end}}
 <h2 id="ai-review">{{.L.Label "ai_review"}}</h2>
-<p>상태: <code data-field="ai_review">{{.R.Coverage.AIReview.Status}}</code> {{with .R.Coverage.AIReview.Reason}}<code>{{.}}</code>{{end}}</p>
+<p>상태: <code data-field="ai_review">{{.R.Coverage.AIReview.Status}}</code> {{with .R.Coverage.AIReview.Reason}}{{reasonHTML $.L .}}{{end}}</p>
 <table><tr><th>task</th><th>상태</th><th>결과</th></tr>
-{{range .R.Coverage.AIReview.RequiredTasks}}<tr><td><code>{{.Key}}</code></td><td><code>{{deref .TaskStatus "없음"}}</code></td><td><code>{{.Result}}</code>{{with .Reason}} <code>{{.}}</code>{{end}}</td></tr>
+{{range .R.Coverage.AIReview.RequiredTasks}}<tr><td><code>{{.Key}}</code></td><td><code>{{deref .TaskStatus "없음"}}</code></td><td><code>{{.Result}}</code>{{with .Reason}} {{reasonHTML $.L .}}{{end}}</td></tr>
 {{end}}</table>
 {{if .R.Coverage.AIReview.OptionalTasks}}<p>{{.L.Label "ai_review_optional"}}</p>
 <table><tr><th>task</th><th>상태</th><th>결과</th></tr>
-{{range .R.Coverage.AIReview.OptionalTasks}}<tr><td><code>{{.Key}}</code></td><td><code>{{deref .TaskStatus "없음"}}</code></td><td><code>{{.Result}}</code>{{with .Reason}} <code>{{.}}</code>{{end}}</td></tr>
+{{range .R.Coverage.AIReview.OptionalTasks}}<tr><td><code>{{.Key}}</code></td><td><code>{{deref .TaskStatus "없음"}}</code></td><td><code>{{.Result}}</code>{{with .Reason}} {{reasonHTML $.L .}}{{end}}</td></tr>
 {{end}}</table>{{end}}
 {{if .R.Coverage.ReviewCalls}}<ul>{{range .R.Coverage.ReviewCalls}}<li>모델 호출 <code>{{.Role}}</code>{{if .Purpose}} ({{$.L.Label (printf "call.%s" .Purpose)}}){{end}} · <code>{{.Model}}</code> · OpenCode <code>{{.Version}}</code> · <code>{{.Outcome}}</code> · 지침{{if .PackID}} <code>{{.PackID}}@{{.PackVersion}}</code>{{end}} <code>{{.PackDigest}}</code></li>{{end}}</ul>{{end}}
 <h2 id="coverage">{{.L.Label "coverage"}}</h2>
@@ -641,12 +738,12 @@ var htmlTemplate = template.Must(template.New("report").Funcs(htmlFuncs).Parse(`
 <li>test_status: <code>{{.R.Coverage.TestStatus}}</code></li>
 {{range .Notes}}<li>{{.}}</li>{{end}}
 </ul>
-{{if .R.Coverage.Tools}}<div class="scroll"><table><tr><th>task</th><th>도구</th><th>버전</th><th>exit class</th><th>범위 파일</th><th>처리 파일</th><th>제외</th><th>미목록</th><th>패키지 상태</th></tr>
-{{range .R.Coverage.Tools}}<tr><td><code>{{.TaskKey}}</code></td><td><code>{{.Analyzer}}</code></td><td><code>{{deref .ToolVersion "미확정"}}</code></td><td><code>{{.ExitClass}}</code></td><td>{{.FilesInScope}}</td><td>{{derefInt .ProcessedFiles "미확정"}}</td><td>{{.IgnoredFiles}}</td><td>{{.UnlistedFiles}}</td><td><code>{{packages .Packages}}</code></td></tr>
+{{if .R.Coverage.Tools}}<div class="scroll"><table><tr><th>task</th><th>도구</th><th>버전</th><th>exit class</th><th>범위 파일</th><th>처리 파일</th><th>제외</th><th>미목록</th><th>단위 상태</th><th>한계</th></tr>
+{{range .R.Coverage.Tools}}<tr><td><code>{{.TaskKey}}</code></td><td><code>{{.Analyzer}}</code></td><td><code>{{deref .ToolVersion "미확정"}}</code></td><td><code>{{.ExitClass}}</code></td><td>{{.FilesInScope}}</td><td>{{derefInt .ProcessedFiles "미확정"}}</td><td>{{.IgnoredFiles}}</td><td>{{.UnlistedFiles}}</td><td>{{unitsHTML $.L .Packages}}</td><td>{{limitsHTML $.L .Limitations}}</td></tr>
 {{end}}</table></div>{{end}}
 <h2 id="tasks">{{.L.Label "tasks"}}</h2>
 <table><tr><th>task</th><th>필수</th><th>상태</th><th>사유</th></tr>
-{{range .R.Tasks}}<tr><td><code>{{.Key}}</code></td><td>{{.RequiredForVerdict}}</td><td><code>{{.Status}}</code></td><td><code>{{deref .Reason "없음"}}</code></td></tr>
+{{range .R.Tasks}}<tr><td><code>{{.Key}}</code></td><td>{{.RequiredForVerdict}}</td><td><code>{{.Status}}</code></td><td>{{reasonCell $.L .Reason "없음"}}</td></tr>
 {{end}}</table>
 <h2 id="findings">{{.L.Label "findings"}}</h2>
 <p>{{.L.Label "code_excerpt_none"}}</p>
@@ -665,7 +762,7 @@ var htmlTemplate = template.Must(template.New("report").Funcs(htmlFuncs).Parse(`
 {{range .ObservationIDs}}<li>observation <a href="#{{.}}"><code>{{.}}</code></a></li>{{end}}
 <li>recommendation: {{.Recommendation.Summary}}</li>
 {{range .Verification}}<li>verification: {{.}}</li>{{end}}
-{{range .Limitations}}<li>limitation: {{.}}</li>{{end}}
+{{range .Limitations}}<li>limitation: {{limitationHTML $.L .}}</li>{{end}}
 </ul></section>
 {{end}}
 <h2 id="observations">{{.L.Label "observations"}}</h2>

@@ -990,7 +990,11 @@ func (v secView) summaryAppendix() []secPart {
 	l := v.L
 	r := v.R
 	ai := r.Coverage.AIReview
-	aiText := tf(l, "summary.ai_review", ai.Status, optText(ai.Reason, "-"), len(r.Coverage.ReviewCalls))
+	aiReason := "-"
+	if ai.Reason != nil {
+		aiReason = reasonText(l, *ai.Reason)
+	}
+	aiText := tf(l, "summary.ai_review", ai.Status, aiReason, len(r.Coverage.ReviewCalls))
 	files := func(p *int) string {
 		if p == nil {
 			return l.Label("unknown")

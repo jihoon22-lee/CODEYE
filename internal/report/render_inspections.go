@@ -94,6 +94,15 @@ func checkOutcome(l Locale, tool StaticTool) string {
 	return status
 }
 
+// reasonCodes is the raw reason code behind a check's outcome text, kept
+// beside the words for an operator.
+func reasonCodes(tool StaticTool) []string {
+	if tool.TaskReason == nil {
+		return nil
+	}
+	return []string{*tool.TaskReason}
+}
+
 func checkFileScope(l Locale, tool StaticTool, submitted bool) string {
 	if tool.ProcessedFiles == nil {
 		return l.Label("inspection.files_unknown")
@@ -166,7 +175,7 @@ func (v secView) staticInspectionParts(language StaticLanguage, obs map[string]O
 				part := v.staticTaskPart(tool, kind, coverage[tool.TaskKey], obs, false)
 				part.List[0].Label = name
 				if strings.Contains(tool.TaskKey, ".") {
-					part.List[0].Codes = []string{tool.TaskKey}
+					part.List[0].Codes = append([]string{tool.TaskKey}, part.List[0].Codes...)
 				}
 				if detail != "" {
 					part.List[0].Text += " · " + detail
@@ -182,7 +191,7 @@ func (v secView) staticInspectionParts(language StaticLanguage, obs map[string]O
 			for _, row := range rows {
 				fold.Parts = append(fold.Parts, v.staticTaskPart(row, kind, coverage[row.TaskKey], obs, true))
 			}
-			category.Parts = append(category.Parts, secPart{List: []secItem{{Label: name, Text: outcome}}, Parts: []secPart{fold}})
+			category.Parts = append(category.Parts, secPart{List: []secItem{{Label: name, Text: outcome, Codes: reasonCodes(tool)}}, Parts: []secPart{fold}})
 		}
 		if len(category.Parts) == 0 {
 			if kind == "other" || language.Ecosystem == nil {
@@ -202,6 +211,9 @@ func (v secView) staticTaskPart(tool StaticTool, kind string, coverage ToolCover
 		item.Codes = []string{tool.TaskKey}
 	} else {
 		item.Text = checkOutcome(l, tool)
+	}
+	if !checkCompleted(tool) {
+		item.Codes = append(item.Codes, reasonCodes(tool)...)
 	}
 	total := 0
 	for _, id := range tool.ObservationIDs {
@@ -231,7 +243,40 @@ func (v secView) staticTaskPart(tool StaticTool, kind string, coverage ToolCover
 	if paths := coverage.ProcessedPaths; len(paths) > 0 {
 		part.Parts = []secPart{processedPathsPart(l, "inspection.processed_paths", paths)}
 	}
+	if notes, ok := coverageNotesPart(l, coverage, tool.TaskReason); ok {
+		part.Parts = append(part.Parts, notes)
+	}
 	return part
+}
+
+// shownCounters and shownLimitations are the coverage entries the inspection
+// and measurement rows already word on their own line; the notes fold leaves
+// them out so nothing is said twice.
+var (
+	shownCounters = map[string]bool{"format_input_limit": true, "functions_measured": true,
+		"excluded_third_party_directory": true, "excluded_data_directory": true}
+	shownLimitations = map[string]bool{"no_file_reached_clone_thresholds": true}
+)
+
+// coverageNotesPart folds a tool row's limitations and coverage counters in
+// words, the raw code beside each. The row's own task reason is already in its
+// outcome line and is not repeated. ok is false when the row has nothing more.
+func coverageNotesPart(l Locale, c ToolCoverage, taskReason *string) (secPart, bool) {
+	var items []secItem
+	for _, code := range c.Limitations {
+		if base := strings.SplitN(code, ":", 2)[0]; !shownLimitations[base] && (taskReason == nil || base != strings.SplitN(*taskReason, ":", 2)[0]) {
+			items = append(items, secItem{Text: reasonText(l, code), Codes: []string{code}})
+		}
+	}
+	for _, key := range sortedKeys(c.Packages) {
+		if !shownCounters[key] {
+			items = append(items, secItem{Text: l.Unit(key) + ": " + strconv.Itoa(c.Packages[key]), Codes: []string{key}})
+		}
+	}
+	if len(items) == 0 {
+		return secPart{}, false
+	}
+	return secPart{Fold: tf(l, "inspection.coverage_notes", len(items)), List: items}, true
 }
 
 func processedPathsPart(l Locale, label string, paths []string) secPart {
@@ -402,6 +447,9 @@ func (v secView) measurementParts(obs map[string]Observation, detail bool) []sec
 				label = "measurement.submitted_paths"
 			}
 			part.Parts = append(part.Parts, processedPathsPart(l, label, paths))
+		}
+		if notes, ok := coverageNotesPart(l, coverage[key], tool.TaskReason); ok {
+			part.Parts = append(part.Parts, notes)
 		}
 		if name != "" {
 			part.Paras = append(part.Paras, l.Label("measurement.meaning."+name))

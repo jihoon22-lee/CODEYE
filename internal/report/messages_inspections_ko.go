@@ -133,13 +133,11 @@ func init() {
 		"measurement.clone_details":                   "중복 %d쌍의 위치 보기",
 		"measurement.other_clone_groups":              "나머지 중복 위치 묶음 %d개 보기",
 		"measurement.submitted_paths":                 "도구에 전달한 파일 %d개 보기",
+		"inspection.coverage_notes":                   "범위 단위와 한계 %d개 보기",
 		"measurement.unlocated":                       "위치를 확인할 수 없음",
 		"measurement.full":                            "나머지 %d개 위치는 전체 보기에서 확인할 수 있다.",
 		"measurement.other_locations":                 "나머지 %d개 위치 보기",
 	} {
 		Korean.Labels[k] = v
 	}
-	Korean.Codes["gofmt_failed"] = "gofmt가 소스를 끝까지 읽지 못했다. 구문 오류나 입력 읽기 오류는 작업 stderr에 남는다."
-	Korean.Codes["format_input_limit"] = "형식 검사 입력 한도를 넘은 파일은 확인하지 않았다."
-	Korean.Codes["third_party_directories_excluded"] = "third-party·third_party·thirdparty 디렉터리의 파일은 구조·중복 측정에서 제외했다."
 }

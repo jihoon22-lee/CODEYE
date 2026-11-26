@@ -8,7 +8,7 @@ import { citedDocumentExample } from './reportExample';
 import { matchingDocumentCondition, primaryCitation, projectReadings, relatedStrength, shareTitleSubject } from './reportGroups';
 import { maxProjectBehaviorRows, projectBehaviors } from './reportBehaviors';
 import { cutLine } from './format';
-import { ko } from './locales/ko';
+import { reasonWithHint } from './reasonHints';
 import { reportKo as t } from './locales/report-ko';
 
 const s = t.sections;
@@ -172,8 +172,7 @@ function selectedReading(report: AnalysisReport, sections: Sections, readings: R
     sources: <PinnedSourceLink {...diagnostic.location}
       fallback={sourceLocation(diagnostic.location.path, diagnostic.location.start, diagnostic.location.end)} />,
   };
-  const reason = report.aiReviewReasons.map(code => [t.reasons, s.modelReasons, ko.stages.reasonLabels]
-    .find(labels => Object.hasOwn(labels, code))?.[code]).find(Boolean);
+  const reason = report.aiReviewReasons.map(reasonWithHint).find(Boolean) ?? undefined;
   return { title: t.reading.noFindings, text: report.aiReview === 'not_requested' ? t.reading.reviewNotRequested : reason };
 }
 

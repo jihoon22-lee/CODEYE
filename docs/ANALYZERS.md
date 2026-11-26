@@ -2,7 +2,7 @@
 
 정적 분석 도구가 실행되는 조건과 결과를 관찰로 바꾸는 규칙을 다룬다. [분석기 목록](#분석기-목록)에서 도구·규칙 팩을, [도구 설정](#도구-설정)에서 플래그를 찾을 수 있다. [Go 내부 패키지 의존 관계](#go-내부-패키지-의존-관계)와 [구조·중복 지표 및 비밀값](#구조중복-지표와-비밀값-팩)은 보고서의 해당 절로 연결된다. 노드 설정은 [운영](OPERATIONS.md), 테스트 실행은 [실행](EXECUTION.md#기존-테스트-실행), 관찰 표시와 비교는 [보고서](REPORT.md)를 따른다.
 
-구현 위치는 `internal/worker/analysis/` 아래다. 공통 산출물은 [`analyzer_observations` schema](../schemas/analyzer-observations.schema.json), 도구별 실행 서술은 [`analyzer.schema.json`](../schemas/analyzer.schema.json)을 따르는 `examples/analyzer-*.yaml`, 실제 실행으로 얻은 envelope 예시는 `examples/observations-*.json`이다.
+구현 위치는 `internal/worker/analysis/` 아래다. 분석기가 사유·한계·단위 카운터로 내는 코드는 보고서에서 한국어 문구로 읽히므로, 새 코드는 [코드 문구 목록](../internal/report/reportui/code_labels_ko.json)에 문구를 더해야 한다. 없으면 시험이 실패한다([보고서](REPORT.md#한계-코드)). 공통 산출물은 [`analyzer_observations` schema](../schemas/analyzer-observations.schema.json), 도구별 실행 서술은 [`analyzer.schema.json`](../schemas/analyzer.schema.json)을 따르는 `examples/analyzer-*.yaml`, 실제 실행으로 얻은 envelope 예시는 `examples/observations-*.json`이다.
 
 ## 선정 원칙
 
