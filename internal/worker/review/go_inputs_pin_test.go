@@ -39,6 +39,12 @@ func fixIdentity(j analysis.Job) analysis.Job {
 // dirJob acquires a copy of a repository directory as a snapshot.
 func dirJob(t *testing.T, dir string) analysis.Job {
 	t.Helper()
+	return treeJob(t, dirTree(t, dir))
+}
+
+// dirTree reads a repository directory as a tree of relative paths.
+func dirTree(t *testing.T, dir string) map[string]string {
+	t.Helper()
 	tree := map[string]string{}
 	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -52,7 +58,7 @@ func dirJob(t *testing.T, dir string) analysis.Job {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return treeJob(t, tree)
+	return tree
 }
 
 // goBuildFilesTree is Go source with build files of every other ecosystem

@@ -902,7 +902,7 @@ scripted caller로 잰 승인이다(최소 요청 예산, Go package가 다음 p
 
 ### schema 0.9(단서와 후속 조사)
 
-- 단서를 받은 조사 기록(전체·slot)과 모든 [단서 후속 조사](#단서-후속-조사) 기록(stage `leads`)이 쓴다. 0.7에 조사 기록의 `lead_limit`·`leads`와 후속 조사 기록의 `lead_followup`을 더한 것이다. 계약 probe와 HTTP 근거 읽기는 0.7과 같이 실린다.
+- 단서를 받은 조사 기록(전체·slot)과 모든 [단서 후속 조사](#단서-후속-조사) 기록(stage `leads`)이 쓴다. 0.7에 조사 기록의 `lead_limit`·`leads`와 후속 조사 기록의 `lead_followup`을 더한 것이다. 계약 probe와 HTTP 근거 읽기는 0.7과 같이 실리고, 보고서의 문서 대조·관련 흐름·강점·도구 진단 분류·slot 장부가 0.7 기록과 같이 읽는다(`TestLeadOfferedRecordsFeedTheReportSections`).
 - 조사 기록의 `lead_limit`(3)는 요청이 단서를 받았다는 뜻이고 남긴 단서가 없어도 있다. `leads[]`는 모델의 `id`(`lead_N`), `need`, `symbol`, `evidence_id`(그 기록의 근거), `suspicion`, `candidate_id`(필수)와 플랫폼의 `resolution`(`resolved`·`unresolved`)을 가진다. 찾았으면 `targets`(최대 3개: `id`·`path`·`sha256`·`start_line`·`end_line`·`kind`·`origin`·선택 `symbol`, 선언 전체가 아닌 정의 창이면 `partial`), 못 찾았으면 `reason`이고 `lead_already_in_request`이면 그 발췌의 `in_request_evidence_ids`도 있다. 찾은 위치는 조사 기록의 근거가 아니다(그 요청이 보내지 않았다).
 - 후속 조사 기록(`review.leads`, `review.leads.sNNN`, slot이면 `slice`)의 `lead_followup`은 `leads`(보낸 단서 ID), `sent_evidence_ids`(요청이 보낸 발췌), `new_evidence_ids`(그중 찾은 발췌), `partial_evidence_ids`(그중 부분 발췌), `new_lines`(찾은 발췌의 줄 중 조사 기록의 발췌에 없던 줄을 파일마다 한 번 센 수), `dispositions`(최종 후보마다 `candidate_id`·`final_id`·`disposition`·`lead`, 반박이면 `reason`·`evidence_ids`)다. 상류는 같은 조사 기록이고 slot이면 `review.scope`도 있다. 기록 검사(`record.LeadFollowupMatches`)가 조사 기록의 후보·단서와 처리, 근거의 범위를 대조한다. 반박한 후보는 원래 후보 그대로 최종 후보에 남고, 고친 후보와 더한 후보는 조사 후보와 같은 형식이다.
 - 보고서 생성기 26부터 읽는다(`LeadsReviewDecoder`). [조사 예시](../examples/review/leads/investigate.s001.json) · [후속 조사 예시](../examples/review/leads/leads.s001.json) · [검증 예시](../examples/review/leads/verify.s001.json)
@@ -934,7 +934,7 @@ scripted caller로 잰 승인이다(최소 요청 예산, Go package가 다음 p
 - Python·JavaScript 정의의 선언 끝은 구문 분석이 아니라 토큰의 중괄호(Python은 다음 모듈 수준 문장)로 정한다.
 - 후속 조사는 뒤 작업 전부의 최악을 남길 때만 입장하므로, 상한이 그 최악을 덮지 못하는 큰 프로젝트에서는 실행되지 않는다([승인 측정](#후속-조사-승인-측정)).
 - 선언 경계 판별은 Go 외 언어에서 구문 분석이 아니다. 매크로·전처리·비정형 들여쓰기에서는 경계가 덜 정확할 수 있다. C/C++ 전처리 분기는 첫 분기의 깊이를 따르므로, 분기마다 중괄호 균형이 다르고 대안 관계도 아닌 코드는 경계를 잃을 수 있다. JavaScript 정규식 리터럴은 앞 문자로 짐작하므로 `)` 뒤의 정규식(`if (x) /re/.test(s)`)은 나눗셈으로 읽는다.
-- 보고서 검증기는 schema 0.7 조사 기록이 HTTP 코드와 테스트를 함께 읽었는지(`workflow_reading`) 보고서 본문만으로 알 수 없다. 0.6 기록은 그 읽기가 있을 때만 쓰였으므로 decoder 이름이 증거였지만, 0.7은 모든 역할이 쓴다. 그래서 문서 대조의 관련 흐름은 0.7 조사 산출물이 수락되었고 세 인용(호출 코드, 변경 코드, 테스트)이 같은 범위의 Go 근거일 때 받는다. 보고서 생성기는 기록의 `workflow_reading`이 있을 때만 관련 흐름을 만들고 문서 기록과 대조한다([보고서 연결](#보고서-연결)).
+- 보고서 검증기는 schema 0.7 조사 기록이 HTTP 코드와 테스트를 함께 읽었는지(`workflow_reading`) 보고서 본문만으로 알 수 없다. 0.6 기록은 그 읽기가 있을 때만 쓰였으므로 decoder 이름이 증거였지만, 0.7은 모든 역할이 쓴다. 단서를 받은 조사의 0.9 기록도 같다. 그래서 문서 대조의 관련 흐름은 0.6·0.7·0.9 조사 산출물이 수락되었고 세 인용(호출 코드, 변경 코드, 테스트)이 같은 범위의 Go 근거일 때 받는다. 웹 화면과 보고서 schema도 이 세 decoder를 받는다. 보고서 생성기는 기록의 `workflow_reading`이 있을 때만 관련 흐름을 만들고 문서 기록과 대조한다([보고서 연결](#보고서-연결)).
 - 보고서의 표시용 발췌는 인용의 첫 50줄·1,800바이트까지다. 80줄까지의 인용은 근거 범위 전체가 기록에 남지만 화면에는 앞부분만 보인다([보고서](REPORT.md)).
 - 큰 요청 예산의 실제 모델 품질·지연 시간·비용은 측정하지 않았다. 제한시간 600초와 기본 예산은 추정이며 실제 호출을 보고 다시 정한다(A58).
 - 동적 디스패치와 실제 빌드·런타임 구성이 결정하는 호출은 제공된 발췌와 실행 기록으로 판단한다. 정적으로 연결한 지원 범위는 [파일 사이의 호출 근거](#파일-사이의-호출-근거)에 있다.

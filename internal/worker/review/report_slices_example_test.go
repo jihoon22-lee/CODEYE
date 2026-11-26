@@ -62,6 +62,8 @@ func TestReportSlicesExample(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkSliceExample(t, r, len(caller.requests))
+	// Every slot investigation was offered leads too.
+	requireLeadsRecords(t, r, "review.investigate", "review.investigate.s001", "review.investigate.s002")
 	raw, err := report.Marshal(r)
 	if err != nil {
 		t.Fatal(err)

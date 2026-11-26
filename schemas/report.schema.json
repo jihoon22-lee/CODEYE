@@ -449,7 +449,7 @@
      "then": {
        "required": ["artifacts"],
        "properties": {
-         "artifacts": {"contains": {"required": ["decoder", "task_key"], "properties": {"decoder": {"const": "application/vnd.codeye.review+json;schema_version=0.6"}, "task_key": {"const": "review.investigate"}, "role": {"const": "other"}, "media_type": {"const": "application/vnd.codeye.review+json"}}}},
+         "artifacts": {"contains": {"required": ["decoder", "task_key"], "properties": {"decoder": {"enum": ["application/vnd.codeye.review+json;schema_version=0.6", "application/vnd.codeye.review+json;schema_version=0.7", "application/vnd.codeye.review+json;schema_version=0.9"]}, "task_key": {"const": "review.investigate"}, "role": {"const": "other"}, "media_type": {"const": "application/vnd.codeye.review+json"}}}},
          "documents": {"properties": {"comparisons": {"contains": {"required": ["related_workflow"]}, "maxContains": 1}}}
        }
      }},

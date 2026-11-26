@@ -863,7 +863,7 @@ function checkRelatedWorkflow(r: Record<string, unknown>, documents: Sections['d
     !array(object(r.code_review).roles, object).some(role =>
       role.key === key && role.result === 'accepted' && role.task_status === 'succeeded') ||
     !array(r.artifacts, object).some(artifact => artifact.task_key === key && artifact.role === 'other' &&
-      artifact.media_type === mediaType && artifact.decoder === mediaType + ';schema_version=0.6')) invalid();
+      artifact.media_type === mediaType && ['0.6', '0.7', '0.9'].some(v => artifact.decoder === mediaType + ';schema_version=' + v))) invalid();
 }
 
 function checkContractFollowup(r: Record<string, unknown>, documents: Sections['documents'], includesCode: boolean) {

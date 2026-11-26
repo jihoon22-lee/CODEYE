@@ -642,7 +642,7 @@ func validWorkflowCitations(workflow RelatedWorkflow, scope string, catalog map[
 func hasAcceptedWorkflowReading(r Report) bool {
 	version, _ := strconv.Atoi(r.Builder.Version)
 	const taskKey = "review.investigate"
-	decoders := []string{(WorkflowReadingDecoder{}).Key().String(), (CitedReviewDecoder{}).Key().String()}
+	decoders := []string{(WorkflowReadingDecoder{}).Key().String(), (CitedReviewDecoder{}).Key().String(), (LeadsReviewDecoder{}).Key().String()}
 	return version >= WorkflowReadingSince && r.CodeReview != nil &&
 		slices.ContainsFunc(r.Tasks, func(t Task) bool {
 			return t.Key == taskKey && t.Status == string(domain.TaskSucceeded)
