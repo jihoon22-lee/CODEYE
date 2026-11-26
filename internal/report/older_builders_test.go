@@ -91,6 +91,14 @@ func withoutLeadsForTest(r *Report) {
 	r.Artifacts = slices.DeleteFunc(r.Artifacts, func(a Artifact) bool { return leads(a.TaskKey) })
 	r.Coverage.ReviewCalls = slices.DeleteFunc(r.Coverage.ReviewCalls, func(c ReviewCall) bool { return isLeadsTask(c.TaskKey) })
 	r.Coverage.AIReview.OptionalTasks = slices.DeleteFunc(r.Coverage.AIReview.OptionalTasks, func(t AIReviewTask) bool { return isLeadsTask(t.Key) })
+	// An investigation offered leads is on schema 0.9 (with no lead, its
+	// content is that of 0.7); an earlier builder wrote it on 0.7.
+	leadsKey, cited := (LeadsReviewDecoder{}).Key().String(), (CitedReviewDecoder{}).Key().String()
+	for i := range r.Artifacts {
+		if a := &r.Artifacts[i]; a.Decoder != nil && *a.Decoder == leadsKey {
+			a.Decoder = &cited
+		}
+	}
 	if cr := r.CodeReview; cr != nil {
 		cr.LeadFollowups = nil
 		cr.Roles = slices.DeleteFunc(cr.Roles, func(t AIReviewTask) bool { return isLeadsTask(t.Key) })
