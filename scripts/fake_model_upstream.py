@@ -82,6 +82,8 @@ leads the way the lead contract asks a model to: any call on a sent code line,
 qualified or not (`Name(`, `pkg.Name(`, `recv.Name(`), whose name no sent
 excerpt declares, leaving out the builtins, keywords and standard namespaces of
 Go, Java, Python, JS/TS, C/C++ and Rust in a small fixed list (`NOT_PROJECT`),
+constructor calls (`new Name(`), comment lines and calls inside string
+literals (quoted, or backtick and triple-quoted strings across lines),
 up to `lead_limit`, each a `definition` lead of the first candidate. In both
 modes the follow-up (role `leads`) refines that candidate from its first lead
 and adds one candidate from each other lead (basis the lead). A refinement
@@ -175,8 +177,10 @@ DECLARATION = re.compile(r"\bfunc (?:\([^)]*\) )?([A-Za-z_][A-Za-z0-9_]*)\(")
 # hold (Go, Python, Rust and JS functions by keyword; a Java, C/C++ or JS/TS
 # method or function head is a line ending in "{" whose first call-like name
 # is not a keyword, with or without a type before it; a class, struct,
-# interface, enum, trait or type by keyword), comment lines, and the names
-# no project holds.
+# interface, enum, trait or type by keyword), comment lines, string
+# literals (quoted on one line, or Go/JS backtick and Python triple-quoted
+# strings across lines, as SQL in a Go raw string), and the names no
+# project holds.
 ANY_CALL = re.compile(r"(?:\b([A-Za-z_][A-Za-z0-9_]*)\s*(?:\.|->|::)\s*)?\b([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 KEYWORD_DECLARATION = re.compile(r"\b(?:func(?:\s*\([^)]*\))?|def|fn|function)\s+([A-Za-z_][A-Za-z0-9_]*)")
 HEAD_DECLARATION = re.compile(r"^\s*(?:[A-Za-z_][\w<>\[\],:*&.?]*\s+)+[*&]*([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)[^;]*\{\s*$")
@@ -185,6 +189,8 @@ HEAD_DECLARATION = re.compile(r"^\s*(?:[A-Za-z_][\w<>\[\],:*&.?]*\s+)+[*&]*([A-Z
 METHOD_HEAD = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^;()]*\)\s*(?::\s*[^;{}()]*)?\{\s*$")
 TYPE_DECLARATION = re.compile(r"\b(?:class|struct|interface|enum|trait|type|union)\s+([A-Za-z_][A-Za-z0-9_]*)")
 COMMENT = re.compile(r"^\s*(?://|#|/\*|\*|--)")
+QUOTED = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
+FENCE = re.compile(r'"""|\'\'\'|`')
 # A line opening with one of these is a statement, not a declaration head.
 CONTROL = frozenset(("if", "for", "while", "switch", "catch", "return", "else", "do", "try", "case", "defer", "go", "await", "yield",
                      "throw", "new", "synchronized", "elif", "with", "assert", "match", "loop", "foreach", "using", "lock"))
@@ -193,6 +199,7 @@ NOT_PROJECT = frozenset((
     "if", "for", "while", "switch", "catch", "return", "sizeof", "typeof", "alignof", "decltype", "new", "delete", "throw", "match",
     "await", "yield", "super", "this", "self", "assert", "elif", "not", "and", "or", "in", "lambda", "with", "func", "function", "def", "fn",
     "defer", "go", "select", "case", "else", "do", "try", "synchronized", "import", "require", "loop", "where", "impl",
+    "const", "var", "type", "void", "static_assert", "noexcept", "alignas", "typeid", "operator", "__attribute__",
     # Go builtins and conversions
     "append", "cap", "clear", "close", "complex", "copy", "imag", "len", "make", "max", "min", "panic", "print", "println", "real",
     "recover", "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "uintptr", "float32", "float64",
@@ -246,6 +253,33 @@ def _leads(review_input, limit: int) -> list[dict]:
     return out
 
 
+def _code_lines(text: str):
+    """(line number, code) for the numbered lines of an excerpt, comment
+    lines left out and string literals blanked: quoted strings on a line,
+    and backtick and triple-quoted strings that span lines."""
+    fence = None
+    for line in text.split("\n"):
+        numbered = NUMBERED.match(line)
+        if not numbered:
+            continue
+        body, code = numbered.group(2), ""
+        if not fence and COMMENT.match(body):
+            continue
+        while body:
+            if fence:
+                end = body.find(fence)
+                if end < 0:
+                    break
+                body, fence, code = body[end + len(fence):], None, code + '""'
+                continue
+            m = FENCE.search(body)
+            if not m:
+                code += body
+                break
+            code, fence, body = code + body[:m.start()], m.group(0), body[m.end():]
+        yield numbered.group(1), QUOTED.sub('""', code)
+
+
 def _project_leads(review_input, limit: int) -> list[dict]:
     """Leads of --leads=project, all for the first candidate: one per call
     on a sent code line, qualified or not, whose name no sent excerpt
@@ -268,18 +302,14 @@ def _project_leads(review_input, limit: int) -> list[dict]:
     dirs = {d for e in excerpts if isinstance(e.get("path"), str) for d in e["path"].split("/")[:-1]}
     calls = []
     for e in excerpts:
-        for line in e["text"].split("\n"):
-            numbered = NUMBERED.match(line)
-            if not numbered or COMMENT.match(numbered.group(2)):
-                continue
-            body = numbered.group(2)
+        for number, body in _code_lines(e["text"]):
             for m in ANY_CALL.finditer(body):
                 qualifier, name = m.group(1) or "", m.group(2)
                 # A constructor call, new Name(), names a type, not a function.
                 if name in declared or name in NOT_PROJECT or qualifier in STANDARD_NAMESPACES or re.search(r"\bnew\s+$", body[:m.start()]):
                     continue
                 rank = 1 if not qualifier else 0 if qualifier in dirs else 2
-                calls.append((rank, name, f"{e['id']}:{numbered.group(1)}-{numbered.group(1)}"))
+                calls.append((rank, name, f"{e['id']}:{number}-{number}"))
     out: list[dict] = []
     for _, name, ref in sorted(calls, key=lambda c: c[0]):
         if len(out) == limit:

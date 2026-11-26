@@ -179,6 +179,23 @@ class LeadsTest(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual([x["symbol"] for x in f.result_for("investigate", request, leads="project")["leads"]], want)
 
+    def test_project_mode_reads_no_call_in_a_string(self):
+        lines = {
+            # SQL in a Go raw string across lines and a Go const block
+            "a/q.go": ["const (", "\tlimit = 3", ")", "var q = `SELECT clock_timestamp()", "WHERE EXISTS (SELECT 1)`",
+                       "rows := db.Query(q, fmt.Sprintf(\"%d\", count(n)))"],
+            # a call in a quoted string, a JS template literal and a Python docstring
+            "a/s.ts": ["log(\"retry(later)\")", "const t = `wait(${n})`", "return compute(t)"],
+            "a/d.py": ['"""Runs report(x) on', 'every row."""', "return compute('x(y)')"],
+        }
+        want = {"a/q.go": ["count", "Query"], "a/s.ts": ["log", "compute"], "a/d.py": ["compute"]}
+        for path, body in lines.items():
+            text = "\n".join(f"{i + 1}| {line}" for i, line in enumerate(body))
+            request = {"scope": {"snapshot_manifest_digest": "0" * 64, "lead_limit": 3, "excerpts": [
+                {"id": "ev_" + "a" * 24, "path": path, "start_line": 1, "end_line": len(body), "kind": "code", "text": text}]}}
+            with self.subTest(path=path):
+                self.assertEqual([x["symbol"] for x in f.result_for("investigate", request, leads="project")["leads"]], want[path])
+
 
 if __name__ == "__main__":
     unittest.main()
