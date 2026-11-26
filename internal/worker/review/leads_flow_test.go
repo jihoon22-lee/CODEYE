@@ -77,7 +77,10 @@ func chainCandidate(cite string) map[string]any {
 // call and, when offered, names its definition as a lead of candidate 1;
 // leads answers the follow-up (nil: the follow-up refines candidate 1
 // with a resolved line). The first reply of every request of a role in
-// repaired is invalid, so each of those requests needs its format repair.
+// repaired is not JSON, so each of those requests needs a second call. A
+// role in retried takes all three calls of a request: its first reply lacks
+// the role's list (a format repair), the repair's reply is not JSON (a
+// retry), and the retry is answered.
 // requests keeps every follow-up request.
 type leadsScript struct {
 	mu       sync.Mutex
@@ -85,6 +88,7 @@ type leadsScript struct {
 	asked    bool
 	leads    func(n int, q opencode.Request) opencode.Reply
 	repaired []string
+	retried  []string
 }
 
 func (l *leadsScript) script(t *testing.T) map[string]func(int, opencode.Request) opencode.Reply {
@@ -127,6 +131,18 @@ func (l *leadsScript) script(t *testing.T) map[string]func(int, opencode.Request
 		answer := s[role]
 		s[role] = func(n int, q opencode.Request) opencode.Reply {
 			if !strings.Contains(string(q.Input), `"repair"`) {
+				return opencode.Reply{Reason: "model_output_invalid"}
+			}
+			return answer(n, q)
+		}
+	}
+	for _, role := range l.retried {
+		answer := s[role]
+		s[role] = func(n int, q opencode.Request) opencode.Reply {
+			switch in := string(q.Input); {
+			case !strings.Contains(in, `"repair"`):
+				return asJSON(map[string]any{})
+			case !strings.Contains(in, "output_not_json"):
 				return opencode.Reply{Reason: "model_output_invalid"}
 			}
 			return answer(n, q)
@@ -290,15 +306,18 @@ func TestLeadFollowupWithoutLeadsChangesNothing(t *testing.T) {
 
 // A follow-up is admitted only while the ceiling keeps, after both of its
 // calls, every later task's call cap: with every verify, or every
-// investigation, answered first with invalid output (each needs its
-// repair), every other task ends as it does without leads at every
-// ceiling.
+// investigation, needing a second call (a reply that is not JSON) or all
+// three (a format repair, then a retry), every other task ends as it does
+// without leads at every ceiling.
 func TestLeadFollowupLeavesTheLaterRepairs(t *testing.T) {
-	for _, roles := range [][]string{{"verify"}, {"investigate"}, {"investigate", "verify"}} {
+	for _, c := range []struct{ repaired, retried []string }{
+		{repaired: []string{"verify"}}, {repaired: []string{"investigate"}}, {repaired: []string{"investigate", "verify"}},
+		{retried: []string{"verify"}}, {retried: []string{"investigate"}}, {retried: []string{"investigate", "verify"}},
+	} {
 		for ceiling := 15; ceiling <= 30; ceiling++ {
-			t.Run(fmt.Sprint(roles, ceiling), func(t *testing.T) {
-				_, plan, base := chainRun(t, &leadsScript{repaired: roles}, 12, ceiling)
-				l := &leadsScript{asked: true, repaired: roles}
+			t.Run(fmt.Sprint(c, ceiling), func(t *testing.T) {
+				_, plan, base := chainRun(t, &leadsScript{repaired: c.repaired, retried: c.retried}, 12, ceiling)
+				l := &leadsScript{asked: true, repaired: c.repaired, retried: c.retried}
 				_, _, asked := chainRun(t, l, 12, ceiling)
 				sameOtherTasks(t, plan, base, asked)
 				if codeReviewStage(plan, base) != codeReviewStage(plan, asked) {
@@ -312,17 +331,19 @@ func TestLeadFollowupLeavesTheLaterRepairs(t *testing.T) {
 // The overview's follow-up counts the slots the scope will give lines (the
 // same computation as review.scope) and runs at the default ceiling; its
 // verify checks the refined candidates. At every ceiling, also when every
-// verify or investigation needs its repair, the other tasks end as they do
-// without leads: the follow-up never takes a slot's call.
+// verify or investigation needs a second call or all three, the other tasks
+// end as they do without leads: the follow-up never takes a slot's call.
 func TestOverviewLeadFollowupKeepsTheSlots(t *testing.T) {
 	for _, c := range []struct {
-		ceiling  int
-		repaired []string
-	}{{0, nil}, {20, nil}, {record.WholeRunMaxCalls, nil}, {0, []string{"verify"}}, {20, []string{"verify"}}, {20, []string{"investigate"}}, {30, []string{"investigate", "verify"}}} {
+		ceiling           int
+		repaired, retried []string
+	}{{0, nil, nil}, {20, nil, nil}, {record.WholeRunMaxCalls, nil, nil}, {0, []string{"verify"}, nil}, {20, []string{"verify"}, nil},
+		{20, []string{"investigate"}, nil}, {30, []string{"investigate", "verify"}, nil},
+		{0, nil, []string{"verify"}}, {20, nil, []string{"verify"}}, {25, nil, []string{"investigate"}}, {40, nil, []string{"investigate", "verify"}}} {
 		ceiling := c.ceiling
 		t.Run(fmt.Sprint(c), func(t *testing.T) {
-			_, plan, base := treeRun(t, &leadsScript{repaired: c.repaired}, bodyChainTree(8), ceiling)
-			l := &leadsScript{asked: true, repaired: c.repaired}
+			_, plan, base := treeRun(t, &leadsScript{repaired: c.repaired, retried: c.retried}, bodyChainTree(8), ceiling)
+			l := &leadsScript{asked: true, repaired: c.repaired, retried: c.retried}
 			j, _, asked := treeRun(t, l, bodyChainTree(8), ceiling)
 			sameOtherTasks(t, plan, base, asked)
 			slices := 0
@@ -332,7 +353,7 @@ func TestOverviewLeadFollowupKeepsTheSlots(t *testing.T) {
 				}
 			}
 			r := asked[record.TaskLeads]
-			if ceiling != 0 || c.repaired != nil {
+			if ceiling != 0 || c.repaired != nil || c.retried != nil {
 				if r.Status == domain.TaskSucceeded {
 					t.Logf("ceiling %d: overview follow-up admitted with %d slices", ceiling, slices)
 				}
