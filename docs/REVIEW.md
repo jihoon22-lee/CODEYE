@@ -24,7 +24,7 @@
 
 | `pack.yaml` id·version | 기록 schema | 역할 |
 |---|---|---|
-| `review` 2.11.0 | `0.7`(줄 번호 인용, 모든 역할과 slice), 도구 진단 분류 `0.8`, 단서를 남긴 조사와 [단서 후속 조사](#단서-후속-조사) `0.9`. 이전 워커의 `0.2`, slice `0.3`, 계약 후속 검토 `0.4`, HTTP 경로를 고른 문서 `0.5`, 함께 읽은 HTTP 근거 `0.6`도 읽는다 | environment, documents, investigate, interpret, leads, triage, verify, contract |
+| `review` 2.11.0 | `0.7`(줄 번호 인용, 모든 역할과 slice), 도구 진단 분류 `0.8`, 단서를 받은 조사와 [단서 후속 조사](#단서-후속-조사) `0.9`. 이전 워커의 `0.2`, slice `0.3`, 계약 후속 검토 `0.4`, HTTP 경로를 고른 문서 `0.5`, 함께 읽은 HTTP 근거 `0.6`도 읽는다 | environment, documents, investigate, interpret, leads, triage, verify, contract |
 
 - 지침 개정은 이 지침 하나에 한다. 개정의 검증 절차는 [평가](EVALUATION.md)에 있다.
 - 보고서는 Go가 만들므로 종합·보고 역할에 모델을 호출하지 않는다.
@@ -57,8 +57,8 @@
 | `review.documents` | `documents` | 계획 시 범위 안에 안내 문서가 있을 때만 | 문서 없음 `no_documents`(필수 아님), 선택된 문서 없음 `documents_not_selected`, `dependency_failed` | 선택 문서 발췌 | 적용 경로가 있는 계약·충돌·질문, 지침성 문구 메모, 근거가 있는 문서 품질 판단 |
 | `review.investigate` | `code_review` | 예 | — | 수락된 문서·환경 결과, 모듈별 코드·테스트의 [검토 단위](#검토-단위). 원시 도구 진단은 넣지 않는다(REQ-009) | 후보 `investigate_N`(0개부터 보낸 코드 양과 출력 한도가 정한 상한까지, 최대 12개), 구현 근거가 있는 강점, 전체 조사에서 문서 계약과 코드의 대조 |
 | `review.interpret` | `code_review` | 아니오 | 해석할 도구 관찰이 없으면 `no_tool_observations` | 관찰 ID·규칙·위치와 주변 줄 창 | 관찰에 연결한 가설 `interpret_N`(최대 2) 또는 해석 한계 |
-| `review.leads` | `code_review` | 아니오 | 조사가 단서를 남기지 않았으면 `no_leads`, 남긴 단서를 하나도 찾지 못했으면 `no_leads_resolved`, 조사가 수락되지 않았으면 `dependency_failed`, 호출 상한이면 `review_budget_exhausted` | 수락된 조사가 남긴 단서 중 플랫폼이 찾은 것, 그 단서가 가리키는 후보, 단서와 후보가 인용한 줄, 찾은 발췌 | 후보의 고침·거둠과 후보 없는 단서의 새 후보. 나머지 후보는 그대로 남는다 |
-| `review.verify` | `code_review` | 예 | investigate·interpret가 모두 수락되지 않으면 `dependency_failed`. 후보가 없으면 호출 없이 성공(`no_candidates_to_verify`). 조사 후보가 모두 배포 코드가 아닌 경로만 인용했으면 보낼 후보가 없어 호출 없이 성공([검토 대상은 배포 코드다](#검토-대상은-배포-코드다)) | 수락된 두 역할의 후보(단서 후속 조사가 수락됐으면 그 최종 후보), 문서 계약, 관찰, 발췌와 호출자·테스트 확장 | 후보별 판정 |
+| `review.leads` | `code_review` | 아니오 | 조사 요청이 단서를 받지 않았으면 `leads_not_offered`, 받았지만 조사가 남기지 않았으면 `no_leads`, 남긴 단서를 하나도 찾지 못했으면 `no_leads_resolved`, 호출 상한이 뒤 작업의 최대 호출을 남기지 못하면 `leads_not_admitted`, 조사가 수락되지 않았으면 `dependency_failed` | 수락된 조사가 남긴 단서 중 플랫폼이 찾은 것, 그 단서가 가리키는 후보, 단서와 후보가 인용한 줄, 찾은 발췌 | 후보의 고침·반박과 단서마다 새 후보 하나까지. 나머지 후보는 그대로 남는다 |
+| `review.verify` | `code_review` | 예 | investigate·interpret가 모두 수락되지 않으면 `dependency_failed`. 후보가 없으면 호출 없이 성공(`no_candidates_to_verify`). 조사 후보가 모두 배포 코드가 아닌 경로만 인용했으면 보낼 후보가 없어 호출 없이 성공([검토 대상은 배포 코드다](#검토-대상은-배포-코드다)) | 수락된 두 역할의 후보(단서 후속 조사가 수락됐으면 그 최종 후보와 반박의 반대 근거), 문서 계약, 관찰, 발췌와 호출자·테스트 확장 | 후보별 판정 |
 | `review.contract` | `code_review` | 아니오 | 유효한 선택과 새 구현 줄이 없으면 `no_review_scope`, 선행 기록이 없거나 맞지 않으면 `dependency_failed`, 호출 상한이면 `review_budget_exhausted` | 수락된 문서와 앞선 미확인 판정, 다시 읽은 범위 안의 발췌 | 같은 계약에 대한 대조 한 건 |
 
 역할 지침과 허용 입력은 다음과 같다.
@@ -70,7 +70,7 @@
 | [독립 코드 분석](../prompts/review/investigate.md) | 모듈 계약, 환경 한계, 코드·테스트 발췌 | 원인·발생 조건·영향·반증 가능성을 가진 후보 또는 빈 목록 |
 | [정적 진단 해석](../prompts/review/interpret-diagnostics.md) | 어댑터가 발급한 관찰 ID, 버전·범위·파싱 상태와 관련 발췌 | 원시 관찰에 연결한 영향 가설 또는 해석 한계 |
 | [도구 진단 분류](../prompts/review/triage.md) | 분석기·규칙·위치·원시 메시지·보고서가 주는 기본 심각도와 경로의 종류를 가진 진단 묶음과 그 선언 단위 | 묶음(또는 그 일부)마다 실제 문제·무해·판단 불가와 그 근거 줄. 판단 불가는 입력에 없는 것을 이름으로 적는다 |
-| [단서 후속 조사](../prompts/review/leads.md) | 찾은 단서(필요한 것·시작한 줄·식별자·의심·찾은 발췌 ID), 단서가 가리키는 후보, 인용한 줄과 찾은 발췌 | 찾은 코드로 고친 후보, 찾은 줄로 조건이 일어날 수 없음을 보인 후보의 거둠, 후보 없는 단서의 새 후보 |
+| [단서 후속 조사](../prompts/review/leads.md) | 찾은 단서(필요한 것·시작한 줄·식별자·의심·가리키는 후보·찾은 발췌 ID·부분 발췌 ID), 단서가 가리키는 후보, 인용한 줄과 찾은 발췌 | 찾은 코드로 고친 후보, 찾은 줄로 조건이 일어날 수 없음을 보인 후보의 반박(검증이 판단), 찾은 코드가 보인 다른 문제의 새 후보 |
 | [후보 검증](../prompts/review/verify.md) | 이전 후보 원문과 ID, 호출부·테스트·반대 근거 | 지지·기각·판단 보류의 이유, 유효·무효 조건, 추가 확인 사항 |
 | [문서 계약 후속 검토](../prompts/review/contract.md) | 문서 약속과 원래 판단, 새 구현과 관련 호출자·테스트 발췌 | 적용 범위와 문서 근거가 같은 대조 또는 미확인 |
 
@@ -94,8 +94,11 @@
 | `no_environment_gap` | 모든 선언이 관측과 일치해 환경 해석 생략 | 아니오 |
 | `secret_screen_failed` | 이전 worker만 쓴 사유: 비밀값 분석이 실행됐지만 결과를 쓸 수 없어 검토를 건너뜀. 지금은 미선별로 검토한다(아래 비밀값 선별) | 아니오 |
 | `no_review_scope` | slice의 파일을 overview가 이미 보냈거나 모두 보류·읽기 불가([모듈 단위 검토 분할](#모듈-단위-검토-분할)) | 아니오 |
-| `no_leads` | 조사가 단서를 남기지 않아 [단서 후속 조사](#단서-후속-조사) 생략 | 아니오 |
+| `leads_not_offered` | 조사 요청이 범위를 모두 담아 단서를 받지 않았으므로 [단서 후속 조사](#단서-후속-조사) 생략 | 아니오 |
+| `no_leads` | 조사 요청이 단서를 받았지만 조사가 남기지 않아 단서 후속 조사 생략 | 아니오 |
 | `no_leads_resolved` | 조사가 남긴 단서를 스냅샷에서 하나도 찾지 못해 단서 후속 조사 생략. 찾지 못한 이유는 단서마다 기록과 보고서의 수에 남는다 | 아니오 |
+| `leads_not_admitted` | 남은 호출 상한이 뒤 작업 전부의 최대 호출을 남기지 못해 단서 후속 조사 생략. 다른 작업은 호출을 잃지 않는다 | 아니오 |
+| `leads_slot_not_run` | 후속 조사가 이을 slot 조사가 호출 상한으로 실행되지 않아 단서 후속 조사 생략. slot 조사 자신은 `review_budget_exhausted`다 | 아니오 |
 
 필수 여부는 계획 시 정한다. 문서가 없어 생략한 문서 역할을 모델 검토 성공으로 세지 않는다. 필수 모델 작업이 실패했으면 도구 결과가 남아도 검토 전체를 완료로 올리지 않는다. 진행 단계 판정에서 이 생략을 어떻게 셈하는지는 [구조](ARCHITECTURE.md)에 있다.
 
@@ -363,9 +366,11 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 
 ### 단서 형식
 
-- 조사 요청에 `scope.lead_limit`(3)이 있을 때만 단서를 받는다. 요청을 다 맞춘 뒤 자리가 남을 때만 붙이므로 발췌·문서·메모를 밀어내지 않는다. 요청이 범위를 모두 담았으면 단서를 묻지 않는다. 요청에 붙는 계약 문장도 그때만 붙는다.
-- 단서 하나는 `need`(`definition`: 인용한 줄에서 부르는 식별자의 정의, `callers`: 인용한 줄에 선언된 함수를 부르는 곳), `evidence_id`(보낸 코드의 줄 범위 인용), `symbol`(식별자 하나), `suspicion`(서술 필드 한도), `candidate`(가리키는 후보의 1부터 센 위치, 없으면 0)다. 조사 지침에는 단서가 판정이 아니며 보낸 코드로 판단할 수 있으면 후보로 쓴다는 한 문장이 있다.
-- 단서는 강점처럼 선택 항목이다. 형식이 틀리거나 개수를 넘으면 그 단서만 빼고(`review_lead_omitted`) 형식 복구에서 다시 묻지 않는다. 조사의 후보와 수락에는 영향이 없다.
+- 조사 요청에 `scope.lead_limit`(3)이 있을 때만 단서를 받는다. 요청을 다 맞춘 뒤 자리가 남을 때만 붙이므로 발췌·문서·메모를 밀어내지 않는다. 요청이 범위를 모두 담았으면 단서를 묻지 않는다.
+- 단서의 계약 문장은 단서를 받는 요청의 역할 계약 끝에만 붙는다. 단서가 판정이 아니며 보낸 코드로 판단할 수 있으면 후보로 쓴다는 문장, 찾을 수 있는 식별자와 찾을 수 없는 식별자를 말하는 문장도 그 안에 있다. 조사 지침(`investigate.md`)에는 단서 문장이 없으므로 단서를 받지 않는 요청의 지시문은 단서가 생기기 전과 같다(`TestGoReviewInputsUnchanged`). 팩 digest는 `pack.yaml`(버전, 역할 목록)을 함께 덮으므로 바뀐다.
+- 단서 하나는 `need`(`definition`: 인용한 줄에서 부르는 함수의 정의, `callers`: 인용한 줄에 선언된 함수를 부르는 곳), `evidence_id`(보낸 코드의 줄 범위 인용), `symbol`(식별자 하나), `suspicion`(서술 필드 한도), `candidate`(가리키는 후보의 1부터 센 위치, 필수)다. 단서는 늘 조사의 후보 하나가 기대는 확인하지 못한 전제를 따른다. 가리키는 후보가 없거나 남지 않은 단서는 뺀다.
+- 찾을 수 있는 식별자는 프로젝트의 함수, 소스가 수신 타입을 정한 프로젝트 타입의 메서드, 프로젝트 package로 가는 package 한정 호출이다. 표준 라이브러리, 외부 모듈, 인터페이스나 타입을 정할 수 없는 값을 통한 호출은 찾지 못한다. 계약 문장이 이 범위를 그대로 말한다.
+- 단서는 강점처럼 선택 항목이다. 형식이 틀리거나, 후보를 가리키지 않거나, 개수를 넘으면 그 단서만 빼고(`review_lead_omitted`) 형식 복구에서 다시 묻지 않는다. 조사의 후보와 수락에는 영향이 없다.
 
 ### 단서 해석
 
@@ -373,50 +378,58 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 
 | 언어 | `definition` | `callers` |
 |---|---|---|
-| Go | 패키지 한정 호출의 import 연결([파일 사이의 호출 근거](#파일-사이의-호출-근거)), 그다음 같은 package의 함수·메서드 선언 | 같은 package의 호출자 확장, 그다음 다른 파일의 연결된 호출 |
-| Java, C·C++(헤더), Rust(모듈), Python·JavaScript·TypeScript(import) | 같은 호출 연결 | 같은 언어 파일의 연결된 호출 |
+| Go | 인용한 줄의 호출 중 이름이 식별자인 것. package 한정 호출은 import 연결([파일 사이의 호출 근거](#파일-사이의-호출-근거))로 가져온 프로젝트 package에만 묶는다. 그 밖의 호출은 조사 파일 package의 소스만으로 하는 타입 검사(importer 없음, 호출자 확장과 같은 방식)로 package 함수와, 수신 값의 타입이 그 package가 선언한 구체 타입으로 정해진 메서드에 묶는다 | 같은 package의 호출자 확장, 그다음 다른 파일의 연결된 호출 |
+| Java, C·C++(헤더), Rust(모듈), Python·JavaScript·TypeScript(import) | 인용한 줄의 연결된 호출 중 호출 이름이나 import가 묶은 원래 이름이 식별자인 것 | 같은 언어 파일의 연결된 호출 |
 | 그 밖의 언어 | `lead_language_unsupported` | `lead_language_unsupported` |
 
-- run이 모델에 보낼 수 있는 파일만 읽는다. 실행 범위 안, PR이면 변경 파일 안, 비밀값 선별이 보류하지 않은 파일, 생성 파일·부차 경로가 아닌 파일이고 blob마다 manifest의 크기·SHA-256과 대조한다. 보류 파일은 열지 않는다.
-- 단서마다 읽기 한도는 파일 80개·8 MiB다(호출자 확장과 같은 값). 찾은 위치마다 창 하나이고, 창은 60줄·2,400바이트 이하, 단서 하나의 위치는 세 개까지다. 호출부는 호출 줄과 앞뒤 세 줄이다. Go 정의는 선언 전체가 한 창에 들어가고 조사 요청이 그 선언의 줄을 하나도 보내지 않았으면 선언 전체를, 아니면 호출 연결이 고른 끝 반환 줄(앞 세 줄까지)을 보낸다.
+- 식별자는 호출 대상 자신이어야 한다. 인용한 줄에 그 이름의 호출이 없으면(필드 대입, 인자, 같은 줄의 다른 토큰) `lead_symbol_not_at_anchor`다. 표준 라이브러리·외부 모듈로 가는 package 한정 호출은 같은 이름의 지역 함수가 있어도 그 함수에 묶지 않는다. 인터페이스 메서드, 함수 값, 타입 검사가 타입을 정하지 못한 값(외부 함수가 돌려준 값 등)의 메서드는 이름이 같은 다른 수신 타입의 메서드에 묶지 않고 `lead_definition_not_found`로 남긴다. 빌드 조건이 다른 파일에 같은 함수·메서드가 둘 이상 있으면 `lead_ambiguous`다.
+- run이 모델에 보낼 수 있는 파일만 읽는다. 실행 범위 안, PR이면 변경 파일 안, 비밀값 선별이 보류하지 않은 파일, 생성 파일·부차 경로가 아닌 파일이고 blob마다 manifest의 크기·SHA-256과 대조한다. 보류 파일은 열지 않는다. 생성 파일 머리말이 있는 파일은 읽은 뒤 원문을 쓰지 않는다(`lead_generated_file`).
+- 단서마다 읽기 한도는 파일 80개·8 MiB 하나다. Go 호출자 확장도 그 단서의 같은 스캔으로 읽으므로 한도를 따로 갖지 않는다. 찾은 위치마다 창 하나이고, 창은 60줄·2,400바이트 이하, 단서 하나의 위치는 세 개까지다. 호출부는 호출 줄과 앞뒤 세 줄이다.
+- 정의는 선언 전체가 한 창에 들어가고 조사 요청이 그 선언의 줄을 하나도 보내지 않았으면 선언 전체를 보낸다. 아니면 호출 연결이 고른 부분 창(Go의 끝 반환 줄, Python·JavaScript의 선언부터 첫 반환까지, 한 창을 넘는 선언의 앞부분)을 보내고 부분 발췌로 표시한다(단서 목표의 `partial`, 요청과 후속 조사 기록의 `partial_evidence_ids`). 부분 발췌만으로는 후보를 반박할 수 없다.
 - 후속 조사 하나가 보내는 찾은 발췌는 [요청 크기](#요청-크기)의 verify 확장 한도 안에서 단서 셋 × 위치 셋까지다. 최소 예산은 6개·8,000바이트, 기본·최대 예산은 9개·21,600바이트다. 한도가 차면 그 단서는 `lead_over_cap`이다.
 - 찾은 위치가 조사 요청에 있던 발췌 안이면 그 발췌 ID를 적고 다시 보내지 않는다(`lead_already_in_request`). 맞는 선언이 둘 이상이면 고르지 않는다(`lead_ambiguous`). 찾지 못한 단서는 이유 코드를 남기고 짐작하지 않는다.
-- 찾지 못한 이유는 `lead_symbol_not_at_anchor`(인용한 줄에 그 식별자의 호출·선언이 없음), `lead_definition_not_found`, `lead_callers_not_found`, `lead_ambiguous`, `lead_already_in_request`, `lead_outside_scope`, `lead_outside_change`, `lead_secret_withheld`, `lead_generated_file`, `lead_secondary_path`, `lead_scan_limit`, `lead_over_cap`, `lead_language_unsupported`, `lead_read_failed`다. 읽지 못한 파일이 이유가 되는 것은 그 단서가 가리킬 수 있는 파일일 때뿐이다. 한정 호출이면 한정자와 이름이 같은 파일·디렉터리이거나 한정자와 그 파일을 함께 적은 import 줄이 가리키는 파일, 한정 없는 호출이면 같은 디렉터리의 파일이거나 그 식별자를 적은 import 줄이 가리키는 파일이다. 같은 파일의 다른 호출이 부르는 보류 파일은 이유가 되지 않는다. import 별칭으로 연결된 호출은 같은 줄에 연결된 이름 자신의 호출이 없을 때만 단서의 식별자와 맞춘다.
+- 찾지 못한 이유는 `lead_symbol_not_at_anchor`(인용한 줄에 그 식별자의 호출·선언이 없음), `lead_definition_not_found`, `lead_callers_not_found`, `lead_ambiguous`, `lead_already_in_request`, `lead_outside_scope`, `lead_outside_change`, `lead_secret_withheld`, `lead_generated_file`, `lead_secondary_path`, `lead_scan_limit`, `lead_over_cap`, `lead_language_unsupported`, `lead_read_failed`다. 읽지 못한 파일이 이유가 되는 것은 그 단서가 가리킬 수 있는 파일일 때뿐이다. 정의 단서에서는 한정 호출이면 한정자와 이름이 같은 파일·디렉터리이거나 한정자와 그 파일을 함께 적은 import 줄이 가리키는 파일, 한정 없는 호출이면 같은 디렉터리의 파일이거나 그 식별자를 적은 import 줄이 가리키는 파일이다. 호출부 단서에서는 호출부를 찾으려고 읽은 파일이다. 같은 파일의 다른 호출이 부르는 보류 파일은 이유가 되지 않는다.
 - 찾은 발췌의 근거 ID는 플랫폼이 (snapshot digest, 경로, blob SHA-256, 줄 범위)로 발급하고(`record.ExcerptID`), 요청을 만들 때 원문을 스냅샷에서 다시 읽어 확인한다. 노출 수(`llm_exposed_files`)에 든다.
 
 ### 후속 조사 계획과 호출 상한
 
 - 조사 task마다 후속 조사 task 하나를 늘 계획한다(전체 조사의 `review.leads`, slot마다 `review.leads.sNNN`). 키는 범위·계획에서만 정해지고 재시도는 같은 키를 다시 계획한다. 같은 조사의 verify가 후속 조사를 기다린다.
-- 호출 없이 끝나는 경우는 조사가 단서를 남기지 않았을 때 `no_leads`, 찾은 단서가 없을 때 `no_leads_resolved`(둘 다 `skipped_policy`이고 [보낼 것이 없던 역할](#검토-대상이-없는-역할)로 센다), 조사가 수락되지 않았을 때 `dependency_failed`, slot에 줄이 없을 때 `no_review_scope`, 상한에 막혔을 때 `budget_exhausted`(`review_budget_exhausted`)다.
-- 상한에서 후속 조사가 가장 먼저 빠진다. 자기 호출 뒤에도 계획 순서에서 뒤에 오는 일의 호출이 남을 때만 승인된다. 남겨 두는 호출은 자기 verify의 최대 3회, 전체 조사에 계약 probe가 있으면 `review.contract`의 2회, 줄이 계획된 뒤의 slot마다 입장 예비 2회, 분류 묶음마다 2회다.
-- 전체 조사의 후속 조사는 `review.scope`보다 먼저 실행된다. 그래서 줄이 계획될 slot을 `review.scope`와 같은 계산으로 미리 구한다. 입력은 같은 스냅샷, 수락된 조사 기록, 설정한 상한(남은 호출이 아님), 분석기 결과다. 후속 조사 기록은 입력이 아니므로 미리 구한 범위는 저장되는 범위와 `calls_before_slices`만 다르다(`TestOverviewScopeComputedEarlyIsTheScope`). 계산하지 못하면 계획된 slot마다 2회를 남긴다. 이 후속 조사는 또 전체 역할 상한 15회 안에서 verify의 3회를 남기므로 `calls_before_slices`와 상한의 최솟값은 바뀌지 않는다.
+- 호출 없이 끝나는 경우는 모두 `skipped_policy`다. 조사 요청이 단서를 받지 않았으면 `leads_not_offered`, 받았지만 조사가 단서를 남기지 않았으면 `no_leads`, 찾은 단서가 없으면 `no_leads_resolved`, 상한이 입장을 허락하지 않으면 `leads_not_admitted`, 상한이 slot 조사를 막았으면 `leads_slot_not_run`이다. 이 다섯은 실행이 필요로 하지 않았거나 감당할 수 없던 선택 읽기이므로 [보낼 것이 없던 역할](#검토-대상이-없는-역할)처럼 단계를 낮추지 않고 이유는 그대로 보인다(`domain.LeadsNotRun`). 조사가 수락되지 않았으면 `dependency_failed`, slot에 줄이 없으면 `no_review_scope`다. 조사 기록의 `lead_limit`가 단서를 받았는지 말한다.
+- 상한에서 후속 조사가 가장 먼저 빠진다. 자기 호출 두 번 뒤에도 계획 순서에서 뒤에 오는 기존 일 전부의 최악이 남을 때만 입장한다(`leadsCallLimit`). 남겨 두는 호출은 각 task의 호출 상한이다. 자기 verify 3회, 전체 조사에 계약 probe가 있으면 `review.contract` 2회, 줄이 계획된 뒤의 slot마다 조사 3회와 검증 3회, 분류 묶음마다 분류 3회와 검증 3회다. 그래서 뒤 작업이 형식 복구와 재시도를 모두 써도 후속 조사가 그 호출을 가져가지 않는다(`TestLeadFollowupLeavesTheLaterRepairs`).
+- 전체 조사의 후속 조사는 `review.scope`보다 먼저 실행된다. 그래서 줄이 계획될 slot을 `review.scope`와 같은 계산으로 미리 구한다. 입력은 같은 스냅샷, 수락된 조사 기록, 설정한 상한(남은 호출이 아님), 분석기 결과다. 후속 조사 기록은 입력이 아니므로 미리 구한 범위는 저장되는 범위와 `calls_before_slices`만 다르다(`TestOverviewScopeComputedEarlyIsTheScope`). 계산하지 못하면 계획된 slot마다 조사와 검증의 상한을 남긴다. 이 후속 조사는 또 전체 역할 상한 15회 안에서 verify의 3회를 남기므로 `calls_before_slices`와 상한의 최솟값은 바뀌지 않는다.
 - 후속 조사 task의 호출 상한은 2회다(요청 한 번과, 형식 복구 또는 JSON이 아닌 응답의 재시도 한 번).
 
 ### 후속 조사 요청과 출력
 
-- 요청은 메시지 하나다. 찾은 단서(ID, 필요한 것, 시작 줄, 식별자, 의심, 가리키는 후보 ID, 찾은 발췌 ID), 단서가 가리키는 후보, 발췌(단서가 인용한 줄, 후보가 인용한 줄, 찾은 발췌 순)를 담는다. 호출마다 새 세션이므로 원래 후보가 인용한 코드를 다시 보낸다. 요청이 예산을 넘으면 뒤쪽 단서부터 빼고 `review_input_trimmed`를 남기며, 단서 하나로도 넘으면 `review_input_too_large`로 실패한다.
-- 출력은 `{"results":[...]}`이고 기준(`basis`)마다 결과 하나다. 입력 후보에는 `refined`(고친 후보 전체)나 `withdrawn`(이유와, 찾은 발췌 안의 줄을 하나 이상 포함한 코드 근거 1~6개)을 쓰고, 고칠 것이 없으면 결과를 내지 않는다. 후보가 없는 단서는 `added` 후보 하나까지다. 고치거나 더한 후보는 조사 후보와 같은 검사를 받는다.
-- 출력 오류는 [출력 오류 분류](#출력-오류-분류)를 따른다(`lead_result_invalid`·`lead_result_duplicate`·`lead_withdrawal_evidence_not_new`). 복구 뒤에도 틀린 결과는 그 결과만 빼고 그 후보는 조사가 낸 그대로 남는다(`lead_result_omitted`).
-- 기록은 최종 후보 전부와 후보마다의 처리(`kept`·`refined`·`added`·`withdrawn`)를 담는다. 같은 조사의 verify는 수락된 후속 조사 기록의 최종 후보를 검증한다. 후속 조사가 호출되지 않았거나 실패하면 verify는 조사의 후보를 그대로 검증하므로 후보가 줄지 않는다. 실패의 이유는 그 task와 기록에 남는다.
+- 요청은 메시지 하나다. 찾은 단서(ID, 필요한 것, 시작 줄, 식별자, 의심, 가리키는 후보 ID, 찾은 발췌 ID, 그중 부분 발췌 ID), 단서가 가리키는 후보, 발췌(단서가 인용한 줄, 후보가 인용한 줄, 찾은 발췌 순)를 담는다. 호출마다 새 세션이므로 원래 후보가 인용한 코드를 다시 보낸다. 요청이 예산을 넘으면 뒤쪽 단서부터 빼고 `review_input_trimmed`를 남기며, 단서 하나로도 넘으면 `review_input_too_large`로 실패한다.
+- 출력은 `{"results":[...]}`이고 기준(`basis`)마다 결과 하나다. 입력 후보에는 `refined`(고친 후보 전체)나 `contested`(이유와 코드 근거 1~6개, 그중 하나 이상이 부분 발췌가 아닌 찾은 발췌 안의 줄)를 쓰고, 고칠 것이 없으면 결과를 내지 않는다. 단서(`basis`가 단서 ID)마다 찾은 코드가 보인 다른 문제의 `added` 후보 하나까지이고 찾은 발췌를 인용해야 한다. 고치거나 더한 후보는 조사 후보와 같은 검사를 받는다.
+- 반박한 후보는 빠지지 않는다. 그 후보는 그대로 같은 조사의 verify로 가고, 요청의 후보에 `contested`(이유와 인용한 줄)가 붙으며 인용한 줄과 그 줄을 담은 찾은 발췌도 함께 간다. 그런 후보가 있는 verify 요청에만 반대 근거를 다른 반박 근거처럼 저울질하라는 계약 문장이 붙는다. 판정은 verify가 하고, 반박이 맞으면 보고서는 다른 반박된 후보처럼 싣는다.
+- 출력 오류는 [출력 오류 분류](#출력-오류-분류)를 따른다(`lead_result_invalid`·`lead_result_duplicate`·`lead_contest_evidence_not_resolved`·`lead_addition_evidence_not_new`). 복구 뒤에도 틀린 결과는 그 결과만 빼고 그 후보는 조사가 낸 그대로 남는다(`lead_result_omitted`).
+- 기록은 최종 후보 전부와 후보마다의 처리(`kept`·`refined`·`contested`·`added`)를 담는다. 같은 조사의 verify는 수락된 후속 조사 기록의 최종 후보를 검증한다. 후속 조사가 호출되지 않았거나 실패하면 verify는 조사의 후보를 그대로 검증하므로 후보가 줄지 않는다. 실패의 이유는 그 task와 기록에 남는다.
+- 후속 조사 기록의 근거는 보낸 것뿐이다. 조사 기록의 근거를 바꾸지 않은 항목, 찾은 발췌, 보낸 발췌 안에서 좁힌 인용 범위만 둘 수 있고, 인용 범위는 보낸 발췌 안에 있어야 한다(`record.Decode`, `record.LeadFollowupMatches`).
 
 ### 단서 기록과 보고서
 
-- 단서를 남긴 조사 기록과 후속 조사 기록은 [schema 0.9](#schema-09단서와-후속-조사)다. 단서를 남기지 않은 조사 기록은 0.7 그대로다.
-- 보고서(생성기 26)의 `code_review.lead_followups`는 기록과 task 행에서만 센다. 남긴 단서, 찾은 단서, 찾지 못한 단서의 이유별 수, 계획·호출·수락한 후속 조사 task, 호출하지 않은 task의 이유별 수, 호출 수, 새로 보낸 발췌와 그 줄, 후보 처리별 수다([보고서](REPORT.md#단서-후속-조사)). `scripts/quality_eval.py`와 `quality_score.py`가 이 객체를 그대로 읽는다.
+- 단서를 받은 조사 기록(`lead_limit` 3, 남긴 단서가 없어도)과 후속 조사 기록은 [schema 0.9](#schema-09단서와-후속-조사)다. 단서를 받지 않은 조사 기록은 0.7 그대로다.
+- 보고서(생성기 26)의 `code_review.lead_followups`는 기록, task 행, 호출 기록에서만 센다. 남긴 단서, 찾은 단서, 찾지 못한 단서의 이유별 수, 계획한 후속 조사 task, 호출이 하나 이상 있는 task(`tasks_run`)와 수락한 task, 호출하지 않은 task의 이유별 수(호출 전에 실패한 task는 그 이유로), 호출 수, 새로 보낸 발췌와 그 줄(조사 요청에 없던 줄을 파일마다 한 번), 후보 처리별 수다([보고서](REPORT.md#단서-후속-조사)). `scripts/quality_eval.py`와 `quality_score.py`가 이 객체를 그대로 읽는다.
 - 회귀 파일럿 검사는 후속 조사 기록을 조사 줄의 반복 금지 규칙에서 빼고 그 새 줄을 따로 센다([회귀 집합 실행](EVALUATION.md#회귀-집합-실행)).
 
 ### 후속 조사 승인 측정
 
-scripted caller로 잰 승인이다(최소 요청 예산, 모든 조사가 다음 package의 함수를 가리키는 찾을 수 있는 단서 하나를 남김). 실제 모델이 남기는 단서의 수와 품질, 비용은 재지 않았다.
+scripted caller로 잰 승인이다(최소 요청 예산, Go package가 다음 package의 함수를 부르는 사슬, 모든 조사가 다음 package의 함수를 가리키는 단서 하나를 남김). 단서가 가리킨 함수가 이미 그 조사 요청에 있으면 찾지 않으므로 실행한 후속 조사는 slot 수보다 적다. 실제 모델이 남기는 단서의 수와 품질, 비용은 재지 않았다.
 
-| 구성 | 상한 | 들어간 slice(단서 없음 · 있음) | 실행한 후속 조사 | 상한에 막힌 후속 조사 | 더한 호출 |
-|---|---|---|---|---|---|
-| Go package 99개(줄이 계획된 slot 19개) | 99 | 19 · 19 | 19 | 0 | 19 |
-| 같음 | 20 | 9 · 9 | 0 | 10 | 0 |
-| Go package 400개(slot 79개) | 99 | 48 · 48 | 0 | 49 | 0 |
-| 같음 | 20 | 9 · 9 | 0 | 10 | 0 |
+| 구성 | 상한 | 줄이 계획된 slot | 들어간 slice(단서 없음 · 있음) | 실행한 후속 조사 | 상한에 막힌 후속 조사 | 더한 호출 |
+|---|---|---|---|---|---|---|
+| Go package 12개 | 99 | 5 | 5 · 5 | 1 | 0 | 1 |
+| 같음 | 20 | 5 | 5 · 5 | 0 | 1 | 0 |
+| Go package 24개 | 99 | 11 | 11 · 11 | 2 | 0 | 2 |
+| 같음 | 20 | 11 | 9 · 9 | 0 | 2 | 0 |
+| Go package 48개 | 99 | 23 | 23 · 23 | 0 | 5 | 0 |
+| Go package 99개 | 99 | 48 | 48 · 48 | 0 | 12 | 0 |
+| Go package 400개 | 99 | 96 | 48 · 48 | 0 | 37 | 0 |
+| 같음 | 20 | 96 | 9 · 9 | 0 | 7 | 0 |
 
-- 단서가 있어도 slice 승인과 호출 수는 단서가 없을 때와 같았다. 후속 조사는 상한이 줄이 계획된 slot을 모두 덮을 때만 실행됐다. 상한이 모자란 프로젝트에서는 전체 조사의 후속 조사도 막힌다.
+- 단서가 있어도 slice 승인, 다른 task의 상태와 단계 상태는 단서가 없을 때와 같았다. 상한이 뒤 작업 전부의 최악을 덮는 작은 프로젝트에서만 후속 조사가 실행된다. 기본 상한 99는 줄이 계획된 slot 11개까지 후속 조사를 실행했고 23개부터는 하나도 실행하지 않았다.
 - 단서 하나·34줄 선언 하나를 보낸 후속 조사의 요청은 최소·기본·최대 예산 모두 약 14,650바이트였고 대부분 지침이었다. 찾은 발췌는 위 한도를 넘지 않고, 요청 전체는 요청 바이트 이하다.
 
 ## 도구 진단 분류
@@ -707,9 +720,10 @@ scripted caller로 잰 승인이다(최소 요청 예산, 모든 조사가 다�
 | `contract_comparison_invalid` | 무결성 | 응답 거부. 복구 뒤에도 남으면 후속 검토 실패(앞선 대조 유지) |
 | `contract_evidence_not_new` | 무결성 | `contract_comparison_invalid`와 같다 |
 | `contract_partial_support_invalid` | 무결성 | `contract_comparison_invalid`와 같다 |
-| `lead_result_invalid` | 무결성 | 단서 후속 조사 결과의 `basis`가 보낸 후보·단서가 아니거나 그 대상에 맞지 않는 `disposition`이다(후보가 있는 단서의 `added` 등). 복구 요청에 그 결과를 다시 싣고, 복구 뒤에도 남으면 그 결과만 빼며 그 후보는 조사가 낸 그대로 남는다(`lead_result_omitted`) |
+| `lead_result_invalid` | 무결성 | 단서 후속 조사 결과의 `basis`가 보낸 후보·단서가 아니거나 그 대상에 맞지 않는 `disposition`이다(후보에 대한 `added`, 단서에 대한 `refined` 등). 복구 요청에 그 결과를 다시 싣고, 복구 뒤에도 남으면 그 결과만 빼며 그 후보는 조사가 낸 그대로 남는다(`lead_result_omitted`) |
 | `lead_result_duplicate` | 형식 | 같은 `basis`의 두 번째 결과를 버린다. 앞 결과는 그대로 받는다 |
-| `lead_withdrawal_evidence_not_new` | 무결성 | 거둔(`withdrawn`) 결과가 새로 보낸 발췌 안의 코드를 인용하지 않았다. `lead_result_invalid`와 같다 |
+| `lead_contest_evidence_not_resolved` | 무결성 | 반박(`contested`) 결과가 부분 발췌가 아닌 찾은 발췌 안의 코드를 인용하지 않았다. `lead_result_invalid`와 같다 |
+| `lead_addition_evidence_not_new` | 무결성 | 더한(`added`) 후보가 찾은 발췌 안의 코드를 인용하지 않았다. `lead_result_invalid`와 같다 |
 
 ## 후보 검증과 근거 규칙
 
@@ -888,9 +902,9 @@ scripted caller로 잰 승인이다(최소 요청 예산, 모든 조사가 다�
 
 ### schema 0.9(단서와 후속 조사)
 
-- 단서를 남긴 조사 기록(전체·slot)과 모든 [단서 후속 조사](#단서-후속-조사) 기록(stage `leads`)이 쓴다. 0.7에 조사 기록의 `leads`와 후속 조사 기록의 `lead_followup`을 더한 것이다.
-- `leads[]`는 모델의 `id`(`lead_N`), `need`, `symbol`, `evidence_id`(그 기록의 근거), `suspicion`, 선택 `candidate_id`와 플랫폼의 `resolution`(`resolved`·`unresolved`)을 가진다. 찾았으면 `targets`(최대 3개: `id`·`path`·`sha256`·`start_line`·`end_line`·`kind`·`origin`·선택 `symbol`), 못 찾았으면 `reason`이고 `lead_already_in_request`이면 그 발췌의 `in_request_evidence_ids`도 있다. 찾은 위치는 조사 기록의 근거가 아니다(그 요청이 보내지 않았다).
-- 후속 조사 기록(`review.leads`, `review.leads.sNNN`, slot이면 `slice`)의 `lead_followup`은 `leads`(보낸 단서 ID), `sent_evidence_ids`(요청이 보낸 발췌), `new_evidence_ids`(그중 찾은 발췌), `new_lines`(그 발췌의 서로 다른 줄 수), `dispositions`(최종 후보마다 `candidate_id`·`final_id`·`disposition`·`lead`, 거둠이면 `reason`·`evidence_ids`)다. 상류는 같은 조사 기록이고 slot이면 `review.scope`도 있다. 기록 검사(`record.LeadFollowupMatches`)가 조사 기록의 후보·단서와 처리를 대조한다. 거둔 후보는 최종 후보에 없고, 고친 후보와 더한 후보는 조사 후보와 같은 형식이다.
+- 단서를 받은 조사 기록(전체·slot)과 모든 [단서 후속 조사](#단서-후속-조사) 기록(stage `leads`)이 쓴다. 0.7에 조사 기록의 `lead_limit`·`leads`와 후속 조사 기록의 `lead_followup`을 더한 것이다. 계약 probe와 HTTP 근거 읽기는 0.7과 같이 실린다.
+- 조사 기록의 `lead_limit`(3)는 요청이 단서를 받았다는 뜻이고 남긴 단서가 없어도 있다. `leads[]`는 모델의 `id`(`lead_N`), `need`, `symbol`, `evidence_id`(그 기록의 근거), `suspicion`, `candidate_id`(필수)와 플랫폼의 `resolution`(`resolved`·`unresolved`)을 가진다. 찾았으면 `targets`(최대 3개: `id`·`path`·`sha256`·`start_line`·`end_line`·`kind`·`origin`·선택 `symbol`, 선언 전체가 아닌 정의 창이면 `partial`), 못 찾았으면 `reason`이고 `lead_already_in_request`이면 그 발췌의 `in_request_evidence_ids`도 있다. 찾은 위치는 조사 기록의 근거가 아니다(그 요청이 보내지 않았다).
+- 후속 조사 기록(`review.leads`, `review.leads.sNNN`, slot이면 `slice`)의 `lead_followup`은 `leads`(보낸 단서 ID), `sent_evidence_ids`(요청이 보낸 발췌), `new_evidence_ids`(그중 찾은 발췌), `partial_evidence_ids`(그중 부분 발췌), `new_lines`(찾은 발췌의 줄 중 조사 기록의 발췌에 없던 줄을 파일마다 한 번 센 수), `dispositions`(최종 후보마다 `candidate_id`·`final_id`·`disposition`·`lead`, 반박이면 `reason`·`evidence_ids`)다. 상류는 같은 조사 기록이고 slot이면 `review.scope`도 있다. 기록 검사(`record.LeadFollowupMatches`)가 조사 기록의 후보·단서와 처리, 근거의 범위를 대조한다. 반박한 후보는 원래 후보 그대로 최종 후보에 남고, 고친 후보와 더한 후보는 조사 후보와 같은 형식이다.
 - 보고서 생성기 26부터 읽는다(`LeadsReviewDecoder`). [조사 예시](../examples/review/leads/investigate.s001.json) · [후속 조사 예시](../examples/review/leads/leads.s001.json) · [검증 예시](../examples/review/leads/verify.s001.json)
 
 ## 보고서 연결
@@ -915,9 +929,10 @@ scripted caller로 잰 승인이다(최소 요청 예산, 모든 조사가 다�
 
 - overview는 문서 계약이나 도구 진단에 관련된 줄과 모듈의 파일 전체 또는 선언 단위를 발췌한다. 후속 검토는 아직 전송하지 않은 줄을 다루며 호출·요청·slot 상한이 남은 줄을 결정한다.
 - 모델은 도구를 쓰지 않는다. 요청에 없는 파일을 직접 열거나 검색하지 못하므로 한 요청의 단위 밖에 있는 호출 관계는 verify 확장, slice, 단서 후속 조사로만 보인다.
-- 단서 해석은 정적 연결이다. 값의 타입이 정하는 메서드 호출(다른 package 타입의 메서드), 표준 라이브러리와 외부 모듈, 동적 디스패치는 찾지 못하고 `lead_definition_not_found`로 남는다. 이 저장소 사본의 가짜 upstream dry run에서 표준 라이브러리·외부 타입의 메서드를 가리킨 단서가 그렇게 남았다.
-- 찾은 창이 조사 요청의 발췌와 일부만 겹치면(호출부 창, 같은 package 선언) 창 전체를 보내고 그 줄도 `new_lines`에 센다. Go 정의의 선언 전체 창은 겹치면 쓰지 않는다.
-- 상한이 줄이 계획된 slot을 모두 덮지 못하는 프로젝트에서는 단서 후속 조사가 실행되지 않는다([승인 측정](#후속-조사-승인-측정)).
+- 단서 해석은 정적 연결이다. 다른 package 타입의 메서드, 표준 라이브러리와 외부 모듈, 인터페이스와 함수 값을 통한 호출, 같은 package의 소스로 타입을 정할 수 없는 값의 메서드는 찾지 못하고 `lead_definition_not_found`로 남는다. 이름이 같은 다른 선언으로 대신하지 않는다.
+- 찾은 창이 조사 요청의 발췌와 일부만 겹치면(호출부 창, 부분 정의 창) 창 전체를 보내지만 `new_lines`에는 조사 요청에 없던 줄만 센다. 정의의 선언 전체 창은 겹치면 쓰지 않는다.
+- Python·JavaScript 정의의 선언 끝은 구문 분석이 아니라 토큰의 중괄호(Python은 다음 모듈 수준 문장)로 정한다.
+- 후속 조사는 뒤 작업 전부의 최악을 남길 때만 입장하므로, 상한이 그 최악을 덮지 못하는 큰 프로젝트에서는 실행되지 않는다([승인 측정](#후속-조사-승인-측정)).
 - 선언 경계 판별은 Go 외 언어에서 구문 분석이 아니다. 매크로·전처리·비정형 들여쓰기에서는 경계가 덜 정확할 수 있다. C/C++ 전처리 분기는 첫 분기의 깊이를 따르므로, 분기마다 중괄호 균형이 다르고 대안 관계도 아닌 코드는 경계를 잃을 수 있다. JavaScript 정규식 리터럴은 앞 문자로 짐작하므로 `)` 뒤의 정규식(`if (x) /re/.test(s)`)은 나눗셈으로 읽는다.
 - 보고서 검증기는 schema 0.7 조사 기록이 HTTP 코드와 테스트를 함께 읽었는지(`workflow_reading`) 보고서 본문만으로 알 수 없다. 0.6 기록은 그 읽기가 있을 때만 쓰였으므로 decoder 이름이 증거였지만, 0.7은 모든 역할이 쓴다. 그래서 문서 대조의 관련 흐름은 0.7 조사 산출물이 수락되었고 세 인용(호출 코드, 변경 코드, 테스트)이 같은 범위의 Go 근거일 때 받는다. 보고서 생성기는 기록의 `workflow_reading`이 있을 때만 관련 흐름을 만들고 문서 기록과 대조한다([보고서 연결](#보고서-연결)).
 - 보고서의 표시용 발췌는 인용의 첫 50줄·1,800바이트까지다. 80줄까지의 인용은 근거 범위 전체가 기록에 남지만 화면에는 앞부분만 보인다([보고서](REPORT.md)).

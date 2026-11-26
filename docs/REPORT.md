@@ -147,22 +147,22 @@ builder 22부터 분류 slot(`review.triage.tNNN`·`review.verify.tNNN`, [검토
 
 ### 단서 후속 조사
 
-builder 26부터 단서 후속 조사(`review.leads`·`review.leads.sNNN`, [검토](REVIEW.md#단서-후속-조사))가 계획된 보고서의 코드 분석 절은 `lead_followups`를 싣는다. 이전 리비전에는 없다. 단서를 남긴 조사 기록과 후속 조사 기록(review 기록 0.9)은 자기 task에 붙은 것만 받고, 후속 조사 기록은 같은 조사 기록의 후보·단서와 대조한다(`record.LeadFollowupMatches`). [생성과 검증](../internal/report/review_leads.go)
+builder 26부터 단서 후속 조사(`review.leads`·`review.leads.sNNN`, [검토](REVIEW.md#단서-후속-조사))가 계획된 보고서의 코드 분석 절은 `lead_followups`를 싣는다. 이전 리비전에는 없다. 단서를 받은 조사 기록과 후속 조사 기록(review 기록 0.9)은 자기 task에 붙은 것만 받고, 후속 조사 기록은 같은 조사 기록의 후보·단서와 대조한다(`record.LeadFollowupMatches`). [생성과 검증](../internal/report/review_leads.go)
 
 | 필드 | 내용 |
 |---|---|
 | `leads_asked`, `leads_resolved` | 수락된 조사 기록이 남긴 단서와 그중 플랫폼이 스냅샷에서 찾은 단서 |
 | `leads_unresolved` | 찾지 못한 단서의 이유별 수(`lead_definition_not_found`·`lead_secret_withheld` 등). `leads_asked = leads_resolved + 합`이다 |
-| `tasks_planned`, `tasks_run`, `tasks_accepted` | 계획된 후속 조사 task, 그중 모델을 호출했거나 호출하려 한 task, 결과를 받아들인 task |
-| `tasks_not_run` | 호출하지 않은 task의 이유별 수(`no_leads`, `no_leads_resolved`, `review_budget_exhausted`, 조사나 slot이 실행되지 않은 이유). task 행과 같아야 한다 |
+| `tasks_planned`, `tasks_run`, `tasks_accepted` | 계획된 후속 조사 task, 그중 `coverage.review_calls`에 호출이 하나 이상 있는 task, 결과를 받아들인 task |
+| `tasks_not_run` | 호출이 없는 task의 이유별 수(이유가 없으면 상태). `leads_not_offered`(요청이 단서를 받지 않음), `no_leads`(받았지만 남기지 않음), `no_leads_resolved`, `leads_not_admitted`(상한), `leads_slot_not_run`(slot 조사가 상한으로 실행되지 않음), 조사가 실행되지 않은 이유, 호출 전의 실패 이유다. task 행과 같아야 한다 |
 | `calls` | `coverage.review_calls` 가운데 후속 조사 task의 호출 수 |
-| `new_excerpts`, `new_lines` | 수락된 후속 조사가 새로 보낸 찾은 발췌와 그 서로 다른 줄 수 |
-| `dispositions` | 수락된 후속 조사 뒤 후보의 처리별 수(`kept`·`refined`·`added`·`withdrawn`) |
+| `new_excerpts`, `new_lines` | 수락된 후속 조사가 새로 보낸 찾은 발췌, 그 줄 가운데 따라간 조사 기록의 발췌에 없던 줄을 파일마다 한 번 센 수(여러 후속 조사가 같은 줄을 보내도 한 번) |
+| `dispositions` | 수락된 후속 조사 뒤 후보의 처리별 수(`kept`·`refined`·`contested`·`added`) |
 
 - 수는 모두 기록과 task 행에서 센다. 모델이 쓴 숫자는 쓰지 않는다. 검증(`ValidateReport`)이 task 행, AI 검토 항목, 호출 목록과 다시 대조하고, 맞지 않거나 builder 26 이전 리비전에 있으면 거부한다.
-- 수락된 후속 조사의 최종 후보가 그 조사의 발견이 되고 같은 조사의 검증 판정을 싣는다. 후속 조사가 실행되지 않았거나 실패하면 조사의 후보가 그대로 발견이 된다. 거둔 후보는 발견이 아니고 `dispositions.withdrawn`에 센다.
+- 수락된 후속 조사의 최종 후보가 그 조사의 발견이 되고 같은 조사의 검증 판정을 싣는다. 후속 조사가 실행되지 않았거나 실패하면 조사의 후보가 그대로 발견이 된다. 반박한 후보(`contested`)도 발견이고, 검증이 반박을 받아들였으면 다른 반박된 후보처럼 `refuted`로 실린다.
 - 장부의 `calls_used`는 slot 후속 조사 기록의 호출을 slice처럼 더하고, 전체 조사의 후속 조사 호출은 `calls_before_slices`에 들어 있다.
-- Markdown·HTML의 코드 분석 절에 "단서 후속 조사" 단락이 있고, 찾지 못한 단서와 호출하지 않은 후속 조사는 이유 문구와 함께 따로 센다. 웹 보고서 패널은 이 객체를 아직 보이지 않는다(task 목록의 사유 문구는 보인다).
+- Markdown·HTML의 코드 분석 절과 웹 보고서 패널의 코드 분석 탭에 "단서 후속 조사" 단락이 있고, 찾지 못한 단서와 호출하지 않은 후속 조사는 공유 사유 문구(`code_labels_ko.json`)와 함께 따로 센다.
 
 ### 의존성 목록
 
