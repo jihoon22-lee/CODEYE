@@ -486,6 +486,18 @@ export const ko = {
     count: (label: string, n: number) => `${label} ${n}건`,
     // The texts of the task reasons come from the catalog the Go renderers share.
     reasonLabels: codeLabels.reasons,
+    // Where the user acts on a reason. These point into this screen and the guide, so
+    // they stay out of the shared catalog the exports read.
+    reasonHints: {
+      tool_not_configured: '도구 메뉴에서 설치 방법을 확인하세요',
+      source_auth_required: '주소를 확인하고 플랫폼 GitHub 계정에 읽기 권한을 부여하세요',
+      source_unreachable: '네트워크를 확인하고 다시 시도하세요',
+      source_unavailable: '폴더가 있는지, 읽을 수 있는지 확인하세요',
+      source_holds_codeye_data: '프로젝트가 든 하위 폴더를 고르세요',
+      registry_unreachable: '네트워크를 확인하세요',
+      model_not_configured: '안내서의 "모델 설정"을 확인하세요',
+      model_auth_failed: 'codeye model probe로 확인하세요',
+    } as Record<string, string>,
     reasonLabel: (label: string) => `사유: ${label}`,
     finishedOfPlanned: (finished: number, planned: number) => `${finished}/${planned} 종료`,
     finishedOnly: (finished: number) => `${finished}건 종료 (계획 수 미확정)`,

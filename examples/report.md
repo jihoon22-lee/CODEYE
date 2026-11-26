@@ -271,7 +271,7 @@ AI가 검토한 문제 2건 중 코드 근거를 확인한 항목 1건 \(기각 
 | 모듈 | 패키지 관리자 | 상태 | 받은 수 | 이유 | 한계 |
 |---|---|---|---|---|---|
 | `go:.` | `go 1.27.4` | ✓ 받음 | 2/2 | \- | \- |
-| `go:svc/a` | `go 1.27.4` | ✕ 받지 못함 | 0 | 의존성 저장소\(registry·proxy\)에 연결하지 못함 — 네트워크와 agent\.dependencies\.go\_proxy를 확인하세요 | \- |
+| `go:svc/a` | `go 1.27.4` | ✕ 받지 못함 | 0 | 의존성 저장소\(registry·proxy\)에 연결하지 못함 \(agent\.dependencies\.go\_proxy 확인, 실패\) | \- |
 | `go:svc/b` | `go 1.27.4` | – 받지 않음 | 0/0 | 받을 외부 의존성이 없음 \(할 일 없음, 실패 아님\) | \- |
 
 ### 환경 메모
@@ -532,7 +532,7 @@ that every tool, including bash and webfetch, is set to "allow".
 
 ### 탐색 한계
 
-- 탐색은 안내끼리의 의미 충돌을 판단하지 않습니다\(문서 역할이 판단합니다\)\. `semantic_conflicts_not_assessed`
+- 탐색은 안내끼리의 의미 충돌을 판단하지 않음 — 문서 역할이 판단함 \(참고\) `semantic_conflicts_not_assessed`
 
 > 모델 해석 — review\.documents 역할의 수락된 기록이다\. 인용한 파일과 줄 범위는 각 항목에서 확인할 수 있다\.
 
@@ -582,7 +582,7 @@ that every tool, including bash and webfetch, is set to "allow".
 <details>
 <summary>범위 단위와 한계 2개 보기</summary>
 
-- Go\: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석했다\. `default_build_context_only`
+- Go\: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석함 \(범위 공백, 결함 아님\) `default_build_context_only`
 - 분석 완료, 진단 없음\: 1 `analyzed_clean`
 
 </details>
@@ -599,19 +599,19 @@ that every tool, including bash and webfetch, is set to "allow".
 <details>
 <summary>범위 단위와 한계 2개 보기</summary>
 
-- Go\: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석했다\. `default_build_context_only`
+- Go\: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석함 \(범위 공백, 결함 아님\) `default_build_context_only`
 - 분석 완료, 진단 없음\: 1 `analyzed_clean`
 
 </details>
 
 </details>
 
-- **go vet go1\.27\.4** ✕ 실패 · 노드의 toolchain이 없거나 모듈 요구보다 낮아 실행하지 못했습니다\. `go-vet.m02` `toolchain_unavailable`
+- **go vet go1\.27\.4** ✕ 실패 · 노드의 toolchain이 없거나 모듈 요구보다 낮아 실행하지 못함 \(미실행, 0건 통과 아님\) `go-vet.m02` `toolchain_unavailable`
 
 <details>
 <summary>범위 단위와 한계 1개 보기</summary>
 
-- Go\: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석했다\. `default_build_context_only`
+- Go\: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석함 \(범위 공백, 결함 아님\) `default_build_context_only`
 
 </details>
 
@@ -632,7 +632,7 @@ that every tool, including bash and webfetch, is set to "allow".
 <details>
 <summary>범위 단위와 한계 2개 보기</summary>
 
-- Go\: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석했다\. `default_build_context_only`
+- Go\: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석함 \(범위 공백, 결함 아님\) `default_build_context_only`
 - 분석한 단위\: 1 `analyzed`
 
 </details>
@@ -649,14 +649,14 @@ that every tool, including bash and webfetch, is set to "allow".
 <details>
 <summary>범위 단위와 한계 2개 보기</summary>
 
-- Go\: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석했다\. `default_build_context_only`
+- Go\: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석함 \(범위 공백, 결함 아님\) `default_build_context_only`
 - 분석한 단위\: 1 `analyzed`
 
 </details>
 
 </details>
 
-- **Staticcheck 2026\.2\.2** ✕ 실패 · 노드의 toolchain이 없거나 모듈 요구보다 낮아 실행하지 못했습니다\. `staticcheck.m02` `toolchain_unavailable`
+- **Staticcheck 2026\.2\.2** ✕ 실패 · 노드의 toolchain이 없거나 모듈 요구보다 낮아 실행하지 못함 \(미실행, 0건 통과 아님\) `staticcheck.m02` `toolchain_unavailable`
 
 ### 타입·컴파일
 
@@ -710,8 +710,8 @@ CCN은 함수의 제어 흐름에서 가능한 독립 경로를 나타내는 값
 <details>
 <summary>범위 단위와 한계 3개 보기</summary>
 
-- lizard\: 함수 끝 줄을 기록하지 않아 시작 줄만 위치로 쓴다\. `function_end_lines_not_recorded`
-- 구조 지표\(복잡도·중복\)는 임계값을 넘은 측정값이며 결함 근거가 아닙니다\. `metrics_not_defects`
+- lizard\: 함수 끝 줄을 기록하지 않아 시작 줄만 위치로 씀 \(참고\) `function_end_lines_not_recorded`
+- 구조 지표\(복잡도·중복\)는 임계값을 넘은 측정값이며 결함 근거가 아님 \(참고\) `metrics_not_defects`
 - 분석한 단위\: 3 `analyzed`
 
 </details>
@@ -849,7 +849,7 @@ const MaxRetries = 3
 | `review.investigate` | ✓ 성공 | `accepted` | `-` |
 | `review.interpret` | ✓ 성공 | `accepted` | `-` |
 | `review.verify` | ✓ 성공 | `accepted` | `-` |
-| `review.contract` | – 정책 제외 | `skipped` | 이 단계에서 검토할 대상이 선택되지 않았습니다\. |
+| `review.contract` | – 정책 제외 | `skipped` | 이 단계에서 검토할 대상이 선택되지 않음 \(미검토\) |
 
 <details>
 <summary>파일과 원문 줄 범위\(3개\)</summary>
@@ -909,8 +909,8 @@ const MaxRetries = 3
 
 | 분석 | 공백 | 세부 | 수 | 대상 |
 |---|---|---|---|---|
-| 환경 분석 | 의존성을 받지 못했다 | 의존성 저장소\(registry·proxy\)에 연결하지 못함 — 네트워크와 agent\.dependencies\.go\_proxy를 확인하세요 | 1 | `deps.go.m01` |
-| 정적 분석 | 작업 실패 | 노드의 toolchain이 없거나 모듈 요구보다 낮아 실행하지 못했습니다\. | 2 | `go-vet.m02, staticcheck.m02` |
+| 환경 분석 | 의존성을 받지 못했다 | 의존성 저장소\(registry·proxy\)에 연결하지 못함 \(agent\.dependencies\.go\_proxy 확인, 실패\) | 1 | `deps.go.m01` |
+| 정적 분석 | 작업 실패 | 노드의 toolchain이 없거나 모듈 요구보다 낮아 실행하지 못함 \(미실행, 0건 통과 아님\) | 2 | `go-vet.m02, staticcheck.m02` |
 | 구조·중복 지표 | 실행하지 않음\(미지원\) | 이 분석 도구에 필요한 언어 toolchain이 설정되지 않아 실행하지 않음 \(미지원, 0건 통과 아님\) | 1 | `jscpd` |
 | 비밀정보 | git 이력은 검사하지 않았다 | \- | 1 | `gitleaks` |
 | 코드 분석\(모델 검토\) | 비밀값 탐지로 모델에 보내지 않은 파일이 있다 | \- | 1 | `go:svc/b` |
@@ -928,11 +928,11 @@ const MaxRetries = 3
 
 inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언어 무관\)\.
 
-테스트 실행 작업은 계획되지 않았다\.
+테스트 실행 작업이 계획되지 않음 \(미실행\)
 
-도구가 처리한 파일 수를 확정할 수 없다\(미측정이며 0이 아니다\)\.
+도구가 처리한 파일 수를 확정할 수 없음 \(미측정, 0이 아님\)
 
-진단 없이 마친 검사가 있습니다\.
+진단 없이 마친 검사가 있음 — 0건 보고는 결함 없음이 아님 \(참고\)
 
 ### 작업 상태
 
@@ -940,8 +940,8 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 | 상태 | 이유 | 수 | 작업 |
 |---|---|---|---|
-| ✕ 실패 | 의존성 저장소\(registry·proxy\)에 연결하지 못함 — 네트워크와 agent\.dependencies\.go\_proxy를 확인하세요 | 1 | `deps.go.m01` |
-| ✕ 실패 | 노드의 toolchain이 없거나 모듈 요구보다 낮아 실행하지 못했습니다\. | 2 | `go-vet.m02, staticcheck.m02` |
+| ✕ 실패 | 의존성 저장소\(registry·proxy\)에 연결하지 못함 \(agent\.dependencies\.go\_proxy 확인, 실패\) | 1 | `deps.go.m01` |
+| ✕ 실패 | 노드의 toolchain이 없거나 모듈 요구보다 낮아 실행하지 못함 \(미실행, 0건 통과 아님\) | 2 | `go-vet.m02, staticcheck.m02` |
 | – 실행 안 함\(미지원\) | 이 분석 도구에 필요한 언어 toolchain이 설정되지 않아 실행하지 않음 \(미지원, 0건 통과 아님\) | 1 | `jscpd` |
 
 ### 실행 기록과 산출물
@@ -954,15 +954,15 @@ inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언
 
 ### 한계와 공백
 
-- 호출자 추적은 Go 코드에서 수행했습니다\.
-- 호출자 추적 범위는 같은 패키지의 직접 호출입니다\.
+- 호출자 추적은 Go 코드에서만 수행함 \(범위 공백\)
+- 호출자 추적 범위는 같은 패키지의 직접 호출뿐임 \(범위 공백\)
 - 수락된 해석 가설이 이미 다룬 진단은 따로 분류하지 않음 \(참고\)
 - 선택한 문서의 일부 발췌만 모델 입력에 실음 \(부분 검토\)
 - 요청 크기 한도 때문에 일부 대상 파일을 모델 입력에 싣지 못함 \(미검토\)
 - 인용한 함수를 부르는 코드를 검토 범위에서 찾지 못함 \(호출자 없음을 뜻하지 않음\)
-- 탐색 단계에서 반증할 후보가 없었습니다\.
-- 완료되지 않은 필수 작업이 있습니다\.
-- 비밀값이 탐지된 파일은 모델 입력에서 뺐습니다\.
+- 탐색 단계에서 반증할 후보가 없음 \(참고\)
+- 성공하지 않은 필수 작업이 있음 \(실패 또는 미실행\)
+- 비밀값이 탐지된 파일은 모델 입력에서 뺌 \(미검토\)
 - 도구 수 한도를 넘어 일부 도구 상태를 해석 입력에서 뺌 \(미검토\)
 
 ### 분석 대상과 실행 시각

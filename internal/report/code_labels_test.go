@@ -355,3 +355,22 @@ func TestCodeLabelForms(t *testing.T) {
 		t.Error("a counter with only a reason text reads as that text")
 	}
 }
+
+// The catalog words what happened and what it means. Where on the web screens
+// to act on it is a web-only hint, so no export carries a menu or screen
+// pointer, and every text uses the one noun-ending register. TC-329
+func TestCatalogHasNoScreenHintsAndOneRegister(t *testing.T) {
+	c := koreanCodeLabels
+	formal := regexp.MustCompile(`습니다|니다|하세요|으세요|보세요|해야 합`)
+	plain := regexp.MustCompile(`(했|았|었|됐|된|한|있|없|않|이)다(\.|\)|$| )`)
+	for name, table := range map[string]map[string]string{"reasons": c.Reasons, "model_reasons": c.ModelReasons, "units": c.Units, "upstream": c.Upstream} {
+		for code, text := range table {
+			if strings.Contains(text, "메뉴") {
+				t.Errorf("%s.%s points into a web menu: %q", name, code, text)
+			}
+			if formal.MatchString(text) || plain.MatchString(text) {
+				t.Errorf("%s.%s is not in the noun-ending register: %q", name, code, text)
+			}
+		}
+	}
+}

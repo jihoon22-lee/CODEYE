@@ -6,7 +6,7 @@ import type { Citation, Excerpt, RelatedWorkflow } from './parseReportSections';
 import { reportURL, sourceEvidenceURL } from './analysisReport';
 import { FindingHistory, HIDDEN, findingBadge, type ComparisonLoad } from './HistoryView';
 import { ko } from './locales/ko';
-import { codeText } from './locales/codeLabels';
+import { reasonWithHint } from './reasonHints';
 import { reportKo as t } from './locales/report-ko';
 import { ReportIcon } from './ReportLayout';
 import tablerLicense from '../../internal/report/reportui/LICENSE.tabler-core?url&no-inline';
@@ -21,7 +21,7 @@ export { label } from './format';
 // A reason code ("code" or "code:detail") in words from the shared catalog, else
 // the code itself.
 export function explainReason(value: string) {
-  return codeText(value) ?? value;
+  return reasonWithHint(value) ?? value;
 }
 export function ReportIdentity({ report, showStatus = true }: { report: AnalysisReport; showStatus?: boolean }) {
   const p = report.project;

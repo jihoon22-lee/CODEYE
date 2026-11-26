@@ -70,3 +70,23 @@ describe('stored example codes', () => {
     expect(missing.map(c => `${c.code} in ${c.file}`)).toEqual([]);
   });
 });
+
+// The hint of where to act is web-only: the screens show it after the catalog
+// text, and the catalog the Go exports read never carries it.
+describe('web-only reason hints', () => {
+  it('follow the catalog text on the report and the run page', () => {
+    const text = codeLabels.reasons.tool_not_configured;
+    expect(explainReason('tool_not_configured')).toBe(`${text} — 도구 메뉴에서 설치 방법을 확인하세요`);
+    expect(reasonText('tool_not_configured')).toContain('도구 메뉴에서 설치 방법을 확인하세요');
+    expect(explainReason('mypy_failed')).toBe(codeLabels.reasons.mypy_failed);
+  });
+
+  it('are not in the shared catalog', () => {
+    for (const code of Object.keys(ko.stages.reasonHints)) {
+      const text = codeLabels.reasons[code] ?? codeLabels.model_reasons[code];
+      expect(text).toBeTruthy();
+      expect(text).not.toContain(ko.stages.reasonHints[code]);
+    }
+    for (const text of [...Object.values(codeLabels.reasons), ...Object.values(codeLabels.model_reasons)]) expect(text).not.toContain('메뉴');
+  });
+});

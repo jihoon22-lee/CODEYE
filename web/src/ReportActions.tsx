@@ -8,7 +8,7 @@ import { actionPlan, COVERAGE_ATTENTION, DIAGNOSTIC_PLACES, MISMATCH_SHOWN, NOTI
 import { findingHypothesisNotShipped, findingNotShipped, overviewFacts, regularStaticLanguages, ruleGroups, severityOf, type RuleGroup } from './reportGroups';
 import { reportKo as t, diagnosticDescription } from './locales/report-ko';
 import { reportActionsKo as a } from './locales/report-actions-ko';
-import { ko } from './locales/ko';
+import { reasonWithHint } from './reasonHints';
 
 const tone = (f: Finding) => f.validation === 'supported' || f.validation === 'reproduced' ? 'ready' : 'attention';
 
@@ -244,8 +244,7 @@ export function ReportActions({ report, sections, isDisposed, openFinding, openC
   } else if (!assessed) {
     lead = a.notAssessed;
     paragraphs.push(report.aiReview === 'not_requested' ? t.reading.reviewNotRequested : report.aiReview !== 'performed' ? a.modelNotPerformed : '');
-    const reason = report.aiReviewReasons.map(code => [t.reasons, t.sections.modelReasons, ko.stages.reasonLabels]
-      .find(labels => Object.hasOwn(labels, code))?.[code]).find(Boolean);
+    const reason = report.aiReviewReasons.map(reasonWithHint).find(Boolean);
     if (reason && report.aiReview !== 'not_requested') paragraphs.push(reason);
   } else if (sections.codeReview.findings.length > 0 || sections.codeReview.strengths.length > 0 || sections.codeReview.roles.some(role =>
     (role.result === 'accepted' && role.key === 'review.investigate') ||
