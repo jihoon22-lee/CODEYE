@@ -153,31 +153,40 @@ def _texts(node, out):
 
 FUNCTION = re.compile(r"^\d+\| func ([A-Za-z_][A-Za-z0-9_]*)\(", re.M)
 NUMBERED = re.compile(r"^(\d+)\| (.*)$")
-QUALIFIED_CALL = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\.([A-Za-z_][A-Za-z0-9_]*)\(")
+QUALIFIED_CALL = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\(")
+# Qualifiers of common standard-library calls. A snapshot holds no
+# definition for them, so the double names the project's own calls first.
+STANDARD_QUALIFIERS = frozenset((
+    "atomic", "base64", "binary", "bufio", "bytes", "context", "errors", "exec", "filepath", "flag", "fmt", "fs", "hex",
+    "http", "io", "json", "log", "maps", "math", "os", "path", "rand", "reflect", "regexp", "runtime", "sha256", "slices",
+    "slog", "sort", "strconv", "strings", "sync", "syscall", "time", "unicode", "url", "utf8"))
 DECLARATION = re.compile(r"\bfunc (?:\([^)]*\) )?([A-Za-z_][A-Za-z0-9_]*)\(")
 
 
 def _leads(review_input, limit: int, has_candidate: bool) -> list[dict]:
     """Leads of an investigation that offers them: one per qualified call on
-    a sent code line whose name no sent excerpt declares."""
+    a sent code line whose name no sent excerpt declares, the calls of
+    standard-library qualifiers last."""
     scope = review_input.get("scope") if isinstance(review_input, dict) else None
     excerpts = [e for e in (scope or {}).get("excerpts") or [] if isinstance(e, dict) and e.get("kind") == "code"
                 and isinstance(e.get("id"), str) and isinstance(e.get("text"), str)]
     declared = {m for e in excerpts for line in e["text"].split("\n") for m in DECLARATION.findall(line)}
-    out: list[dict] = []
+    calls = []
     for e in excerpts:
         for line in e["text"].split("\n"):
             numbered = NUMBERED.match(line)
             if not numbered or DECLARATION.search(numbered.group(2)):
                 continue
-            for name in QUALIFIED_CALL.findall(numbered.group(2)):
-                if name in declared or any(x["symbol"] == name for x in out):
-                    continue
-                n = numbered.group(1)
-                out.append({"need": "definition", "evidence_id": f"{e['id']}:{n}-{n}", "symbol": name, "suspicion": TEXT,
-                            "candidate": 1 if has_candidate and not out else 0})
-                if len(out) == limit:
-                    return out
+            for qualifier, name in QUALIFIED_CALL.findall(numbered.group(2)):
+                if name not in declared:
+                    calls.append((qualifier in STANDARD_QUALIFIERS, name, f"{e['id']}:{numbered.group(1)}-{numbered.group(1)}"))
+    out: list[dict] = []
+    for _, name, ref in sorted(calls, key=lambda c: c[0]):
+        if len(out) == limit:
+            break
+        if not any(x["symbol"] == name for x in out):
+            out.append({"need": "definition", "evidence_id": ref, "symbol": name, "suspicion": TEXT,
+                        "candidate": 1 if has_candidate and not out else 0})
     return out
 
 

@@ -84,6 +84,11 @@ class LeadsTest(unittest.TestCase):
         self.assertEqual([(x["symbol"], x["evidence_id"], x["candidate"]) for x in out["leads"]],
                          [("Load", "ev_" + "a" * 24 + ":4-4", 1), ("Token", "ev_" + "a" * 24 + ":5-5", 0)])
         self.assertNotIn("leads", f.result_for("investigate", self.INPUT))
+        # A standard-library call comes after the project's own calls.
+        standard = json.loads(json.dumps(self.INPUT))
+        standard["scope"]["excerpts"][0]["text"] = "3| func main() {\n4| \tfmt.Println(1)\n5| \tvault.Token()\n6| \thelper.Local()\n7| }"
+        self.assertEqual([(x["symbol"], x["evidence_id"], x["candidate"]) for x in f.result_for("investigate", standard, leads=True)["leads"]],
+                         [("Token", "ev_" + "a" * 24 + ":5-5", 1), ("Println", "ev_" + "a" * 24 + ":4-4", 0)])
         unoffered = json.loads(json.dumps(self.INPUT))
         del unoffered["scope"]["lead_limit"]
         self.assertNotIn("leads", f.result_for("investigate", unoffered, leads=True))
