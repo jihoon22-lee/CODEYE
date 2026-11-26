@@ -51,6 +51,10 @@ func capture(t *testing.T, name string, job analysis.Job, key string, res analys
 			write(name+".stdout", e.Result.Stdout.Data)
 			write(name+".stderr", e.Result.Stderr.Data)
 			write(name+".exit", []byte(code+"\n"))
+		case a.kind.retryName():
+			write(name+".retry.stdout", e.Result.Stdout.Data)
+			write(name+".retry.stderr", e.Result.Stderr.Data)
+			write(name+".retry.exit", []byte(code+"\n"))
 		case execRustc:
 			write("versions.rustc", e.Result.Stdout.Data)
 		case execCargo:
@@ -59,24 +63,26 @@ func capture(t *testing.T, name string, job analysis.Job, key string, res analys
 			write("versions.clippy", e.Result.Stdout.Data)
 		}
 	}
-	depDir := filepath.Join(dir, name+".deps")
-	_ = os.RemoveAll(depDir)
-	n := 0
-	_ = filepath.WalkDir(filepath.Join(taskDir, "target"), func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".d") {
+	for target, deps := range map[string]string{"target": name + ".deps", "target-retry": name + ".retry.deps"} {
+		depDir := filepath.Join(dir, deps)
+		_ = os.RemoveAll(depDir)
+		n := 0
+		_ = filepath.WalkDir(filepath.Join(taskDir, target), func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !strings.HasSuffix(p, ".d") {
+				return nil
+			}
+			b, err := os.ReadFile(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(depDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			n++
+			if err := os.WriteFile(filepath.Join(depDir, strconv.Itoa(n)+".d"), clean(b), 0o644); err != nil {
+				t.Fatal(err)
+			}
 			return nil
-		}
-		b, err := os.ReadFile(p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.MkdirAll(depDir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		n++
-		if err := os.WriteFile(filepath.Join(depDir, strconv.Itoa(n)+".d"), clean(b), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		return nil
-	})
+		})
+	}
 }

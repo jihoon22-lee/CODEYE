@@ -1273,8 +1273,9 @@ cargo check --offline --locked --message-format=json --workspace --all-targets
 cargo-clippy clippy --offline --locked --message-format=json --workspace --all-targets -- --cap-lints warn -W clippy::undocumented_unsafe_blocks -W clippy::multiple_unsafe_ops_per_block -W clippy::panic_in_result_fn -W clippy::unwrap_in_result -W clippy::todo -W clippy::unimplemented
 ```
 
-- 실행 순서는 `rustc.version`(`rustc -vV`) → `cargo.version` → (clippy: `clippy.version`) → `cargo.check` 또는 `clippy.check`다. 모듈 `Cargo.toml`은 실행 전에 manifest SHA-256과 대조한다.
+- 실행 순서는 `rustc.version`(`rustc -vV`) → `cargo.version` → (clippy: `clippy.version`) → `cargo.check` 또는 `clippy.check`다(아래 재실행이 있으면 그 뒤 `cargo.check.targets`·`clippy.check.targets`). 모듈 `Cargo.toml`은 실행 전에 manifest SHA-256과 대조한다.
 - `--all-targets`는 라이브러리, 바이너리, 통합 시험, 예제, 벤치, 단위 시험 하니스를 모두 검사한다. 개발 의존성도 오프라인으로 구해져야 한다. 같은 소스가 두 번 컴파일되어 같은 진단이 두 번 나오므로 코드·수준·위치·메시지가 같은 진단은 합치고 `duplicate_diagnostics_merged`를 남긴다.
+- **시험·벤치·예제 대상만 컴파일되지 않으면 그 종류를 빼고 다시 실행한다.** 첫 실행이 exit 101로 끝났고, stdout을 끝까지 읽었고, lint가 아닌 컴파일 오류가 모두 대상 종류 `test`·`bench`·`example`인 대상에서 났고, stderr가 의존성·lockfile·linker·build script·toolchain 같은 다른 원인을 말하지 않으면, 실패한 종류만 뺀 대상 플래그(`--lib --bins --tests --benches --examples` 중 남은 것)로 한 번 더 실행한다. 안정 toolchain에서 `#![feature]`를 쓰는 nightly 전용 벤치(E0554)가 실제 프로젝트에서 잰 경우다. 재실행은 새 `CARGO_TARGET_DIR`을 쓴다. 실패한 대상이 남긴 dep-info가 처리 파일로 읽히지 않게 하기 위해서다. 결과는 재실행의 판정이고 한계 `failing_target_kinds_excluded`, `target.properties.excluded_target_kinds`(뺀 종류)·`targets`(남은 선택), 선택(`rule_pack.selection`)에는 `--all-targets` 대신 남은 플래그를 적는다. 뺀 대상의 소스는 처리 파일이 아니어서 `rust_files_not_compiled`로 보인다. `--tests`를 빼면 라이브러리의 `#[cfg(test)]` 코드도 검사하지 않는다. 첫 실행의 원시 stream은 실행 기록으로 남는다. 오류가 하나라도 배포 대상(lib·bin·build script·proc macro)에 있으면 재실행하지 않고 전처럼 `package_errors`다. [A69](DECISIONS.md)
 - **clippy는 `cargo-clippy clippy`로 직접 실행한다.** `cargo clippy`는 외부 하위 명령이라 저장소 `[alias] clippy = ...`가 가릴 수 있다. 내장 명령 `check`는 alias로 가릴 수 없다.
 - **rustc 진단 중복 제거.** clippy는 rustc 진단도 함께 내므로 clippy 작업은 코드가 `clippy::`로 시작하는 진단만 남긴다(`rustc_diagnostics_excluded`). clippy 출력의 rustc 진단 집합은 cargo check 관찰 집합과 같다.
 - **deny lint.** deny가 기본인 lint(rustc `overflowing_literals`, clippy correctness 그룹)가 있으면 exit 101이고 의존 crate가 컴파일되지 않는다. cargo check에서 lint 이름 코드의 `error`는 관찰(`raw_severity=error`)로 남기되 작업은 `failed`/`lints_denied`이고 처리 파일은 주장하지 않는다. 저장소가 `-D warnings`나 `#![deny(warnings)]`를 쓰면 경고가 있는 한 cargo check는 실패한다. clippy는 `--cap-lints warn`으로 수준을 낮춰 correctness lint가 실패한 작업에 갇히지 않게 한다(`cap_lints_warn`).
@@ -1317,6 +1318,7 @@ clippy 작업은 allow-by-default인 여섯 lint를 `-W`로 켠다. 소스의 `#
 | exit 0, `build-finished` 하나·`success:true`, 레코드 완독, 도구 오류·drift 없음, 처리 파일 있음 | succeeded |
 | exit 0인데 `build-finished`가 없거나 `success:false` | failed / `build_exit_mismatch` |
 | exit 101 + 컴파일 오류(코드 `E####`·코드 없음) | failed / `package_errors`, 오류는 `tool_errors`, 관찰 보존 |
+| exit 101 + 컴파일 오류가 모두 시험·벤치·예제 대상 | 그 종류를 뺀 재실행의 판정, `failing_target_kinds_excluded` |
 | exit 101 + lint 이름 코드의 `error`만 | failed / `lints_denied`, 관찰 보존 |
 | exit 101 + 오프라인 의존성 없음 | failed / `dependency_unavailable`(configuration_error) |
 | `--locked`인데 Cargo.lock 없음 / 갱신 필요 | failed / `lockfile_missing` / `lockfile_outdated`(configuration_error) |

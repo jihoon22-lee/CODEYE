@@ -550,6 +550,30 @@ func (a *Analyzer) Run(ctx context.Context, job analysis.Job, task analysis.Task
 			break
 		}
 	}
+	// A build that failed only in test, bench or example targets is run
+	// again without those kinds, so the library and binaries are analysed
+	// (decision A69). The retry has its own target directory: the failed
+	// targets left dep-info files that would read as processed sources.
+	if (a.kind == KindCheck || a.kind == KindClippy) && !writeFailed && !in.Cancelled && ctx.Err() == nil {
+		if kinds := ExcludableFailure(in.Main); kinds != nil {
+			retryTarget := filepath.Join(taskDir, "target-retry")
+			if err := os.Mkdir(retryTarget, 0o700); err != nil {
+				writeFailed = true
+			} else {
+				retryEnv := maps.Clone(env)
+				retryEnv["CARGO_TARGET_DIR"] = retryTarget
+				dirs["target"] = retryTarget
+				res := runner.Run(ctx, spec(retryEnv, a.toolExe, a.kind.RetryArgs(kinds)...))
+				e, err := analysis.WriteExecution(dirs["exec"], a.kind.retryName(), res)
+				if err != nil {
+					writeFailed = true
+				} else {
+					in.Executions = append(in.Executions, e)
+					in.First, in.Main, in.ExcludedKinds = in.Main, &res, kinds
+				}
+			}
+		}
+	}
 	// The workspace copy must still be the snapshot: a build script may write
 	// into its working directory.
 	in.Drift = workspaceDrift(workspace, files, mod.Dir)

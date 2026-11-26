@@ -1,0 +1,3 @@
+    Checking nightlybench v0.1.0 ([REDACTED])
+error: could not compile `nightlybench` (bench "speed") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

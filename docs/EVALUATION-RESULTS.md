@@ -903,6 +903,23 @@ C/C++ 변형 3개(dev 1, holdout 2)만 같은 도구 목록·설정으로 다시
 - **추가 규칙.** 누수·이중 해제·해제 뒤 사용·널 역참조 계열 열두 규칙을 더한 실험 규칙 팩으로 같은 변형을 실행했다. 단위 상태는 같고 GCC 실행 시간은 거의 같았다(단위 24개 사례에서 작업 합계 76초 → 81초). 더 나온 진단은 시험 경로 8건, 배포 코드 0건이다. 배포 코드의 정밀도 표본은 0건이라 잴 수 없었다. 시험 경로 8건을 읽은 결과는 오탐 7(단언 매크로가 실패 시 돌아오지 않는 것을 GCC가 모름), 불분명 1(시험의 확인하지 않은 할당)이다. 규칙 팩은 v1로 두었다.
 - **compile DB 보간(A68).** 세 사례의 compile DB에 없는 번역 단위 69개(배포 3, 시험 66)에 가장 가까운 항목의 인자를 빌려 cppcheck·clang-tidy를 제품 선택으로 직접 실행했다(제품 경로 밖의 실험). clang-tidy는 시험 경로 52개에서 컴파일 오류로 끝났고 배포 코드 3개는 컴파일되었다. 진단(헤더 위치 포함)은 clang-tidy 배포 10·시험 13, cppcheck(`missingInclude`·정보 제외) 배포 74·시험 96이었다. 배포 코드 진단의 정밀도 표본은 읽지 않았다.
 
+### Rust: 컴파일되지 않는 시험·벤치 대상
+
+Rust 변형 3개(dev 2, holdout 1)만 같은 도구 목록·설정으로 다시 실행했다. 기준에서 실패한 cargo check·clippy 작업 넷은 모두 안정 toolchain이 nightly 전용 벤치의 `#![feature]`를 거부한 것(E0554)이 원인이었다.
+
+| 분석기 | 기준 | 실패한 종류를 뺀 재실행(A69) |
+|---|---|---|
+| cargo check 작업 상태 | succeeded 1, failed `package_errors` 2 | succeeded 2, failed `lints_denied` 1 |
+| cargo check 처리 파일(배포 / 배포 아님) | 3 / 0 | 4 / 1 |
+| clippy 작업 상태 | succeeded 1, failed `package_errors` 2 | succeeded 3 |
+| clippy 처리 파일(배포 / 배포 아님) | 3 / 0 | 10 / 1 |
+| crate 상태 | `analyzed_clean` 4, `analyzed_with_findings` 1, `failed_compile` 2 | `analyzed_clean` 4, `analyzed_with_findings` 3 |
+| 배포 코드 진단(cargo check / clippy) | 72 / 126 | 72 / 126 |
+
+- 재실행한 작업 넷은 모두 벤치만 뺐다(`excluded_target_kinds=bench`).
+- 남은 cargo check 실패 하나는 배포 코드의 deny 기본 lint다. 벤치의 컴파일 오류가 그 사유를 `package_errors`로 가리고 있었다.
+- 관찰 집합(규칙·경로·줄)은 여섯 작업 모두 전후가 같다. 실패한 작업도 관찰을 보존했기 때문이다. 늘어난 진단이 없으므로 정밀도 표본은 읽지 않았고, 채점기의 "tool diagnostic hits label" 집계도 기준과 같다.
+
 ### Java: SpotBugs 컴파일과 모듈 기술자
 
 Java 변형 3개(dev 2, holdout 1)만 같은 도구 목록·설정으로 다시 실행했다.

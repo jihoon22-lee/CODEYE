@@ -63,10 +63,14 @@ type replayRunner struct {
 	versions struct{ rustc, cargo, clippy []byte }
 	main     recorded
 	depsDir  string // testdata/<name>.deps, written into CARGO_TARGET_DIR
-	mutate   func(r *executor.Result)
-	onMain   func(spec executor.Spec)
-	all      []executor.Spec
-	mains    []executor.Spec
+	// retry answers the run without the failing target kinds (argv without
+	// --all-targets), from testdata/<name>.retry.*, when captured.
+	retry        *recorded
+	retryDepsDir string
+	mutate       func(r *executor.Result)
+	onMain       func(spec executor.Spec)
+	all          []executor.Spec
+	mains        []executor.Spec
 }
 
 func newReplay(t *testing.T, capture string) *replayRunner {
@@ -76,6 +80,10 @@ func newReplay(t *testing.T, capture string) *replayRunner {
 	if capture != "" {
 		r.main = loadCapture(t, capture)
 		r.depsDir = filepath.Join("testdata", capture+".deps")
+		if _, err := os.Stat(filepath.Join("testdata", capture+".retry.exit")); err == nil {
+			retry := loadCapture(t, capture+".retry")
+			r.retry, r.retryDepsDir = &retry, filepath.Join("testdata", capture+".retry.deps")
+		}
 	}
 	return r
 }
@@ -103,11 +111,16 @@ func (r *replayRunner) Run(_ context.Context, spec executor.Spec) executor.Resul
 	default:
 		isMain = true
 		out, errb, code = r.main.stdout, r.main.stderr, r.main.exit
+		depsDir := r.depsDir
+		if r.retry != nil && !slices.Contains(spec.Args, "--all-targets") {
+			out, errb, code = r.retry.stdout, r.retry.stderr, r.retry.exit
+			depsDir = r.retryDepsDir
+		}
 		r.mains = append(r.mains, spec)
-		if r.depsDir != "" {
-			entries, _ := os.ReadDir(r.depsDir)
+		if depsDir != "" {
+			entries, _ := os.ReadDir(depsDir)
 			for _, e := range entries {
-				b, _ := os.ReadFile(filepath.Join(r.depsDir, e.Name()))
+				b, _ := os.ReadFile(filepath.Join(depsDir, e.Name()))
 				dst := filepath.Join(spec.Env["CARGO_TARGET_DIR"], "debug", "deps")
 				_ = os.MkdirAll(dst, 0o700)
 				_ = os.WriteFile(filepath.Join(dst, e.Name()), b, 0o600)
@@ -282,6 +295,10 @@ func TestReplayOutcomeTable(t *testing.T) {
 		{"compile error", "typeerr", "check-typeerr", KindCheck, domain.TaskFailed, ReasonPackageErrors, obsdoc.ExitExecutionError, nil, true, func(t *testing.T, x replayResult) {
 			if len(x.doc.Observations) != 0 || len(x.doc.ToolErrors) == 0 || x.doc.ToolErrors[0].Kind != "compile" || x.doc.Coverage.Units[CrateFailed] != 1 {
 				t.Fatalf("observations %d errors %+v units %v", len(x.doc.Observations), x.doc.ToolErrors, x.doc.Coverage.Units)
+			}
+			// The error is in the library: nothing is retried.
+			if len(x.r.mains) != 1 || slices.Contains(x.doc.Limitations, LimTargetsExcluded) {
+				t.Fatalf("mains %d limitations %v", len(x.r.mains), x.doc.Limitations)
 			}
 		}},
 		{"workspace", "workspace", "check-workspace", KindCheck, domain.TaskSucceeded, "", obsdoc.ExitSuccessWithFindings, []string{"crates/app/src/lib.rs", "crates/core/src/lib.rs"}, false, func(t *testing.T, x replayResult) {
@@ -484,5 +501,87 @@ func TestReplayPlaceholderWhenNoCargoPackage(t *testing.T) {
 	res = packtest.RunTask(t, a, fx.Job, "cargo-check", newReplay(t, ""))
 	if res.Reason != ReasonScopeNoPackage {
 		t.Fatalf("status %s/%s", res.Status, res.Reason)
+	}
+}
+
+// checkFailingBenchExcluded is TC-322 on one envelope: the bench target that
+// does not compile on the stable toolchain is left out, the library, its unit
+// tests and the integration test are analysed and the task succeeds with the
+// library warning, saying which kinds it left out.
+func checkFailingBenchExcluded(t *testing.T, kind Kind, res analysis.TaskResult, doc obsdoc.Document) {
+	t.Helper()
+	if res.Status != domain.TaskSucceeded || doc.Outcome.ExitClass != obsdoc.ExitSuccessWithFindings || len(doc.ToolErrors) != 0 {
+		t.Fatalf("status %s/%s %+v errors %+v", res.Status, res.Reason, doc.Outcome, doc.ToolErrors)
+	}
+	want := []string{execRustc, execCargo, execCheck, execCheck + ".targets"}
+	if kind == KindClippy {
+		want = []string{execRustc, execCargo, execClippyV, execClippy, execClippy + ".targets"}
+	}
+	if !slices.Equal(execNames(doc), want) {
+		t.Fatalf("executions %v", execNames(doc))
+	}
+	if !slices.Equal(doc.Coverage.ProcessedPaths, []string{"src/lib.rs", "tests/it.rs"}) || doc.Coverage.FilesUnlisted != 1 || !slices.Contains(doc.Limitations, "rust_files_not_compiled") {
+		t.Fatalf("coverage %+v limitations %v", doc.Coverage, doc.Limitations)
+	}
+	if !slices.Contains(doc.Limitations, LimTargetsExcluded) || doc.Target.Properties["excluded_target_kinds"] != "bench" || doc.Target.Properties["targets"] != "lib,bins,tests,examples" {
+		t.Fatalf("limitations %v properties %v", doc.Limitations, doc.Target.Properties)
+	}
+	if slices.Contains(doc.RulePack.Selection, "--all-targets") || !slices.Contains(doc.RulePack.Selection, "--lib") || slices.Contains(doc.RulePack.Selection, "--benches") {
+		t.Fatalf("selection %v", doc.RulePack.Selection)
+	}
+	rule := "unused_variables"
+	if kind == KindClippy {
+		rule = "clippy::len_zero"
+	}
+	o := obsOf(doc, rule)
+	if len(o) == 0 || *o[0].Path != "src/lib.rs" || o[0].RawRef.Execution != want[len(want)-1] {
+		t.Fatalf("observations %+v", doc.Observations)
+	}
+}
+
+func TestReplayFailingBenchTargetIsExcluded(t *testing.T) {
+	for _, c := range []struct {
+		kind    Kind
+		capture string
+	}{{KindCheck, "check-nightlybench"}, {KindClippy, "clippy-nightlybench"}} {
+		t.Run(c.capture, func(t *testing.T) {
+			x := replayCase(t, c.kind, "nightlybench", c.capture, nil)
+			checkFailingBenchExcluded(t, c.kind, x.res, x.doc)
+			if len(x.r.mains) != 2 || !slices.Contains(x.r.mains[0].Args, "--all-targets") ||
+				!slices.Equal(x.r.mains[1].Args, c.kind.RetryArgs([]string{"bench"})) {
+				t.Fatalf("main runs %d", len(x.r.mains))
+			}
+			if a, b := x.r.mains[0].Env["CARGO_TARGET_DIR"], x.r.mains[1].Env["CARGO_TARGET_DIR"]; a == b || a == "" || b == "" {
+				t.Fatalf("the retry shares the target directory %q", a)
+			}
+		})
+	}
+	// An error in a shipped target as well, a stderr cause, or a record
+	// without target kinds: no retry.
+	x := replayCase(t, KindCheck, "nightlybench", "check-nightlybench", func(r *executor.Result) {
+		if slices.Contains(r.Command.Argv, "--all-targets") {
+			r.Stderr.Data = append(r.Stderr.Data, []byte("error: failed to run custom build command for `x v0.1.0`\n")...)
+			r.Stderr.TotalBytes = int64(len(r.Stderr.Data))
+		}
+	})
+	if len(x.r.mains) != 1 || x.res.Status != domain.TaskFailed {
+		t.Fatalf("retried after a build script failure: %d %s/%s", len(x.r.mains), x.res.Status, x.res.Reason)
+	}
+	for name, edit := range map[string]func([]byte) []byte{
+		"error in the library": func(b []byte) []byte {
+			return bytes.ReplaceAll(b, []byte(`"kind":["bench"]`), []byte(`"kind":["lib"]`))
+		},
+		"error in a build script": func(b []byte) []byte {
+			return bytes.ReplaceAll(b, []byte(`"kind":["bench"]`), []byte(`"kind":["custom-build"]`))
+		},
+	} {
+		x := replayCase(t, KindCheck, "nightlybench", "check-nightlybench", func(r *executor.Result) {
+			if slices.Contains(r.Command.Argv, "--all-targets") {
+				setStdout(r, edit(r.Stdout.Data))
+			}
+		})
+		if len(x.r.mains) != 1 || x.res.Status != domain.TaskFailed || x.res.Reason != ReasonPackageErrors || slices.Contains(x.doc.Limitations, LimTargetsExcluded) {
+			t.Fatalf("%s: mains %d %s/%s", name, len(x.r.mains), x.res.Status, x.res.Reason)
+		}
 	}
 }
