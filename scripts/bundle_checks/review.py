@@ -110,7 +110,7 @@ def check_environment_example(doc: dict) -> None:
 
 
 ROLE_STAGES = ("environment", "documents", "investigate", "interpret", "verify")
-PACK_ROLES = ("environment", "documents", "investigate", "interpret", "triage", "verify", "contract")
+PACK_ROLES = ("environment", "documents", "investigate", "interpret", "leads", "triage", "verify", "contract")
 
 
 def compact_json(text: str) -> bytes:
@@ -745,6 +745,131 @@ def check_triage_examples(raw: dict, validators: dict) -> int:
         case("triage verify unbound to its triage record", lambda d: next(u for u in d["verify.t001"]["upstream"] if u["source"] == "review.triage.t001").update(sha256="0" * 64)),
         case("triage verify of other candidates", lambda d: d["verify.t001"]["candidates"].pop()),
         case("triage evidence of another blob", lambda d: d["triage.t001"]["evidence"][0].update(sha256="0" * 64)),
+    ]
+    for name, d in negative:
+        expect_invalid(name, check, d)
+    return len(negative)
+
+
+LEADS_EXAMPLE_FILES = ("investigate.s001", "leads.s001", "verify.s001")
+
+
+def leads_examples() -> dict:
+    return {name: (ROOT / "examples/review/leads" / (name + ".json")).read_text(encoding="utf-8") for name in LEADS_EXAMPLE_FILES}
+
+
+def excerpt_id(snapshot: str, e: dict) -> str:
+    binding = "\0".join([snapshot, e["path"], e["sha256"], f'{e["start_line"]}:{e["end_line"]}'])
+    return "ev_" + hashlib.sha256(binding.encode()).hexdigest()[:24]
+
+
+def check_leads_examples(raw: dict, validators: dict) -> int:
+    """Validate and bind the lead examples (docs/REVIEW.md#단서-후속-조사);
+    returns the negative cases run. Beyond the schema: every excerpt and
+    resolved target ID is bound to its path, blob and lines; a lead cites a
+    code excerpt of its investigation and names one of its candidates; a
+    resolved target is not an excerpt of the investigation; the follow-up
+    sends only resolved leads with their anchors, its new excerpts are
+    exactly their targets, its line count is theirs, every original
+    candidate has one disposition in order and a kept one is unchanged; the
+    verify names the follow-up by its digest and checks its candidates. The
+    chain tree of the Go test is synthetic, so the blobs are not read here;
+    the Go decoder binds them to the snapshot manifest."""
+
+    record_v = validators["review-record.schema.json"]
+    docs = {name: json.loads(text) for name, text in raw.items()}
+    pack, roles = pack_selection(("go",))
+
+    def check(docs: dict) -> None:
+        inv, fu, ver = docs["investigate.s001"], docs["leads.s001"], docs["verify.s001"]
+        for name, doc in docs.items():
+            record_v.validate(doc)
+            stage = name.split(".")[0]
+            ensure(doc["stage"] == stage and doc["slice"]["key"] == "s001" and doc["slice"] == inv["slice"], "lead record identity: " + name)
+            ensure(all(doc[k] == inv[k] for k in ("snapshot_manifest_digest", "run_id", "attempt_id", "pack")), "lead record of another attempt: " + name)
+            ensure(doc["pack"] == {"id": pack["id"], "version": pack["version"]}, "lead record pack: " + name)
+            for e in doc["evidence"]:
+                ensure(e["id"] == excerpt_id(doc["snapshot_manifest_digest"], e), "lead record evidence ID: " + name)
+            for call in doc["calls"]:
+                ensure(call["role"] == stage and call["pack_files"] == roles[stage]["files"] and call["pack_sha256"] == roles[stage]["digest"], "lead record call pack digest: " + name)
+        ensure(inv["schema_version"] == "0.9" and fu["schema_version"] == "0.9", "lead records on schema 0.9")
+        evidence = {e["id"]: e for e in inv["evidence"]}
+        candidates = [c["id"] for c in inv["candidates"]]
+        leads = {x["id"]: x for x in inv["leads"]}
+        for x in inv["leads"]:
+            ensure(x["evidence_id"] in evidence and evidence[x["evidence_id"]]["kind"] in ("code", "test"), "lead cites no code excerpt of its investigation: " + x["id"])
+            ensure(x.get("candidate_id") is None or x["candidate_id"] in candidates, "lead of an unknown candidate: " + x["id"])
+            for target in x.get("targets", []):
+                ensure(target["id"] == excerpt_id(inv["snapshot_manifest_digest"], target) and target["end_line"] - target["start_line"] < 60, "lead target binding: " + x["id"])
+                ensure(target["id"] not in evidence, "lead target the investigation already sent: " + x["id"])
+        f = fu["lead_followup"]
+        sent = set(f["sent_evidence_ids"])
+        targets = {}
+        for lead in f["leads"]:
+            x = leads.get(lead)
+            ensure(x is not None and x["resolution"] == "resolved" and x["evidence_id"] in sent, "follow-up sends a lead its investigation did not resolve: " + lead)
+            targets.update({t["id"]: t for t in x["targets"]})
+        catalog = {e["id"]: e for e in fu["evidence"]}
+        ensure(sent <= set(catalog) and set(f["new_evidence_ids"]) <= sent, "follow-up excerpts outside its record")
+        ensure(set(f["new_evidence_ids"]) == set(targets) and all({k: v for k, v in catalog[i].items()} == targets[i] for i in targets), "follow-up new excerpts differ from the resolved targets")
+        lines = set()
+        for i in f["new_evidence_ids"]:
+            e = catalog[i]
+            lines |= {(e["path"], e["sha256"], n) for n in range(e["start_line"], e["end_line"] + 1)}
+        ensure(f["new_lines"] == len(lines), "follow-up new line count")
+        originals = [d for d in f["dispositions"] if d.get("candidate_id")]
+        ensure([d["candidate_id"] for d in originals] == candidates, "follow-up dispositions differ from the investigation's candidates")
+        final = {c["id"]: c for c in fu["candidates"]}
+        ensure(sorted(d["final_id"] for d in f["dispositions"] if d.get("final_id")) == sorted(final), "follow-up candidates without a disposition")
+        for d in originals:
+            if d["disposition"] == "kept":
+                original = next(c for c in inv["candidates"] if c["id"] == d["candidate_id"])
+                ensure(dict(final[d["final_id"]], id=original["id"]) == original, "kept candidate changed: " + d["candidate_id"])
+        ensure(carries_upstream_evidence(fu, inv), "follow-up evidence changes an excerpt of the investigation")
+        up = {u["source"]: u for u in ver["upstream"]}
+        ensure(up.get("review.leads.s001", {}).get("sha256") == hashlib.sha256(compact_json(raw["leads.s001"])).hexdigest(), "verify is not bound to the follow-up")
+        ensure(up.get("review.investigate.s001", {}).get("sha256") == hashlib.sha256(compact_json(raw["investigate.s001"])).hexdigest(), "verify is not bound to the investigation")
+        ensure(ver["candidates"] == fu["candidates"], "verify checks other candidates than the follow-up's")
+        ensure(carries_upstream_evidence(ver, fu, inv), "verify evidence changes an excerpt of the follow-up")
+
+    check(docs)
+
+    def case(name: str, edit) -> tuple[str, dict]:
+        d = copy.deepcopy(docs)
+        edit(d)
+        return name, d
+
+    def lead(d):
+        return d["investigate.s001"]["leads"][0]
+
+    def disposition(d):
+        return d["leads.s001"]["lead_followup"]["dispositions"][0]
+
+    failed = copy.deepcopy(docs["leads.s001"])
+    failed.update(outcome="failed", failure_reason="review_input_too_large", calls=[])
+    failed.pop("lead_followup")
+    record_v.validate(failed)
+    negative = [
+        case("leads on schema 0.7", lambda d: d["investigate.s001"].update(schema_version="0.7")),
+        case("lead of an unknown need", lambda d: lead(d).update(need="usages")),
+        case("resolved lead with a reason", lambda d: lead(d).update(reason="lead_ambiguous")),
+        case("unresolved lead with targets", lambda d: lead(d).update(resolution="unresolved", reason="lead_ambiguous")),
+        case("lead of an unknown reason", lambda d: (lead(d).update(resolution="unresolved", reason="lead_guessed"), lead(d).pop("targets"))),
+        case("lead in the request without the excerpt", lambda d: (lead(d).update(resolution="unresolved", reason="lead_already_in_request"), lead(d).pop("targets"))),
+        case("lead citing an unsent excerpt", lambda d: lead(d).update(evidence_id="ev_" + "0" * 24)),
+        case("lead target of another blob", lambda d: lead(d)["targets"][0].update(sha256="0" * 64)),
+        case("lead target the investigation sent", lambda d: lead(d)["targets"][0].update(**{k: d["investigate.s001"]["evidence"][0][k] for k in ("id", "path", "sha256", "start_line", "end_line")})),
+        case("accepted follow-up without its content", lambda d: d["leads.s001"].pop("lead_followup")),
+        case("follow-up on schema 0.7", lambda d: d["leads.s001"].update(schema_version="0.7")),
+        case("follow-up call of another role", lambda d: d["leads.s001"]["calls"][0].update(role="investigate")),
+        case("follow-up new excerpt not a target", lambda d: d["leads.s001"]["lead_followup"]["new_evidence_ids"].append(d["leads.s001"]["lead_followup"]["sent_evidence_ids"][0])),
+        case("follow-up new line count", lambda d: d["leads.s001"]["lead_followup"].update(new_lines=d["leads.s001"]["lead_followup"]["new_lines"] + 1)),
+        case("follow-up of an unresolved lead", lambda d: d["leads.s001"]["lead_followup"].update(leads=["lead_2"])),
+        case("kept candidate with a lead", lambda d: disposition(d).update(disposition="kept")),
+        case("withdrawn candidate without its reason", lambda d: (disposition(d).update(disposition="withdrawn"), disposition(d).pop("final_id"))),
+        case("follow-up candidate without a disposition", lambda d: d["leads.s001"]["lead_followup"].update(dispositions=[])),
+        case("verify unbound to the follow-up", lambda d: next(u for u in d["verify.s001"]["upstream"] if u["source"] == "review.leads.s001").update(sha256="0" * 64)),
+        case("verify of the investigation's candidates", lambda d: d["verify.s001"].update(candidates=d["investigate.s001"]["candidates"])),
     ]
     for name, d in negative:
         expect_invalid(name, check, d)

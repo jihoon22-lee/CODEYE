@@ -321,11 +321,11 @@ func checkLeadFollowup(r Record, catalog map[string]Excerpt, b bounds) error {
 	for _, d := range f.Dispositions {
 		switch d.Disposition {
 		case DispositionKept, DispositionRefined:
-			if d.CandidateID == "" || !final[d.FinalID] || d.Reason != "" || d.EvidenceIDs != nil || added {
+			if d.CandidateID == "" || !final[d.FinalID] || d.Reason != "" || d.EvidenceIDs != nil || added || (d.Lead == "") != (d.Disposition == DispositionKept) {
 				return invalid("lead disposition")
 			}
 		case DispositionWithdrawn:
-			if d.CandidateID == "" || d.FinalID != "" || !ProseText(d.Reason, b.text) || !refs(d.EvidenceIDs, catalog, 6, "code") || added ||
+			if d.CandidateID == "" || d.FinalID != "" || d.Lead == "" || !ProseText(d.Reason, b.text) || !refs(d.EvidenceIDs, catalog, 6, "code") || added ||
 				!slices.ContainsFunc(d.EvidenceIDs, func(id string) bool { return leadNewLines(id, f.New, catalog) }) {
 				return invalid("lead withdrawal")
 			}

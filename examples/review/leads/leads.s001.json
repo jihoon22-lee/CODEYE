@@ -1,0 +1,126 @@
+{
+  "schema_version": "0.9",
+  "pack": {
+    "id": "review",
+    "version": "2.11.0"
+  },
+  "snapshot_manifest_digest": "4c4c1f1b52d2168d3c26fc150556c86a9e275bd2a2ddf0512b5178549bd871d8",
+  "run_id": "0195f3a0-0000-7000-8000-000000000b01",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000b02",
+  "stage": "leads",
+  "slice": {
+    "key": "s001",
+    "modules": [
+      "go:."
+    ]
+  },
+  "outcome": "accepted",
+  "upstream": [
+    {
+      "source": "review.investigate.s001",
+      "state": "accepted",
+      "sha256": "88e5c632736390c9a05470590a0779989546e50b9df1e7197fc265c20666be89"
+    },
+    {
+      "source": "review.scope",
+      "state": "accepted",
+      "sha256": "89791a7e1160581ead6caa2857e64aa4d844887fea9a57385cd7c818759dc338"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_52d092ed61aa42665bb8ccd0",
+      "path": "p03/f.go",
+      "sha256": "b2a1e3658c13d8ffb2cf5d4eebe8b359d99411505c32d0086446484d6c04a009",
+      "start_line": 51,
+      "end_line": 51,
+      "kind": "code",
+      "origin": "cited"
+    },
+    {
+      "id": "ev_bbee5b59f41f44a574bc7b07",
+      "path": "p04/f.go",
+      "sha256": "bba116d96a188772888ce25d04bd0f5cd5eab7b24bb7581968fd7bec7e479719",
+      "start_line": 47,
+      "end_line": 52,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_f836d9a38f2f20d6a3e8a00c",
+      "path": "p04/f.go",
+      "sha256": "bba116d96a188772888ce25d04bd0f5cd5eab7b24bb7581968fd7bec7e479719",
+      "start_line": 48,
+      "end_line": 48,
+      "kind": "code",
+      "origin": "cited"
+    }
+  ],
+  "observations": [],
+  "candidates": [
+    {
+      "id": "investigate_1",
+      "title": "다음 패키지의 음수 처리에 따라 결과가 달라질 수 있음",
+      "condition": "n이 0보다 크고 다음 패키지가 0 이하를 받는 호출",
+      "impact": "끝 패키지가 음수를 돌려주면 합계가 줄어든다.",
+      "improvement": "반환값의 범위를 확인한다.",
+      "counterpoint": "다음 패키지가 음수를 돌려주지 않을 수 있다.",
+      "mechanism": "인용한 줄이 다음 패키지 함수의 반환값을 그대로 더한다.",
+      "evidence_ids": [
+        "ev_52d092ed61aa42665bb8ccd0",
+        "ev_f836d9a38f2f20d6a3e8a00c"
+      ],
+      "origin": "investigate"
+    }
+  ],
+  "lead_followup": {
+    "leads": [
+      "lead_1"
+    ],
+    "sent_evidence_ids": [
+      "ev_52d092ed61aa42665bb8ccd0",
+      "ev_bbee5b59f41f44a574bc7b07"
+    ],
+    "new_evidence_ids": [
+      "ev_bbee5b59f41f44a574bc7b07"
+    ],
+    "new_lines": 6,
+    "dispositions": [
+      {
+        "candidate_id": "investigate_1",
+        "final_id": "investigate_1",
+        "disposition": "refined",
+        "lead": "lead_1"
+      }
+    ]
+  },
+  "limitations": [
+    "model_input_not_secret_screened"
+  ],
+  "calls": [
+    {
+      "role": "leads",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_id": "review",
+      "pack_version": "2.11.0",
+      "pack_sha256": "8bdd6ea250659058460995c2197d60952777e87ce71a4e9309f584a0bd34c749",
+      "pack_files": [
+        "00-core.md",
+        "domains.md",
+        "languages/go.md",
+        "leads.md",
+        "pack.yaml"
+      ],
+      "request_sha256": "69784d36d70a90af0f077e5c92cd85cb44aabf6ebce4c1af72b6cf0648c3b4fb",
+      "request_bytes": 12534,
+      "usage": {
+        "input": 1479,
+        "output": 50
+      },
+      "attempt": 1,
+      "outcome": "accepted",
+      "output_errors": []
+    }
+  ]
+}

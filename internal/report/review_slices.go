@@ -508,6 +508,12 @@ func validateLedger(r Report) error {
 		if tStage, _, triage := record.TriageTask(c.TaskKey); triage {
 			stage, slice = tStage, true
 		}
+		if _, leads := record.LeadsTask(c.TaskKey); leads {
+			stage, slice = record.StageLeads, true
+		}
+		if leads := c.Role == record.StageLeads; leads && n < LeadsSince {
+			return invalidf("lead follow-up call in a builder %s revision", r.Builder.Version)
+		}
 		if !slice {
 			stage = strings.TrimPrefix(c.TaskKey, "review.")
 		}
