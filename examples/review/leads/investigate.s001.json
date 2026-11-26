@@ -29,7 +29,7 @@
     {
       "source": "review.scope",
       "state": "accepted",
-      "sha256": "89791a7e1160581ead6caa2857e64aa4d844887fea9a57385cd7c818759dc338"
+      "sha256": "6b8844ad8c08f7fa2cfc458bbdca27d6d71f047932ab574d7486acc79a08dca6"
     }
   ],
   "evidence": [
@@ -203,6 +203,7 @@
       "origin": "investigate"
     }
   ],
+  "lead_limit": 3,
   "leads": [
     {
       "id": "lead_1",
@@ -239,7 +240,7 @@
       "opencode_version": "1.19.5",
       "pack_id": "review",
       "pack_version": "2.11.0",
-      "pack_sha256": "51bfee21d3d25a9a9de5f96dd2f27e21eac3fcebbcd7f3b0550262e571fa03e1",
+      "pack_sha256": "50b3d1082190476fa1d57da08e02c505732d4ee61732a0a217b87a893379d363",
       "pack_files": [
         "00-core.md",
         "domains.md",
@@ -247,8 +248,8 @@
         "languages/go.md",
         "pack.yaml"
       ],
-      "request_sha256": "02a0127e0a3e3af1a39a7ff80294d30e0ea902ad0b1ee1dbf73490914935167f",
-      "request_bytes": 25073,
+      "request_sha256": "74338dc3f9af20b47512ccf3be3575da8ebfeb95f925576a150adbdd39681edc",
+      "request_bytes": 25423,
       "usage": {
         "input": 10100,
         "output": 50

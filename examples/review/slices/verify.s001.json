@@ -24,12 +24,12 @@
     {
       "source": "review.investigate.s001",
       "state": "accepted",
-      "sha256": "f208772aa95a0bfa0b049c62c7ff68c8cc66a9549577e7375f2c9645c8b5144a"
+      "sha256": "7b55932039b9e8d4cc60332e5196bb25e1a25bf33f8060b779cec6f4559252da"
     },
     {
       "source": "review.scope",
       "state": "accepted",
-      "sha256": "cdfc013db4dab97ff795baaad4e0b89aa7ba262babe423188451eeda5429ccc5"
+      "sha256": "074572832d9e1b679b60d01caf230c21583f06c3da7ad8f068fe6bd59742c8ff"
     }
   ],
   "evidence": [

@@ -60,7 +60,7 @@ func TestAcceptedWorkflowReadingRetainsSubmittedContextWithoutModelCitations(t *
 	doc := readRecord(t, j, record.StageDocuments)
 	inv := readRecord(t, j, record.StageInvestigate)
 	reading := inv.WorkflowReading
-	if inv.Schema != record.SchemaVersionCitedLines || reading == nil || !inv.WorkflowReadingMatches(doc) ||
+	if inv.Schema != roleSchema(inv) || reading == nil || !inv.WorkflowReadingMatches(doc) ||
 		len(inv.ContractComparisons) != 1 || inv.ContractComparisons[0].Status != "unknown" ||
 		!slices.Equal(inv.ContractComparisons[0].CodeEvidenceIDs, []string{reading.ReadEvidenceID}) ||
 		len(inv.WorkflowReadingEvidence()) != 3 || slices.ContainsFunc(inv.CitedEvidence(), func(e record.Excerpt) bool {

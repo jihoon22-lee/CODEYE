@@ -394,7 +394,7 @@ func TestSlicesContinueWithoutRepeatingOverviewLines(t *testing.T) {
 			if err != nil {
 				t.Fatal(name, err)
 			}
-			if r.Schema != record.SchemaVersionCitedLines || r.Slice == nil || r.Slice.Key != sl.Key || !slices.Equal(r.Slice.Modules, sl.Modules) {
+			if r.Schema != roleSchema(r) || r.Slice == nil || r.Slice.Key != sl.Key || !slices.Equal(r.Slice.Modules, sl.Modules) {
 				t.Fatalf("%s schema %s slice %+v", name, r.Schema, r.Slice)
 			}
 			if !slices.ContainsFunc(r.Upstream, func(u record.Upstream) bool {
@@ -405,7 +405,7 @@ func TestSlicesContinueWithoutRepeatingOverviewLines(t *testing.T) {
 		}
 	}
 	for _, stage := range record.Stages {
-		if _, err := os.Stat(recordPath(j, stage)); err == nil && readRecord(t, j, stage).Schema != record.SchemaVersionCitedLines {
+		if _, err := os.Stat(recordPath(j, stage)); err == nil && readRecord(t, j, stage).Schema != roleSchema(readRecord(t, j, stage)) {
 			t.Fatalf("%s is not a record of the current schema", stage)
 		}
 	}

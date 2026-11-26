@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.7",
+  "schema_version": "0.9",
   "pack": {
     "id": "review",
     "version": "2.11.0"
@@ -29,7 +29,7 @@
     {
       "source": "review.scope",
       "state": "accepted",
-      "sha256": "cdfc013db4dab97ff795baaad4e0b89aa7ba262babe423188451eeda5429ccc5"
+      "sha256": "074572832d9e1b679b60d01caf230c21583f06c3da7ad8f068fe6bd59742c8ff"
     }
   ],
   "evidence": [
@@ -112,6 +112,7 @@
       "origin": "investigate"
     }
   ],
+  "lead_limit": 3,
   "limitations": [
     "excerpt_only",
     "files_outside_review_context"
@@ -123,7 +124,7 @@
       "opencode_version": "1.19.5",
       "pack_id": "review",
       "pack_version": "2.11.0",
-      "pack_sha256": "7b3c575e6e2d9c2b7986e46fc9834190fe8526ce93819681a1bfa69ed8949a5a",
+      "pack_sha256": "52a39bd30dc05d12d90a2930bf3971cf45e5bee818028526a7b521a7dab9ca04",
       "pack_files": [
         "00-core.md",
         "domains.md",
@@ -133,8 +134,8 @@
         "languages/python.md",
         "pack.yaml"
       ],
-      "request_sha256": "3656e932d3232642b60b2c014fe7701903f1867e0228ce10a143e1bf49b3003d",
-      "request_bytes": 35321,
+      "request_sha256": "91b2f525bde297d573a5cec3ec0e80d4cbd8a097fdd3cda788c2dd03ff3c7a79",
+      "request_bytes": 35671,
       "usage": {
         "input": 16604,
         "output": 50

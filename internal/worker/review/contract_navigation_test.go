@@ -142,13 +142,13 @@ func TestInvestigateKeepsFindingsWhenProbeIsInvalid(t *testing.T) {
 				}
 			}
 			if name != "valid" && name != "canonical" {
-				if r.ContractProbe != nil || r.Schema != record.SchemaVersionCitedLines {
+				if r.ContractProbe != nil || r.Schema != roleSchema(r) {
 					t.Fatalf("invalid selection was persisted: %+v", r.ContractProbe)
 				}
 				return
 			}
 			p := r.ContractProbe
-			if p == nil || r.Schema != record.SchemaVersionCitedLines || len(p.Candidates) != 2 || len(p.Literals) != 1 ||
+			if p == nil || r.Schema != roleSchema(r) || len(p.Candidates) != 2 || len(p.Literals) != 1 ||
 				!p.Valid(j.Snapshot.Digest, r.ContractComparisons[0]) {
 				t.Fatalf("valid snapshot-bound probe missing: %+v", r)
 			}

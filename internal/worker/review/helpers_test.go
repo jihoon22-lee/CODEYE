@@ -289,6 +289,15 @@ func leadsSkip(key, status, reason string) bool {
 		(domain.LeadsNotRun(reason) || reason == domain.ReasonNoReviewScope || reason == reasonDependency)
 }
 
+// roleSchema is the schema of a role record of this worker: 0.9 for an
+// investigation whose request offered leads, 0.7 for the others.
+func roleSchema(r record.Record) string {
+	if r.Stage == record.StageInvestigate && r.LeadLimit > 0 {
+		return record.SchemaVersionLeads
+	}
+	return record.SchemaVersionCitedLines
+}
+
 func leadsNotRun(key string, r analysis.TaskResult) bool {
 	return leadsSkip(key, string(r.Status), r.Reason)
 }
