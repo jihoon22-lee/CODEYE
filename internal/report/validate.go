@@ -101,6 +101,7 @@ func ValidateReport(r Report) error {
 	readingKey := (WorkflowReadingDecoder{}).Key()
 	citedKey := (CitedReviewDecoder{}).Key()
 	triageKey := (TriageReviewDecoder{}).Key()
+	leadsKey := (LeadsReviewDecoder{}).Key()
 	for _, a := range r.Artifacts {
 		if !domain.ValidID(a.ID) || arts[a.ID] || !hex64.MatchString(a.SHA256) || a.SizeBytes < 0 {
 			return invalidf("artifact %s is invalid", a.ID)
@@ -124,6 +125,14 @@ func ValidateReport(r Report) error {
 			if err != nil || version < TriageSince || strconv.Itoa(version) != r.Builder.Version ||
 				!isTriageTask(deref(a.TaskKey)) || a.Role != "other" || a.MediaType != triageKey.MediaType {
 				return invalidf("triage artifact %s requires a triage slot task and its builder", a.ID)
+			}
+		}
+		if a.Decoder != nil && *a.Decoder == leadsKey.String() {
+			task := deref(a.TaskKey)
+			stage, _, slice := record.SliceTask(task)
+			if !builderAtLeast(r.Builder.Version, LeadsSince) || a.Role != "other" || a.MediaType != leadsKey.MediaType ||
+				(!isLeadsTask(task) && task != "review."+record.StageInvestigate && (!slice || stage != record.StageInvestigate)) {
+				return invalidf("lead artifact %s requires an investigation or follow-up task and its builder", a.ID)
 			}
 		}
 		if a.Decoder != nil && *a.Decoder == readingKey.String() {

@@ -210,8 +210,23 @@ func reviewLineage(rec *record.Record, states map[string]*taskState, obs map[str
 			contractSliceLineage(rec, states) &&
 			record.ValidateContractFollowup(*rec, *docs.reviewResult.Record, *inv.reviewResult.Record)
 	}
+	if rec.Stage == record.StageLeads && rec.Accepted() {
+		return leadsLineage(rec, leadsKeyOf(rec), states)
+	}
 	if rec.Stage != record.StageVerify {
 		return true
+	}
+	// A verify of an investigation whose follow-up the report accepted
+	// checks the follow-up's candidates and names it as accepted upstream.
+	var leads *record.Record
+	if triageSlot(rec) == "" {
+		key := leadsKeyOf(rec)
+		if st := states[key]; reviewAccepted(st) && st.reviewResult.Record.LeadFollowup != nil {
+			if u, ok := up[key]; !ok || u.State != record.UpstreamAccepted {
+				return false
+			}
+			leads = st.reviewResult.Record
+		}
 	}
 	var want []record.Candidate
 	// One excerpt ID (bound to path, blob and range) may reach verify from
@@ -233,8 +248,13 @@ func reviewLineage(rec *record.Record, states map[string]*taskState, obs map[str
 			continue
 		}
 		prior := states[source].reviewResult.Record
-		want = append(want, prior.Candidates...)
 		priors = append(priors, *prior)
+		if leads != nil && prior.Stage == record.StageInvestigate {
+			want = append(want, leads.Candidates...)
+			priors = append(priors, *leads)
+			continue
+		}
+		want = append(want, prior.Candidates...)
 	}
 	if !reflect.DeepEqual(nonNilCandidates(want), nonNilCandidates(rec.Candidates)) {
 		return false
@@ -352,9 +372,18 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 	} else {
 		for _, stage := range []string{record.StageInvestigate, record.StageInterpret} {
 			if st := states["review."+stage]; reviewAccepted(st) {
-				candidates = append(candidates, st.reviewResult.Record.Candidates...)
-				aside = aside || stage == record.StageInvestigate && record.PackSetsAside(st.reviewResult.Record.Pack.Version) && !r.scopeNonShipped
-				for _, e := range st.reviewResult.Record.Evidence {
+				from := st.reviewResult.Record
+				// The follow-up's final candidates replace the
+				// investigation's when no verify could check them.
+				if leads := leadsFor(states, ""); stage == record.StageInvestigate && leads != nil {
+					for _, e := range from.Evidence {
+						evidence[e.ID] = e
+					}
+					from = leads
+				}
+				candidates = append(candidates, from.Candidates...)
+				aside = aside || stage == record.StageInvestigate && record.PackSetsAside(from.Pack.Version) && !r.scopeNonShipped
+				for _, e := range from.Evidence {
 					evidence[e.ID] = e
 				}
 			}
@@ -375,6 +404,12 @@ func composeReviews(r *Report, states map[string]*taskState, limits *stringSet) 
 			}
 		case reviewAccepted(inv):
 			from = inv.reviewResult.Record
+			if leads := leadsFor(states, key); leads != nil {
+				for _, e := range from.Evidence {
+					evidence[e.ID] = e
+				}
+				from = leads
+			}
 		default:
 			continue
 		}

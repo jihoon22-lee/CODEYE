@@ -48,6 +48,9 @@ func validateSections(r Report) error {
 	if err := validateLedger(r); err != nil {
 		return err
 	}
+	if err := validateLeadFollowups(r); err != nil {
+		return err
+	}
 	if cr := r.CodeReview; cr != nil && cr.Subject != "" && (cr.Subject != record.SubjectNonShipped || !builderAtLeast(r.Builder.Version, ShippedFocusSince)) {
 		return invalidf("code_review.subject %q in a revision of builder %s", cr.Subject, r.Builder.Version)
 	}

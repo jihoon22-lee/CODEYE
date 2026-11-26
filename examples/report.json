@@ -11,11 +11,11 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000583",
+      "id": "0195f3a0-0000-7000-8000-00000000058b",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "21004fdac487e0b1067598f88b09e0b88dba91e6e1fc8cd4488b9f06563eff6c",
-      "size_bytes": 26016,
+      "sha256": "eca0cc60201769f18e29598868b3479035bd62077928ff201f424fe618ea0f21",
+      "size_bytes": 27564,
       "task_key": null
     },
     {
@@ -716,7 +716,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000563",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "95abed122af733848987d5cddbdda6ecb36f133b27384582cfac4c9f0487b03e",
+      "sha256": "ca8b4641fbbaebdd02b27f4facd7001632e270caf1a46b680078e50437ad6654",
       "size_bytes": 1575,
       "task_key": "review.environment"
     },
@@ -725,7 +725,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000565",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "48642f069a64458e14636c75d2fd416b4e17f0ebb83e15e7e77745c03b5fe8c9",
+      "sha256": "3233c4ea54e14a89aaa87f844da24b9a6c5b751783abec627c28c146640d0627",
       "size_bytes": 3379,
       "task_key": "review.documents"
     },
@@ -734,7 +734,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000567",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "d1696bb4b986b58e48e267efb9dc11a1a90b26656f7c4ae969e2dec923001a02",
+      "sha256": "4d1da11ee07255cb45802d52b52ffc6618129f9f2da6a75291c6b3740b954119",
       "size_bytes": 3309,
       "task_key": "review.investigate"
     },
@@ -743,43 +743,43 @@
       "id": "0195f3a0-0000-7000-8000-000000000569",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "70357863e44bad697b4ff6b4bc33078b68be647b835fce36265fe9c89c4b2056",
+      "sha256": "a07563d79878478bcddb58ed87953bfe323558ffafdbe55a572f768c23587e30",
       "size_bytes": 3470,
       "task_key": "review.interpret"
     },
     {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
-      "id": "0195f3a0-0000-7000-8000-00000000056b",
+      "id": "0195f3a0-0000-7000-8000-00000000056c",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "23cefd585bda7c2c5802972b96590adc26962aba28c3b8100b00c1babb5ddb90",
+      "sha256": "03ac97c88d65f4fbcf271687059c76ce263ff3a1453f0a79b79f981a9da24ce2",
       "size_bytes": 4826,
       "task_key": "review.verify"
     },
     {
       "decoder": "application/vnd.codeye.review-scope+json;schema_version=0.3",
-      "id": "0195f3a0-0000-7000-8000-00000000056d",
+      "id": "0195f3a0-0000-7000-8000-00000000056e",
       "media_type": "application/vnd.codeye.review-scope+json",
       "role": "other",
-      "sha256": "de08cee6d6bb6273fe13573c35716a7016370052f9305f451866107ca2dd9aab",
+      "sha256": "3151cfa92b5d473dd5eadccf6ed29763655863bf31bab98cf7e98b60131801a1",
       "size_bytes": 2471,
       "task_key": "review.scope"
     },
     {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.8",
-      "id": "0195f3a0-0000-7000-8000-00000000057e",
+      "id": "0195f3a0-0000-7000-8000-000000000586",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "79c60c702a20d8937da37fa296f45303c10012857f69afcb1d4e340181b2b26b",
+      "sha256": "6d54393fb687ecf8bc7324bf6c2230579346ababd422e683be0a73f68643d216",
       "size_bytes": 2692,
       "task_key": "review.triage.t001"
     },
     {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.8",
-      "id": "0195f3a0-0000-7000-8000-000000000580",
+      "id": "0195f3a0-0000-7000-8000-000000000588",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "80a563ad3072ddbc6168a9bbc3db0a49d052613c6e300c6843d682282cc99207",
+      "sha256": "cf8361d08faea93de34b0159204b6c1d7447d3b7be7502fa1096ec5675939640",
       "size_bytes": 1248,
       "task_key": "review.verify.t001"
     }
@@ -794,9 +794,9 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "4c6b47914989b9e31a66fc35bc1462f489bdfca84eee9b4f4ef564a9e3f140c8",
+    "input_digest": "bfc6b108a1108a616c89ecdee51be75890c8b0f322c34d374f72cd83c14bf6cf",
     "result_manifest_artifact_id": null,
-    "version": "25"
+    "version": "26"
   },
   "code_review": {
     "accepted_calls": 6,
@@ -877,6 +877,22 @@
       }
     ],
     "inventory_files": 10,
+    "lead_followups": {
+      "calls": 0,
+      "dispositions": {},
+      "leads_asked": 0,
+      "leads_resolved": 0,
+      "leads_unresolved": {},
+      "new_excerpts": 0,
+      "new_lines": 0,
+      "tasks_accepted": 0,
+      "tasks_not_run": {
+        "no_leads": 1,
+        "no_review_scope": 7
+      },
+      "tasks_planned": 8,
+      "tasks_run": 0
+    },
     "ledger": {
       "calls_used": 6,
       "files": [
@@ -967,7 +983,7 @@
           "slices": []
         }
       ],
-      "request_bytes_sent": 96812,
+      "request_bytes_sent": 97479,
       "scope": {
         "key": "review.scope",
         "result": "accepted",
@@ -976,8 +992,8 @@
       "status": "overview_only"
     },
     "pack_id": "review",
-    "pack_version": "2.10.0",
-    "request_bytes": 96812,
+    "pack_version": "2.11.0",
+    "request_bytes": 97479,
     "roles": [
       {
         "key": "review.investigate",
@@ -988,6 +1004,12 @@
         "key": "review.interpret",
         "result": "accepted",
         "task_status": "succeeded"
+      },
+      {
+        "key": "review.leads",
+        "reason": "no_leads",
+        "result": "skipped",
+        "task_status": "skipped_policy"
       },
       {
         "key": "review.verify",
@@ -1003,15 +1025,16 @@
     ],
     "stage": {
       "counts": {
-        "skipped_policy": 17
+        "skipped_policy": 25
       },
       "reasons": [
+        "no_leads",
         "no_review_scope"
       ],
       "stage": "code_review",
       "state": "succeeded",
       "succeeded": 6,
-      "tasks": 23
+      "tasks": 31
     },
     "strengths": [
       {
@@ -1081,6 +1104,54 @@
         },
         {
           "key": "review.investigate.s007",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads",
+          "reason": "no_leads",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s001",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s002",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s003",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s004",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s005",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s006",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s007",
           "reason": "no_review_scope",
           "result": "skipped",
           "task_status": "skipped_policy"
@@ -1189,8 +1260,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "c7fe033a9b9b174e605e959a50f565bc6b22171bfa4cd600b7586069dc0f0e83",
-        "pack_version": "2.10.0",
+        "pack_sha256": "08c8fad0999b41bb92380e323eba8b1012398f58daf814c3615cf0dec404e11b",
+        "pack_version": "2.11.0",
         "request_sha256": "b1df944a707658a4c1153406bab943e7e585e404d72ea987170ba125771234e1",
         "role": "environment",
         "task_key": "review.environment"
@@ -1200,8 +1271,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "bfd65e2c623fb7950d8a1d740445fdb3e863f729fce0f58c41c700902c595462",
-        "pack_version": "2.10.0",
+        "pack_sha256": "f5a0bc47df7c52e96087131835f5d6df8ee2b4cc4659948601fe8976b69e8981",
+        "pack_version": "2.11.0",
         "request_sha256": "98ae5725a5f1fb6fd9d2814e385c23ba87111fa36ba99cb8204421832364d2a9",
         "role": "documents",
         "task_key": "review.documents"
@@ -1211,9 +1282,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "5d1d9671dad9cb9e3c65ee9bb3f90ec2a1cc25fadccc976004dc6ac0dfd2d5ed",
-        "pack_version": "2.10.0",
-        "request_sha256": "7dc5468c7d26b0852a13dd372f5f55331cf76387e13c7e6b883cf4b8bf43e865",
+        "pack_sha256": "51bfee21d3d25a9a9de5f96dd2f27e21eac3fcebbcd7f3b0550262e571fa03e1",
+        "pack_version": "2.11.0",
+        "request_sha256": "2879cc7dc746f4c41f794d20d6ad2729683447bcd11f8bc725fea9251681fb2b",
         "role": "investigate",
         "task_key": "review.investigate"
       },
@@ -1222,8 +1293,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "0f085b48a9c0e7a37c2c27c6096494e25c84e2c3dd061f244e42eaa1c4e0fb88",
-        "pack_version": "2.10.0",
+        "pack_sha256": "3e09593dde4ae1d6928ba86a12d10bdac092ddea7e71185ec346c7b1a4f2ee2b",
+        "pack_version": "2.11.0",
         "request_sha256": "61ae4f18527b79cb297aafecf35cab37ac42ea1151e51150a2e4cfe747577105",
         "role": "interpret",
         "task_key": "review.interpret"
@@ -1233,8 +1304,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "f34909e035ecf7bca46aafd021ff978510e11bb64e8b666cb4d213edabb67dfa",
-        "pack_version": "2.10.0",
+        "pack_sha256": "b02be89cf5d6fc34927fcffa01ae9180f8c041c79c05bad5755cd1d2be032a4a",
+        "pack_version": "2.11.0",
         "request_sha256": "5c07f341a58672b04c999558eebabfbce113e39aa1af90cac3e8ee185ecf5e00",
         "role": "verify",
         "task_key": "review.verify"
@@ -1244,8 +1315,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "3da49d865f52937c6b94bf22169af4bc8b861851f7ccf71affbdda86ee996b46",
-        "pack_version": "2.10.0",
+        "pack_sha256": "f2b1e072cf123ca1bcc4c052601952065edb2b9cf781acd1c790e97e6a49f314",
+        "pack_version": "2.11.0",
         "request_sha256": "2e077d8ed1ce99f8def14832b2c3a69f9a53a3149dc78f7d8e442809c012b17e",
         "role": "triage",
         "task_key": "review.triage.t001"
@@ -4145,7 +4216,7 @@
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000057c",
+      "id": "0195f3a0-0000-7000-8000-000000000584",
       "key": "review.contract",
       "reason": "no_review_scope",
       "required_for_verdict": false,
@@ -4180,140 +4251,196 @@
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000056e",
+      "id": "0195f3a0-0000-7000-8000-00000000056f",
       "key": "review.investigate.s001",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000570",
+      "id": "0195f3a0-0000-7000-8000-000000000572",
       "key": "review.investigate.s002",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000572",
+      "id": "0195f3a0-0000-7000-8000-000000000575",
       "key": "review.investigate.s003",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000574",
+      "id": "0195f3a0-0000-7000-8000-000000000578",
       "key": "review.investigate.s004",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000576",
+      "id": "0195f3a0-0000-7000-8000-00000000057b",
       "key": "review.investigate.s005",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000578",
+      "id": "0195f3a0-0000-7000-8000-00000000057e",
       "key": "review.investigate.s006",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000057a",
+      "id": "0195f3a0-0000-7000-8000-000000000581",
       "key": "review.investigate.s007",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000056c",
-      "key": "review.scope",
-      "reason": null,
-      "required_for_verdict": false,
-      "status": "succeeded"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-00000000057d",
-      "key": "review.triage.t001",
-      "reason": null,
-      "required_for_verdict": false,
-      "status": "succeeded"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000581",
-      "key": "review.triage.t002",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
       "id": "0195f3a0-0000-7000-8000-00000000056a",
-      "key": "review.verify",
-      "reason": null,
-      "required_for_verdict": true,
-      "status": "succeeded"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-00000000056f",
-      "key": "review.verify.s001",
-      "reason": "no_review_scope",
+      "key": "review.leads",
+      "reason": "no_leads",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000571",
-      "key": "review.verify.s002",
+      "id": "0195f3a0-0000-7000-8000-000000000570",
+      "key": "review.leads.s001",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000573",
-      "key": "review.verify.s003",
+      "key": "review.leads.s002",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000575",
-      "key": "review.verify.s004",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000577",
-      "key": "review.verify.s005",
+      "id": "0195f3a0-0000-7000-8000-000000000576",
+      "key": "review.leads.s003",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000579",
-      "key": "review.verify.s006",
+      "key": "review.leads.s004",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000057b",
-      "key": "review.verify.s007",
+      "id": "0195f3a0-0000-7000-8000-00000000057c",
+      "key": "review.leads.s005",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-00000000057f",
+      "key": "review.leads.s006",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000582",
+      "key": "review.leads.s007",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000056d",
+      "key": "review.scope",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000585",
+      "key": "review.triage.t001",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000589",
+      "key": "review.triage.t002",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000056b",
+      "key": "review.verify",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000571",
+      "key": "review.verify.s001",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000574",
+      "key": "review.verify.s002",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000577",
+      "key": "review.verify.s003",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000057a",
+      "key": "review.verify.s004",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000057d",
+      "key": "review.verify.s005",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000580",
+      "key": "review.verify.s006",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000583",
+      "key": "review.verify.s007",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000587",
       "key": "review.verify.t001",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000582",
+      "id": "0195f3a0-0000-7000-8000-00000000058a",
       "key": "review.verify.t002",
       "reason": "no_review_scope",
       "required_for_verdict": false,

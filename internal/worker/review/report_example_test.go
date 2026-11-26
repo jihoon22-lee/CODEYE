@@ -739,7 +739,7 @@ func checkReportExample(t *testing.T, r report.Report, plan []analysis.TaskSpec,
 		t.Fatalf("ai review %+v (tasks %v)", ai, rows)
 	}
 	for _, x := range append(append([]report.AIReviewTask{}, ai.RequiredTasks...), ai.OptionalTasks...) {
-		if x.Result == "skipped" && x.Reason != nil && *x.Reason == domain.ReasonNoReviewScope {
+		if x.Result == "skipped" && x.Reason != nil && (*x.Reason == domain.ReasonNoReviewScope || leadsSkip(x.Key, deref(x.TaskStatus), *x.Reason)) {
 			continue
 		}
 		if x.Result != "accepted" {

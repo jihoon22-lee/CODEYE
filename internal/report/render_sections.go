@@ -553,6 +553,9 @@ func newSecView(r Report, digest string, l Locale) secView {
 	if c.Ledger != nil {
 		cb.Parts = append(cb.Parts, ledgerParts(l, *c.Ledger)...)
 	}
+	if c.LeadFollowups != nil {
+		cb.Parts = append(cb.Parts, leadFollowupParts(l, *c.LeadFollowups)...)
+	}
 	cb.Parts = append(cb.Parts, secPart{Heading: l.Label("review.findings"), Findings: pick(c.FindingIDs), Empty: l.Label("review.no_findings")})
 	if len(c.Limits) > 0 {
 		lp := secPart{Heading: l.Label("review.limits"), Model: tf(l, "model.performed_observations", "review.interpret")}
@@ -582,6 +585,30 @@ func newSecView(r Report, digest string, l Locale) secView {
 		}
 	}
 	return v
+}
+
+// leadFollowupParts render the run's leads and follow-up tasks: the counts,
+// then the unresolved leads and the follow-ups that made no call by reason,
+// then what the accepted follow-ups did with the candidates.
+func leadFollowupParts(l Locale, x LeadFollowups) []secPart {
+	head := secPart{Heading: l.Label("leads.heading"), Paras: []string{l.Label("leads.lead"), tf(l, "leads.asked", x.LeadsAsked, x.LeadsResolved),
+		tf(l, "leads.tasks", x.TasksPlanned, x.TasksRun, x.TasksAccepted, x.Calls), tf(l, "leads.new", x.NewExcerpts, x.NewLines)}}
+	out := []secPart{head}
+	counts := func(heading string, m map[string]int, text func(string) string) {
+		if len(m) == 0 {
+			return
+		}
+		t := &secTable{Head: []string{l.Label("col.reason"), l.Label("col.count")}}
+		for _, k := range leadReasonsSorted(m) {
+			t.Rows = append(t.Rows, []secCell{txt(text(k)), num(m[k])})
+		}
+		out = append(out, secPart{Heading: l.Label(heading), Table: t})
+	}
+	reason := func(k string) string { return reasonText(l, k) }
+	counts("leads.unresolved", x.LeadsUnresolved, reason)
+	counts("leads.not_run", x.TasksNotRun, reason)
+	counts("leads.dispositions", x.Dispositions, func(k string) string { return lab(l, "leads.disposition", k) })
+	return out
 }
 
 // ledgerParts render the code review ledger: its header, one row per module

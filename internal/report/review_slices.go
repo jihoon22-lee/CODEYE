@@ -130,6 +130,10 @@ func sliceKeys(states map[string]*taskState) []string {
 func reviewRecordKeys(states map[string]*taskState) []string {
 	var out []string
 	for _, stage := range record.Stages {
+		// The investigation's follow-up comes before its verify.
+		if stage == record.StageVerify && states[record.TaskLeads] != nil {
+			out = append(out, record.TaskLeads)
+		}
 		out = append(out, "review."+stage)
 	}
 	// The diagnostic triage slots run before review.scope.
@@ -137,7 +141,11 @@ func reviewRecordKeys(states map[string]*taskState) []string {
 		out = append(out, "review."+record.StageTriage+"."+key, "review."+record.StageVerify+"."+key)
 	}
 	for _, key := range sliceKeys(states) {
-		out = append(out, "review."+record.StageInvestigate+"."+key, "review."+record.StageVerify+"."+key)
+		out = append(out, "review."+record.StageInvestigate+"."+key)
+		if states[record.LeadsTaskKey(key)] != nil {
+			out = append(out, record.LeadsTaskKey(key))
+		}
+		out = append(out, "review."+record.StageVerify+"."+key)
 	}
 	if states[record.TaskContract] != nil {
 		out = append(out, record.TaskContract)
@@ -219,7 +227,7 @@ func (c sectionContext) ledger() *ReviewLedger {
 		// A triage slot's calls are not in the scope artifact's count
 		// (calls_before_slices): they are counted from its records like a
 		// slice's.
-		whole := !isSliceTask(k) && !isTriageTask(k) && k != record.TaskContract
+		whole := !isSliceTask(k) && !isTriageTask(k) && !isLeadsSlotTask(k) && k != record.TaskContract
 		switch {
 		case reviewAccepted(st), verifyIncomplete(k, st), k == record.TaskContract && contractCallRecord(st),
 			doc != nil && doc.LineCoverage() && !st.rejected && st.reviewResult != nil && st.reviewResult.Record != nil:

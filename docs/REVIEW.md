@@ -636,6 +636,9 @@ overview 조사(`review.investigate`)가 보내지 못한 코드와 테스트 �
 | `contract_comparison_invalid` | 무결성 | 응답 거부. 복구 뒤에도 남으면 후속 검토 실패(앞선 대조 유지) |
 | `contract_evidence_not_new` | 무결성 | `contract_comparison_invalid`와 같다 |
 | `contract_partial_support_invalid` | 무결성 | `contract_comparison_invalid`와 같다 |
+| `lead_result_invalid` | 무결성 | 단서 후속 조사 결과의 `basis`가 보낸 후보·단서가 아니거나 그 대상에 맞지 않는 `disposition`이다(후보가 있는 단서의 `added` 등). 복구 요청에 그 결과를 다시 싣고, 복구 뒤에도 남으면 그 결과만 빼며 그 후보는 조사가 낸 그대로 남는다(`lead_result_omitted`) |
+| `lead_result_duplicate` | 형식 | 같은 `basis`의 두 번째 결과를 버린다. 앞 결과는 그대로 받는다 |
+| `lead_withdrawal_evidence_not_new` | 무결성 | 거둔(`withdrawn`) 결과가 새로 보낸 발췌 안의 코드를 인용하지 않았다. `lead_result_invalid`와 같다 |
 
 ## 후보 검증과 근거 규칙
 

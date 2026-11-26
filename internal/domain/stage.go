@@ -44,6 +44,9 @@ const (
 	// ReasonNoReviewScope: a review slice whose planned files the overview
 	// already sent, or that are all withheld or unreadable.
 	ReasonNoReviewScope = "no_review_scope"
+	// ReasonNoLeads: a lead follow-up whose investigation named no lead
+	// (docs/REVIEW.md#단서-후속-조사).
+	ReasonNoLeads = "no_leads"
 )
 
 // Controlled skip reasons for a planned dependency task that had nothing to
@@ -78,7 +81,7 @@ func NothingToDo(reason string) bool { return NothingToReview(reason) || Nothing
 // exclusion and unreadable inputs are not in this set.
 func NothingToReview(reason string) bool {
 	switch reason {
-	case ReasonNoDocuments, ReasonNoToolObservations, ReasonNoEnvironmentGap, ReasonNoReviewScope:
+	case ReasonNoDocuments, ReasonNoToolObservations, ReasonNoEnvironmentGap, ReasonNoReviewScope, ReasonNoLeads:
 		return true
 	}
 	return false

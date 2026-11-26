@@ -15,6 +15,10 @@ import (
 // wrote: the ledger of its version and, before CitedLinesSince, the review
 // artifacts under the decoders of the earlier record schemas.
 func fileOnlyLedgerForTest(r *Report) {
+	// Builders before LeadsSince planned no lead follow-up.
+	if version, err := strconv.Atoi(r.Builder.Version); err == nil && version < LeadsSince {
+		withoutLeadsForTest(r)
+	}
 	if version, err := strconv.Atoi(r.Builder.Version); err == nil && version < TriageSince {
 		withoutTriageForTest(r)
 	}
@@ -75,6 +79,21 @@ func withoutTriageForTest(r *Report) {
 			n := *l.CallsUsed - removed
 			l.CallsUsed = &n
 		}
+	}
+}
+
+// withoutLeadsForTest drops the lead follow-up tasks, their artifacts and
+// calls and the lead_followups object. The investigate records keep their
+// schema (no example investigation names a lead).
+func withoutLeadsForTest(r *Report) {
+	leads := func(key *string) bool { return key != nil && isLeadsTask(*key) }
+	r.Tasks = slices.DeleteFunc(r.Tasks, func(t Task) bool { return isLeadsTask(t.Key) })
+	r.Artifacts = slices.DeleteFunc(r.Artifacts, func(a Artifact) bool { return leads(a.TaskKey) })
+	r.Coverage.ReviewCalls = slices.DeleteFunc(r.Coverage.ReviewCalls, func(c ReviewCall) bool { return isLeadsTask(c.TaskKey) })
+	r.Coverage.AIReview.OptionalTasks = slices.DeleteFunc(r.Coverage.AIReview.OptionalTasks, func(t AIReviewTask) bool { return isLeadsTask(t.Key) })
+	if cr := r.CodeReview; cr != nil {
+		cr.LeadFollowups = nil
+		cr.Roles = slices.DeleteFunc(cr.Roles, func(t AIReviewTask) bool { return isLeadsTask(t.Key) })
 	}
 }
 

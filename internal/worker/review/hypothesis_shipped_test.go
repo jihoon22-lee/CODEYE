@@ -357,6 +357,12 @@ func TestEarlierRevisionTreatsLaterMarkersAsModelText(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			old := c.run.report
 			old.Builder.Version = c.version
+			// Those builders wrote no lead_followups.
+			if old.CodeReview != nil {
+				cr := *old.CodeReview
+				cr.LeadFollowups = nil
+				old.CodeReview = &cr
+			}
 			old.Findings = slices.Clone(old.Findings)
 			for i, f := range old.Findings {
 				if f.ID == c.run.finding.ID {
