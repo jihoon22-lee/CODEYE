@@ -238,7 +238,8 @@ type leadHit struct {
 	symbol string
 	// extent is the whole declaration of a Go definition whose bound
 	// location (loc) is only its closing return: the window holds the whole
-	// declaration when it fits one window.
+	// declaration when it fits one window and the investigate request sent
+	// none of its lines (they are not sent twice).
 	extent sourceCallLocation
 	// excerpt is the window when the resolver already built it (the Go
 	// caller expansion).
@@ -583,7 +584,9 @@ func (r *leadResolver) window(scan *leadScan, h leadHit) (record.Excerpt, bool) 
 		return record.Excerpt{}, false
 	}
 	if w := h.extent; w.path == h.loc.path && w.start >= 1 && w.start <= start && end <= w.end && w.end <= len(lines) &&
-		w.end-w.start+1 <= record.MaxLeadWindowLines {
+		w.end-w.start+1 <= record.MaxLeadWindowLines && !slices.ContainsFunc(r.sent, func(x record.Excerpt) bool {
+		return x.Path == w.path && x.Start <= w.end && w.start <= x.End
+	}) {
 		if x, ok := r.s.boundedExcerpt(e, kind, origin, w.start, lines[w.start-1:w.end], maxWindowBytes); ok && x.End == w.end {
 			if origin != "context" && record.ValidEvidenceSymbol(h.symbol) {
 				x.Symbol = h.symbol

@@ -338,8 +338,9 @@ func TestLeadReasonsFollowTheirOwnCall(t *testing.T) {
 
 // A Go definition the call binds across packages is sent whole when the
 // declaration fits one window (here 34 lines, past the 24 lines of the
-// bounded return the call binding keeps). A longer one is sent as that
-// bounded return.
+// bounded return the call binding keeps). A longer one, or one whose first
+// lines the investigate request already carried, is sent as that bounded
+// return.
 func TestLeadDefinitionWindowHoldsTheDeclaration(t *testing.T) {
 	body := func(pad int) string {
 		return "package quote\n\n// Price returns the price of n items; a negative count gives -1.\nfunc Price(n int) int {\n" +
@@ -356,6 +357,14 @@ func TestLeadDefinitionWindowHoldsTheDeclaration(t *testing.T) {
 		l := resolveOne(t, s, record.LeadNeedDefinition, "Price", window, anchor)
 		if !l.Resolved() || len(l.Targets) != 1 || l.Targets[0].Path != "quote/price.go" || l.Targets[0].Start != c.start || l.Targets[0].End != c.end {
 			t.Fatalf("pad %d: lead %+v", c.pad, l)
+		}
+		if c.pad != 28 {
+			continue
+		}
+		head, _ := leadWindow(t, s, "quote/price.go", "func Price(", 2)
+		l = resolveOne(t, s, record.LeadNeedDefinition, "Price", window, anchor, head)
+		if !l.Resolved() || len(l.Targets) != 1 || l.Targets[0].Start != 33 || l.Targets[0].End != 36 {
+			t.Fatalf("declaration head already sent: lead %+v", l)
 		}
 	}
 }
