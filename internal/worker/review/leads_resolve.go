@@ -288,9 +288,31 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 			hits = append(hits, leadHit{loc: loc, origin: "context"})
 		}
 	}
+	// A call bound under another name (an import alias) is matched by the
+	// symbol on its call lines when no binding has the symbol's own name.
+	lines := strings.Split(anchor.Text, "\n")
+	callText := func(loc sourceCallLocation) string {
+		lo, hi := loc.start-anchor.Start, loc.end-anchor.Start
+		if lo < 0 || hi >= len(lines) || lo > hi {
+			return ""
+		}
+		return strings.Join(lines[lo:hi+1], "\n")
+	}
+	var aliased []sourceCallLocation
 	for _, link := range links {
-		if link.symbol == symbol && rangesContain([]record.Excerpt{anchor}, link.caller) {
+		if !rangesContain([]record.Excerpt{anchor}, link.caller) {
+			continue
+		}
+		switch {
+		case link.symbol == symbol:
 			add(link.callee)
+		case symbolAt(callText(link.caller), symbol) && !slices.Contains(aliased, link.callee):
+			aliased = append(aliased, link.callee)
+		}
+	}
+	if len(hits) == 0 {
+		for _, loc := range aliased {
+			add(loc)
 		}
 	}
 	if len(hits) == 0 && strings.HasSuffix(anchor.Path, ".go") {

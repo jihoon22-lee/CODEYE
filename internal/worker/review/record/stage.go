@@ -910,23 +910,17 @@ func candidateTextWithin(c CandidateText, b bounds) bool {
 // candidates as they came (the report binds them to the upstream record),
 // and may narrow one of those further.
 func checkCitedRanges(r Record) error {
+	// A lead follow-up sends the cited lines of its leads and candidates as
+	// excerpts of their own, as the investigation recorded them, whether or
+	// not its call succeeded: each is bound to the snapshot like any excerpt
+	// and the report binds it to the investigate record.
+	if r.Stage == StageLeads {
+		return nil
+	}
 	cited := map[string]bool{}
-	if r.Stage == StageVerify || r.Stage == StageLeads {
+	if r.Stage == StageVerify {
 		for _, c := range r.Candidates {
 			for _, id := range c.Evidence {
-				cited[id] = true
-			}
-		}
-	}
-	// A follow-up sends the cited lines of its leads and candidates as the
-	// investigation recorded them (the report binds them to that record)
-	// and may narrow them further.
-	if r.Stage == StageLeads && r.LeadFollowup != nil {
-		for _, id := range r.LeadFollowup.Sent {
-			cited[id] = true
-		}
-		for _, d := range r.LeadFollowup.Dispositions {
-			for _, id := range d.EvidenceIDs {
 				cited[id] = true
 			}
 		}

@@ -332,7 +332,7 @@ func readRecord(t *testing.T, j analysis.Job, stage string) record.Record {
 	if strings.Contains(string(b), `"text":`) {
 		t.Fatal("record stores source text")
 	}
-	r, err := record.Decode(b, expectStage(j, stage))
+	r, err := record.Decode(b, expectRecord(j, stage))
 	if err != nil {
 		t.Fatal(stage, err)
 	}
