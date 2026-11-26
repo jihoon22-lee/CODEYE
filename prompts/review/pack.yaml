@@ -1,5 +1,5 @@
 id: review
-version: 2.10.0
+version: 2.11.0
 schema_version: '0.2'
 language: ko
 status: default
@@ -10,6 +10,7 @@ roles:
   documents: documents.md
   investigate: investigate.md
   interpret: interpret-diagnostics.md
+  leads: leads.md
   triage: triage.md
   verify: verify.md
   contract: contract.md

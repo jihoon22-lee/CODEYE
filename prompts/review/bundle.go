@@ -19,13 +19,14 @@ import (
 var files embed.FS
 
 // Roles are the model roles of the review in plan order.
-var Roles = []string{"environment", "documents", "investigate", "interpret", "triage", "verify", "contract"}
+var Roles = []string{"environment", "documents", "investigate", "interpret", "leads", "triage", "verify", "contract"}
 
 var roleFiles = map[string]string{
 	"environment": "environment.md",
 	"documents":   "documents.md",
 	"investigate": "investigate.md",
 	"interpret":   "interpret-diagnostics.md",
+	"leads":       "leads.md",
 	"triage":      "triage.md",
 	"verify":      "verify.md",
 	"contract":    "contract.md",

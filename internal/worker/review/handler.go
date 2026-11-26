@@ -120,22 +120,19 @@ func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec,
 		analysis.TaskSpec{Key: "review.documents", Required: docs, Title: "문서 계약 검토", Stage: domain.StageDocuments},
 		analysis.TaskSpec{Key: "review.investigate", Required: true, Title: "독립 코드 검토", Stage: domain.StageCodeReview},
 		analysis.TaskSpec{Key: "review.interpret", Required: false, Title: "정적 진단 해석", Stage: domain.StageCodeReview},
+		analysis.TaskSpec{Key: record.TaskLeads, Required: false, Title: "단서 후속 조사", Stage: domain.StageCodeReview},
 		analysis.TaskSpec{Key: "review.verify", Required: true, Title: "후보 반례 검증", Stage: domain.StageCodeReview})
 	sp := planSlicesFor(j.Snapshot.Manifest, j.Scope, h.secondary(), changedPaths(j))
 	groups := codeGroupsFor(j.Snapshot.Manifest, j.Scope, h.secondary(), changedPaths(j), true)
 	if groups.eligible > 0 {
 		plan = append(plan, analysis.TaskSpec{Key: record.TaskScope, Required: false, Title: "모듈별 검토 범위", Stage: domain.StageCodeReview})
-		slots := coverageSlots(sp)
-		if j.Scope.ReviewCoverage == domain.ReviewCoverageExtended {
-			planner := roleStage{ctx: ctx, j: j}
-			if n, err := planner.coverageSlotPlan(groups); err == nil {
-				slots = n
-			}
-		}
-		for i := range slots {
+		// Each slot's lead follow-up runs between its investigation and
+		// its verify (leads_run.go).
+		for i := range h.slotsFor(ctx, j, sp, groups) {
 			inv, ver := slotTaskKeys(sliceKey(i))
 			plan = append(plan,
 				analysis.TaskSpec{Key: inv, Required: false, Title: "모듈별 코드 검토 " + sliceKey(i), Stage: domain.StageCodeReview},
+				analysis.TaskSpec{Key: record.LeadsTaskKey(sliceKey(i)), Required: false, Title: "모듈별 단서 후속 조사 " + sliceKey(i), Stage: domain.StageCodeReview},
 				analysis.TaskSpec{Key: ver, Required: false, Title: "모듈별 후보 검증 " + sliceKey(i), Stage: domain.StageCodeReview})
 		}
 	}
@@ -155,6 +152,29 @@ func (h Handler) Plan(ctx context.Context, j analysis.Job) ([]analysis.TaskSpec,
 	return plan, nil
 }
 
+// slotsFor is the number of module slots the plan holds: the slots of the
+// planned slices, or for extended coverage the coverage plan's.
+func (h Handler) slotsFor(ctx context.Context, j analysis.Job, sp slicePlan, groups codeGroups) int {
+	slots := coverageSlots(sp)
+	if j.Scope.ReviewCoverage == domain.ReviewCoverageExtended {
+		planner := roleStage{ctx: ctx, j: j}
+		if n, err := planner.coverageSlotPlan(groups); err == nil {
+			slots = n
+		}
+	}
+	return slots
+}
+
+// plannedSlots is the number of module slots Plan plans for j (0 without
+// eligible source).
+func (h Handler) plannedSlots(ctx context.Context, j analysis.Job) int {
+	groups := codeGroupsFor(j.Snapshot.Manifest, j.Scope, h.secondary(), changedPaths(j), true)
+	if groups.eligible == 0 {
+		return 0
+	}
+	return h.slotsFor(ctx, j, planSlicesFor(j.Snapshot.Manifest, j.Scope, h.secondary(), changedPaths(j)), groups)
+}
+
 func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, runner executor.Runner) analysis.TaskResult {
 	role, ok := strings.CutPrefix(t.Key, "review.")
 	if !ok {
@@ -162,12 +182,15 @@ func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r
 	}
 	slice, triage := "", ""
 	tStage, tKey, isTriage := record.TriageTask(t.Key)
+	leadsSlot, isLeads := record.LeadsTask(t.Key)
 	switch stage, key, isSlice := record.SliceTask(t.Key); {
 	case t.Key == record.TaskScope:
 	case isSlice:
 		role, slice = stage, key
 	case isTriage:
 		role, triage = tStage, tKey
+	case isLeads:
+		role = record.StageLeads
 	case !slices.Contains(reviewpack.Roles, role):
 		return result(domain.TaskFailed, reasonUnknownRole)
 	}
@@ -189,6 +212,9 @@ func (h Handler) Run(ctx context.Context, j analysis.Job, t analysis.TaskSpec, r
 	}
 	if triage != "" {
 		return s.triageTask(triage)
+	}
+	if isLeads {
+		return s.leadsTask(leadsSlot)
 	}
 	switch role {
 	case record.StageEnvironment:
@@ -222,7 +248,10 @@ type roleStage struct {
 	slice *record.ScopeSlice
 	// triage is the slot key of a diagnostic triage task or its verify
 	// (triage_run.go).
-	triage       string
+	triage string
+	// leadsLimit is the call count below which a lead follow-up may call
+	// (leadsCallLimit).
+	leadsLimit   int
 	sliceLimits  record.ScopeLimits
 	scopeUp      record.Upstream
 	sliceReserve int
@@ -521,6 +550,9 @@ func (s *roleStage) inputUnavailable() *analysis.TaskResult {
 // it is made (callsBelow: the check and the record are one step, in plan
 // order, also when pairs run concurrently).
 func (s *roleStage) reserveCall() *analysis.TaskResult {
+	if s.role == record.StageLeads {
+		return s.callResult(s.callsBelow(s.leadsLimit, true))
+	}
 	reserve := 0
 	if s.slice != nil && s.role == record.StageInvestigate && s.sliceReserve == record.SliceMinCalls {
 		reserve = 1
@@ -534,7 +566,12 @@ func (s *roleStage) reserveCall() *analysis.TaskResult {
 	if s.slice != nil || s.role == record.StageContract {
 		reserve += s.triageHold()
 	}
-	ok, err := s.callsBelow(s.h.maxCalls(s.j.Scope)-reserve, true)
+	return s.callResult(s.callsBelow(s.h.maxCalls(s.j.Scope)-reserve, true))
+}
+
+// callResult is the task result of a refused call check; nil when the call
+// may be made.
+func (s *roleStage) callResult(ok bool, err error) *analysis.TaskResult {
 	switch {
 	case errors.Is(err, errCallsCancelled):
 		r := result(domain.TaskCancelled, "cancelled")

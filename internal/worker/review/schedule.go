@@ -84,6 +84,10 @@ func NewSchedule(keys []string) *Schedule {
 		if _, slot, ok := record.SliceTask(k); ok {
 			return "s:" + slot, record.TaskMaxCalls(k), true
 		}
+		// A slot's lead follow-up belongs to its slot's unit.
+		if slot, ok := record.LeadsTask(k); ok && slot != "" {
+			return "s:" + slot, record.TaskMaxCalls(k), true
+		}
 		if _, slot, ok := record.TriageTask(k); ok {
 			return "t:" + slot, record.TaskMaxCalls(k), true
 		}

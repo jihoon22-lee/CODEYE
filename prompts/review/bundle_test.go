@@ -45,7 +45,7 @@ func guidesOf(files []string) []string {
 
 func TestDefaultPackSelection(t *testing.T) {
 	id, version, err := Identity()
-	if err != nil || id != "review" || version != "2.10.0" {
+	if err != nil || id != "review" || version != "2.11.0" {
 		t.Fatal(id, version, err)
 	}
 	pack, err := os.ReadFile("pack.yaml")

@@ -165,6 +165,22 @@ func (s *roleStage) verify() analysis.TaskResult {
 		invRec, uInv = s.prior(record.StageInvestigate + "." + s.slice.Key)
 		upstream = []record.Upstream{uDoc, uInv, s.scopeUp}
 	}
+	// The investigation's lead follow-up, when it wrote a record: an
+	// accepted one gives the candidates to verify; a failed one leaves the
+	// investigation's (leads_run.go).
+	var leadsRec record.Record
+	var uLeads record.Upstream
+	if s.triage == "" {
+		name := record.StageLeads
+		if s.slice != nil {
+			name += "." + s.slice.Key
+		}
+		if r, u, ok := s.leadsRecord(name); ok {
+			leadsRec, uLeads = r, u
+			upstream = append(upstream, u)
+		}
+	}
+	followed := uInv.State == record.UpstreamAccepted && uLeads.State == record.UpstreamAccepted
 	if uInv.State != record.UpstreamAccepted && uInt.State != record.UpstreamAccepted {
 		return result(domain.TaskSkippedPolicy, reasonDependency)
 	}
@@ -184,8 +200,15 @@ func (s *roleStage) verify() analysis.TaskResult {
 		}
 	}
 	if uInv.State == record.UpstreamAccepted {
-		candidates = append(candidates, invRec.Candidates...)
+		if followed {
+			candidates = append(candidates, leadsRec.Candidates...)
+		} else {
+			candidates = append(candidates, invRec.Candidates...)
+		}
 		addEvidence(invRec.Evidence)
+		if followed {
+			addEvidence(leadsRec.Evidence)
+		}
 		if s.triage != "" {
 			used := map[string]bool{}
 			for _, c := range invRec.Candidates {
@@ -685,6 +708,9 @@ func (s *roleStage) verify() analysis.TaskResult {
 	var priors []record.Record
 	if uInv.State == record.UpstreamAccepted {
 		priors = append(priors, invRec)
+	}
+	if followed {
+		priors = append(priors, leadsRec)
 	}
 	if uInt.State == record.UpstreamAccepted {
 		priors = append(priors, intRec)
