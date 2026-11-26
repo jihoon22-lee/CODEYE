@@ -34,7 +34,7 @@ a,summary{color:#116955}summary{cursor:pointer;font-weight:650}.model{color:#3e6
 </table>
 <p>우선 확인:</p><ul><li><a href="#fnd_8dc98efebf4ba6bda61d"><code>fnd_8dc98efebf4ba6bda61d</code></a></li></ul>
 <h2 id="ai-review">AI 검토</h2>
-<p>상태: <code data-field="ai_review">not_performed</code> <code>review_tasks_not_planned</code></p>
+<p>상태: <code data-field="ai_review">not_performed</code> <span title="review_tasks_not_planned">이 실행에는 모델 검토 작업이 계획되지 않았습니다</span></p>
 <table><tr><th>task</th><th>상태</th><th>결과</th></tr>
 <tr><td><code>review.context</code></td><td><code>없음</code></td><td><code>not_planned</code></td></tr>
 <tr><td><code>review.investigate</code></td><td><code>없음</code></td><td><code>not_planned</code></td></tr>
@@ -51,12 +51,12 @@ a,summary{color:#116955}summary{cursor:pointer;font-weight:650}.model{color:#3e6
 <li>test_status: <code>not_run</code></li>
 <li>inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다(언어 무관).</li><li>테스트 실행 작업은 계획되지 않았다.</li>
 </ul>
-<div class="scroll"><table><tr><th>task</th><th>도구</th><th>버전</th><th>exit class</th><th>범위 파일</th><th>처리 파일</th><th>제외</th><th>미목록</th><th>패키지 상태</th></tr>
-<tr><td><code>go-vet</code></td><td><code>go.vet</code></td><td><code>go1.27.4</code></td><td><code>success_with_findings</code></td><td>1</td><td>1</td><td>0</td><td>0</td><td><code>analyzed_with_findings=1</code></td></tr>
+<div class="scroll"><table><tr><th>task</th><th>도구</th><th>버전</th><th>exit class</th><th>범위 파일</th><th>처리 파일</th><th>제외</th><th>미목록</th><th>단위 상태</th><th>한계</th></tr>
+<tr><td><code>go-vet</code></td><td><code>go.vet</code></td><td><code>go1.27.4</code></td><td><code>success_with_findings</code></td><td>1</td><td>1</td><td>0</td><td>0</td><td><span title="analyzed_with_findings">분석 완료, 진단 있음: 1</span></td><td><span title="cgo_disabled">Go: cgo 파일은 분석하지 않았다.</span><br><span title="default_build_context_only">Go: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석했다.</span><br><span title="no_offline_module_cache">Go: 오프라인 모듈 캐시가 없다.</span></td></tr>
 </table></div>
 <h2 id="tasks">작업 상태</h2>
 <table><tr><th>task</th><th>필수</th><th>상태</th><th>사유</th></tr>
-<tr><td><code>go-vet</code></td><td>true</td><td><code>succeeded</code></td><td><code>없음</code></td></tr>
+<tr><td><code>go-vet</code></td><td>true</td><td><code>succeeded</code></td><td>없음</td></tr>
 </table>
 <h2 id="findings">발견 항목</h2>
 <p>이전 보고서에는 파일 위치만 기록되어 있습니다.</p>
@@ -104,7 +104,7 @@ a,summary{color:#116955}summary{cursor:pointer;font-weight:650}.model{color:#3e6
 <tr><td><code>bb65a06a-175c-4dd5-b7a3-48ac39dce4d2</code></td><td><code>go-vet</code></td><td><code>stderr</code></td><td><code>text/plain</code></td><td><code>e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</code></td><td>0</td><td><code>-</code></td></tr>
 </table></div>
 <h2 id="limitations">한계와 공백</h2>
-<ul><li>AI 검토를 수행하지 않았거나 그 결과를 검증하지 못했다. 도구 진단만 포함한다.</li><li>고정 스냅샷에서 표시할 발췌를 확보하지 못했다.</li></ul>
+<ul><li>AI 검토를 수행하지 않았거나 그 결과를 검증하지 못했습니다. 도구 진단만 포함합니다.</li><li>고정 스냅샷에서 표시할 발췌를 확보하지 못했습니다.</li></ul>
 <details><summary>기술 상세</summary>
 <table>
 <tr><th>report</th><td><code>eebfcfd1-b7c6-4417-ab52-cf481ccf487a</code> rev <span data-field="revision">1</span></td></tr>

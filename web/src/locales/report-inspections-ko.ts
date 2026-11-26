@@ -46,6 +46,7 @@ export const inspectionsKo = {
   recordedDiagnostics: (n: number) => `저장된 진단 ${n}건`,
   formatLimit: (n: number) => `입력 한도로 ${n}개 파일의 서식을 확인하지 못했습니다.`,
   processedPaths: (n: number) => `기록된 처리 파일 ${n}개 보기`,
+  coverageNotes: (n: number) => `범위 단위와 한계 ${n}개 보기`,
   submittedPaths: (n: number) => `도구에 전달한 파일 ${n}개 보기`,
   moduleChecks: (n: number) => `모듈별 검사 ${n}개 보기`,
   earlier: '저장된 분석기 결과를 읽을 수 없는 작업',

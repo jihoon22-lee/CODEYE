@@ -571,6 +571,16 @@
 
 [보고서와 화면](REPORT.md#분석-종류별-절)
 
+**A72 — 사유·한계·단위 코드의 한국어 문구는 하나의 목록을 Go 렌더러와 웹이 함께 읽는다.** (기록 2026-11-26) REQ-012/013, NFR-006과 TC-329, TC-330에 대해 다음을 확정한다. 실제 보고서에서 `mypy_failed`·`cppcheck_failed`·`tsconfig_invalid`·`node_modules_outside_snapshot`·`java_compilation_failed`·`spotbugs_failed` 같은 분석기 사유가 Go 렌더러(Markdown·HTML)에 한국어 문구 없이 코드로 나왔고, 도구 표의 단위 수는 `key=n`으로, 도구 행의 한계는 어디에도 나오지 않았다.
+
+1. **목록 하나.** [`internal/report/reportui/code_labels_ko.json`](../internal/report/reportui/code_labels_ko.json)을 Go가 `go:embed`하고 웹이 가져온다. 이미 `rule_descriptions_ko.json`·`overview_glossary.json`이 같은 방식이다. 이전에는 문구가 Go의 `Codes`와 `model_reason.*`, 웹의 단계 화면 사유, 보고서 사유, 모델 역할 사유 다섯 곳에 흩어져 서로 어긋났다(합집합 338개, Go와 웹이 함께 가진 145개 중 143개의 문구가 달랐다). 두 개의 맵과 어긋남을 잡는 시험을 두는 안은 같은 코드를 두 번 쓰고 말투 차이마다 시험을 고쳐야 해서 택하지 않았다. 다국어는 같은 모양의 파일 하나를 더하면 된다.
+2. **코드 하나에 문구 하나.** 겹친 코드는 단계 화면의 문구(일어난 일과 뜻을 괄호로 쓴 형식)를 먼저, 그다음 웹 보고서, Go 문구를 따랐다. 단계 화면의 문구에서 뜻 표지가 빠지거나 Go 문구에 정보가 더 있던 코드(`ai_review_not_performed`, `ai_review_partial`, `request_input_sources_only`, `tool_unavailable`, `toolchain_not_configured`, `repository_code_not_allowed`, `repository_code_not_offered`, `tool_not_configured`)는 그 정보를 합쳤다. 맥락마다 뜻이 달랐던 `workspace_drift`, `snapshot_integrity_failed`, `lockfile_outdated`, `manifest_invalid`, `dependency_unavailable`는 어느 맥락에서나 맞는 중립 문구로 썼다. 단계 화면의 문구에 있던 화면 안내("도구 메뉴에서 …")는 내보내기에도 쓰이므로 `tool_not_configured`에서 뺐다.
+3. **이름공간.** `reasons`(작업 사유·한계), `model_reasons`(`result_missing`·`not_succeeded`처럼 분석기 사유와 낱말이 겹치는 역할 수준 사유, `reasons` 뒤에 찾고 두 이름공간은 겹치지 않는다), `units`(도구 행의 카운터 키: `dependency_unavailable`·`syntax_error`·`unknown`·`not_analyzed`처럼 사유와 뜻이 다른 낱말이 있으므로 따로 둔다. 단위 문구가 없으면 사유 문구를 쓴다), `upstream`(`upstream_<역할>_<상태>`는 역할이 작업 키에서 오므로 목록의 항목이 아니라 상태별 문구 틀이다).
+4. **빠짐을 막는 시험.** Go 시험이 `internal/worker`·`internal/domain`·`internal/report`의 비테스트 소스를 AST로 읽어 사유·한계·카운터 키가 선언되는 자리(이름이 `Reason`·`Lim`·`Unit`·`Package`·`TU` 등으로 시작하는 상수, `Reason`·`Limitations` 필드, 한계 목록에 대한 대입·append·보조 함수 호출, 사유를 받는 호출, `Units`·`Packages`의 키)에서 코드를 모으고, 각각 문구가 있거나 이유를 적은 제외 목록에 있어야 한다. 쓰이지 않는 제외 항목도 실패한다. 보지 못하는 것은 부분으로 만든 코드(`upstream_*`는 틀로 처리), 보조 함수가 돌려주는 리터럴, 변수를 거친 값이다. 이를 메우려고 저장된 예시 보고서와 관찰 문서(`examples/report*.json`, `observations-*.json`)의 한계·사유·단위도 모두 문구가 있어야 한다. 웹은 같은 파일을 가져오는지, 맵이 사본이 아닌지, 같은 저장 예시를 읽는지 시험한다.
+5. **builder 버전.** 올리지 않는다. 저장 본문은 같고 Markdown·HTML은 요청 시점에 저장본에서 렌더링하므로 게시된 리비전에도 새 문구가 적용된다. 평면 배치(builder 4 이하)의 출력은 코드 문구와 도구 표의 한계 열 때문에 바이트가 달라졌고, 골든(`testdata/report-go-vet.*`)과 예시 Markdown(`examples/report.md`, `report-slices.md`)을 의도해서 다시 만들었다.
+
+[보고서와 화면](REPORT.md#한계-코드)
+
 ## 계정과 권한
 
 **A35 — viewer의 코드 포함 내보내기.** (기록 2026-11-19) REQ-028/031, NFR-006과 TC-144에 대해 viewer도 `include_code=true` 내보내기를 할 수 있게 둔다. 대신 모든 내보내기(형식 세 가지, 코드 포함 여부와 무관)는 본문을 보내기 전에 같은 트랜잭션에서 `report.exported` 감사 행(`format`, `include_code`, run·revision)을 남기고, 기록하지 못하면 본문을 보내지 않는다.

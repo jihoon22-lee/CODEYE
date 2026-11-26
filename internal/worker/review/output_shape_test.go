@@ -378,7 +378,7 @@ func TestReportPublishesVerdictsOfAnIncompleteVerify(t *testing.T) {
 	if p := os.Getenv("CODEYE_SHAPE_MD"); p != "" {
 		_ = os.WriteFile(p, []byte(md), 0o600)
 	}
-	if !strings.Contains(md, "검증 역할이 일부 후보만 판정했다") || !strings.Contains(md, "검증 작업이 일부 후보를 판정하지 못하고 끝났다") {
+	if !strings.Contains(md, "검증 역할이 일부 후보만 판정했다") || !strings.Contains(md, "검증 작업이 일부 후보를 판정하지 못하고 끝났") {
 		t.Fatal("the rendered report does not say the verification is incomplete")
 	}
 	// An older builder could not have published it.

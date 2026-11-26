@@ -1,12 +1,17 @@
 package report
 
-import "strings"
-
 // Locale holds user-facing strings of the renderers. Codes stay in JSON; only
 // renderers translate them, so another locale is one more table.
 type Locale struct {
-	Labels           map[string]string
+	Labels map[string]string
+	// Codes are the reason and limitation codes, ModelReasons the codes of a
+	// model review role that would be ambiguous elsewhere, Units the coverage
+	// counter keys. All three come from reportui/code_labels_ko.json, which the
+	// web report reads too.
 	Codes            map[string]string
+	ModelReasons     map[string]string
+	Upstream         map[string]string
+	Units            map[string]string
 	RuleDescriptions map[string]string
 }
 
@@ -132,229 +137,10 @@ var Korean = Locale{
 		"metric_observations": "그중 구조 지표(결함 아님)",
 		"metric_marker":       "구조 지표, 결함 아님",
 	},
-	Codes: map[string]string{
-		"imports_unresolved":                  "가져온 라이브러리를 찾지 못함",
-		LimAIReviewNotPerformed:               "AI 검토를 수행하지 않았거나 그 결과를 검증하지 못했다. 도구 진단만 포함한다.",
-		LimAIReviewPartial:                    "필수 AI 검토 중 일부만 검증되었다.",
-		LimResultManifestMissing:              "결과 manifest가 없다. DB에 기록된 작업 상태만 표시한다.",
-		LimResultManifestRejected:             "결과 manifest 검증에 실패했다. DB에 기록된 작업 상태만 표시한다.",
-		LimTestsNotPerformed:                  "with-tests 프로필이 요청한 테스트 결과가 없다.",
-		LimTestExecutionUnverified:            "테스트 명령의 종료 상태와 프로세스 정리를 확인할 수 없다.",
-		"test_entries_unavailable":            "지원되는 기존 테스트를 찾지 못했다.",
-		"test_command_failed":                 "테스트 명령이 실패 종료했다.",
-		"test_results_unavailable":            "개별 테스트 실행 결과를 확인하지 못했다.",
-		"test_preparation_failed":             "테스트 준비가 실패했다.",
-		"no_tests_executed":                   "테스트 명령이 테스트를 하나도 실행하지 않았다.",
-		"test_tool_unavailable":               "노드에 테스트 실행 도구가 없다.",
-		"test_dependencies_unavailable":       "테스트에 필요한 의존성이 준비되지 않았다.",
-		"test_isolation_unavailable":          "테스트에 필요한 로컬 네트워크 격리를 사용할 수 없다.",
-		"test_scope_unsupported":              "선택한 파일만 따로 실행할 수 있는 테스트 명령이 없다.",
-		LimRequiredTaskIncomplete:             "필수 작업 중 성공하지 않은 작업이 있다.",
-		LimStaticAnalysisGap:                  "범위에 이 언어의 소스가 있으나 노드에 그 언어의 분석기가 없어 정적 분석을 하지 않았다.",
-		LimStaticAnalysisNotPlanned:           "범위에 지원 언어의 소스가 없어 정적 분석 작업을 계획하지 않았다.",
-		LimCleanupUncertain:                   "하위 프로세스 정리를 확인하지 못했다.",
-		LimArtifactRejected:                   "분석 산출물 검증에 실패해 해당 작업의 결과를 제외했다.",
-		LimArtifactMissing:                    "분석 산출물을 읽지 못했다.",
-		LimUnrecognizedArtifact:               "해석기가 등록되지 않은 산출물이 있다(결과에 반영하지 않음).",
-		LimNoCodeExcerpts:                     "고정 스냅샷에서 표시할 발췌를 확보하지 못했다.",
-		LimTaskNotInManifest:                  "결과 manifest에 없는 작업이 있다.",
-		LimTaskStatusMismatch:                 "산출물의 작업 상태가 controller가 접수한 상태와 달라 접수 상태를 따랐다.",
-		LimRunCancelled:                       "실행이 취소되었다.",
-		LimRunFailed:                          "실행이 실패했다.",
-		NoteInventoryAllLanguages:             "inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다(언어 무관).",
-		NoteToolFilesUnknown:                  "도구가 처리한 파일 수를 확정할 수 없다(미측정이며 0이 아니다).",
-		NoteNoTestsPlanned:                    "테스트 실행 작업은 계획되지 않았다.",
-		NoteToolZeroIsNotClean:                "진단 없이 마친 검사가 있습니다.",
-		NotePullRequestFocus:                  "pull request의 변경 파일을 먼저 검토했다. 저장소의 나머지는 같은 깊이로 검토하지 않았을 수 있다.",
-		"default_build_context_only":          "Go: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석했다.",
-		"cgo_disabled":                        "Go: cgo 파일은 분석하지 않았다.",
-		"build_constraint_ignored_files":      "Go: build constraint로 제외된 파일이 있다.",
-		"unlisted_go_files":                   "Go: go 명령이 보고하지 않은 파일이 있다.",
-		"no_offline_module_cache":             "Go: 오프라인 모듈 캐시가 없다.",
-		"dependencies_prepared":               "이 실행에서 받은 의존성으로 분석했다.",
-		"dependencies_partially_prepared":     "이 실행에서 일부만 받은 의존성으로 분석했다.",
-		"tool_version_untested":               "Go: 시험하지 않은 toolchain 버전이다.",
-		"workspace_drift":                     "Go: 실행 중 workspace가 manifest와 달라졌다.",
-		LimReviewLineage:                      "검토 단계 기록이 앞 단계·탐색·도구 산출물과 이어지지 않아 제외했다.",
-		"environment_notes_outside_input":     "코드 근거를 먼저 담기 위해 일부 환경 해석을 조사 입력에서 뺐다.",
-		"review_input_trimmed":                "요청 크기 한도 때문에 일부 발췌를 모델 입력에서 뺐다.",
-		"verification_excerpt_hashes_omitted": "요청 크기를 맞추기 위해 검증 요청에서 발췌 해시를 생략했다. 근거 ID와 발췌는 유지했다.",
-		"verification_observations_trimmed":   "진단이 많은 후보는 검증 요청에 앞의 진단 8개만 이름으로 실었다. 검토 기록과 발견은 진단을 모두 가진다.",
-		"verification_budget_exceeded":        "요청 크기 한도 때문에 일부 후보를 검증하지 못했다(미검토).",
-		"candidate_not_shipped":               "시험·예제·벤치마크·생성물·외부 코드 경로의 줄만 인용한 조사 후보는 배포 코드의 결함이 아니므로 검증 요청에 보내지 않고 발견에서 뺐다(개수만 센다).",
-		"hypothesis_not_shipped":              "시험·예제·벤치마크·생성물·외부 코드 경로의 도구 진단과 줄에 대한 해석 가설이다. 모델 검증의 결과는 그대로 두고 조치 항목이나 미확정 후보로 세지 않는다.",
-		"verification_call_failed":            "후속 검증 호출이 실패해 일부 후보를 검증하지 못했다(미검토). 앞서 수락한 판정은 유지했다.",
-		"code_excerpts_go_only":               "코드 발췌는 Go 파일만 사용했다.",
-		"execution_claim_rejected":            "실행·재현을 주장한 모델 서술을 거부했다.",
-		// Model output resolved after the format repair (docs/REVIEW.md#출력-오류-분류).
-		"review_output_degraded":        "형식 복구 뒤에도 형식만 틀린 모델 출력 항목을 플랫폼이 정리해 받았다(인용 범위·목록 길이). 정리한 내용은 한계로 남겼다.",
-		"output_repair_not_sent":        "요청·호출 한도 때문에 형식 복구 요청을 보내지 못해 형식만 틀린 출력을 플랫폼이 정리해 받았다.",
-		"citation_range_unspecified":    "긴 발췌를 줄 범위 없이(또는 너무 긴 범위로) 인용한 근거를 보낸 발췌 전체로 기록했다. 인용한 줄의 정밀도만 잃었다.",
-		"citation_range_from_candidate": "긴 발췌를 줄 범위 없이 인용한 검증 근거를 그 후보가 인용한 줄 범위로 기록했다.",
-		"citation_list_trimmed":         "근거 목록에서 반복된 ID를 빼거나 한도까지 앞의 항목만 남겼다.",
-		"verification_list_trimmed":     "검증 판정의 조건·가정·다음 확인 목록에서 규칙에 맞지 않거나 한도를 넘은 항목을 뺐다.",
-		"review_candidate_omitted":      "형식 복구 뒤에도 근거 위치를 확정하지 못하거나 규칙을 통과하지 못한 후보를 제외했다.",
-		"interpretation_items_omitted":  "형식 복구 뒤에도 규칙을 통과하지 못한 진단 해석 항목을 제외했다.",
-		"document_items_omitted":        "형식 복구 뒤에도 규칙을 통과하지 못한 문서 검토 항목을 제외했다.",
-		"environment_notes_omitted":     "형식 복구 뒤에도 규칙을 통과하지 못한 환경 해석을 제외했다.",
-		LimReviewVerificationIncomplete: "검증 작업이 일부 후보를 판정하지 못하고 끝났다. 수락한 판정은 발견에 실었고 나머지 후보는 사유와 함께 미검토로 남겼다.",
-		// Structure, duplication and secrets pack (docs/ANALYZERS.md).
-		"metrics_not_defects":                "구조 지표(복잡도·중복)는 임계값 초과 측정값이며 결함 근거가 아니다.",
-		"function_end_lines_not_recorded":    "lizard: 함수 끝 줄을 기록하지 않아 시작 줄만 위치로 쓴다.",
-		"in_source_suppressions_honored":     "소스 안의 도구 억제 주석을 도구가 적용했다.",
-		"source_files_not_analyzed":          "도구가 읽지 못한 소스 파일이 있다.",
-		"clone_columns_not_recorded":         "jscpd: 중복 구간의 열 위치를 기록하지 않았다.",
-		"processed_paths_from_input_list":    "jscpd: 처리 파일은 CODEYE가 넘긴 입력 목록이다(도구가 파일별 처리를 보고하지 않음).",
-		"source_files_not_compared":          "jscpd: 크기·인코딩 때문에 비교하지 않은 소스 파일이 있다.",
-		"no_file_reached_clone_thresholds":   "jscpd: 중복 임계값에 닿는 파일이 없었다.",
-		"history_not_scanned":                "gitleaks: workspace 사본만 검사했고 git 이력은 검사하지 않았다.",
-		"secret_values_withheld":             "gitleaks: 비밀값과 그 일부·hash를 저장하지 않는다. 위치와 규칙만 남긴다.",
-		"repository_ignore_file_honored":     "gitleaks: 저장소의 .gitleaksignore를 적용했다(digest 기록).",
-		"binary_files_not_claimed_processed": "gitleaks: 텍스트가 아닌 파일은 처리 파일로 세지 않았다.",
-		"secret_columns_not_recorded":        "gitleaks: 도구의 열 위치가 첫 줄 뒤에서 1씩 어긋나 줄 범위만 남긴다.",
-		"rejected_option_gitleaksignore":     "gitleaks: 저장소 .gitleaksignore에 사본 밖을 가리키는 항목이 있어 검사를 거부했다(값은 기록하지 않음).",
-		// Pattern taint pack (docs/ANALYZERS.md#opengrep-패턴taint-팩).
-		"intra_file_flows_only":           "opengrep: 입력이 들어오는 곳과 위험한 호출이 같은 파일에 있는 흐름만 찾는다. 파일 사이의 흐름은 찾지 않는다.",
-		"request_input_sources_only":      "opengrep: HTTP 요청 입력(C·C++는 소켓 수신 바이트와 CGI 요청 변수)에서 시작하는 흐름만 찾는다. 명령행 인자·기타 환경변수·파일·DB 값은 출발점이 아니다.",
-		"tool_output_holds_source_text":   "opengrep: 기록한 SARIF 원시 출력에는 일치한 소스 코드 조각이 들어 있다. 관찰의 흐름 단계 문구에는 코드를 넣지 않는다.",
-		"files_not_fully_analyzed":        "opengrep: 도구가 오류를 보고한 파일(일부만 해석, 해석 실패, 규칙 제한시간 초과)은 처리 파일로 세지 않았다.",
-		"file_names_not_mappable_skipped": "opengrep: SARIF 결과의 경로로 다시 읽을 수 없는 이름의 파일은 검사하지 않았다.",
-		"flow_steps_truncated":            "opengrep: 흐름 단계가 64개를 넘는 결과는 앞 단계와 마지막 위험 호출만 남겼다.",
-		"files_over_size_limit_skipped":   "opengrep: 크기 한도(1MB)를 넘는 파일은 검사하지 않았다.",
-		"non_text_files_skipped":          "opengrep: UTF-8 텍스트가 아닌 파일은 검사하지 않았다.",
-		"planned_files_not_scanned":       "opengrep: 계획한 파일 중 도구가 검사했다고 보고하지 않은 파일이 있다.",
-		"data_directories_excluded":       "숨김·testdata·vendor·node_modules 아래 파일은 측정하지 않았다.",
-		"workspace_link_refused":          "검사 대상 사본에 링크나 특수 파일이 있어 도구를 실행하지 않았다.",
-		"repository_config_rejected":      "저장소 설정이 사본 밖을 가리켜 도구를 실행하지 않았다(값은 기록하지 않음).",
-		"result_outside_snapshot":         "도구가 선택된 snapshot 파일이 아닌 곳의 결과를 냈다. 그 결과는 버렸고 작업은 실패다.",
-		"model_input_not_secret_screened": "비밀값 탐지가 실행되지 않아 모델 입력을 비밀값 기준으로 거르지 않았다.",
-		// Model call outcomes (docs/REVIEW.md#실패와-task-결과).
-		"opencode_version_untested":                    "시험하지 않은 OpenCode 버전으로 모델을 호출했다(시험한 버전은 docs/REVIEW.md).",
-		"model_not_configured":                         "모델이 설정되지 않아 모델 검토를 하지 않았다.",
-		"model_credential_unavailable":                 "모델 API 키 파일이 없거나 읽을 수 없어 모델을 호출하지 않았다.",
-		"model_endpoint_not_configured":                "오프라인 모드라 공급자의 공개 주소로는 모델을 호출하지 않았다(모델 키 파일의 base_url에 사내 주소를 적는다).",
-		"model_auth_failed":                            "모델 공급자가 API 키를 거부했다(인증 실패).",
-		"model_not_found":                              "모델 공급자에 그 모델이 없다.",
-		"model_unavailable":                            "모델 공급자가 응답하지 않았거나 오류를 냈다.",
-		"model_timeout":                                "모델 호출이 제한시간 안에 끝나지 않았다.",
-		"model_rate_limited":                           "모델 공급자의 사용량 제한에 걸렸다.",
-		"opencode_version_unsupported":                 "OpenCode 실행 파일이 버전을 알 수 없는 값으로 답했다.",
-		"opencode_version_timeout":                     "모델 호출 전 OpenCode 버전 확인이 제한시간을 넘겼다.",
-		"secret_files_withheld":                        "비밀값이 탐지된 파일은 모델 입력에서 뺐다.",
-		"credential_like_content":                      "자격증명과 비슷한 내용이 있어 문서 검토 입력에서 제외했다",
-		"no_public_api_javadoc":                        "공개 메서드에 연결된 Javadoc을 확인하지 못했다",
-		"rust_api_implementation_outside_review_input": "인용한 Rust 공개 API 중 일부 구현을 검토 입력으로 보내지 못했다.",
-		"rust_public_api_partially_sampled":            "Rust 공개 API 문서는 예산 안에서 일부 재공개만 확인했다.",
-		"documents_not_selected":                       "탐색에서 검토할 문서가 선택되지 않았다",
-		"secret_screen_failed":                         "비밀값 탐지 결과를 쓸 수 없어 모델 검토를 건너뛰었다(코드 미전송).",
-		"review_budget_exhausted":                      "attempt의 모델 호출 상한에 닿아 실행하지 않았다(호출 없음).",
-		"no_review_scope":                              "이 단계에서 검토할 대상이 선택되지 않았습니다.",
-		"review_call_count_failed":                     "모델 호출 수를 기록하지 못해 호출하지 않았다.",
-		"review_call_cap_exceeded":                     "작업 하나의 모델 호출 수 상한을 넘는 호출이라 보내지 않았다.",
-		"review_slice_limit":                           "slice 수 상한 밖의 파일은 모듈 단위 검토를 계획하지 않았다.",
-		// Discovery limitations and task reasons the sections show
-		// (docs/REPORT.md#분석-종류별-절).
-		"document_budget_exceeded":        "읽기 예산을 넘은 문서가 있어 그 문서는 읽지 않았다.",
-		"semantic_conflicts_not_assessed": "탐색은 안내끼리의 의미 충돌을 판단하지 않는다(문서 역할이 판단한다).",
-		"document_scope_items_omitted":    "인용한 문서가 적용 범위를 뒷받침하지 못한 항목을 문서 검토 결과에서 제외했다.",
-		"contract_comparison_omitted":     "형식 복구 뒤에도 검사를 통과하지 못한 문서 계약 대조를 제외했다. 그 계약은 구현 대조 미확인이다.",
-		"document_package_scope_narrowed": "호출 예제로 확인한 패키지 경로로 문서 항목의 적용 범위를 좁혔다.",
-		"workflow_selection_invalid":      "문서와 연결할 HTTP 경로 선택 중 확인되지 않은 항목을 제외했다.",
-		"workflow_evidence_unavailable":   "선택한 HTTP 경로의 구현 근거를 다시 확인하지 못했다.",
-		"toolchain_unavailable":           "노드의 toolchain이 없거나 모듈 요구보다 낮아 실행하지 못했다.",
-		// Dependency preparation (docs/ARCHITECTURE.md#의존성-준비).
-		"no_dependencies":                  "받을 외부 의존성이 없다.",
-		"vendored_dependencies":            "저장소가 의존성을 vendor 디렉터리에 담고 있어 받지 않았다.",
-		"no_dependency_consumer":           "받은 의존성을 쓸 분석기가 없어 받지 않았다.",
-		"dependency_consumers_not_allowed": "의존성을 쓸 분석기가 빌드 스크립트 실행 허가가 없어 실행되지 않으므로 받지 않았다.",
-		"registry_unreachable":             "의존성 저장소(registry·proxy)에 연결하지 못했다.",
-		"offline_no_registry_configured":   "오프라인 모드라 공개 저장소에서 받지 않았고, 설정된 사내 미러나 노드의 캐시에 받을 것이 없었다.",
-		"module_not_on_proxy":              "Go 모듈 proxy에 없는 모듈이 있다(비공개 모듈이거나 이름이 틀렸다).",
-		"checksum_mismatch":                "받은 모듈의 checksum이 go.sum과 다르다.",
-		"go_sum_incomplete":                "go.sum에 빠진 항목이 있어 오프라인 분석기가 그 모듈을 확인할 수 없다.",
-		"go_mod_unreadable":                "go.mod를 읽지 못했다.",
-		"package_manager_not_configured":   "노드에 이 생태계의 패키지 관리자가 설정되지 않았다.",
-		"download_limit_exceeded":          "내려받기 크기 상한을 넘어 중단했다.",
-		"dependency_budget_exhausted":      "실행 하나의 의존성 받기 시간 예산을 다 써서 중단했다.",
-		"dependency_cache_full":            "저장 영역 cache가 상한에 닿아 의존성을 받지 않았다.",
-		"dependency_fetch_failed":          "의존성 받기가 실패했다.",
-		"dependency_record_failed":         "의존성 받기 기록을 쓰지 못했다.",
-		"private_module_not_fetched":       "비공개 모듈(GOPRIVATE)은 공개 proxy에서 받지 않으며 노드의 모듈 캐시에도 없었다.",
-		"private_modules_seeded":           "노드 모듈 캐시에 있던 비공개 모듈을 썼다.",
-		"replace_outside_snapshot":         "go.mod의 replace가 스냅샷 밖의 경로를 가리켜 실행하지 않았다.",
-		"timeout":                          "제한시간 안에 끝나지 않아 중단했다.",
-		"seeded_from_operator_cache":       "노드에 있던 모듈 캐시를 먼저 읽었다.",
-		"dependency_versions_not_pinned":   "lockfile이 버전을 고정하지 않아 패키지 관리자가 이번에 버전을 골랐다.",
-		// Dependency preparation: shared and Rust and JS/TS reasons.
-		"local_dependency_outside_project": "프로젝트 밖 경로를 가리키는 로컬 의존성(file:·link:·portal:)이 있어 설치하지 않았다.",
-		"lockfile_outdated":                "lockfile이 manifest(Cargo.toml·package.json)와 맞지 않아 고치지 않고 멈췄다.",
-		"lockfile_format_unsupported":      "이 lockfile 형식(yarn 2 이상, bun, poetry.lock, Pipfile 등)은 읽지 않는다.",
-		"lockfile_version_unsupported":     "패키지 관리자가 이 lockfile 버전을 읽지 못했다.",
-		"manifest_invalid":                 "manifest(Cargo.toml·package.json)를 읽지 못했다.",
-		"dependency_not_found":             "패키지 저장소(registry)에 없는 의존성이 있다.",
-		"registry_auth_required":           "패키지 저장소가 인증을 요구했다(인증이 필요한 저장소는 지원하지 않는다).",
-		"multiple_lockfiles":               "여러 패키지 관리자의 lockfile이 있어 package.json의 packageManager(없으면 정해진 순서의 첫째)를 썼다.",
-		"links_outside_workspace_removed":  "설치된 node_modules에서 작업 사본 밖을 가리키는 링크(file:·link: 의존성)를 지웠다.",
-		"link_outside_workspace":           "작업 사본 밖을 가리켜 지운 링크.",
-		"snapshot_integrity_failed":        "스냅샷 파일이 기록된 해시와 달라 받지 않았다.",
-		"dependency_unavailable":           "필요한 의존성이 노드에 없어 분석하지 못했다.",
-
-		"javascript_type_input_budget_exceeded":      "모듈의 소스가 JavaScript 보강 검사의 입력 한도를 초과했다.",
-		"javascript_type_input_unsupported":          "JavaScript 보강 검사가 소스 인코딩을 지원하지 않는다.",
-		"javascript_type_no_eligible_files":          "선택 범위에 JavaScript 보강 검사 대상 파일이 없다.",
-		"javascript_type_files_excluded":             "JavaScript 보강 검사의 대상 범위에서 벤더·생성·예제 등 일부 파일을 제외했다.",
-		"javascript_type_module_resolution_disabled": "JavaScript 보강 검사는 import와 프로젝트의 선언 타입을 해석하지 않는다.",
-		"javascript_type_builtins_es2022_dom":        "JavaScript 보강 검사는 ES2022와 DOM 표준 타입을 사용한다.",
-		"javascript_type_primitive_rejections_only":  "JavaScript 보강 검사는 거부 사유가 원시값으로 확인된 호출을 검사한다.",
-
-		"toolchain_not_configured":    "이 도구가 필요로 하는 언어 toolchain이 노드에 지정되지 않아 실행하지 않았다(0건 통과 아님).",
-		"tool_not_configured":         "노드 운영자가 이 분석 도구 경로를 지정하지 않아 실행하지 않았다(0건 통과 아님).",
-		"tool_unavailable":            "지정된 분석 도구가 시작 검증·버전 확인을 통과하지 못해 실행하지 않았다.",
-		"analyzer_pack_missing":       "범위의 이 언어를 맡을 분석기가 이 빌드에 없다.",
-		"repository_code_not_allowed": "이 프로젝트에서 저장소 코드 실행을 허용하지 않았다.",
-		"repository_code_not_offered": "관리자가 다른 사용자의 저장소 코드 실행을 허용하지 않았다.",
-		// C/C++ compile DB generation (docs/ANALYZERS.md#compile-db-생성) and
-		// the build context of the analyzers.
-		"compile_db_missing":                       "스냅샷에 compile_commands.json이 없고 이번 실행에서 만든 compile DB도 없어 build flag가 필요한 분석을 실행하지 않았다(0건 통과 아님).",
-		"build_tool_not_configured":                "노드 도구 경로에 cmake나 그 빌드 프로그램(make·ninja)이 없어 compile DB를 만들지 않았다.",
-		"compile_db_generation_failed":             "CMake configure가 실패해 compile DB를 만들지 못했다. C/C++ 분석은 build flag 없는 축소 모드다.",
-		"compile_db_not_written":                   "CMake configure는 끝났지만 compile_commands.json을 쓰지 않았다.",
-		"compile_db_generated":                     "CMake configure로 이번 실행에서 compile DB를 만들어 C/C++ 분석기가 읽었다(저장소의 compile_commands.json이 아니다).",
-		"compile_db_generation_partial":            "일부 CMake 프로젝트에서만 compile DB를 만들었다. 나머지 프로젝트의 C/C++ 분석은 축소 모드다.",
-		"compile_db_generation_not_allowed":        "저장소 코드 실행이 허용되지 않아 compile DB를 만들지 않았다. C/C++ 분석은 build flag 없는 축소 모드다.",
-		"compile_db_generation_unavailable":        "compile DB를 만들 도구가 없거나 생성 작업이 끝나지 않아 C/C++ 분석은 build flag 없는 축소 모드다.",
-		"compile_db_build_description_unsupported": "compile DB도 CMake 프로젝트도 없어 compile DB를 만들지 않았다(Meson·autotools 등은 아직 지원하지 않는다).",
-		"cmake_not_found":                          "노드 도구 경로에 cmake가 없어 compile DB를 만들지 않았다.",
-		"cmake_generator_not_found":                "노드 도구 경로에 make나 ninja가 없어 compile DB를 만들지 않았다.",
-		"cmake_inputs_not_enumerated":              "CMake 입력 파일이 256개를 넘어 규칙 문맥에 목록을 남기지 않았다.",
-		"generated_include_dirs_used":              "configure가 build 디렉터리에 만든 헤더를 include 경로로 읽었다.",
-		"repository_code_executed":                 "저장소 코드 실행 허가에 따라 저장소가 정한 코드(build script·CMake configure)를 실행했다.",
-		"build_script_failed":                      "저장소의 build script가 실패해 분석하지 못했다.",
-		"build_scripts_used_toolchain_path":        "build script가 노드 도구 경로의 시스템 C 도구(cc·ar 등)를 사용했다.",
-		"doc_output_collision":                     "이름이 같은 crate 둘의 문서 출력이 겹쳐 rustdoc이 끝나지 못했다(구성 오류).",
-		"dependency_cruiser_no_parsed_sources":     "dependency-cruiser 출력에 분석한 소스가 없고 따라가지 않은 import 대상만 있었다(0건 통과 아님).",
-		"dependency_violations_not_represented":    "어느 import 줄에도 연결하지 못한 의존 규칙 위반이 있어 관찰로 남기지 못했다.",
-		"document_too_large":                       "문서가 문서당 읽기 한도보다 크다.",
-		"read_budget_exhausted":                    "전체 읽기 예산을 다 써서 읽지 않았다.",
-		// Python dependency preparation (docs/ANALYZERS.md#python-의존성-받기).
-		"dynamic_dependencies_not_read":           "pyproject.toml이 의존성을 dynamic으로 두어 빌드하지 않고는 읽을 수 없다.",
-		"no_binary_distribution":                  "wheel이 없는 패키지가 있어 빼고 받았다(소스 빌드는 하지 않는다).",
-		"no_matching_distribution":                "pip이 맞는 wheel을 찾지 못한 패키지가 있다(wheel이 없거나 이름이 틀렸다).",
-		"resolution_conflict":                     "요구사항끼리 버전이 맞지 않아 설치할 조합이 없다.",
-		"hash_mismatch":                           "받은 패키지의 hash가 요구사항의 --hash와 다르다.",
-		"pyproject_unreadable":                    "pyproject.toml을 읽지 못했다.",
-		"too_many_requirements":                   "pyproject.toml을 펼친 요구사항이 너무 많아(10,000개 초과) 받지 않았다.",
-		"lockfile_export_failed":                  "uv.lock에서 요구사항을 꺼내지 못했다(uv export 실패).",
-		"third_party_packages_prepared":           "Python: 이 실행에서 받은 패키지로 import를 확인했다.",
-		"third_party_packages_partially_prepared": "Python: 일부만 받은 패키지로 import를 확인했다.",
-		"third_party_packages_not_installed":      "Python: 외부 패키지를 설치하지 않아 그 import는 확인하지 못했다.",
-		"prepared_packages_not_used":              "Python: 받은 패키지를 이 노드에서 읽지 못해 mypy는 패키지 없이 검사했다.",
-		"requirement_hashes_not_checked":          "hash가 있는 요구사항과 없는 요구사항이 섞여 hash를 확인하지 않았다.",
-		"interpreter_startup_hooks_removed":       "받은 패키지의 *.pth·sitecustomize를 지워 인터프리터가 실행하지 않게 했다.",
-		"prepared_tree_reused":                    "이전 실행에서 같은 고정 버전으로 받아 둔 패키지를 그대로 썼다.",
-		// Review inputs of five languages (docs/REVIEW.md).
-		"source_in_excluded_directories": "숨김·vendor·testdata·node_modules와 build·dist·target 같은 산출물·의존성 디렉터리 아래 소스는 모델 입력에서 뺐다.",
-	},
+	Codes:        koreanCodeLabels.Reasons,
+	ModelReasons: koreanCodeLabels.ModelReasons,
+	Upstream:     koreanCodeLabels.Upstream,
+	Units:        koreanCodeLabels.Units,
 }
 
 func init() {
@@ -599,21 +385,10 @@ var koSectionLabels = map[string]string{
 	"discovery.result_missing":  "탐색 산출물을 읽지 못해 이 절의 탐색 결과가 없다.",
 	"discovery.result_rejected": "탐색 산출물이 검증에 실패해 쓰지 않았다.",
 
-	"model.performed":                        "모델 해석 — %s 역할의 수락된 기록이다. 인용한 파일과 줄 범위는 각 항목에서 확인할 수 있다.",
-	"model.performed_observations":           "모델 해석 — %s 역할의 수락된 기록에서 가져온 모델 서술이다. 도구나 실행으로 확인한 사실이 아니다. 줄 끝의 ID는 정적 분석 절의 진단이다.",
-	"model.not_performed":                    "모델 해석 없음: %s.",
-	"model_reason.review_tasks_not_planned":  "이 실행에는 모델 검토 작업이 계획되지 않았다",
-	"model_reason.role_not_planned":          "이 역할의 작업이 계획되지 않았다",
-	"model_reason.result_rejected":           "역할 기록이 검증에 실패했다",
-	"model_reason.result_missing":            "역할 기록을 읽지 못했다",
-	"model_reason.not_succeeded":             "역할 작업이 성공하지 않았다",
-	"model_reason.no_environment_gap":        "모듈 요구와 노드 관측에 해석할 차이가 없어 역할을 생략했다",
-	"model_reason.no_documents":              "범위에 읽을 문서가 없어 역할을 생략했다",
-	"model_reason.no_tool_observations":      "해석할 도구 진단이 없어 역할을 생략했다",
-	"model_reason.model_source_not_approved": "이 소스의 모델 전송이 승인되지 않았다",
-	"model_reason.model_review_not_offered":  "이 서비스의 관리자가 다른 사용자의 모델 검토를 허용하지 않았다",
-	"model_reason.secret_screen_failed":      "비밀값 탐지 결과를 쓸 수 없어 모델에 코드를 보내지 않았다",
-	"col.location":                           "위치",
+	"model.performed":              "모델 해석 — %s 역할의 수락된 기록이다. 인용한 파일과 줄 범위는 각 항목에서 확인할 수 있다.",
+	"model.performed_observations": "모델 해석 — %s 역할의 수락된 기록에서 가져온 모델 서술이다. 도구나 실행으로 확인한 사실이 아니다. 줄 끝의 ID는 정적 분석 절의 진단이다.",
+	"model.not_performed":          "모델 해석 없음: %s.",
+	"col.location":                 "위치",
 
 	"env.modules":           "모듈",
 	"env.manifests":         "읽은 manifest",
@@ -987,14 +762,8 @@ var koSectionLabels = map[string]string{
 
 // Code translates a code ("code" or "code:detail"); unknown codes are shown as is.
 func (l Locale) Code(c string) string {
-	base, detail, _ := strings.Cut(c, ":")
-	if t, ok := l.Codes[base]; ok {
-		if detail != "" {
-			return t + " (" + detail + ")"
-		}
-		return t
-	}
-	return c
+	t, _ := l.CodeLabel(c)
+	return t
 }
 
 // Label returns a label or the key itself.

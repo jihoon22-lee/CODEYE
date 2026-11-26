@@ -11,7 +11,7 @@ import { ProjectOverview } from './ProjectOverview';
 import { ReportDocumentReading } from './ReportDocumentReading';
 import { ReportOverviewTable } from './ReportOverviewTable';
 import { ReportActions, ReportCoverageNote } from './ReportActions';
-import { InspectionReading, MeasurementReading, StaticDiagnosticReading } from './ReportInspections';
+import { InspectionReading, MeasurementReading, StaticDiagnosticReading, ToolCoverageNotes } from './ReportInspections';
 import { ReportGoDependencies } from './ReportGoDependencies';
 import { ReportCodeStrengths } from './ReportCodeStrengths';
 import { ReportSearch, focusReportFinding, focusReportSearchLocation, type ReportSearchTarget } from './ReportSearch';
@@ -745,6 +745,8 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
           })}
           empty={s.gapLabels.not_planned}
         />
+        {sections.staticAnalysis.languages.flatMap(lang => lang.tools).filter(tool => sc.tasks.includes(tool.task))
+          .map(tool => <ToolCoverageNotes key={tool.task} tool={tool} />)}
         <Table head={[s.col.rule, s.col.location]} rows={detectionsPrimary.map(detectionRow)} empty={detectionsSecondary.length > 0 ? undefined : s.noSecrets} />
         {detectionsSecondary.length > 0 && (
           <More title={sm.secondaryDetections(detectionsSecondary.length)}>{() => <Table head={[s.col.rule, s.col.location]} rows={detectionsSecondary.map(detectionRow)} />}</More>

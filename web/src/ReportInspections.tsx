@@ -5,6 +5,7 @@ import { explainReason, label, PinnedSourceLink, ReportPreview, sourceLocation }
 import { cutLine } from './format';
 import { acceptedStaticResult as shown, ruleGroups, secondaryReviewPath, sevRank } from './reportGroups';
 import { reportKo, diagnosticDescription, genericDiagnosticMessage } from './locales/report-ko';
+import { codeText, unitText } from './locales/codeLabels';
 import { inspectionsKo as i } from './locales/report-inspections-ko';
 
 const s = reportKo.sections;
@@ -35,8 +36,9 @@ function scope(tool: StaticTool) {
     : i.checkedFiles(tool.processed, tool.inScope);
 }
 
-function status(tool: StaticTool) {
-  if (tool.reason) return `${label(s.taskStatus, tool.status)} · ${explainReason(tool.reason)}`;
+// The raw reason code stays in a title for an operator.
+function status(tool: StaticTool): ReactNode {
+  if (tool.reason) return <span title={tool.reason}>{`${label(s.taskStatus, tool.status)} · ${explainReason(tool.reason)}`}</span>;
   return shown(tool) ? label(s.taskStatus, tool.status) : `${label(s.taskStatus, tool.status)} · ${label(s.result, tool.result)}`;
 }
 
@@ -51,6 +53,25 @@ function inspectionResults(tools: StaticTool[]) {
   return [...results.values()];
 }
 
+// The counters and limitations the rows below already word on their own line.
+const shownCounters = new Set(['format_input_limit', 'functions_measured', 'excluded_third_party_directory', 'excluded_data_directory']);
+const shownLimitations = new Set(['no_file_reached_clone_thresholds']);
+
+// A tool row's limitations and coverage counters in words, the raw code in a
+// title and a small code beside each. Nothing is shown for a row without any.
+export function ToolCoverageNotes({ tool }: { tool: StaticTool }) {
+  const limitations = tool.limitations.filter(code => !shownLimitations.has(code.split(':')[0]) && code.split(':')[0] !== tool.reason?.split(':')[0]);
+  const counters = Object.keys(tool.units).sort().filter(key => !shownCounters.has(key));
+  if (limitations.length + counters.length === 0) return null;
+  return <details className="inspection-paths inspection-coverage-notes">
+    <summary>{i.coverageNotes(limitations.length + counters.length)}</summary>
+    <ul className="plain">
+      {limitations.map(code => <li key={'l-' + code}><span title={code}>{codeText(code) ?? code}</span> <small><code>{code}</code></small></li>)}
+      {counters.map(key => <li key={'u-' + key}><span title={key}>{unitText(key)}: {tool.units[key]}</span> <small><code>{key}</code></small></li>)}
+    </ul>
+  </details>;
+}
+
 function TaskScope({ tool, kind, byID, grouped }: { tool: StaticTool; kind: string; byID: Map<string, Observation>; grouped: boolean }) {
   const total = tool.observations.filter(id => !byID.get(id)?.suppressed).length;
   const limit = kind === 'format' ? tool.units.format_input_limit : 0;
@@ -63,6 +84,7 @@ function TaskScope({ tool, kind, byID, grouped }: { tool: StaticTool; kind: stri
       <summary>{i.processedPaths(tool.paths.length)}</summary>
       <ul className="plain">{tool.paths.map(path => <li key={path}><code>{path}</code></li>)}</ul>
     </details>}
+    <ToolCoverageNotes tool={tool} />
   </>;
 }
 
@@ -316,6 +338,7 @@ export function MeasurementReading({ sections, byID }: { sections: Pick<Sections
         <summary>{id === 'any.jscpd' ? i.submittedPaths(tool.paths.length) : i.processedPaths(tool.paths.length)}</summary>
         <ul className="plain">{tool.paths.map(path => <li key={path}><code>{path}</code></li>)}</ul>
       </details>}
+      <ToolCoverageNotes tool={tool} />
       {(tool.units.excluded_third_party_directory > 0 || tool.units.excluded_data_directory > 0 || legacy > 0) &&
         <p className="small">{[
           tool.units.excluded_third_party_directory > 0 && i.excluded(tool.units.excluded_third_party_directory),

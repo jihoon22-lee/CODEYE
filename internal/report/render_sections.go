@@ -165,13 +165,8 @@ func optInt(p *int, def string) string {
 
 // reasonText is a reason code with its translation when one exists.
 func reasonText(l Locale, c string) string {
-	if t := l.Code(c); t != c {
-		return t
-	}
-	if t, ok := l.Labels["model_reason."+c]; ok {
-		return t
-	}
-	return c
+	t, _ := l.CodeLabel(c)
+	return t
 }
 
 func stageLine(l Locale, st SectionStage) string {
@@ -1058,7 +1053,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{range .Appendix}}{{template "part" (pair $l .)}}{{end}}</details>
 {{else}}<p>{{.L.Label "appendix.lead"}}</p>
 <h3>{{.L.Label "ai_review"}}</h3>
-<p>상태: <code data-field="ai_review">{{.R.Coverage.AIReview.Status}}</code> {{with .R.Coverage.AIReview.Reason}}<code>{{.}}</code>{{end}}</p>
+<p>상태: <code data-field="ai_review">{{.R.Coverage.AIReview.Status}}</code> {{with .R.Coverage.AIReview.Reason}}{{reasonHTML $l .}}{{end}}</p>
 {{if .R.Coverage.ReviewCalls}}<ul>{{range .R.Coverage.ReviewCalls}}<li>모델 호출 <code>{{.Role}}</code>{{if .Purpose}} ({{$l.Label (printf "call.%s" .Purpose)}}){{end}} · <code>{{.Model}}</code> · OpenCode <code>{{.Version}}</code> · <code>{{.Outcome}}</code> · 지침{{if .PackID}} <code>{{.PackID}}@{{.PackVersion}}</code>{{end}} <code>{{.PackDigest}}</code></li>{{end}}</ul>{{end}}
 <h3>{{.L.Label "coverage"}}</h3>
 <ul>
@@ -1071,7 +1066,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 </ul>
 <h3>{{.L.Label "tasks"}}</h3>
 <div class="scroll"><table><tr><th>task</th><th>필수</th><th>상태</th><th>사유</th></tr>
-{{range .R.Tasks}}<tr><td><code>{{.Key}}</code></td><td>{{.RequiredForVerdict}}</td><td><code>{{.Status}}</code></td><td><code>{{deref .Reason "없음"}}</code></td></tr>
+{{range .R.Tasks}}<tr><td><code>{{.Key}}</code></td><td>{{.RequiredForVerdict}}</td><td><code>{{.Status}}</code></td><td>{{reasonCell $l .Reason "없음"}}</td></tr>
 {{end}}</table></div>
 <h3>{{.L.Label "executions"}}</h3>
 <div class="scroll"><table><tr><th>실행</th><th>상태</th><th>exit</th><th>정리</th><th>argv</th><th>cwd</th><th>stdout</th><th>stderr</th></tr>

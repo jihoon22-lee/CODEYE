@@ -24,7 +24,7 @@
 
 ## AI 검토
 
-상태: `not_performed` `review_tasks_not_planned`
+상태: `not_performed` 이 실행에는 모델 검토 작업이 계획되지 않았습니다 `review_tasks_not_planned`
 
 | task | 상태 | 결과 |
 |---|---|---|
@@ -43,15 +43,15 @@
 - inventory 파일 수는 snapshot manifest에 포함된 모든 파일 수다\(언어 무관\)\.
 - 테스트 실행 작업은 계획되지 않았다\.
 
-| task | 도구 | 버전 | exit class | 범위 파일 | 처리 파일 | 제외 | 미목록 | 패키지 상태 |
-|---|---|---|---|---|---|---|---|---|
-| `go-vet` | `go.vet` | `go1.27.4` | `success_with_findings` | 1 | 1 | 0 | 0 | `analyzed_with_findings=1` |
+| task | 도구 | 버전 | exit class | 범위 파일 | 처리 파일 | 제외 | 미목록 | 단위 상태 | 한계 |
+|---|---|---|---|---|---|---|---|---|---|
+| `go-vet` | `go.vet` | `go1.27.4` | `success_with_findings` | 1 | 1 | 0 | 0 | 분석 완료, 진단 있음\: 1 `analyzed_with_findings` | Go\: cgo 파일은 분석하지 않았다\. `cgo_disabled`; Go\: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석했다\. `default_build_context_only`; Go\: 오프라인 모듈 캐시가 없다\. `no_offline_module_cache` |
 
 ## 작업 상태
 
 | task | 필수 | 상태 | 사유 |
 |---|---|---|---|
-| `go-vet` | true | `succeeded` | `없음` |
+| `go-vet` | true | `succeeded` | 없음 |
 
 ## 발견 항목
 
@@ -107,8 +107,8 @@
 
 ## 한계와 공백
 
-- AI 검토를 수행하지 않았거나 그 결과를 검증하지 못했다\. 도구 진단만 포함한다\.
-- 고정 스냅샷에서 표시할 발췌를 확보하지 못했다\.
+- AI 검토를 수행하지 않았거나 그 결과를 검증하지 못했습니다\. 도구 진단만 포함합니다\.
+- 고정 스냅샷에서 표시할 발췌를 확보하지 못했습니다\.
 
 ### 기술 상세
 
