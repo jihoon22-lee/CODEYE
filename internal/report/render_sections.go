@@ -935,7 +935,7 @@ func mdPart(p func(...string), part secPart, l Locale) {
 	}
 	mdWorkflowCitations(p, part.Workflow)
 	for _, f := range part.Findings {
-		mdFinding(p, f, "#### ", true)
+		mdFinding(p, l, f, "#### ", true)
 	}
 	mdCitations(p, part.Sources)
 	mdCards(p, part.Cards)
@@ -1238,7 +1238,7 @@ var htmlSectionsTemplate = template.Must(template.New("sections").Funcs(htmlFunc
 {{range .ObservationIDs}}<li>observation <a href="#{{.}}"><code>{{.}}</code></a></li>{{end}}
 <li>recommendation: {{.Recommendation.Summary}}</li>
 {{range .Verification}}<li>verification: {{.}}</li>{{end}}
-{{range .Limitations}}<li>limitation: {{.}}</li>{{end}}
+{{range .Limitations}}<li>limitation: {{limitationHTML $l .}}</li>{{end}}
 </ul></section>
 {{end}}{{if .Cards}}<div class="report-export-workbench">
 <div class="report-workbench-index">

@@ -266,7 +266,7 @@ function FindingDetails({ f, history }: { f: Finding; history?: ReactNode }) {
       {f.limitations.length > 0 && (
         <>
           <h6>{t.limitations}</h6>
-          <TextList values={f.limitations} />
+          <TextList values={f.limitations.map(explainReason)} />
         </>
       )}
       <details className="finding-evidence">

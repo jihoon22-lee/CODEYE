@@ -153,7 +153,7 @@ func RenderMarkdown(r Report, digest string, l Locale) []byte {
 	}
 	for _, f := range r.Findings {
 		f.Title = v.FindingTitle[f.ID]
-		mdFinding(p, f, "### ", false)
+		mdFinding(p, l, f, "### ", false)
 	}
 	p("## ", mdText(l.Label("observations")))
 	p()
@@ -350,7 +350,7 @@ func mdTasks(p func(...string), r Report, l Locale, h string) {
 }
 
 // mdFinding renders one finding under heading level h.
-func mdFinding(p func(...string), f Finding, h string, sectioned bool) {
+func mdFinding(p func(...string), l Locale, f Finding, h string, sectioned bool) {
 	if sectioned {
 		mdReadingAnchor(p, f.ID)
 	}
@@ -399,7 +399,7 @@ func mdFinding(p func(...string), f Finding, h string, sectioned bool) {
 		p("- verification: ", mdText(x))
 	}
 	for _, x := range f.Limitations {
-		p("- limitation: ", mdText(x))
+		p("- limitation: ", mdLimitation(l, x))
 	}
 	p()
 }
@@ -459,6 +459,24 @@ func mdReason(l Locale, c string) string {
 		return mdText(t) + " " + mdCode(c)
 	}
 	return mdCode(c)
+}
+
+// mdLimitation is a finding's limitation: a code in words with the code in a
+// code span, or the stored sentence as it is.
+func mdLimitation(l Locale, x string) string {
+	if _, ok := l.CodeLabel(x); ok {
+		return mdReason(l, x)
+	}
+	return mdText(x)
+}
+
+// limitationHTML is a finding's limitation: a code in words with the code in a
+// title, or the stored sentence as it is.
+func limitationHTML(l Locale, x string) template.HTML {
+	if _, ok := l.CodeLabel(x); ok {
+		return reasonHTML(l, x)
+	}
+	return template.HTML(template.HTMLEscapeString(x))
 }
 
 // mdUnits lists a tool row's coverage counters in words, each with its key.
@@ -664,6 +682,7 @@ var htmlFuncs = template.FuncMap{
 	"short":           short,
 	"code":            func(l Locale, c string) string { return l.Code(c) },
 	"reasonHTML":      reasonHTML,
+	"limitationHTML":  limitationHTML,
 	"reasonCell":      reasonCellHTML,
 	"unitsHTML":       unitsHTML,
 	"limitsHTML":      limitsHTML,
@@ -743,7 +762,7 @@ var htmlTemplate = template.Must(template.New("report").Funcs(htmlFuncs).Parse(`
 {{range .ObservationIDs}}<li>observation <a href="#{{.}}"><code>{{.}}</code></a></li>{{end}}
 <li>recommendation: {{.Recommendation.Summary}}</li>
 {{range .Verification}}<li>verification: {{.}}</li>{{end}}
-{{range .Limitations}}<li>limitation: {{.}}</li>{{end}}
+{{range .Limitations}}<li>limitation: {{limitationHTML $.L .}}</li>{{end}}
 </ul></section>
 {{end}}
 <h2 id="observations">{{.L.Label "observations"}}</h2>

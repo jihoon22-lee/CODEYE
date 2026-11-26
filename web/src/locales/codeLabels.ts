@@ -19,7 +19,7 @@ export function codeText(value: string): string | null {
   const text = Object.hasOwn(codeLabels.reasons, code) ? codeLabels.reasons[code]
     : Object.hasOwn(codeLabels.model_reasons, code) ? codeLabels.model_reasons[code] : upstreamText(code);
   if (text == null) return null;
-  return [text, ...detail].join(' · ');
+  return detail.length > 0 ? `${text} (${detail.join(':')})` : text;
 }
 
 // upstream_<role>_<state> names the role of an earlier review stage and how it

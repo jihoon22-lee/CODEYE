@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { AnalysisReport, Finding, Observation } from './analysisReport';
 import type { DiagnosticTriage, Sections } from './parseReportSections';
-import { Citations, FindingSourceLink, PinnedSourceLink, ReportPath, ReportPreview, label, sourceLocation } from './ReportParts';
+import { Citations, FindingSourceLink, PinnedSourceLink, ReportPath, ReportPreview, explainReason, label, sourceLocation } from './ReportParts';
 import { ReportIcon } from './ReportLayout';
 import { inlineComparisonCode } from './ProjectOverview';
 import { actionPlan, COVERAGE_ATTENTION, DIAGNOSTIC_PLACES, MISMATCH_SHOWN, NOTICE_ATTENTION } from './reportActions';
@@ -54,7 +54,7 @@ function ActionCard({ f, included, openFinding }: { f: Finding; included: boolea
       {(recommendation || checks.length > 0 || limits.length > 0) && <dl className="report-action-rows">
         {recommendation && <Row name={a.recommendation}>{recommendation}</Row>}
         {checks.map((c, i) => <Row key={i} name={a.verification}>{c}</Row>)}
-        {limits.length > 0 && <Row name={a.limitation}>{limits.join(' ')}</Row>}
+        {limits.length > 0 && <Row name={a.limitation}>{limits.map(explainReason).join(' ')}</Row>}
       </dl>}
       <button type="button" className="btn btn-sm btn-ghost-primary report-card-action" onClick={() => openFinding(f.id)}>
         {a.evidenceLink(f.evidence.length - f.counter.length, f.counter.length)}<ReportIcon name="jump" />

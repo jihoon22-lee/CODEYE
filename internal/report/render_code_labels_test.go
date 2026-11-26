@@ -1,6 +1,7 @@
 package report
 
 import (
+	"html/template"
 	"os"
 	"strings"
 	"testing"
@@ -120,5 +121,39 @@ func TestSectionedAppendixWordsTaskReasons(t *testing.T) {
 	}
 	if !strings.Contains(string(html), `<span title="toolchain_unavailable">`) {
 		t.Error("the task table does not word toolchain_unavailable")
+	}
+}
+
+// A finding's limitation codes and the AI review reason of the summary
+// layout read as words too. TC-329
+func TestFindingLimitationsAndSummaryReasonAreWorded(t *testing.T) {
+	r := storedExample(t, "../../examples/report-slices.json")
+	const code = "excerpt_only"
+	r.Findings[0].Limitations = append(r.Findings[0].Limitations, code)
+	words := Korean.Code(code)
+	if words == code {
+		t.Fatalf("%s has no text", code)
+	}
+	for _, detail := range []string{DetailFull} {
+		md := string(RenderMarkdownAt(r, strings.Repeat("0", 64), Korean, detail))
+		if !strings.Contains(md, "- limitation: "+mdText(words)+" `"+code+"`") {
+			t.Errorf("%s markdown does not word the finding limitation", detail)
+		}
+		html, err := RenderHTMLAt(r, strings.Repeat("0", 64), Korean, detail)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(html), `<li>limitation: <span title="`+code+`">`+template.HTMLEscapeString(words)+`</span></li>`) {
+			t.Errorf("%s html does not word the finding limitation", detail)
+		}
+	}
+	// A stored sentence is not a code and stays as written.
+	if got := mdLimitation(Korean, "정적 도구 관찰만 포함하며 실행으로 재현하지 않았다."); strings.Contains(got, "`") {
+		t.Errorf("a sentence got a code span: %q", got)
+	}
+	r.Coverage.AIReview.Reason = strPtr("model_timeout")
+	summary := string(RenderMarkdownAt(r, strings.Repeat("0", 64), Korean, DetailSummary))
+	if strings.Contains(summary, "사유 model_timeout") || !strings.Contains(summary, Korean.Code("model_timeout")[:12]) {
+		t.Error("the summary layout prints the AI review reason as a raw code")
 	}
 }

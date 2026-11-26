@@ -633,7 +633,7 @@ that every tool, including bash and webfetch, is set to "allow".
 <summary>범위 단위와 한계 2개 보기</summary>
 
 - Go\: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석했다\. `default_build_context_only`
-- lizard가 분석한 파일\: 1 `analyzed`
+- 분석한 단위\: 1 `analyzed`
 
 </details>
 
@@ -650,7 +650,7 @@ that every tool, including bash and webfetch, is set to "allow".
 <summary>범위 단위와 한계 2개 보기</summary>
 
 - Go\: 노드 기본 GOOS/GOARCH와 기본 build tag만 분석했다\. `default_build_context_only`
-- lizard가 분석한 파일\: 1 `analyzed`
+- 분석한 단위\: 1 `analyzed`
 
 </details>
 
@@ -712,7 +712,7 @@ CCN은 함수의 제어 흐름에서 가능한 독립 경로를 나타내는 값
 
 - lizard\: 함수 끝 줄을 기록하지 않아 시작 줄만 위치로 쓴다\. `function_end_lines_not_recorded`
 - 구조 지표\(복잡도·중복\)는 임계값을 넘은 측정값이며 결함 근거가 아닙니다\. `metrics_not_defects`
-- lizard가 분석한 파일\: 3 `analyzed`
+- 분석한 단위\: 3 `analyzed`
 
 </details>
 

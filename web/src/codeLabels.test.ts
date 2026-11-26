@@ -30,7 +30,7 @@ describe('shared code catalog', () => {
   });
 
   it('words a code with a detail and a composed upstream code, and leaves an unknown code as it is', () => {
-    expect(codeText('static_analysis_gap:go')).toMatch(/ · go$/);
+    expect(codeText('static_analysis_gap:go')).toMatch(/ \(go\)$/);
     expect(codeText('upstream_interpret_skipped')).toContain('interpret');
     expect(codeText('upstream_interpret_exploded')).toBeNull();
     expect(explainReason('code_nobody_defined')).toBe('code_nobody_defined');
