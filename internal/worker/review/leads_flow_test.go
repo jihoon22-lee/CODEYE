@@ -1,6 +1,7 @@
 package review
 
 import (
+	"encoding/json"
 	"fmt"
 	"path"
 	"regexp"
@@ -384,5 +385,34 @@ func TestLeadFollowupPlanIsStable(t *testing.T) {
 	s := NewSchedule(keys)
 	if s.ledger.unitOf["review.leads.s001"] != s.ledger.unitOf["review.investigate.s001"] || s.ledger.taskCap["review.leads.s001"] != record.LeadsMaxCalls {
 		t.Fatal("the slot's follow-up is not in its slot's unit")
+	}
+}
+
+// The overview follow-up computes the scope before review.scope writes it
+// (leadsCallLimit). Both run scopeDoc on the same inputs: the snapshot, the
+// accepted overview investigation, the configured ceiling (not the calls
+// left) and the analyzer results. The follow-up's record and the overview's
+// verify are not inputs, so a computation made after the run equals the
+// stored artifact in everything but calls_before_slices, which counts the
+// whole-run calls made by then.
+func TestOverviewScopeComputedEarlyIsTheScope(t *testing.T) {
+	j, _, res := treeRun(t, &leadsScript{asked: true}, bodyChainTree(8), 0)
+	if res[record.TaskLeads].Status != domain.TaskSucceeded || res[record.TaskScope].Status != domain.TaskSucceeded {
+		t.Fatalf("follow-up %+v scope %+v", res[record.TaskLeads], res[record.TaskScope])
+	}
+	s := &roleStage{h: Handler{Static: vetStub{}, Budget: smallBudget}, ctx: t.Context(), j: j, role: record.StageLeads}
+	early, r := s.scopeDoc()
+	if r != nil {
+		t.Fatalf("scope computation %+v", r)
+	}
+	stored, err := record.DecodeScope(mustRead(t, scopePath(j)), scopeExpect(j))
+	if err != nil {
+		t.Fatal(err)
+	}
+	early.Budget.CallsBeforeSlices = stored.Budget.CallsBeforeSlices
+	a, _ := json.Marshal(early)
+	b, _ := json.Marshal(stored)
+	if string(a) != string(b) {
+		t.Fatalf("early scope\n%s\nstored scope\n%s", a, b)
 	}
 }
