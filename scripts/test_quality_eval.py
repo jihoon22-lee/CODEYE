@@ -223,6 +223,26 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(est["upper"], {"calls": 40, "ledger_microusd": int(40 * per_call["leads"] * est["margin"])})
 
 
+class DumpComparisonTests(unittest.TestCase):
+    """regression_pilot.compare_dumps: the request multisets of two dumps."""
+
+    def test_the_date_of_the_system_prompt_is_no_difference(self):
+        import regression_pilot
+        with tempfile.TemporaryDirectory() as tmp:
+            base, cand = Path(tmp, "base"), Path(tmp, "cand")
+            for d, date in ((base, "Thu Nov 26 2026"), (cand, "Fri Nov 27 2026")):
+                d.mkdir()
+                messages = [{"role": "system", "content": f"You review code.\nToday's date: {date}\n"},
+                            {"role": "user", "content": "Role: investigate\n<review-input>{}</review-input>"}]
+                (d / "0001.json").write_text(json.dumps({"input": messages}))
+            out = regression_pilot.compare_dumps(base, cand)
+            self.assertEqual((out["baseline"], out["candidate"], out["only_baseline"], out["only_candidate"]), (1, 1, [], []))
+            # Any other difference still counts.
+            (cand / "0001.json").write_text(json.dumps({"input": [{"role": "user", "content": "Role: investigate\nanother request"}]}))
+            out = regression_pilot.compare_dumps(base, cand)
+            self.assertEqual((len(out["only_baseline"]), len(out["only_candidate"])), (1, 1))
+
+
 class RegressionPilotCoverageTests(unittest.TestCase):
     """check_coverage: the conditions registered before a paid run with slices."""
 

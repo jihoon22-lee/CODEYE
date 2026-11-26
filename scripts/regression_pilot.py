@@ -560,6 +560,9 @@ _NORMALIZE = [
     (re.compile(r"\b[0-9a-f]{64}\b"), "<sha256>"),
     (re.compile(r"\b[0-9a-f]{32}\b"), "<dir>"),
     (re.compile(r"/tmp/[^\s\"'\\]+"), "<tmp>"),
+    # OpenCode's system prompt names the day the request was sent, so two
+    # runs on either side of midnight would otherwise differ in every request.
+    (re.compile(r"Today's date: [A-Z][a-z]{2} [A-Z][a-z]{2} [0-9]{2} [0-9]{4}"), "Today's date: <date>"),
 ]
 
 
@@ -567,7 +570,8 @@ def normalized_requests(dump):
     """The (role, prompt) of every request a fake_model_upstream.py --dump
     directory holds, with run-specific identities replaced (UUIDs, evidence
     and observation IDs bound to the snapshot digest, digests, the random
-    source directory and temporary paths)."""
+    source directory, temporary paths and the date OpenCode's system prompt
+    gives)."""
     out = []
     for path in sorted(Path(dump).glob("*.json")):
         payload = json.loads(path.read_bytes())
