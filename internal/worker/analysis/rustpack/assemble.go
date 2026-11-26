@@ -102,16 +102,20 @@ type assembleInput struct {
 	Source                      func(rel string) ([]byte, bool)
 	Drift                       map[string]bool
 	Rustc, Cargo, ClippyV, Main *executor.Result
-	Executions                  []analysis.Execution
-	Mask                        func(string) string
-	Cancelled, Integrity        bool
-	ExtraLimitations            []string
-	WorkspaceRoots              []string
-	DepInfo                     []string // snapshot-relative .rs files rustc listed
-	DepInfoOK                   bool
-	ConfigFiles                 []obsdoc.ConfigFile
-	ConfigKnown                 bool
-	Linker                      bool
+	// First is the run whose compile errors were all in ExcludedKinds
+	// targets; Main is then the retry without those kinds.
+	First                *executor.Result
+	ExcludedKinds        []string
+	Executions           []analysis.Execution
+	Mask                 func(string) string
+	Cancelled, Integrity bool
+	ExtraLimitations     []string
+	WorkspaceRoots       []string
+	DepInfo              []string // snapshot-relative .rs files rustc listed
+	DepInfoOK            bool
+	ConfigFiles          []obsdoc.ConfigFile
+	ConfigKnown          bool
+	Linker               bool
 	// ToolPath: the operator's tool path directories followed the toolchain
 	// directory on the child PATH (programs build scripts spawn by name).
 	ToolPath   bool
@@ -380,6 +384,122 @@ func DocArgs() []string {
 	return []string{"doc", "--offline", "--locked", "--workspace", "--no-deps", "--message-format=json"}
 }
 
+// Target kinds that are not shipped code. A compile error confined to these
+// targets (a bench using nightly #![feature(test)] on the stable toolchain is
+// the measured case) is retried without them, so the shipped library and
+// binaries are still analysed (decision A69).
+var excludableTargetKinds = map[string]string{"bench": "--benches", "example": "--examples", "test": "--tests"}
+
+// targetFlags are the cargo target selections that together are
+// --all-targets, in cargo's order.
+var targetFlags = []string{"--lib", "--bins", "--tests", "--benches", "--examples"}
+
+// LimTargetsExcluded: the first run failed to compile only in test, bench
+// or example targets and the result is the retry without those kinds.
+const LimTargetsExcluded = "failing_target_kinds_excluded"
+
+// retryName is the execution name of the retry without the failing kinds.
+func (k Kind) retryName() string { return k.main() + ".targets" }
+
+// withoutKinds replaces --all-targets in args with the target flags of every
+// kind except the excluded ones.
+func withoutKinds(args []string, excluded []string) []string {
+	drop := map[string]bool{}
+	for _, k := range excluded {
+		drop[excludableTargetKinds[k]] = true
+	}
+	var flags []string
+	for _, f := range targetFlags {
+		if !drop[f] {
+			flags = append(flags, f)
+		}
+	}
+	out := []string{}
+	for _, a := range args {
+		if a == "--all-targets" {
+			out = append(out, flags...)
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+// remainingTargets names the target selections left after excluding kinds
+// (lib, bins, tests, benches, examples).
+func remainingTargets(excluded []string) []string {
+	var out []string
+	for _, f := range withoutKinds([]string{"--all-targets"}, excluded) {
+		out = append(out, strings.TrimPrefix(f, "--"))
+	}
+	return out
+}
+
+// RetryArgs is the argv of the retry without the excluded target kinds.
+func (k Kind) RetryArgs(excluded []string) []string {
+	if k == KindClippy {
+		return withoutKinds(ClippyArgs(), excluded)
+	}
+	return withoutKinds(CheckArgs(), excluded)
+}
+
+// ExcludableFailure returns the target kinds to leave out when a cargo check
+// or clippy run failed (exit 101) only because targets of excludable kinds did
+// not compile: every compile error of the stream belongs to a test, bench or
+// example target, the stream parsed completely and stderr names no other
+// cause (dependencies, lockfile, linker, build script, toolchain). It
+// returns nil otherwise.
+func ExcludableFailure(r *executor.Result) []string {
+	if r == nil || r.Status != executor.StatusExited || r.ExitCode == nil || *r.ExitCode != 101 || !pack.StreamsComplete(r) {
+		return nil
+	}
+	st := ParseStream(r.Stdout.Data)
+	if st.UnparsedBytes != 0 || st.ShapeErrors != 0 || st.DecodeError != "" {
+		return nil
+	}
+	f := ClassifyStderr(r.Stderr.Data)
+	if f.Toolchain || f.LockMissing || f.LockOutdated || f.Dependency || f.Linker || f.ManifestInvalid || f.BuildScript || f.DocCollision {
+		return nil
+	}
+	kinds := map[string]bool{}
+	for _, m := range st.Messages {
+		if !compileError(m.Diag) {
+			continue
+		}
+		if len(m.TargetKinds) == 0 {
+			return nil
+		}
+		for _, k := range m.TargetKinds {
+			if _, ok := excludableTargetKinds[k]; !ok {
+				return nil
+			}
+			kinds[k] = true
+		}
+	}
+	out := make([]string, 0, len(kinds))
+	for k := range kinds {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// compileError is a compiler error that is not a denied lint (the same
+// split as assemble).
+func compileError(d Diag) bool {
+	if d.Level == "error: internal compiler error" {
+		return true
+	}
+	if d.Level != "error" {
+		return false
+	}
+	_, hasPrim := primarySpan(d)
+	return !(d.Code != "" && !errorCode.MatchString(d.Code) && hasPrim)
+}
+
 func keepCode(k Kind, code string) bool {
 	if k == KindDoc {
 		return strings.HasPrefix(code, "rustdoc::")
@@ -432,6 +552,11 @@ func assemble(in assembleInput) obsdoc.Document {
 		doc.RulePack.ConfigFiles = nil
 	}
 	doc.Target.Properties = map[string]string{"features": "default", "targets": "all_targets", "workspace": "true", "host_only": "true", "profile": "dev"}
+	if in.First != nil && in.Kind != KindDoc {
+		doc.RulePack.Selection = withoutKinds(doc.RulePack.Selection, in.ExcludedKinds)
+		doc.Target.Properties["targets"] = strings.Join(remainingTargets(in.ExcludedKinds), ",")
+		doc.Target.Properties["excluded_target_kinds"] = strings.Join(in.ExcludedKinds, ",")
+	}
 	if in.Kind == KindDoc {
 		doc.Target.Properties["targets"] = "documentation"
 	}
@@ -450,6 +575,10 @@ func assemble(in assembleInput) obsdoc.Document {
 		doc.Executions = append(doc.Executions, obsdoc.ExecutionOf(e.Name, e.Result))
 	}
 	mainName := in.Kind.main()
+	if in.First != nil && in.Kind != KindDoc {
+		mainName = in.Kind.retryName()
+		limitations = append(limitations, LimTargetsExcluded)
+	}
 	if in.Integrity {
 		doc.Outcome = obsdoc.Outcome{TaskStatus: domain.TaskFailed, Reason: ptr(ReasonSnapshotIntegrity), ExitClass: obsdoc.ExitNotRun}
 		doc.Coverage.ProcessedPaths = []string{}
@@ -721,7 +850,7 @@ func assemble(in assembleInput) obsdoc.Document {
 	finishedOK := finished && st.Finished[0]
 
 	// Outcome: precedence from cleanup to parser state.
-	results := []*executor.Result{in.Rustc, in.Cargo, in.ClippyV, in.Main}
+	results := []*executor.Result{in.Rustc, in.Cargo, in.ClippyV, in.First, in.Main}
 	status, reason, class := pack.ExecutionOutcome(results, in.Cancelled)
 	fail := func(s domain.TaskStatus, r, c string) {
 		if reason == "" {
