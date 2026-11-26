@@ -335,6 +335,81 @@ func TestContestedCandidateGoesToVerify(t *testing.T) {
 	}
 }
 
+// A caller window holds only the call and three lines around it, so a guard
+// further up the caller is not in it. A contest citing a caller window
+// reaches verify with the declaration enclosing that window (the same step
+// that gives every cited range its declaration), so verify reads the guard.
+func TestContestedCallerWindowReachesVerifyWithItsDeclaration(t *testing.T) {
+	const guard = "if people <= 0 {"
+	steps := strings.Repeat("\tsum += 1\n", 10)
+	j := treeJob(t, map[string]string{
+		"go.mod":      "module example.org/guard\n\ngo 1.23\n",
+		"README.md":   "# Guard\n\nThe bill is split between the people present.\n",
+		"calc/div.go": "package calc\n\n// Ratio divides total by parts.\nfunc Ratio(total, parts int) int {\n\treturn total / parts\n}\n",
+		"app/run.go": "package app\n\nimport \"example.org/guard/calc\"\n\n" + strings.Repeat("// setup note\n", 900) +
+			"\n// Share splits the bill.\nfunc Share(total, people int) int {\n\t" + guard + "\n\t\treturn 0\n\t}\n\tsum := 0\n" + steps +
+			"\treturn calc.Ratio(total, people) + sum\n}\n",
+	})
+	reason := "호출부가 0 이하의 인원을 먼저 돌려보내므로 0으로 나누지 않는다."
+	l := &leadsScript{asked: true, leads: func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[leadsInput](t, q)
+		window := catalogOf(in.Scope.Excerpts)[in.Leads[0].Resolved[0]]
+		if window.Path != "app/run.go" || strings.Contains(window.Text, guard) {
+			t.Fatalf("caller window %+v", window)
+		}
+		return asJSON(map[string]any{"results": []map[string]any{{"basis": in.Candidates[0].ID, "disposition": "contested", "reason": reason,
+			"evidence_ids": []string{citeLine(window, "calc.Ratio(")}}}})
+	}}
+	script := l.script(t)
+	script["investigate"] = func(_ int, q opencode.Request) opencode.Reply {
+		in := decodeAs[investigateInput](t, q)
+		i := slices.IndexFunc(in.Scope.Excerpts, func(e record.Excerpt) bool { return e.Path == "calc/div.go" })
+		if !in.Scope.WholeRun || i < 0 {
+			return asJSON(map[string]any{"candidates": []any{}})
+		}
+		div := in.Scope.Excerpts[i]
+		candidate := chainCandidate(citeLine(div, "total / parts"))
+		candidate["title"], candidate["condition"] = "parts가 0이면 0으로 나눈다", "parts가 0인 호출"
+		out := map[string]any{"candidates": []map[string]any{candidate}}
+		if in.Scope.LeadLimit > 0 {
+			out["leads"] = []map[string]any{{"need": "callers", "evidence_id": citeLine(div, "func Ratio("), "symbol": "Ratio",
+				"suspicion": "호출부가 0을 넘기는지 이 요청에 없다.", "candidate": 1}}
+		}
+		return asJSON(out)
+	}
+	verify := script["verify"]
+	var mu sync.Mutex
+	read := 0
+	script["verify"] = func(n int, q opencode.Request) opencode.Reply {
+		in := decodeAs[verifyInput](t, q)
+		if slices.ContainsFunc(in.Candidates, func(c verifyCandidate) bool { return c.Contested != nil }) {
+			if slices.ContainsFunc(in.Scope.Excerpts, func(e record.Excerpt) bool {
+				return e.Path == "app/run.go" && e.Origin == record.OriginDeclaration && strings.Contains(e.Text, guard)
+			}) {
+				mu.Lock()
+				read++
+				mu.Unlock()
+			}
+			var out []any
+			for _, c := range in.Candidates {
+				out = append(out, inconclusiveFor(c.Candidate, c.Evidence[0]))
+			}
+			return asJSON(map[string]any{"verifications": out})
+		}
+		return verify(n, q)
+	}
+	_, results := runRoleWith(t, j, Handler{Static: vetStub{}, Caller: &scriptedCaller{script: script}, Budget: smallBudget}, "1.27.4")
+	if r := results[record.TaskLeads]; r.Status != domain.TaskSucceeded {
+		t.Fatalf("follow-up %+v", r)
+	}
+	if d := readRecord(t, j, record.StageLeads).LeadFollowup.Dispositions; len(d) != 1 || d[0].Disposition != record.DispositionContested {
+		t.Fatalf("dispositions %+v", d)
+	}
+	if read == 0 || results["review.verify"].Status != domain.TaskSucceeded {
+		t.Fatalf("verify read the caller's declaration %d times: %+v", read, results["review.verify"])
+	}
+}
+
 // A refinement rewrites a candidate's text from the resolved code: it keeps
 // every citation of the candidate it refines and cites lines of a whole
 // resolved declaration. Dropping a citation (lead_refinement_citations_dropped),

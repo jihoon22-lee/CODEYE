@@ -340,7 +340,22 @@ func (s *roleStage) verify() analysis.TaskResult {
 		s.setEvidence(context)
 		return *s.inputUnavailable()
 	}
-	declarations, err := s.enclosingDeclarations(anchors)
+	// A contest's excerpts get their enclosing declarations too: a caller
+	// window holds only the call's neighbourhood, and a guard further up the
+	// caller can decide whether the contest holds.
+	contested := map[string]bool{}
+	for _, c := range candidates {
+		for _, id := range contestIDs[c.ID] {
+			contested[id] = true
+		}
+	}
+	declared := slices.Clone(anchors)
+	for _, x := range withText {
+		if contested[x.ID] && !cited[x.ID] {
+			declared = append(declared, x)
+		}
+	}
+	declarations, err := s.enclosingDeclarations(declared)
 	if err != nil {
 		s.setEvidence(context)
 		return *s.inputUnavailable()
