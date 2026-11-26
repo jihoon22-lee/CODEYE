@@ -115,6 +115,50 @@ class LeadsTest(unittest.TestCase):
         repeated = f.result_for("leads", follow, shape=1.0, leads=True)["results"]
         self.assertEqual(len(repeated), 4)
         self.assertEqual(repeated[0], repeated[1])
+        # A refinement keeps every citation of its candidate and rests on a
+        # resolved excerpt that is not partial; with only a partial one the
+        # lead that would refine gets no result, and the others still add.
+        cited = json.loads(json.dumps(follow))
+        cited["candidates"][0]["evidence_ids"] = ["ev_" + "d" * 24, "ev_" + "e" * 24]
+        first = f.result_for("leads", cited, leads="project")["results"][0]
+        self.assertEqual((first["disposition"], first["evidence_ids"]),
+                         ("refined", ["ev_" + "d" * 24, "ev_" + "e" * 24, "ev_" + "a" * 24, "ev_" + "c" * 24]))
+        partial = json.loads(json.dumps(follow))
+        partial["leads"][0]["partial_evidence_ids"] = ["ev_" + "c" * 24]
+        self.assertEqual([(r["basis"], r["disposition"]) for r in f.result_for("leads", partial, leads=True)["results"]], [("lead_2", "added")])
+
+    PROJECT = {"scope": {"snapshot_manifest_digest": "0" * 64, "lead_limit": 3, "excerpts": [
+        {"id": "ev_" + "a" * 24, "path": "app/main.go", "start_line": 3, "end_line": 9, "kind": "code",
+         "text": "3| func Run(n int) int {\n4| \tif check(n) {\n5| \t\treturn total(n) + len(xs)\n6| \t}\n7| \tfmt.Println(n)\n"
+                 "8| \treturn s.Save(n) + store.Load(n) + Run(n)\n9| }"},
+    ]}}
+
+    def test_project_mode_names_undeclared_project_calls(self):
+        ev = "ev_" + "a" * 24
+        named = [(x["symbol"], x["evidence_id"], x["need"], x["candidate"]) for x in f.result_for("investigate", self.PROJECT, leads="project")["leads"]]
+        # Unqualified calls before calls on a receiver; no builtin (len), no
+        # keyword (if), no standard namespace (fmt) and no name a sent
+        # excerpt declares (Run).
+        self.assertEqual(named, [("check", ev + ":4-4", "definition", 1), ("total", ev + ":5-5", "definition", 1), ("Save", ev + ":8-8", "definition", 1)])
+        # The qualified mode is unchanged: qualified calls only.
+        self.assertEqual([x["symbol"] for x in f.result_for("investigate", self.PROJECT, leads=True)["leads"]], ["Save", "Load", "Println"])
+        self.assertEqual(f.result_for("investigate", self.PROJECT, leads="qualified"), f.result_for("investigate", self.PROJECT, leads=True))
+
+    def test_project_mode_leaves_out_builtins_of_six_languages(self):
+        lines = {
+            "a/x.py": ["print(len(items))", "value = sorted(items)", "logging.info(x)", "return compute(items)"],
+            "a/x.ts": ["console.log(parseInt(s))", "const d = new Widget(s)", "if (isNaN(s)) {", "return compute(s)"],
+            "a/X.java": ["System.out.println(s.toString())", "String t = String.valueOf(s)", "return compute(s);"],
+            "a/x.c": ["char *p = malloc(sizeof(int));", "printf(\"%d\", n);", "return compute(n);"],
+            "a/x.rs": ["let v = Some(x).unwrap();", "println!(\"{}\", v);", "compute(v)"],
+            "a/x.go": ["n := len(append(xs, 1))", "panic(err)", "return compute(n)"],
+        }
+        for path, body in lines.items():
+            text = "\n".join(f"{i + 1}| {line}" for i, line in enumerate(body))
+            request = {"scope": {"snapshot_manifest_digest": "0" * 64, "lead_limit": 3, "excerpts": [
+                {"id": "ev_" + "a" * 24, "path": path, "start_line": 1, "end_line": len(body), "kind": "code", "text": text}]}}
+            with self.subTest(path=path):
+                self.assertEqual([x["symbol"] for x in f.result_for("investigate", request, leads="project")["leads"]], ["compute"])
 
 
 if __name__ == "__main__":
