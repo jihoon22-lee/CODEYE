@@ -52,7 +52,7 @@ func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 	}
 	keys := []string{}
 	for _, p := range plan {
-		if strings.HasPrefix(p.Key, "review.investigate.s") || strings.HasPrefix(p.Key, "review.verify.s") {
+		if strings.HasPrefix(p.Key, "review.investigate.s") || strings.HasPrefix(p.Key, "review.leads.s") || strings.HasPrefix(p.Key, "review.verify.s") {
 			continue
 		}
 		keys = append(keys, p.Key+"="+string(p.Stage))
@@ -60,7 +60,7 @@ func TestWorkerHandlersComposeDiscovery(t *testing.T) {
 			t.Fatalf("%s must be optional", p.Key)
 		}
 	}
-	want := []string{"env.discover=environment", "docs.discover=documents", "go-vet=static_analysis", "staticcheck=static_analysis", "gofmt=static_analysis", "errcheck=static_analysis", "lizard=static_analysis", "jscpd=static_analysis", "gitleaks=static_analysis", "opengrep=static_analysis", "review.environment=environment", "review.documents=documents", "review.investigate=code_review", "review.interpret=code_review", "review.verify=code_review", "review.scope=code_review", "review.triage.t001=code_review", "review.verify.t001=code_review", "review.triage.t002=code_review", "review.verify.t002=code_review"}
+	want := []string{"env.discover=environment", "docs.discover=documents", "go-vet=static_analysis", "staticcheck=static_analysis", "gofmt=static_analysis", "errcheck=static_analysis", "lizard=static_analysis", "jscpd=static_analysis", "gitleaks=static_analysis", "opengrep=static_analysis", "review.environment=environment", "review.documents=documents", "review.investigate=code_review", "review.interpret=code_review", "review.leads=code_review", "review.verify=code_review", "review.scope=code_review", "review.triage.t001=code_review", "review.verify.t001=code_review", "review.triage.t002=code_review", "review.verify.t002=code_review"}
 	if len(keys) != len(want) {
 		t.Fatalf("plan %v", keys)
 	}
@@ -129,7 +129,7 @@ func TestWorkerHandlersComposeReview(t *testing.T) {
 	for _, p := range plan {
 		keys = append(keys, p.Key+"="+string(p.Stage))
 	}
-	want := "env.discover=environment docs.discover=documents go-vet=static_analysis staticcheck=static_analysis errcheck=static_analysis gitleaks=static_analysis review.environment=environment review.documents=documents review.investigate=code_review review.interpret=code_review review.verify=code_review"
+	want := "env.discover=environment docs.discover=documents go-vet=static_analysis staticcheck=static_analysis errcheck=static_analysis gitleaks=static_analysis review.environment=environment review.documents=documents review.investigate=code_review review.interpret=code_review review.leads=code_review review.verify=code_review"
 	if strings.Join(keys, " ") != want {
 		t.Fatalf("plan %v", keys)
 	}
