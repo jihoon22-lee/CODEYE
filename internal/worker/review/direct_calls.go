@@ -122,7 +122,9 @@ func lexScan(content string, python, member, rust, slashes bool, limit, nesting 
 			advance(content[:1])
 			content = content[1:]
 			continue
-		case (python && c == '#') || (!python && strings.HasPrefix(content, "//")):
+		case (python && c == '#') || (!python && strings.HasPrefix(content, "//")) ||
+			slashes && nesting == 0 && len(content) == length && strings.HasPrefix(content, "#!"):
+			// A hashbang line opening a script is a comment too.
 			size = strings.IndexByte(content, '\n')
 			if size < 0 {
 				size = len(content)
@@ -256,8 +258,9 @@ func lexScan(content string, python, member, rust, slashes bool, limit, nesting 
 // slashDivides reports a "/" after an operand: the last token is a string,
 // template or regular expression literal, a name that is no keyword before
 // an expression (a property name after "." is none), a digit, "]", or a ")"
-// whose "(" follows no if, while, for or with. A TypeScript non-null "!" or
-// a postfix "++" or "--" on the operand's line leaves the operand ended.
+// whose "(" follows no if, while, for or with (a method of that name after
+// "." is none). A TypeScript non-null "!" or a postfix "++" or "--" on the
+// operand's line leaves the operand ended.
 func slashDivides(tokens []callToken) bool {
 	last := len(tokens) - 1
 	for last > 0 {
@@ -293,9 +296,11 @@ func slashDivides(tokens []callToken) bool {
 	case len(t.text) == 1 && t.text[0] >= '0' && t.text[0] <= '9', t.text == "]":
 		return true
 	case t.text == ")":
-		// A ")" token's parent is its "(".
+		// A ")" token's parent is its "("; a method named like the
+		// keyword (arr.with(...), Symbol.for(...)) opens no condition.
 		open := t.parent
-		return open >= 0 && !(tokenIs(tokens, open-1, "if") || tokenIs(tokens, open-1, "while") || tokenIs(tokens, open-1, "for") || tokenIs(tokens, open-1, "with"))
+		condition := tokenIs(tokens, open-1, "if") || tokenIs(tokens, open-1, "while") || tokenIs(tokens, open-1, "for") || tokenIs(tokens, open-1, "with")
+		return open >= 0 && !(condition && !tokenIs(tokens, open-2, "."))
 	}
 	return false
 }

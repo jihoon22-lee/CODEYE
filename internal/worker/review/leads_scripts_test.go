@@ -361,6 +361,9 @@ func slashCases() []slashCase {
 		{name: "division after a template, a non-null assertion and a postfix increment", text: "a = `t` / 2;\nb = x! / 2;\nc = this.count! / total;\nd = i++ / 2;\ne = j-- / 2;",
 			divisions: 5},
 		{name: "division after a property named like a keyword", text: "a = mod.default / 2;\nb = obj.return / 3;", divisions: 2},
+		{name: "division after a method named like a keyword", text: "y = arr.with(0, a) / (helper = other) / 2;\nz = Symbol.for(k) / 2;", divisions: 3,
+			names: []string{"helper", "other"}},
+		{name: "a hashbang line", text: "#!/usr/bin/env node\nconst re = /x/;", regexes: []string{"/x/"}, names: []string{"re"}, hidden: []string{"usr", "env", "node"}},
 		{name: "a compound division and a division on the next line", text: "total /= n;\nx = a\n  / b;", divisions: 2},
 		{name: "code between two divisions", text: "x = a / (helper = other) / 2;\ny = a! / (helper = other) / 2;", divisions: 4, names: []string{"helper", "other"}},
 
@@ -375,8 +378,8 @@ func slashCases() []slashCase {
 // file from the lead reader: a same-file function and an imported function
 // beside literals resolve, a declaration spelled inside a literal is none,
 // and an assignment between two divisions (after an operand, a non-null
-// assertion, a postfix increment or a property named like a keyword) is
-// still seen.
+// assertion, a postfix increment, or a property or method named like a
+// keyword) is still seen.
 func TestScriptLeadsReadPastRegularExpressions(t *testing.T) {
 	runBindCases(t, regexLiteralCases())
 }
@@ -401,7 +404,8 @@ func regexLiteralCases() []bindCase {
 		{name: "a declaration spelled in a literal", tree: map[string]string{"app/run.ts": "const re = /function helper\\(x: number\\)/;\n\n" + caller + tsHelper},
 			path: "app/run.ts", line: "return helper(x)", symbol: "helper", target: "app/run.ts", first: "function helper(x: number)", last: "// helper end"},
 	}
-	for _, division := range []string{"a / (helper = other) / 2", "a! / (helper = other) / 2", "a++ / (helper = other) / 2", "Math.default / (helper = other) / 2"} {
+	for _, division := range []string{"a / (helper = other) / 2", "a! / (helper = other) / 2", "a++ / (helper = other) / 2", "Math.default / (helper = other) / 2",
+		"[a].with(0, a) / (helper = other) / 2"} {
 		cases = append(cases, bindCase{name: "an assignment between divisions: " + division, tree: assigned(division),
 			path: "app/run.ts", line: "return helper(x)", symbol: "helper", reason: record.LeadAmbiguous})
 	}
