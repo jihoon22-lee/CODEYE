@@ -447,6 +447,9 @@ func FuzzLeadNativeTokens(f *testing.F) {
 // reason finders.
 func FuzzLeadPythonDefinitions(f *testing.F) {
 	addLeadSeeds(f, "python")
+	// An indented def whose body sits at its column: the first return
+	// after it is no longer its own.
+	f.Add(encodeLeadFiles([]leadFile{{path: "app/jobs.py", text: " def A:\n return 0"}}), "A")
 	f.Fuzz(func(t *testing.T, tree, symbol string) {
 		if files, ok := leadFuzzTree(tree, "python"); ok {
 			runLeadReaders(t, files, symbol, leadReadersThorough)

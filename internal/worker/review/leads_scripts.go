@@ -918,7 +918,8 @@ func pythonFunctionDeclaration(tokens []callToken, blocks []pyBlock, at int) (sc
 
 // scriptFirstReturn is the last line of the first return, raise, throw or
 // assert of a function body opening at token body (its "{" or Python ":"),
-// before the body's end, within witnessMaxLines of start and before any
+// before the body's end (its "}", or the next statement at the Python def's
+// column or left of it), within witnessMaxLines of start and before any
 // nested function; 0 when none (directDefinition's window).
 func scriptFirstReturn(tokens []callToken, body, start int, python bool) int {
 	if body < 0 || body >= len(tokens) || !python && !tokenIs(tokens, body, "{") {
@@ -927,10 +928,18 @@ func scriptFirstReturn(tokens []callToken, body, start int, python bool) int {
 	end := len(tokens)
 	if !python {
 		end = tokens[body].close
+	} else {
+		column := tokens[logicalStart(tokens, body)].column
+		for k := body + 1; k < len(tokens); k++ {
+			if statementStart(tokens, k) && tokens[k].column <= column {
+				end = k
+				break
+			}
+		}
 	}
 	for i := body + 1; i < end; i++ {
 		t := tokens[i]
-		if t.line >= start+witnessMaxLines || python && t.column == 0 && t.depth == 0 {
+		if t.line >= start+witnessMaxLines {
 			break
 		}
 		if tokenIs(tokens, i, "def") || tokenIs(tokens, i, "class") || tokenIs(tokens, i, "function") || tokenIs(tokens, i, "=") && tokenIs(tokens, i+1, ">") {
