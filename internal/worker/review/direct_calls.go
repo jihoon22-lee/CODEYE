@@ -93,14 +93,22 @@ func lexicalCallTokens(content string, python, member, rust bool, limit int) []c
 // (jsxMarkup), read as opaque tokens, its {...} expressions as code.
 type lexMode struct {
 	python, member, rust, slashes, jsx bool
+	// count is the number of tokens the scan has read, those of its
+	// template expressions' own scans included (lexScan sets it).
+	count *int
 }
 
 // lexScan reads content in mode m. With nesting above 0 it reads the
 // expression of a template's ${...} (slashes mode): the "}" that closes no
-// bracket ends it, and used counts the bytes read through that "}". ok is
+// bracket ends it, and used counts the bytes read through that "}". The
+// limit bounds the tokens of the whole scan, a template expression's
+// included, so no nesting of templates lets the scan read past it. ok is
 // false when the text cannot be separated safely.
 func lexScan(content string, m lexMode, limit, nesting int) (tokens []callToken, used int, ok bool) {
 	python, member, rust, slashes := m.python, m.member, m.rust, m.slashes
+	if m.count == nil {
+		m.count = new(int)
+	}
 	length := len(content)
 	var stack []int
 	// jsx holds the JSX element trees being read, the innermost last.
@@ -115,7 +123,7 @@ func lexScan(content string, m lexMode, limit, nesting int) (tokens []callToken,
 		}
 	}
 	for len(content) > 0 {
-		if len(tokens) >= limit || len(stack) > callMaxDepth || len(jsx) > callMaxDepth {
+		if *m.count >= limit || len(stack) > callMaxDepth || len(jsx) > callMaxDepth {
 			return nil, 0, false
 		}
 		t := callToken{line: line, column: column, depth: len(stack), parent: -1}
@@ -139,6 +147,7 @@ func lexScan(content string, m lexMode, limit, nesting int) (tokens []callToken,
 				advance(content[:size])
 				t.endLine = line
 				tokens = append(tokens, t)
+				*m.count++
 				content = content[size:]
 			}
 			continue
@@ -290,6 +299,7 @@ func lexScan(content string, m lexMode, limit, nesting int) (tokens []callToken,
 		advance(content[:size])
 		t.endLine = line
 		tokens = append(tokens, t)
+		*m.count++
 		content = content[size:]
 	}
 	if len(stack) != 0 || nesting > 0 || len(jsx) != 0 {
@@ -699,9 +709,10 @@ func regexSize(content string) int {
 }
 
 // codeTemplateSize is the length of the template literal content opens, its
-// ${...} expressions read as code (lexScan, nesting one deeper) to the "}"
-// that ends each, so their strings, comments, templates and regular
-// expressions are their own; 0 when the template cannot be read.
+// ${...} expressions read as code (lexScan, nesting one deeper, their
+// tokens counted against the scan's limit) to the "}" that ends each, so
+// their strings, comments, templates and regular expressions are their own;
+// 0 when the template cannot be read.
 func codeTemplateSize(content string, m lexMode, limit, nesting int) int {
 	if nesting >= callMaxDepth {
 		return 0

@@ -576,7 +576,7 @@ func jsxTokenCases() []jsxTokenCase {
 }
 
 // angleForm is a TSX text repeating one form a "<" takes, and whether the
-// lead scan reads a few hundred of them (or gives up at once).
+// lead scan reads twenty of its lines (or gives up at once).
 type angleForm struct {
 	name, line string
 	read       bool
@@ -592,6 +592,9 @@ func angleForms() []angleForm {
 		// Each "<" here makes the scan look for the ")" of a <p>(...),
 		// which no later text holds.
 		{name: "markup whose text opens a parenthesis", line: "x = <p>(a</p>;\n", read: true},
+		// A template is one token of the file, its expression read by a
+		// scan of its own, whose tokens the limit counts too.
+		{name: "markup whose text opens a parenthesis in templates", line: "s = `${[" + strings.Repeat("<p>(a</p>, ", 100) + "]}`;\n", read: true},
 		{name: "a < opening nothing readable", line: "y = <T(z);\n"},
 	}
 }
@@ -599,18 +602,19 @@ func angleForms() []angleForm {
 // The lead scan reads a "<" where an operand starts with a bounded
 // lookahead: a TSX file of about 1 MB repeating one form of "<" (tens of
 // thousands of them) takes well under a second, the scan giving up at its
-// token limit, while a few hundred of them are read whole (or the scan
-// gives up at the first, for a "<" it cannot read). The race detector slows
-// every reading alike, so the bound is wider there.
+// token limit (template expressions' tokens included), while twenty of its
+// lines are read whole (or the scan gives up at the first, for a "<" it
+// cannot read). The race detector slows every reading alike, so the bound
+// is wider there.
 func TestScriptLeadScanOfManyAnglesIsBounded(t *testing.T) {
-	limit := 500 * time.Millisecond
+	limit := 250 * time.Millisecond
 	if raceDetector {
 		limit = 5 * time.Second
 	}
 	for _, form := range angleForms() {
 		t.Run(form.name, func(t *testing.T) {
-			if tokens := leadTokens("app/view.tsx", strings.Repeat(form.line, 200)); (tokens != nil) != form.read {
-				t.Fatalf("read %d tokens of 200 lines, want them read: %v", len(tokens), form.read)
+			if tokens := leadTokens("app/view.tsx", strings.Repeat(form.line, 20)); (tokens != nil) != form.read {
+				t.Fatalf("read %d tokens of 20 lines, want them read: %v", len(tokens), form.read)
 			}
 			text := strings.Repeat(form.line, (1<<20)/len(form.line))
 			began := time.Now()
