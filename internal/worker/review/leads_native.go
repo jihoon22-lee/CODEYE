@@ -654,7 +654,7 @@ func nativeQuotedFile(c *sourceCallCatalog, p, name string) string {
 
 // nativeOutcome is what one call binds to: hits, else local (a declaration
 // that is no project function), ambiguous, refused (nothing bound safely)
-// or open (no declaration seen: left to the call catalog).
+// or open (no declaration seen, so nothing bound).
 type nativeOutcome struct {
 	hits                            []leadHit
 	local, ambiguous, refused, open bool
