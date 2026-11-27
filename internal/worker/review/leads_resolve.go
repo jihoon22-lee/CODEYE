@@ -216,11 +216,13 @@ type leadHit struct {
 	// excerpt is the window when the resolver already built it (the Go
 	// caller expansion).
 	excerpt *record.Excerpt
-	// prototype marks a declaration without its body (a C or C++
-	// prototype): its target is partial. secondary marks a further target
-	// of the binding another hit names first (a header prototype after the
-	// definition): it does not make the lead ambiguous.
-	prototype, secondary bool
+	// partial marks a hit whose window is never its whole declaration: a C
+	// or C++ prototype (the body is elsewhere), a declaration whose end the
+	// reader is not sure of. secondary marks a further target of the
+	// binding another hit names first (a header prototype after the
+	// definition): it does not make the lead ambiguous, and it is sent only
+	// beside a hit the request did not hold.
+	partial, secondary bool
 }
 
 // declaration is the hit's whole declaration when known, else its location.
@@ -283,43 +285,56 @@ func (r *leadResolver) resolve(l record.Lead, anchor record.Excerpt) (record.Lea
 		l.InRequest = inRequest
 		return unresolved(record.LeadInRequest)
 	}
-	// sentAll: a hit's window held no line the request did not send.
-	blockedBy, overCap, sentAll := "", false, false
-	for _, h := range outside {
-		if len(l.Targets) == record.MaxLeadTargets {
+	// sentAll: a hit's window held no line the request did not send. The
+	// primary hits go first; a secondary one (a header prototype after its
+	// definition) only beside a primary hit the request did not hold, so a
+	// definition the request sent in parts leaves the lead in the request.
+	blockedBy, overCap, sentAll, primaryOut := "", false, false, false
+	for _, secondary := range []bool{false, true} {
+		if secondary && !primaryOut {
 			break
 		}
-		why := r.blocked(h.loc.path)
-		if scan.refused[h.loc.path] == record.LeadGenerated {
-			why = record.LeadGenerated
-		}
-		if why != "" {
-			blockedBy = cmpReason(blockedBy, why)
-			continue
-		}
-		x, partial, held, ok := r.window(scan, h)
-		if len(held) > 0 {
-			sentAll = true
-			for _, id := range held {
-				if len(inRequest) < record.MaxLeadTargets {
-					inRequest = addLim(inRequest, id)
-				}
+		for _, h := range outside {
+			if h.secondary != secondary {
+				continue
 			}
-			continue
+			if len(l.Targets) == record.MaxLeadTargets {
+				break
+			}
+			why := r.blocked(h.loc.path)
+			if scan.refused[h.loc.path] == record.LeadGenerated {
+				why = record.LeadGenerated
+			}
+			if why != "" {
+				blockedBy = cmpReason(blockedBy, why)
+				primaryOut = true
+				continue
+			}
+			x, partial, held, ok := r.window(scan, h)
+			if len(held) > 0 {
+				sentAll = true
+				for _, id := range held {
+					if len(inRequest) < record.MaxLeadTargets {
+						inRequest = addLim(inRequest, id)
+					}
+				}
+				continue
+			}
+			primaryOut = true
+			if !ok {
+				continue
+			}
+			if r.excerpts <= 0 || record.JSONLen(x.Text) > r.bytes {
+				overCap = true
+				continue
+			}
+			if slices.ContainsFunc(l.Targets, func(t record.LeadTarget) bool { return t.ID == x.ID }) {
+				continue
+			}
+			r.excerpts--
+			r.bytes -= record.JSONLen(x.Text)
+			l.Targets = append(l.Targets, record.LeadTarget{ID: x.ID, Path: x.Path, SHA256: x.SHA256, Start: x.Start, End: x.End, Kind: x.Kind, Origin: x.Origin, Symbol: x.Symbol, Partial: partial || h.partial})
 		}
-		if !ok {
-			continue
-		}
-		if r.excerpts <= 0 || record.JSONLen(x.Text) > r.bytes {
-			overCap = true
-			continue
-		}
-		if slices.ContainsFunc(l.Targets, func(t record.LeadTarget) bool { return t.ID == x.ID }) {
-			continue
-		}
-		r.excerpts--
-		r.bytes -= record.JSONLen(x.Text)
-		l.Targets = append(l.Targets, record.LeadTarget{ID: x.ID, Path: x.Path, SHA256: x.SHA256, Start: x.Start, End: x.End, Kind: x.Kind, Origin: x.Origin, Symbol: x.Symbol, Partial: partial || h.prototype})
 	}
 	switch {
 	case len(l.Targets) > 0:

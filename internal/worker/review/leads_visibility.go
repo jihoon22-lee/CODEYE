@@ -138,7 +138,7 @@ func (r *leadResolver) visibleFiles(scan *leadScan, anchor record.Excerpt, symbo
 	if lang == "java" {
 		tokens = javaTokens(text)
 	} else {
-		tokens = leadTokens(lang, text)
+		tokens = leadTokens(anchor.Path, text)
 	}
 	calls := leadCalls(tokens, anchor, symbol)
 	switch lang {

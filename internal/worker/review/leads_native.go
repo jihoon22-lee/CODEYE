@@ -48,9 +48,12 @@ type nativeUnit struct {
 	conditional bool
 }
 
+// newNativeUnit reads the unit of file p; nil when its text cannot be
+// tokenized. A file of preprocessor lines alone (its macros, its includes)
+// is a unit without tokens.
 func newNativeUnit(p, text string) *nativeUnit {
-	tokens := leadTokens("c", text)
-	if tokens == nil {
+	tokens, ok := leadTokenScan("c", false, text)
+	if !ok {
 		return nil
 	}
 	u := &nativeUnit{path: p, tokens: tokens}
@@ -72,10 +75,17 @@ var nativeExpressionWords = map[string]bool{
 var nativeSkipNames = []string{"__attribute__", "__declspec", "alignas", "_Alignas", "decltype", "__typeof__", "typeof", "noexcept", "throw", "sizeof", "__asm__", "asm"}
 
 // nativeTypeToken reports token k as one a declarator may follow: a name
-// that is no expression keyword, or the ">" of a template type.
+// that is no expression keyword, the ">" of a template type, or the ")" of
+// a type specifier or attribute (decltype(...), __typeof__(...),
+// __attribute__((...))).
 func nativeTypeToken(t []callToken, k int) bool {
-	return tokenName(t, k) && !nativeExpressionWords[t[k].text] || tokenIs(t, k, ">") && !tokenIs(t, k-1, "-")
+	return tokenName(t, k) && !nativeExpressionWords[t[k].text] || tokenIs(t, k, ">") && !tokenIs(t, k-1, "-") ||
+		tokenIs(t, k, ")") && t[k].parent >= 1 && slices.Contains(nativeSpecifiers, t[t[k].parent-1].text) && !t[t[k].parent-1].quoted
 }
+
+// nativeSpecifiers are the names whose parenthesized operand makes a type
+// or an attribute of a declaration.
+var nativeSpecifiers = []string{"decltype", "typeof", "__typeof__", "__typeof", "__attribute__", "__declspec", "alignas", "_Alignas"}
 
 // start is the first token of the statement holding token i at its depth.
 func (u *nativeUnit) start(i int) int {
@@ -361,10 +371,19 @@ func (u *nativeUnit) decls(name string) []nativeDecl {
 				continue // a call in an expression
 			}
 			close := t[i+1].close
-			if slices.ContainsFunc(t[i+2:close], func(x callToken) bool {
-				return x.depth == t[i].depth+1 && len(x.text) == 1 && x.text[0] >= '0' && x.text[0] <= '9'
-			}) {
-				d.value = true // T f(3): a variable
+			// T f(3): a variable; a number in a default argument (int
+			// level = 0) is no sign of one.
+			def := false
+			for _, x := range t[i+2 : close] {
+				switch {
+				case x.depth != t[i].depth+1:
+				case x.text == ",":
+					def = false
+				case x.text == "=":
+					def = true
+				case !def && len(x.text) == 1 && x.text[0] >= '0' && x.text[0] <= '9':
+					d.value = true
+				}
 			}
 			end := u.headEnd(close+1, t[i].depth)
 			switch {
@@ -632,24 +651,11 @@ func (r *leadResolver) nativeTranslationUnit(scan *leadScan, anchor *nativeUnit)
 }
 
 // nativeQuotedFile is the project file a quoted include of p names: beside
-// p, else the one C or C++ file whose path ends in the name; "" when none.
+// p, where a compiler looks first; "" when none. A file elsewhere whose path
+// ends in the name is not it: only the build's include paths could say so,
+// and the include stays unread.
 func nativeQuotedFile(c *sourceCallCatalog, p, name string) string {
-	if h := nativeHeader(c.files, p, nativeInclude{name: name, quoted: true}); h != "" {
-		return h
-	}
-	if path.IsAbs(name) || strings.HasPrefix(path.Clean(name), "../") {
-		return ""
-	}
-	found := ""
-	for _, q := range c.ordered {
-		if (q == name || strings.HasSuffix(q, "/"+name)) && leadDefinitionLanguage(q) != "" {
-			if found != "" {
-				return ""
-			}
-			found = q
-		}
-	}
-	return found
+	return nativeHeader(c.files, p, nativeInclude{name: name, quoted: true})
 }
 
 // nativeOutcome is what one call binds to: hits, else local (a declaration
@@ -665,18 +671,49 @@ type nativeOutcome struct {
 func nativeHit(d nativeDecl, prototype bool) leadHit {
 	t := d.unit.tokens
 	loc := sourceCallLocation{d.unit.path, t[d.first].line, t[d.last].endLine}
-	return leadHit{loc: loc, origin: "context", extent: loc, prototype: prototype}
+	return leadHit{loc: loc, origin: "context", extent: loc, partial: prototype}
+}
+
+// nativeLead is one lead's reading of the anchor's translation unit, which
+// the calls of its name share: the unit, the name's declarations in it,
+// whether a macro or a using of the name (in C++ with a system include, the
+// C library too) binds the name otherwise, whether a declaration the C++
+// lookup does not place exists (in an inline namespace, a class's friend),
+// and the definitions in the other sources, read once.
+type nativeLead struct {
+	r              *leadResolver
+	scan           *leadScan
+	tu             nativeTU
+	symbol, lang   string
+	all            []nativeDecl
+	otherwise      bool
+	inline, friend bool
+	external       *nativeExternals
+}
+
+func (r *leadResolver) newNativeLead(scan *leadScan, tu nativeTU, symbol, lang string) *nativeLead {
+	l := &nativeLead{r: r, scan: scan, tu: tu, symbol: symbol, lang: lang}
+	for _, x := range tu.units {
+		l.all = append(l.all, x.decls(symbol)...)
+		l.otherwise = l.otherwise || x.macro(symbol) || lang == "cpp" && x.using(symbol)
+		inline, friend := x.hides(symbol)
+		l.inline, l.friend = l.inline || inline, l.friend || friend
+	}
+	if lang == "cpp" && leadBuiltin("cpp", symbol) && slices.ContainsFunc(tu.units, (*nativeUnit).systemInclude) {
+		l.otherwise = true
+	}
+	return l
 }
 
 // bind resolves the call at token i of the anchor unit.
-func (r *leadResolver) nativeBind(scan *leadScan, tu nativeTU, i int, symbol, lang string) (nativeOutcome, error) {
-	u := tu.units[0]
+func (l *nativeLead) bind(i int) (nativeOutcome, error) {
+	u := l.tu.units[0]
 	scope, fn, body, ok := u.callScope(i)
 	if !ok {
 		return nativeOutcome{refused: true}, nil
 	}
 	if body >= 0 {
-		shadow, using := u.shadowed(fn, body, symbol)
+		shadow, using := u.shadowed(fn, body, l.symbol)
 		switch {
 		case shadow:
 			return nativeOutcome{local: true}, nil
@@ -684,26 +721,17 @@ func (r *leadResolver) nativeBind(scan *leadScan, tu nativeTU, i int, symbol, la
 			return nativeOutcome{refused: true}, nil
 		}
 	}
-	for _, x := range tu.units {
-		if x.macro(symbol) || lang == "cpp" && x.using(symbol) {
-			return nativeOutcome{refused: true}, nil
-		}
-	}
-	if lang == "cpp" && leadBuiltin("cpp", symbol) && slices.ContainsFunc(tu.units, (*nativeUnit).systemInclude) {
+	if l.otherwise {
 		return nativeOutcome{refused: true}, nil
-	}
-	var all []nativeDecl
-	for _, x := range tu.units {
-		all = append(all, x.decls(symbol)...)
 	}
 	for s := scope; ; s = s[:len(s)-1] {
 		// An anonymous namespace's names are visible in the scope holding it.
-		decls := slices.DeleteFunc(slices.Clone(all), func(d nativeDecl) bool {
+		decls := slices.DeleteFunc(slices.Clone(l.all), func(d nativeDecl) bool {
 			return !slices.Equal(d.scope, s) && !(len(d.scope) == len(s)+1 && d.scope[len(s)] == "" && slices.Equal(d.scope[:len(s)], s))
 		})
 		if len(decls) > 0 {
-			out, err := r.nativeDecide(scan, tu, decls, s, symbol, lang)
-			if err == nil && len(out.hits) > 0 && lang == "cpp" && nativeOtherwiseFound(tu, all, i, scope, symbol) {
+			out, err := l.decide(decls, s)
+			if err == nil && len(out.hits) > 0 && l.lang == "cpp" && l.otherwiseFound(i, scope) {
 				return nativeOutcome{ambiguous: true}, nil
 			}
 			return out, err
@@ -714,33 +742,28 @@ func (r *leadResolver) nativeBind(scan *leadScan, tu nativeTU, i int, symbol, la
 	}
 }
 
-// nativeOtherwiseFound reports a C++ function of the name the call at token
-// i of the anchor may bind to outside its namespace lookup, whose binding
+// otherwiseFound reports a C++ function of the name the call at token i of
+// the anchor may bind to outside its namespace lookup, whose binding
 // depends on types the reader does not know: a declaration in an inline
 // namespace (visible around it) or, for a call with arguments, one that
 // argument-dependent lookup may add (a namespace the lookup does not reach,
 // a class's friend).
-func nativeOtherwiseFound(tu nativeTU, all []nativeDecl, i int, scope []string, symbol string) bool {
-	t := tu.units[0].tokens
+func (l *nativeLead) otherwiseFound(i int, scope []string) bool {
+	t := l.tu.units[0].tokens
 	args := t[i+1].close > i+2
-	for _, x := range tu.units {
-		if inline, friend := x.hides(symbol); inline || args && friend {
-			return true
-		}
-	}
-	return args && slices.ContainsFunc(all, func(d nativeDecl) bool { return !nativeReached(d.scope, scope) })
+	return l.inline || args && (l.friend || slices.ContainsFunc(l.all, func(d nativeDecl) bool { return !nativeReached(d.scope, scope) }))
 }
 
-// nativeDecide binds a call to the declarations of the scope its lookup
-// stops at.
-func (r *leadResolver) nativeDecide(scan *leadScan, tu nativeTU, decls []nativeDecl, scope []string, symbol, lang string) (nativeOutcome, error) {
+// decide binds a call to the declarations of the scope its lookup stops
+// at.
+func (l *nativeLead) decide(decls []nativeDecl, scope []string) (nativeOutcome, error) {
 	switch {
 	case slices.ContainsFunc(decls, func(d nativeDecl) bool { return d.value }):
 		return nativeOutcome{local: true}, nil
 	case slices.ContainsFunc(decls, func(d nativeDecl) bool { return d.conditional }):
 		return nativeOutcome{ambiguous: true}, nil
 	}
-	if lang == "cpp" {
+	if l.lang == "cpp" {
 		signatures := map[string]bool{}
 		for _, d := range decls {
 			if !d.readable && len(decls) > 1 {
@@ -763,13 +786,13 @@ func (r *leadResolver) nativeDecide(scan *leadScan, tu nativeTU, decls []nativeD
 		// Internal linkage: the definition belongs to this unit, and it holds none.
 		return nativeOutcome{refused: true}, nil
 	}
-	anchor := tu.units[0]
+	anchor := l.tu.units[0]
 	at := slices.IndexFunc(decls, func(d nativeDecl) bool { return d.unit != anchor })
 	var def leadHit
 	found := false
-	if tu.complete && (lang == "c" || decls[0].readable) {
+	if l.tu.complete && (l.lang == "c" || decls[0].readable) {
 		var err error
-		if def, found, err = r.nativeExternal(scan, tu, lang, scope, symbol, decls[0].signature); err != nil {
+		if def, found, err = l.externalDefinition(scope, decls[0].signature); err != nil {
 			return nativeOutcome{}, err
 		}
 	}
@@ -800,49 +823,79 @@ func nativeSource(p, lang string) bool {
 	return false
 }
 
-// nativeExternal finds the one definition of name at scope among the
-// project's C and C++ sources outside the translation unit: not static, not
-// conditional, at namespace scope, in C++ of the prototype's signature.
-// False when there is none or more than one, or when the search cannot be
-// sure: the scan reached its limit, or a source holding the name could not be
-// tokenized.
-func (r *leadResolver) nativeExternal(scan *leadScan, tu nativeTU, lang string, scope []string, name, signature string) (leadHit, bool, error) {
-	in := map[string]bool{}
-	for _, u := range tu.units {
-		in[u.path] = true
-	}
-	var found []nativeDecl
-	for _, p := range r.catalog.ordered {
-		if in[p] || !nativeSource(p, lang) {
-			continue
-		}
-		text, ok, err := scan.index.text(p)
+// externalDefinition finds the one definition of the name at scope among
+// the other sources' (nativeExternals), in C++ of the prototype's
+// signature. False when there is none or more than one, or when the
+// search could not read every source.
+func (l *nativeLead) externalDefinition(scope []string, signature string) (leadHit, bool, error) {
+	if l.external == nil {
+		x, err := l.r.nativeExternals(l.scan, l.tu, l.lang, l.symbol)
 		if err != nil {
 			return leadHit{}, false, err
 		}
-		if scan.limited {
-			return leadHit{}, false, nil
-		}
-		if !ok || !strings.Contains(text, name) {
-			continue
-		}
-		u := newNativeUnit(p, text)
-		if u == nil {
-			return leadHit{}, false, nil
-		}
-		for _, d := range u.decls(name) {
-			if d.body && !d.static && !d.value && !d.conditional && slices.Equal(d.scope, scope) && (lang == "c" || d.readable && d.signature == signature) {
-				found = append(found, d)
-			}
-		}
-		if len(found) > 1 {
-			return leadHit{}, false, nil
+		l.external = &x
+	}
+	if !l.external.complete {
+		return leadHit{}, false, nil
+	}
+	var found []nativeDecl
+	for _, d := range l.external.defs {
+		if slices.Equal(d.scope, scope) && (l.lang == "c" || d.readable && d.signature == signature) {
+			found = append(found, d)
 		}
 	}
 	if len(found) != 1 {
 		return leadHit{}, false, nil
 	}
 	return nativeHit(found[0], false), true, nil
+}
+
+// nativeExternals are the definitions of a name at namespace scope (not
+// static, not conditional, no variable) in the project's C and C++ sources
+// outside a translation unit; complete reports a search that read every
+// such source.
+type nativeExternals struct {
+	defs     []nativeDecl
+	complete bool
+}
+
+// nativeExternals reads the external definitions of name. The search cannot
+// be complete when the scan reached its limit, a source holding the name
+// could not be tokenized, or a source could not be read at all (withheld,
+// outside the scope or the change, generated, unreadable): that source may
+// hold the definition the readable ones only stand in for.
+func (r *leadResolver) nativeExternals(scan *leadScan, tu nativeTU, lang, name string) (nativeExternals, error) {
+	in := map[string]bool{}
+	for _, u := range tu.units {
+		in[u.path] = true
+	}
+	var x nativeExternals
+	for _, p := range r.catalog.ordered {
+		if in[p] || !nativeSource(p, lang) {
+			continue
+		}
+		text, ok, err := scan.index.text(p)
+		if err != nil {
+			return nativeExternals{}, err
+		}
+		if scan.limited || !ok {
+			return nativeExternals{}, nil
+		}
+		if !strings.Contains(text, name) {
+			continue
+		}
+		u := newNativeUnit(p, text)
+		if u == nil {
+			return nativeExternals{}, nil
+		}
+		for _, d := range u.decls(name) {
+			if d.body && !d.static && !d.value && !d.conditional {
+				x.defs = append(x.defs, d)
+			}
+		}
+	}
+	x.complete = true
+	return x, nil
 }
 
 // nativeDefinitions resolves a definition lead anchored in a C or C++ file:
@@ -867,11 +920,11 @@ func (r *leadResolver) nativeDefinitions(scan *leadScan, anchor record.Excerpt, 
 	if err != nil {
 		return nil, true, false, false, "", err
 	}
-	lang := leadDefinitionLanguage(anchor.Path)
+	lead := r.newNativeLead(scan, tu, symbol, leadDefinitionLanguage(anchor.Path))
 	locals := 0
 	ambiguous := false
 	for _, i := range calls {
-		out, err := r.nativeBind(scan, tu, i, symbol, lang)
+		out, err := lead.bind(i)
 		if err != nil {
 			return nil, true, false, false, "", err
 		}

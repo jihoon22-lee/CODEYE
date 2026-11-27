@@ -542,6 +542,51 @@ func (f *rustFile) typeShadowed(fn rustItem, name string) bool {
 	return false
 }
 
+// typeParameter reports name among the generic parameters of an item whose
+// body holds token x inside scope s: a fn (a nested one too), an impl or a
+// trait. A list the reader cannot follow may hold it.
+func (f *rustFile) typeParameter(x, s int, name string) bool {
+	t := f.tokens
+	for p := t[x].parent; p >= 0 && p != s; p = t[p].parent {
+		if !tokenIs(t, p, "{") {
+			continue
+		}
+		// The item's head: back from its body to the ";", "{" or "}" before
+		// it at its level (a closer stands one level below its opener).
+		head := p
+		for k := p - 1; k >= 0; k-- {
+			if tokenIs(t, k, ")") || tokenIs(t, k, "]") {
+				k = t[k].parent
+			} else if t[k].depth != t[p].depth || tokenIs(t, k, ";") || tokenIs(t, k, "{") {
+				break
+			}
+			head = k
+		}
+		for j := head; j < p; j++ {
+			open := -1
+			switch {
+			case f.keyword(j, "impl") && tokenIs(t, j+1, "<"):
+				open = j + 1
+			case (f.keyword(j, "fn") || f.keyword(j, "trait")) && tokenName(t, j+1) && tokenIs(t, j+2, "<"):
+				open = j + 2
+			}
+			if open < 0 {
+				continue
+			}
+			end := f.skipAngles(open)
+			if end < 0 {
+				return true
+			}
+			for g := open; g < end; g++ {
+				if tokenIs(t, g, name) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // rustLeadCall is one call of the lead's name: at its name token, path the
 // names before it (Self::m, Type::m, a::b::m), receiver the name before "."
 // of a method call.
@@ -648,7 +693,7 @@ func (f *rustFile) bind(c rustLeadCall, symbol string) rustOutcome {
 		}
 		return rustOutcome{open: true}
 	case len(c.path) == 1 && c.path[0] != "":
-		if inFn && f.typeShadowed(fn, c.path[0]) {
+		if inFn && f.typeShadowed(fn, c.path[0]) || f.typeParameter(c.at, scope, c.path[0]) {
 			return rustOutcome{open: true}
 		}
 		return pick(f.methods(scope, c.path[0], symbol))
@@ -683,7 +728,7 @@ func (r *leadResolver) rustDefinitions(scan *leadScan, anchor record.Excerpt, sy
 	if !ok {
 		return nil, false, false, true, ""
 	}
-	tokens := leadTokens("rust", text)
+	tokens := leadTokens(anchor.Path, text)
 	if tokens == nil {
 		return nil, false, false, true, ""
 	}

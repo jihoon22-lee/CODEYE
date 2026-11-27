@@ -248,9 +248,11 @@ func pythonOccurrences(tokens []callToken, name string, blocks []pyBlock, import
 // pythonBinds reports a Python occurrence that may bind the name: after as,
 // global, nonlocal, del or for; a for or comprehension target; a parameter
 // of a def or lambda; an assignment, annotated or augmented assignment or
-// walrus target; a capture in a case pattern.
+// walrus target; a capture in a case pattern. A target inside a tuple or
+// list display ((a, name), [a, name], nested or starred) is a target where
+// one of the displays holding it stands.
 func pythonBinds(tokens []callToken, i, start int, blocks []pyBlock) bool {
-	for _, k := range []string{"as", "global", "nonlocal", "del", "for"} {
+	for _, k := range []string{"global", "nonlocal"} {
 		if tokenIs(tokens, i-1, k) {
 			return true
 		}
@@ -273,24 +275,88 @@ func pythonBinds(tokens []callToken, i, start int, blocks []pyBlock) bool {
 		p := tokens[i].parent
 		return p < 0 || !tokenIs(tokens, p, "(") // a keyword argument names no binding
 	}
-	for j := i - 1; j >= 0 && tokens[j].depth == tokens[i].depth; j-- {
-		if tokenIs(tokens, j, "for") {
+	for g := i; ; {
+		if pythonTarget(tokens, g) {
 			return true
 		}
-		if !tokens[j].name && !tokenIs(tokens, j, ",") || tokenIs(tokens, j, "in") {
-			break
+		// The display holding g as an element: "(" or "[" opening a logical
+		// line or after no operand (not a call or a subscript), g between
+		// "(", "[", "," or "*" and "," or the display's end.
+		p, end := tokens[g].parent, g
+		if tokens[g].close > g {
+			end = tokens[g].close
+		}
+		if p < 0 || !tokenIs(tokens, p, "(") && !tokenIs(tokens, p, "[") || pythonOperand(tokens, p-1) && !statementStart(tokens, p) ||
+			!tokenIs(tokens, g-1, "(") && !tokenIs(tokens, g-1, "[") && !tokenIs(tokens, g-1, ",") && !tokenIs(tokens, g-1, "*") ||
+			!tokenIs(tokens, end+1, ",") && end+1 != tokens[p].close {
+			return false
+		}
+		g = p
+	}
+}
+
+// pythonTarget reports token g (a name, or the "(" or "[" of a display) in
+// a target list: after as, del or for, among the names, starred names and
+// displays after a for before its in, or among those of a logical line's
+// top level before an "=" (no ==, <=, >= or !=).
+func pythonTarget(tokens []callToken, g int) bool {
+	for _, k := range []string{"as", "del", "for"} {
+		if tokenIs(tokens, g-1, k) {
+			return true
 		}
 	}
-	if tokens[i].depth == 0 {
-		for k := i + 1; k < len(tokens) && !statementStart(tokens, k); k++ {
-			if tokens[k].depth == 0 && tokenIs(tokens, k, "=") && !tokenIs(tokens, k+1, "=") && !tokenIs(tokens, k-1, "=") &&
-				!tokenIs(tokens, k-1, "!") && !(tokenIs(tokens, k-1, "<") && !tokenIs(tokens, k-2, "<")) && !(tokenIs(tokens, k-1, ">") && !tokenIs(tokens, k-2, ">")) {
-				return true
+walk:
+	for j := g - 1; j >= 0; j-- {
+		switch {
+		case tokenIs(tokens, j, ")") || tokenIs(tokens, j, "]"):
+			// A display before g; its closer stands one level below it.
+			if j = tokens[j].parent; tokens[j].depth != tokens[g].depth {
+				break walk
 			}
+		case tokens[j].depth != tokens[g].depth:
+			break walk
+		case tokenIs(tokens, j, "for"):
+			return true
+		case !tokens[j].name && !tokenIs(tokens, j, ",") && !tokenIs(tokens, j, "*") || tokenIs(tokens, j, "in"):
+			break walk
+		}
+	}
+	if tokens[g].depth != 0 {
+		return false
+	}
+	end := g
+	if tokens[g].close > g {
+		end = tokens[g].close
+	}
+	for k := end + 1; k < len(tokens) && !statementStart(tokens, k); k++ {
+		if tokens[k].depth == 0 && tokenIs(tokens, k, "=") && !tokenIs(tokens, k+1, "=") && !tokenIs(tokens, k-1, "=") &&
+			!tokenIs(tokens, k-1, "!") && !(tokenIs(tokens, k-1, "<") && !tokenIs(tokens, k-2, "<")) && !(tokenIs(tokens, k-1, ">") && !tokenIs(tokens, k-2, ">")) {
+			return true
 		}
 	}
 	return false
 }
+
+// pythonOperand reports token k as the end of an operand a "(" or "[" after
+// it calls or subscripts: a name that is no keyword, a literal or a closing
+// bracket.
+func pythonOperand(tokens []callToken, k int) bool {
+	if k < 0 || k >= len(tokens) {
+		return false
+	}
+	t := tokens[k]
+	switch {
+	case t.quoted || t.stringLiteral:
+		return true
+	case t.name:
+		return !pythonKeywords[t.text]
+	}
+	return t.text == ")" || t.text == "]" || t.text == "}"
+}
+
+// pythonKeywords are the Python keywords an expression may follow.
+var pythonKeywords = leadNames(`and as assert async await del elif else except for from if import in is lambda nonlocal global not or
+	raise return while with yield case match`)
 
 // javascriptOccurrences classifies the occurrences of name in JavaScript or
 // TypeScript tokens.
@@ -355,22 +421,29 @@ func importStatement(tokens []callToken, i int) bool {
 		tokenIs(tokens, k, "export") && (tokenIs(tokens, k+1, "{") || tokenIs(tokens, k+1, "*") || tokenIs(tokens, k+1, "type") && tokenIs(tokens, k+2, "{"))
 }
 
-// methodName reports a class or object member head name(...) { or
-// name(...): T {: not a call and no binding of the name.
+// methodName reports a class or object member head name(...) {,
+// name<T>(...) { or name(...): T {: not a call and no binding of the name.
+// A call has no body after it, so any such head in braces is a member's,
+// whatever stands before it (a decorator, a modifier); one whose return
+// annotation the reader cannot follow is a member's in a class body, or
+// where a member of an object literal begins.
 func methodName(tokens []callToken, i int) bool {
-	if !tokenIs(tokens, i+1, "(") {
+	open := skipGenerics(tokens, i+1)
+	if !tokenName(tokens, i) || !tokenIs(tokens, open, "(") {
 		return false
 	}
 	p := tokens[i].parent
-	if p < 0 || !tokenIs(tokens, p, "{") {
+	if p < 0 || !tokenIs(tokens, p, "{") || controlKeyword(tokens, i) && !classBody(tokens, p) {
 		return false
 	}
-	close := tokens[i+1].close
-	if !tokenIs(tokens, close+1, "{") && !tokenIs(tokens, close+1, ":") {
+	close := tokens[open].close
+	switch {
+	case functionBody(tokens, close) >= 0:
+		return true
+	case !tokenIs(tokens, close+1, ":"):
 		return false
-	}
-	if classBody(tokens, p) {
-		return memberPosition(tokens, i, p)
+	case classBody(tokens, p):
+		return true
 	}
 	prev := i - 1
 	return prev == p || slices.ContainsFunc(classModifiers, func(m string) bool { return tokenIs(tokens, prev, m) }) ||
@@ -492,25 +565,70 @@ func increments(tokens []callToken, i int) bool {
 }
 
 // paramList reports a "(" group that holds parameters: of a function,
-// method, arrow function or catch clause.
+// method, arrow function or catch clause. A group whose ")" a body follows
+// ("{", or a return annotation and "{" or "=>") or "=>" holds parameters
+// whatever stands before it (type parameters, a computed or private name, a
+// decorator), unless it is the condition of if, while, for, for await, with
+// or switch; so does a member head methodName reads.
 func paramList(tokens []callToken, open int) bool {
 	switch {
 	case tokenIs(tokens, open-1, "function"), tokenIs(tokens, open-1, "catch"),
 		tokenName(tokens, open-1) && tokenIs(tokens, open-2, "function"),
 		tokenIs(tokens, open-1, "*") && tokenIs(tokens, open-2, "function"):
 		return true
-	case tokenName(tokens, open-1) && methodName(tokens, open-1):
-		return true
+	case controlKeyword(tokens, open-1) && !(tokens[open].parent >= 0 && classBody(tokens, tokens[open].parent)),
+		tokenIs(tokens, open-1, "await") && tokenIs(tokens, open-2, "for"):
+		return false
 	}
 	close := tokens[open].close
-	if tokenIs(tokens, close+1, "=") && tokenIs(tokens, close+2, ">") {
+	switch {
+	case tokenIs(tokens, close+1, "{"), tokenIs(tokens, close+1, "=") && tokenIs(tokens, close+2, ">"):
 		return true
+	case tokenIs(tokens, close+1, ":"):
+		if k, _ := returnType(tokens, close); k >= 0 {
+			return true
+		}
 	}
-	if tokenIs(tokens, close+1, ":") {
-		_, arrow := returnType(tokens, close)
-		return arrow
+	head := open - 1
+	if tokenIs(tokens, head, ">") {
+		head = genericsStart(tokens, head) - 1
+	}
+	return tokenName(tokens, head) && methodName(tokens, head)
+}
+
+// controlKeyword reports a keyword token k whose "(" holds a condition or a
+// loop head (if, while, for, with, switch), not a method's name after ".".
+func controlKeyword(tokens []callToken, k int) bool {
+	if tokenIs(tokens, k-1, ".") {
+		return false
+	}
+	for _, w := range []string{"if", "while", "for", "with", "switch"} {
+		if tokenIs(tokens, k, w) {
+			return true
+		}
 	}
 	return false
+}
+
+// genericsStart is the "<" opening the type parameter list whose ">" is
+// token close, -1 when none is found.
+func genericsStart(tokens []callToken, close int) int {
+	depth := 0
+	for k := close; k >= 0; k-- {
+		switch {
+		case tokenIs(tokens, k, ">") && !tokenIs(tokens, k-1, "="):
+			depth++
+		case tokenIs(tokens, k, "<"):
+			if depth--; depth == 0 {
+				return k
+			}
+		case tokenIs(tokens, k, ";") || tokenIs(tokens, k, "{"):
+			return -1
+		case tokenIs(tokens, k, ")") || tokenIs(tokens, k, "]") || tokenIs(tokens, k, "}"):
+			k = tokens[k].parent // a group inside the list
+		}
+	}
+	return -1
 }
 
 // patternOwner reports a "{" or "[" group that is a destructuring pattern
@@ -628,21 +746,35 @@ func functionBody(tokens []callToken, close int) int {
 
 // arrowEnd is the last token of an arrow function whose "=>" ends at
 // token arrow (the ">"): its block body, or its expression up to the
-// enclosing group's end, a "," or ";" at its level, or the next statement.
-func arrowEnd(tokens []callToken, arrow int) int {
+// enclosing group's end, a "," or ";" at its level, or at the top level the
+// line break where the expression ends (scriptLineGoesOn). Where a later
+// line may go on with the expression or not, open reports an end the
+// reader is not sure of; wide reads such a line as going on (a scope that
+// may be too wide, never too narrow).
+func arrowEnd(tokens []callToken, arrow int, wide bool) (last int, open bool) {
 	k := arrow + 1
 	if tokenIs(tokens, k, "{") {
-		return tokens[k].close
+		return tokens[k].close, false
 	}
 	if k >= len(tokens) {
-		return arrow
+		return arrow, false
 	}
-	depth, last := tokens[k].depth, arrow
+	depth := tokens[k].depth
+	last = arrow
 	for m := k; m < len(tokens); m++ {
 		t := tokens[m]
-		if t.depth < depth || t.depth == depth && (tokenIs(tokens, m, ",") || tokenIs(tokens, m, ";")) ||
-			depth == 0 && m > k && statementStart(tokens, m) && t.line > tokens[last].line {
+		if t.depth < depth || t.depth == depth && (tokenIs(tokens, m, ",") || tokenIs(tokens, m, ";")) {
 			break
+		}
+		if depth == 0 && m > k && t.line > tokens[last].endLine {
+			switch scriptLineGoesOn(tokens, last, m) {
+			case lineEnds:
+				return last, false
+			case lineUnsure:
+				if !wide {
+					return last, true
+				}
+			}
 		}
 		last = m
 		if t.close > m {
@@ -650,18 +782,102 @@ func arrowEnd(tokens []callToken, arrow int) int {
 			last = m
 		}
 	}
-	return last
+	return last, false
+}
+
+// What a line break does to an expression (scriptLineGoesOn).
+const (
+	lineEnds = iota
+	lineGoesOn
+	lineUnsure
+)
+
+// operandKeywords are the keywords an operand follows inside an expression.
+var operandKeywords = []string{"typeof", "void", "delete", "await", "new", "in", "instanceof", "yield", "as", "satisfies", "keyof", "extends"}
+
+// scriptLineGoesOn reports what the line break between token last and
+// token next (the first of a later line) does to an expression, by the
+// rules that insert a semicolon: the expression goes on after an operator
+// or a keyword an operand follows, and, after an operand, before ".", "?",
+// ":", "(", "[", a binary operator, in or instanceof; it ends before a name,
+// a number, a string, "{", "!", "~", "++", "--", "@" or "#". A template may
+// go on with it as a tagged template, and tokens do not tell a template
+// from a string with escapes; nor do they tell a ">" ending type arguments
+// from a comparison's. Those, and anything else, are unsure.
+func scriptLineGoesOn(tokens []callToken, last, next int) int {
+	p, n := tokens[last], tokens[next]
+	switch {
+	case p.quoted || p.stringLiteral, p.name && !slices.Contains(operandKeywords, p.text),
+		p.text == ")" || p.text == "]" || p.text == "}", len(p.text) == 1 && p.text[0] >= '0' && p.text[0] <= '9',
+		(p.text == "+" || p.text == "-") && postfixAt(tokens, last), p.text == "!" && last > 0 && tokens[last-1].endLine == p.line && operandEnds(tokens, last-1):
+		// An operand ends the line.
+	case p.text == ">" && !tokenIs(tokens, last-1, "="):
+		return lineUnsure
+	default:
+		return lineGoesOn
+	}
+	switch {
+	case n.name && (n.text == "in" || n.text == "instanceof"):
+		return lineGoesOn
+	case n.quoted || n.stringLiteral && n.character || n.name || len(n.text) == 1 && n.text[0] >= '0' && n.text[0] <= '9':
+		return lineEnds
+	case n.stringLiteral:
+		return lineUnsure // a template, or a string with escapes
+	}
+	switch n.text {
+	case ".", "?", ":", "(", "[", "*", "/", "%", "&", "|", "^", "<", ">", "=":
+		return lineGoesOn
+	case "+", "-":
+		if tokenIs(tokens, next+1, n.text) && tokens[next+1].line == n.line && tokens[next+1].column == n.column+1 {
+			return lineEnds // a prefix ++ or -- of the next statement
+		}
+		return lineGoesOn
+	case "!":
+		if tokenIs(tokens, next+1, "=") {
+			return lineGoesOn
+		}
+		return lineEnds
+	case "~", "{", "@", "#":
+		return lineEnds
+	}
+	return lineUnsure
+}
+
+// postfixAt reports a "+" or "-" token k ending a postfix ++ or -- after an
+// operand on its line.
+func postfixAt(tokens []callToken, k int) bool {
+	t := tokens[k]
+	return k > 1 && tokenIs(tokens, k-1, t.text) && tokens[k-1].line == t.line && tokens[k-1].column+1 == t.column &&
+		tokens[k-2].endLine == t.line && operandEnds(tokens, k-2)
+}
+
+// operandEnds reports token k as the end of an operand: a literal, a name
+// that is no keyword an operand follows, a number or a closing bracket.
+func operandEnds(tokens []callToken, k int) bool {
+	t := tokens[k]
+	return t.quoted || t.stringLiteral || t.name && !slices.Contains(operandKeywords, t.text) ||
+		t.text == ")" || t.text == "]" || t.text == "}" || len(t.text) == 1 && t.text[0] >= '0' && t.text[0] <= '9'
 }
 
 // javascriptScope is the token range a non-import binding at token i is
-// visible in, or module when it binds at module level: a declaration's
-// innermost block (module when none; a function declaration or var inside a
-// block reaches its whole top-level statement), a parameter's function,
-// a named function or class expression's own body.
+// visible in, or module when it binds at module level: a let, const or
+// class declaration's innermost block (module when none); a var's function
+// (the body of the innermost function holding it, module when none), as a
+// function declaration's in a block (sloppy code hoists it there); a
+// parameter's function; a named function or class expression's own body
+// (never the module).
 func javascriptScope(tokens []callToken, i int, decl string) (from, to int, module bool) {
 	block := func(k int) (int, int, bool) {
 		for p := tokens[k].parent; p >= 0; p = tokens[p].parent {
 			if tokenIs(tokens, p, "{") {
+				return p, tokens[p].close, false
+			}
+		}
+		return 0, len(tokens) - 1, true
+	}
+	function := func(k int) (int, int, bool) {
+		for p := tokens[k].parent; p >= 0; p = tokens[p].parent {
+			if tokenIs(tokens, p, "{") && functionBrace(tokens, p) {
 				return p, tokens[p].close, false
 			}
 		}
@@ -677,6 +893,10 @@ func javascriptScope(tokens []callToken, i int, decl string) (from, to int, modu
 		}
 		return top, max(tokens[top].close, top), false
 	}
+	arrow := func(from, arrow int) (int, int, bool) {
+		last, _ := arrowEnd(tokens, arrow, true)
+		return from, last, false
+	}
 	switch decl {
 	case "param":
 		p := tokens[i].parent
@@ -685,7 +905,7 @@ func javascriptScope(tokens []callToken, i int, decl string) (from, to int, modu
 		}
 		if p < 0 {
 			// A single parameter before "=>".
-			return i, arrowEnd(tokens, i+2), false
+			return arrow(i, i+2)
 		}
 		close := tokens[p].close
 		if tokenIs(tokens, p-1, "catch") && tokenIs(tokens, close+1, "{") {
@@ -694,11 +914,11 @@ func javascriptScope(tokens []callToken, i int, decl string) (from, to int, modu
 		if body := functionBody(tokens, close); body >= 0 {
 			return p, tokens[body].close, false
 		}
-		if k, arrow := returnType(tokens, close); arrow {
-			return p, arrowEnd(tokens, k+1), false
+		if k, isArrow := returnType(tokens, close); isArrow {
+			return arrow(p, k+1)
 		}
 		if tokenIs(tokens, close+1, "=") && tokenIs(tokens, close+2, ">") {
-			return p, arrowEnd(tokens, close+2), false
+			return arrow(p, close+2)
 		}
 		return statement(i)
 	case "function", "class":
@@ -707,11 +927,16 @@ func javascriptScope(tokens []callToken, i int, decl string) (from, to int, modu
 			key--
 		}
 		if !declarationPosition(tokens, key) {
-			// A named function or class expression binds its name inside.
-			return statement(i)
+			// A named function or class expression binds its name in its
+			// own body; one the reader cannot follow, in the rest of the
+			// file.
+			if end := ownBodyEnd(tokens, i, decl); end >= 0 {
+				return i, end, false
+			}
+			return i, len(tokens) - 1, false
 		}
 		if tokens[key].depth > 0 && decl == "function" {
-			return statement(i)
+			return function(key)
 		}
 		return block(key)
 	case "var", "const", "let":
@@ -719,12 +944,68 @@ func javascriptScope(tokens []callToken, i int, decl string) (from, to int, modu
 		switch {
 		case k < 0:
 			return statement(i)
-		case decl == "var" && tokens[k].depth > 0:
-			return statement(k)
+		case decl == "var":
+			return function(k)
 		}
 		return block(k)
 	}
 	return statement(i)
+}
+
+// functionBrace reports a "{" token b that opens a function's body: after
+// "=>", or after the ")" of a parameter list (not a catch clause's),
+// directly or past a return annotation.
+func functionBrace(tokens []callToken, b int) bool {
+	if tokenIs(tokens, b-1, ">") && tokenIs(tokens, b-2, "=") {
+		return true
+	}
+	for k := b - 1; k >= 0 && b-k < 200; k-- {
+		// A closer stands one level below its opener.
+		closer := tokenIs(tokens, k, ")") || tokenIs(tokens, k, "]") || tokenIs(tokens, k, "}")
+		if closer && tokens[tokens[k].parent].depth != tokens[b].depth || !closer && tokens[k].depth != tokens[b].depth {
+			return false
+		}
+		switch {
+		case tokenIs(tokens, k, ")"):
+			open := tokens[k].parent
+			if paramList(tokens, open) && !tokenIs(tokens, open-1, "catch") && functionBody(tokens, k) == b {
+				return true
+			}
+			k = open
+		case closer:
+			k = tokens[k].parent
+		case tokenIs(tokens, k, ";") || tokenIs(tokens, k, "{") || tokenIs(tokens, k, "=") && !tokenIs(tokens, k+1, ">"):
+			return false
+		}
+	}
+	return false
+}
+
+// ownBodyEnd is the last token of the body of the function or class whose
+// name is token i: a function's parameters and body, a class's first "{"
+// at its level; -1 when the reader cannot follow it.
+func ownBodyEnd(tokens []callToken, i int, decl string) int {
+	if decl == "function" {
+		open := skipGenerics(tokens, i+1)
+		if !tokenIs(tokens, open, "(") {
+			return -1
+		}
+		if body := functionBody(tokens, tokens[open].close); body >= 0 {
+			return tokens[body].close
+		}
+		return -1
+	}
+	for k := i + 1; k < len(tokens) && tokens[k].depth >= tokens[i].depth; k++ {
+		switch {
+		case tokenIs(tokens, k, "{"):
+			return tokens[k].close
+		case tokenIs(tokens, k, ";"):
+			return -1
+		case tokens[k].close > k:
+			k = tokens[k].close
+		}
+	}
+	return -1
 }
 
 // declarationKeyword is the const, let or var token declaring the binding
@@ -760,14 +1041,20 @@ func declarationPosition(tokens []callToken, key int) bool {
 	if k < 0 {
 		return true
 	}
-	return tokenIs(tokens, k, "{") || tokenIs(tokens, k, "}") || tokenIs(tokens, k, ";") || tokens[k].endLine < tokens[k+1].line && tokens[k+1].depth == tokens[key].depth && !strings.Contains("=(,:?[|&!+-*/%<>", tokens[k].text)
+	// A literal (a string, a template, markup) on the line before ends a
+	// statement there as an operand does.
+	return tokenIs(tokens, k, "{") || tokenIs(tokens, k, "}") || tokenIs(tokens, k, ";") || tokens[k].endLine < tokens[k+1].line && tokens[k+1].depth == tokens[key].depth &&
+		(tokens[k].stringLiteral || !strings.Contains("=(,:?[|&!+-*/%<>", tokens[k].text))
 }
 
 // scriptDeclaration is a module-level function declaration: its first and
-// last lines, and the bounded window a long one keeps (to its first return).
+// last lines, and the bounded window a long one keeps (to its first return);
+// open reports an end the reader is not sure of (an arrow function's
+// expression a later line may go on with): its window is partial.
 type scriptDeclaration struct {
 	start, end        int
 	boundStart, bound int
+	open              bool
 }
 
 // jsFunctionDeclaration reads the function a module-level binding at token
@@ -778,6 +1065,7 @@ type scriptDeclaration struct {
 func jsFunctionDeclaration(tokens []callToken, at int) (scriptDeclaration, bool) {
 	first := at - 1
 	var body, last int
+	open := false
 	switch {
 	case tokenIs(tokens, first, "function") || tokenIs(tokens, first, "*") && tokenIs(tokens, first-1, "function"):
 		if tokenIs(tokens, first, "*") {
@@ -841,7 +1129,7 @@ func jsFunctionDeclaration(tokens []callToken, at int) (scriptDeclaration, bool)
 				return scriptDeclaration{}, false
 			}
 			body = arrow + 1
-			last = arrowEnd(tokens, arrow)
+			last, open = arrowEnd(tokens, arrow, false)
 		}
 	default:
 		return scriptDeclaration{}, false
@@ -849,7 +1137,7 @@ func jsFunctionDeclaration(tokens []callToken, at int) (scriptDeclaration, bool)
 	for tokenIs(tokens, first-1, "async") || tokenIs(tokens, first-1, "default") || tokenIs(tokens, first-1, "export") {
 		first--
 	}
-	d := scriptDeclaration{start: tokens[first].line, end: tokens[last].endLine}
+	d := scriptDeclaration{start: tokens[first].line, end: tokens[last].endLine, open: open}
 	d.boundStart, d.bound = d.start, scriptFirstReturn(tokens, body, d.start, false)
 	return d, true
 }
@@ -1030,7 +1318,7 @@ func (r *leadResolver) scriptDefinitions(scan *leadScan, anchor record.Excerpt, 
 	if !ok {
 		return nil, false, false, "", nil
 	}
-	tokens := leadTokens(lang, text)
+	tokens := leadTokens(anchor.Path, text)
 	if tokens == nil || python && pythonDynamicBindings(tokens) {
 		return nil, false, false, "", nil
 	}
@@ -1054,6 +1342,13 @@ func (r *leadResolver) scriptDefinitions(scan *leadScan, anchor record.Excerpt, 
 	ambiguous := false
 	calls, locals := 0, 0
 	scopes := map[string]scriptScopes{}
+	// followed holds what each import binding (by its index) led to: the
+	// calls of one lead follow it once.
+	type follow struct {
+		h     leadHit
+		found bool
+	}
+	followed := map[int]follow{}
 	for i, t := range tokens {
 		if !t.name || !slices.Contains(names, t.text) || t.line < anchor.Start || anchor.End < t.line || !scriptCall(tokens, i, python, typeScript) {
 			continue
@@ -1083,12 +1378,17 @@ func (r *leadResolver) scriptDefinitions(scan *leadScan, anchor record.Excerpt, 
 			if at < 0 {
 				continue
 			}
-			h, found, err := r.scriptImported(scan, anchor.Path, imports[at], python)
-			if err != nil {
-				return nil, true, false, "", err
+			f, seen := followed[at]
+			if !seen {
+				h, found, err := r.scriptImported(scan, anchor.Path, imports[at], python)
+				if err != nil {
+					return nil, true, false, "", err
+				}
+				f = follow{h, found}
+				followed[at] = f
 			}
-			if found {
-				add(h)
+			if f.found {
+				add(f.h)
 			}
 			continue
 		}
@@ -1143,7 +1443,7 @@ func declarationHit(p string, d scriptDeclaration) leadHit {
 	if d.bound >= d.boundStart && d.bound > 0 {
 		loc = sourceCallLocation{p, d.start, d.bound}
 	}
-	return leadHit{loc: loc, origin: "context", extent: extent}
+	return leadHit{loc: loc, origin: "context", extent: extent, partial: d.open}
 }
 
 // leadPythonModule is the one Python file a module name of caller names
@@ -1186,7 +1486,7 @@ func (r *leadResolver) scriptImported(scan *leadScan, caller string, b scriptBin
 		if err != nil || !ok {
 			return leadHit{}, false, err
 		}
-		tokens := leadTokens(leadDefinitionLanguage(p), text)
+		tokens := leadTokens(p, text)
 		if tokens == nil || python && pythonDynamicBindings(tokens) {
 			return leadHit{}, false, nil
 		}

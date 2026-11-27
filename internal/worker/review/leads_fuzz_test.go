@@ -2,13 +2,17 @@ package review
 
 import (
 	"maps"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
@@ -50,7 +54,7 @@ func (x leadFixture) files() []leadFile {
 func leadFixtures() []leadFixture {
 	var out []leadFixture
 	for _, cases := range [][]bindCase{pythonScopingCases(), scriptScopingCases(), returnAnnotationCases(), specifierCases(),
-		regexLiteralCases(), rustScopingCases(), rustMethodCases(), nativeLookupCases()} {
+		regexLiteralCases(), jsxCases(), rustScopingCases(), rustMethodCases(), nativeLookupCases()} {
 		for _, c := range cases {
 			out = append(out, leadFixture{c.tree, c.path, c.symbol, c.withheld})
 		}
@@ -59,7 +63,7 @@ func leadFixtures() []leadFixture {
 		out = append(out, leadFixture{c.tree, c.path, c.symbol, c.withheld})
 	}
 	for _, c := range prototypeCases() {
-		out = append(out, leadFixture{tree: c.tree(), anchor: "native/app.c", symbol: "rate"})
+		out = append(out, leadFixture{tree: c.tree(), anchor: "native/app.c", symbol: "rate", withheld: c.withheld})
 	}
 	for _, c := range dryRunLeadCases(3) {
 		out = append(out, leadFixture{tree: c.tree, anchor: c.anchor, symbol: "share"})
@@ -305,7 +309,7 @@ func checkLeadFileReaders(t testing.TB, f leadFile) {
 	}
 	switch lang := leadDefinitionLanguage(f.path); lang {
 	case "python", "javascript":
-		tokens := leadTokens(lang, f.text)
+		tokens := leadTokens(f.path, f.text)
 		checkLeadTokens(t, f.text, tokens)
 		python, typeScript := lang == "python", typeScriptPath(f.path)
 		var imports []scriptBinding
@@ -344,7 +348,7 @@ func checkLeadFileReaders(t testing.TB, f leadFile) {
 			scriptCall(tokens, i, python, typeScript)
 		}
 	case "rust":
-		tokens := leadTokens(lang, f.text)
+		tokens := leadTokens(f.path, f.text)
 		checkLeadTokens(t, f.text, tokens)
 		rf := newRustFile(tokens)
 		for _, fn := range rf.fns {
@@ -416,7 +420,8 @@ func addLeadSeeds(f *testing.F, langs ...string) {
 }
 
 // The JavaScript and TypeScript scan (a "/" read as division or as a
-// regular expression literal, template expressions read as code) and its
+// regular expression literal, template expressions read as code, in a TSX
+// file JSX markup read as opaque text and its expressions as code) and its
 // import reader.
 func FuzzLeadScriptTokens(f *testing.F) {
 	for _, text := range leadSeedTexts("javascript") {
@@ -425,12 +430,17 @@ func FuzzLeadScriptTokens(f *testing.F) {
 	for _, c := range slashCases() {
 		f.Add(c.text)
 	}
+	for _, c := range jsxTokenCases() {
+		f.Add(c.text)
+	}
 	f.Fuzz(func(t *testing.T, text string) {
-		tokens := leadTokens("javascript", text)
-		checkLeadTokens(t, text, tokens)
-		for _, b := range javascriptImports(tokens) {
-			if b.token < 0 || b.token >= len(tokens) {
-				t.Fatalf("import binding %+v outside %d tokens", b, len(tokens))
+		for _, p := range []string{"app/fuzz.ts", "app/fuzz.tsx"} {
+			tokens := leadTokens(p, text)
+			checkLeadTokens(t, text, tokens)
+			for _, b := range javascriptImports(tokens) {
+				if b.token < 0 || b.token >= len(tokens) {
+					t.Fatalf("import binding %+v outside %d tokens", b, len(tokens))
+				}
 			}
 		}
 	})
@@ -502,6 +512,156 @@ func FuzzLeadGoJavaReasons(f *testing.F) {
 			runLeadReaders(t, files, symbol, leadReadersThorough)
 		}
 	})
+}
+
+// Full lead resolution of a small tree, its windows included: no input may
+// panic it, and every target lies in its file, bound to its blob, within the
+// window limits and outside the excerpts the request sent; a definition
+// target not marked partial is the whole of a declaration the lead's
+// definitions found (a clipped window is always partial). The input names
+// the anchor's tree and symbol and, in sent, lines of a second file the
+// request also sent.
+func FuzzLeadResolution(f *testing.F) {
+	for _, x := range leadFixtures() {
+		f.Add(encodeLeadFiles(x.files()), x.symbol, uint16(0))
+		if len(x.files()) > 1 {
+			f.Add(encodeLeadFiles(x.files()), x.symbol, uint16(1<<6|8)) // lines 2 to 10 of the second file
+		}
+	}
+	f.Fuzz(func(t *testing.T, tree, symbol string, sent uint16) {
+		files, ok := decodeLeadFiles(tree)
+		if !ok || leadDefinitionLanguage(files[0].path) == "" || files[0].refused || !record.ValidEvidenceSymbol(symbol) {
+			return
+		}
+		runLeadResolution(t, files, symbol, sent)
+	})
+}
+
+// runLeadResolution resolves a definition and a callers lead of symbol
+// anchored in files[0] at each of its first four lines calling symbol (else
+// at the whole file), the request having sent the lines around the anchor,
+// and a callers lead anchored at the first definition found, and checks
+// their targets.
+func runLeadResolution(t *testing.T, files []leadFile, symbol string, sent uint16) {
+	root := t.TempDir()
+	withheld := map[string]bool{}
+	for _, f := range files {
+		p := filepath.Join(root, filepath.FromSlash(f.path))
+		if os.MkdirAll(filepath.Dir(p), 0o700) != nil || os.WriteFile(p, []byte(f.text), 0o600) != nil {
+			return // a tree no directory holds (a file and a directory of one name)
+		}
+		if f.refused {
+			withheld[f.path] = true
+		}
+	}
+	snapshot, err := source.AcquireLocal(t.Context(), root, ".", t.TempDir(), source.DefaultLimits())
+	if err != nil {
+		return
+	}
+	s := leadStage(t, analysis.Job{RunID: domain.NewID(), AttemptID: domain.NewID(), Epoch: 1, Profile: "deep-review", Snapshot: snapshot,
+		Scratch: t.TempDir(), Scope: domain.Scope{Kind: "full"}, AllowModelReview: true})
+	if len(withheld) > 0 {
+		s.screen = secretScreen{state: screenApplied, withheld: withheld}
+	}
+	excerpt := func(p string, start, end int) (record.Excerpt, bool) {
+		e, ok := s.entries()[p]
+		if !ok {
+			return record.Excerpt{}, false
+		}
+		lines, ok, err := s.sourceLines(e, nil)
+		if err != nil || !ok || len(lines) == 0 {
+			return record.Excerpt{}, false
+		}
+		start = min(max(start, 1), len(lines))
+		end = min(max(end, start), len(lines))
+		return record.Excerpt{ID: record.ExcerptID(s.j.Snapshot.Digest, p, e.SHA256, start, end), Path: p, SHA256: e.SHA256, Start: start, End: end,
+			Kind: windowKind(p), Origin: "context", Text: strings.Join(lines[start-1:end], "\n")}, true
+	}
+	whole, ok := excerpt(files[0].path, 1, 1<<20)
+	if !ok {
+		return
+	}
+	var extra []record.Excerpt
+	if sent != 0 && len(files) > 1 {
+		start := 1 + int(sent>>6&63)
+		if x, ok := excerpt(files[1+int(sent>>12)%(len(files)-1)].path, start, start+int(sent&63)); ok {
+			extra = append(extra, x)
+		}
+	}
+	var anchors []int
+	for n, line := range strings.Split(whole.Text, "\n") {
+		if strings.Contains(line, symbol+"(") && len(anchors) < 4 {
+			anchors = append(anchors, n+1)
+		}
+	}
+	if len(anchors) == 0 {
+		anchors = []int{0}
+	}
+	for _, n := range anchors {
+		window, anchor := whole, whole
+		if n > 0 {
+			window, _ = excerpt(files[0].path, n-1, n+1)
+			anchor = record.Narrow(window, s.j.Snapshot.Digest, n, n)
+		}
+		carried := append([]record.Excerpt{window}, extra...)
+		hits := resolveFuzzLead(t, s, record.LeadNeedDefinition, symbol, anchor, carried)
+		resolveFuzzLead(t, s, record.LeadNeedCallers, symbol, anchor, carried)
+		// The callers of the definition found, anchored at its declaration.
+		if len(hits) > 0 {
+			d := hits[0].declaration()
+			if x, ok := excerpt(d.path, d.start, d.end); ok {
+				resolveFuzzLead(t, s, record.LeadNeedCallers, symbol, x, append([]record.Excerpt{x}, extra...))
+			}
+		}
+	}
+}
+
+// resolveFuzzLead resolves a lead of symbol at anchor, the request having
+// sent carried, checks its targets and returns a definition lead's hits.
+func resolveFuzzLead(t *testing.T, s *roleStage, need, symbol string, anchor record.Excerpt, carried []record.Excerpt) []leadHit {
+	l := record.Lead{ID: "lead_1", Need: need, Symbol: symbol, EvidenceID: anchor.ID, Suspicion: "호출한 함수가 오류를 돌려주는지 확인해야 한다."}
+	out, err := s.resolveLeads([]record.Lead{l}, map[string]record.Excerpt{anchor.ID: anchor}, carried)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hits []leadHit
+	if need == record.LeadNeedDefinition {
+		r := s.newLeadResolver(carried)
+		if hits, _, err = r.definitions(r.scan(), symbol, anchor); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, target := range out[0].Targets {
+		checkLeadTarget(t, s, carried, hits, target)
+	}
+	return hits
+}
+
+// checkLeadTarget fails unless target is a window of its file's blob within
+// the limits, none of whose lines the request sent, and, as a definition
+// target not marked partial, the whole declaration of one of hits.
+func checkLeadTarget(t *testing.T, s *roleStage, carried []record.Excerpt, hits []leadHit, target record.LeadTarget) {
+	t.Helper()
+	e, ok := s.entries()[target.Path]
+	if !ok || target.SHA256 != e.SHA256 || target.ID != record.ExcerptID(s.j.Snapshot.Digest, target.Path, e.SHA256, target.Start, target.End) {
+		t.Fatalf("target %+v not bound to its blob", target)
+	}
+	lines, ok, err := s.sourceLines(e, nil)
+	if err != nil || !ok || target.Start < 1 || target.End < target.Start || target.End > len(lines) || target.End-target.Start+1 > record.MaxLeadWindowLines ||
+		record.JSONLen(strings.Join(lines[target.Start-1:target.End], "\n")) > maxWindowBytes {
+		t.Fatalf("target %+v outside its %d lines or the window limits", target, len(lines))
+	}
+	if slices.ContainsFunc(carried, func(x record.Excerpt) bool {
+		return x.Path == target.Path && x.Start <= target.End && target.Start <= x.End
+	}) {
+		t.Fatalf("target %+v holds lines the request sent", target)
+	}
+	if target.Origin == "context" && !target.Partial && !slices.ContainsFunc(hits, func(h leadHit) bool {
+		d := h.declaration()
+		return d.path == target.Path && d.start == target.Start && d.end == target.End
+	}) {
+		t.Fatalf("target %+v is not partial but no whole declaration of %+v", target, hits)
+	}
 }
 
 // Every prefix of every fixture file, the rest of its tree whole, passes

@@ -1,8 +1,14 @@
 package review
 
 import (
+	"fmt"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
 
@@ -15,15 +21,19 @@ const ratesCaller = "#include <stdio.h>\n#include <string.h>\n#include \"rates.h
 // format strings and division: a definition of the anchor's file (a static
 // forward prototype before it names the same function), a static inline
 // definition of an included header. A parameter or local of the name, a
-// file-scope function pointer of the name, a macro of it, a call in a class
-// or a member function, a using directive, and in C++ a name of the C
-// library with a system include bind it to nothing; a conditional prototype
+// file-scope function pointer of the name, a local whose type decltype or
+// __typeof__ writes, a macro of it (in a header of preprocessor lines only
+// too), a call in a class or a member function, a using directive, in C++ a
+// name of the C library with a system include, and a quoted include found
+// only in another directory than the including file's bind it to nothing; a
+// conditional prototype
 // or include, two C++ overloads or two definitions are ambiguous, as is a
 // C++ call another lookup may bind (a function of the name in an inline
 // namespace, or for a call with arguments in a namespace the lookup does not
 // reach or as a class's friend). A read of the name (qsort's comparator, a
 // table) refuses nothing, nor does the name in a template parameter list (a
-// parameter, a default argument). In C++ the innermost namespace declaring
+// parameter, a default argument) or a prototype's numeric default argument.
+// In C++ the innermost namespace declaring
 // the name decides, an anonymous namespace's names being visible around it.
 func TestNativeDefinitionLeadsFollowLookup(t *testing.T) {
 	runBindCases(t, nativeLookupCases())
@@ -61,6 +71,8 @@ func nativeLookupCases() []bindCase {
 			path: "native/util.h", line: "return twice(twice(n));", symbol: "twice", target: "native/util.h", first: "inline int twice(", last: "// twice end"},
 		{name: "a project function named like a C library function in C", tree: map[string]string{"native/abs.c": "#include <stdio.h>\n\nstatic int abs(int n) {\n  return n < 0 ? -n : n;\n} // abs end\n\nint run(int n) {\n  return abs(n);\n}\n"},
 			path: "native/abs.c", line: "return abs(n);", symbol: "abs", target: "native/abs.c", first: "static int abs(", last: "// abs end"},
+		{name: "a C++ prototype with a numeric default argument", tree: map[string]string{"native/notify.cpp": "void notify(int level = 0);\n\nint run() {\n  notify();\n  return 0;\n}\n\nvoid notify(int level) {\n  (void)level;\n} // notify end\n"},
+			path: "native/notify.cpp", line: "  notify();", symbol: "notify", target: "native/notify.cpp", first: "void notify(int level) {", last: "// notify end"},
 
 		{name: "parameter of the name", tree: map[string]string{"native/app.c": "#include \"rates.h\"\n\nint run(int (*rate)(int), int n) {\n  return rate(n);\n}\n", "native/rates.h": ratesHeader, "native/rates.c": ratesSource},
 			path: "native/app.c", line: "return rate(n);", symbol: "rate", reason: record.LeadDefinitionMissing},
@@ -83,6 +95,17 @@ func nativeLookupCases() []bindCase {
 			path: "native/run.cpp", line: "return count(n);", symbol: "count", reason: record.LeadDefinitionMissing},
 		{name: "a C library name in C++ with a system include", tree: map[string]string{"native/abs.cpp": "#include <cstdlib>\n\nstatic int abs(int n) {\n  return n < 0 ? -n : n;\n}\n\nint run(int n) {\n  return abs(n);\n}\n"},
 			path: "native/abs.cpp", line: "return abs(n);", symbol: "abs", reason: record.LeadDefinitionMissing},
+		{name: "a local declared with decltype", tree: map[string]string{"native/run.cpp": "int pick(int n) {\n  return n;\n}\n\nint helper(int n) {\n  return n * 2;\n}\n\nint run(int n) {\n  decltype(&pick) helper = &pick;\n  return helper(n);\n}\n"},
+			path: "native/run.cpp", line: "return helper(n);", symbol: "helper", reason: record.LeadDefinitionMissing},
+		{name: "a local declared with __typeof__", tree: map[string]string{"native/run.c": "static int pick(int n) {\n  return n;\n}\n\nstatic int helper(int n) {\n  return n * 2;\n}\n\nint run(int n) {\n  __typeof__(pick) *helper = pick;\n  return helper(n);\n}\n"},
+			path: "native/run.c", line: "return helper(n);", symbol: "helper", reason: record.LeadDefinitionMissing},
+		{name: "a function-like macro in a header of preprocessor lines only", tree: map[string]string{"native/app.c": "#include \"alloc.h\"\n#include \"memdebug.h\"\n\nvoid *run(void) {\n  return xmalloc(16);\n}\n",
+			"native/alloc.h": "#pragma once\n#include <stddef.h>\n\nvoid *xmalloc(size_t n);\n", "native/memdebug.h": "#pragma once\n#ifdef MEMDEBUG\n#define xmalloc(n) xmalloc_debug(n, __FILE__, __LINE__)\n#endif\n",
+			"native/alloc.c": "#include \"alloc.h\"\n\nvoid *xmalloc(size_t n) {\n  return 0;\n}\n"},
+			path: "native/app.c", line: "return xmalloc(16);", symbol: "xmalloc", reason: record.LeadDefinitionMissing},
+		{name: "a quoted include found only in another directory", tree: map[string]string{"native/app.c": "#include \"compat.h\"\n\nint run(int n) {\n  return shim(n);\n}\n",
+			"plugins/legacy/compat.h": "#pragma once\n\nstatic inline int shim(int n) {\n  return n;\n}\n"},
+			path: "native/app.c", line: "return shim(n);", symbol: "shim", reason: record.LeadDefinitionMissing},
 
 		{name: "a C++ overload declared beside the definition of another", tree: map[string]string{"native/area.cpp": "#include \"area.h\"\n\ndouble area(double r) {\n  return 3.14 * r * r;\n}\n\nint run() {\n  return area(2, 3);\n}\n",
 			"native/area.h": "#pragma once\n\nint area(int w, int h);\n", "native/rect.cpp": "int area(int w, int h) {\n  return w * h;\n}\n"},
@@ -109,13 +132,21 @@ func nativeLookupCases() []bindCase {
 
 // A header prototype the anchor includes, beside system includes, binds the
 // call to the one non-static, unconditional definition among the project's
-// sources (a static function of the name in another file is not it): the
+// sources (a static function of the name in another file is not it, nor
+// does a header of preprocessor lines alone stop the search): the
 // definition is sent first and the prototype after it, marked partial.
-// Without exactly one such definition the prototype alone is sent.
+// Without exactly one such definition, or beside a source the lead may not
+// read (withheld), the prototype alone is sent.
 func TestNativeHeaderPrototypeReachesItsDefinition(t *testing.T) {
 	for _, c := range prototypeCases() {
 		t.Run(c.name, func(t *testing.T) {
 			s := leadStage(t, treeJob(t, c.tree()))
+			if len(c.withheld) > 0 {
+				s.screen = secretScreen{state: screenApplied, withheld: map[string]bool{}}
+				for _, p := range c.withheld {
+					s.screen.withheld[p] = true
+				}
+			}
 			window, anchor := leadWindow(t, s, "native/app.c", "return rate(", 0)
 			l := resolveOne(t, s, record.LeadNeedDefinition, "rate", window, anchor)
 			proto := record.LeadTarget{Path: "native/rates.h", Start: 4, End: 4, Partial: true}
@@ -135,31 +166,144 @@ func TestNativeHeaderPrototypeReachesItsDefinition(t *testing.T) {
 	}
 }
 
-// prototypeCase is a project whose anchor native/app.c calls rate through
-// the prototype of native/rates.h: the files beside them and whether the one
-// definition is found.
+// prototypeCase is a project whose anchor native/app.c (ratesCaller unless
+// caller says) calls rate through the prototype of native/rates.h: the
+// files beside them, those withheld, and whether the one definition is
+// found.
 type prototypeCase struct {
-	name  string
-	extra map[string]string
-	def   bool
+	name     string
+	extra    map[string]string
+	def      bool
+	caller   string
+	withheld []string
 }
 
 func (c prototypeCase) tree() map[string]string {
 	tree := map[string]string{"native/app.c": ratesCaller, "native/rates.h": ratesHeader}
+	if c.caller != "" {
+		tree["native/app.c"] = c.caller
+	}
 	for k, v := range c.extra {
 		tree[k] = v
 	}
 	return tree
 }
 
+// fakeRates is a second definition of rate a test build links instead.
+const fakeRates = "int rate(int n) {\n  return 0;\n}\n"
+
 // prototypeCases lists the cases of the test above; the lead reader fuzz
 // tests seed with their trees.
 func prototypeCases() []prototypeCase {
 	legacy := "static int rate(int n) {\n  return n * 9;\n}\n"
 	return []prototypeCase{
-		{"one definition", map[string]string{"native/rates.c": ratesSource}, true},
-		{"one definition beside a static function of the name", map[string]string{"native/rates.c": ratesSource, "native/legacy.c": legacy}, true},
-		{"two definitions", map[string]string{"native/rates.c": ratesSource, "native/stub.c": "int rate(int n) {\n  return 0;\n}\n"}, false},
-		{"only a static function of the name", map[string]string{"native/legacy.c": legacy}, false},
+		{name: "one definition", extra: map[string]string{"native/rates.c": ratesSource}, def: true},
+		{name: "one definition beside a static function of the name", extra: map[string]string{"native/rates.c": ratesSource, "native/legacy.c": legacy}, def: true},
+		{name: "one definition beside a header of definitions only", extra: map[string]string{"native/rates.c": ratesSource, "native/config.h": "#pragma once\n#define RATE_SCALE 7\n"},
+			def: true, caller: "#include \"config.h\"\n" + ratesCaller},
+		{name: "two definitions", extra: map[string]string{"native/rates.c": ratesSource, "native/stub.c": fakeRates}},
+		{name: "only a static function of the name", extra: map[string]string{"native/legacy.c": legacy}},
+		{name: "one readable definition beside a withheld source", extra: map[string]string{"native/rates.c": ratesSource, "test/fake_rates.c": fakeRates},
+			withheld: []string{"native/rates.c"}},
+	}
+}
+
+// A source the lead may not read (outside the scope or outside a pull
+// request's changed files) may hold the definition the readable one only
+// stands in for: the header prototype alone is sent.
+func TestNativeExternalDefinitionNeedsEverySourceRead(t *testing.T) {
+	tree := prototypeCase{extra: map[string]string{"native/rates.c": ratesSource, "test/fake_rates.c": fakeRates}}.tree()
+	for name, configure := range map[string]func(j *analysis.Job){
+		"outside the scope": func(j *analysis.Job) {
+			j.Scope = domain.Scope{Kind: "paths", Paths: []string{"native/app.c", "native/rates.h", "test"}}
+		},
+		"outside the change": func(j *analysis.Job) {
+			j.PullRequest = &domain.PullRequestJob{Changed: []string{"native/app.c", "native/rates.h", "test/fake_rates.c"}}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			j := treeJob(t, tree)
+			configure(&j)
+			s := leadStage(t, j)
+			window, anchor := leadWindow(t, s, "native/app.c", "return rate(", 0)
+			l := resolveOne(t, s, record.LeadNeedDefinition, "rate", window, anchor)
+			if !l.Resolved() || len(l.Targets) != 1 || l.Targets[0].Path != "native/rates.h" || !l.Targets[0].Partial {
+				t.Fatalf("lead %+v", l)
+			}
+		})
+	}
+}
+
+// A definition the investigate request already sent is in the request,
+// whether one excerpt holds it or several do (or one holds all of it but its
+// closing brace): its header prototype is not sent alone in its place.
+func TestNativeDefinitionSentInPartsIsInTheRequest(t *testing.T) {
+	source := "#include \"rates.h\"\n\nint rate(int n) {\n  return n * 7;\n}\n"
+	tree := map[string]string{"native/app.c": ratesCaller, "native/rates.h": ratesHeader, "native/rates.c": source}
+	for name, ranges := range map[string][][2]int{
+		"one excerpt":               {{3, 5}},
+		"all but the closing brace": {{3, 4}},
+		"two excerpts":              {{3, 4}, {5, 5}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := leadStage(t, treeJob(t, tree))
+			window, anchor := leadWindow(t, s, "native/app.c", "return rate(", 0)
+			var sent []record.Excerpt
+			var ids []string
+			for _, r := range ranges {
+				x := sentLines(t, s, "native/rates.c", r[0], r[1])
+				sent = append(sent, x)
+				ids = append(ids, x.ID)
+			}
+			slices.Sort(ids)
+			l := resolveOne(t, s, record.LeadNeedDefinition, "rate", window, anchor, sent...)
+			if l.Resolved() || l.Reason != record.LeadInRequest || l.Targets != nil || !slices.Equal(l.InRequest, ids) {
+				t.Fatalf("lead %+v, want in the request as %v", l, ids)
+			}
+		})
+	}
+}
+
+// The calls of one lead share its reading of the project: an anchor calling
+// the name two hundred times takes about as long as one calling it once,
+// well under two seconds with twenty sources of 50 KB holding the name. The
+// race detector slows every reading alike, so only the ratio holds there.
+func TestNativeLeadReadsTheSourcesOnce(t *testing.T) {
+	tree := map[string]string{"native/net.h": "#pragma once\n\nint net_send(int n);\n",
+		"native/net.c": "#include \"net.h\"\n\nint net_send(int n) {\n  return n;\n}\n"}
+	for f := range 20 {
+		var b strings.Builder
+		b.WriteString("#include \"net.h\"\n\n")
+		for k := 0; b.Len() < 50<<10; k++ {
+			fmt.Fprintf(&b, "/* %s */\nint relay_%d_%d(int n) {\n  return net_send(n + %d) * 2;\n}\n\n", strings.Repeat("relays the message. ", 20), f, k, k)
+		}
+		tree[fmt.Sprintf("native/relay%02d.c", f)] = b.String()
+	}
+	var lines []string
+	for k := 0; k < 200; k += 3 {
+		calls := []string{}
+		for c := k; c < min(k+3, 200); c++ {
+			calls = append(calls, fmt.Sprintf("net_send(%d)", c))
+		}
+		lines = append(lines, "  s += "+strings.Join(calls, " + ")+";")
+	}
+	tree["native/app.c"] = "#include \"net.h\"\n\nint one(void) {\n  return net_send(1);\n}\n\nint run(void) {\n  int s = 0;\n" + strings.Join(lines, "\n") + "\n  return s;\n}\n"
+	s := leadStage(t, treeJob(t, tree))
+	resolve := func(first, last string) time.Duration {
+		window, _ := leadWindow(t, s, "native/app.c", first, 0)
+		whole := sentLines(t, s, "native/app.c", 1, strings.Count(tree["native/app.c"], "\n"))
+		anchor := record.Narrow(whole, s.j.Snapshot.Digest, window.Start, evidenceLine(t, tree["native/app.c"], last))
+		began := time.Now()
+		l := resolveOne(t, s, record.LeadNeedDefinition, "net_send", whole, anchor)
+		took := time.Since(began)
+		if !l.Resolved() || len(l.Targets) != 2 || l.Targets[0].Path != "native/net.c" || l.Targets[1].Path != "native/net.h" {
+			t.Fatalf("lead %+v", l)
+		}
+		return took
+	}
+	once := resolve("return net_send(1);", "return net_send(1);")
+	many := resolve("s += net_send(0)", "net_send(199)")
+	if many > 4*once+250*time.Millisecond || !raceDetector && many > 2*time.Second {
+		t.Fatalf("200 calls took %v, one call %v", many, once)
 	}
 }

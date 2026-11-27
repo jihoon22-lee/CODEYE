@@ -71,8 +71,8 @@ func rustScopingCases() []bindCase {
 // Self::m, Type::m and self.m bind to the one fn m of the plain inherent
 // impl blocks of the type in the file; self.m only when m takes self as the
 // calling method does. A generic impl, a method only a trait impl declares,
-// a type name the enclosing function rebinds (a type parameter) and two
-// conditional methods are not bound.
+// a type name a type parameter rebinds (of the enclosing fn, a nested fn,
+// the impl or the trait) and two conditional methods are not bound.
 func TestRustMethodLeadsBindInherentImpls(t *testing.T) {
 	runBindCases(t, rustMethodCases())
 }
@@ -97,6 +97,12 @@ func rustMethodCases() []bindCase {
 		{name: "a method only a trait impl declares", tree: rustTree("pub struct Order;\n\nimpl Clone for Order {\n    fn clone(&self) -> Self {\n        Order\n    }\n}\n\nimpl Order {\n    pub fn copy(&self) -> Self {\n        Self::clone(self)\n    }\n}\n"),
 			path: "src/lib.rs", line: "Self::clone(self)", symbol: "clone", reason: record.LeadDefinitionMissing},
 		{name: "a type parameter of the type's name", tree: rustTree(impl + "\npub fn make<Order: Default>() -> Order {\n    Order::new(2)\n}\n"), path: "src/lib.rs", line: "Order::new(2)", symbol: "new", reason: record.LeadDefinitionMissing},
+		{name: "an impl's type parameter of the type's name", tree: rustTree(impl + "\npub struct Wrap<T>(T);\n\nimpl<Order: Default> Wrap<Order> {\n    pub fn make() -> Order {\n        Order::new(2)\n    }\n}\n"),
+			path: "src/lib.rs", line: "Order::new(2)", symbol: "new", reason: record.LeadDefinitionMissing},
+		{name: "a nested fn's type parameter of the type's name", tree: rustTree(impl + "\npub fn outer() -> u32 {\n    fn inner<Order: Default>() -> Order {\n        Order::new(2)\n    }\n    0\n}\n"),
+			path: "src/lib.rs", line: "Order::new(2)", symbol: "new", reason: record.LeadDefinitionMissing},
+		{name: "a trait's type parameter of the type's name", tree: rustTree(impl + "\npub trait Make<Order> {\n    fn make() -> u32 {\n        Order::new(2).qty\n    }\n}\n"),
+			path: "src/lib.rs", line: "Order::new(2)", symbol: "new", reason: record.LeadDefinitionMissing},
 		{name: "methods under two cfg attributes", tree: rustTree("pub struct Order;\n\n#[cfg(unix)]\nimpl Order {\n    fn price(&self) -> u32 {\n        7\n    }\n}\n\n#[cfg(not(unix))]\nimpl Order {\n    fn price(&self) -> u32 {\n        8\n    }\n}\n\nimpl Order {\n    pub fn total(&self) -> u32 {\n        self.price()\n    }\n}\n"),
 			path: "src/lib.rs", line: "        self.price()", symbol: "price", reason: record.LeadAmbiguous},
 	}

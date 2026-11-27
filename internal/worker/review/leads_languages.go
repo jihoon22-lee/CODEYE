@@ -45,31 +45,55 @@ func typeScriptPath(p string) bool {
 	return false
 }
 
-// leadTokens scans text of language lang for a lead's binding. Python uses
+// leadTokens scans the text of file p for a lead's binding. Python uses
 // the shared scan; JavaScript and TypeScript the member scan in slashes mode
 // (a "/" is division after an operand and opens a regular expression
 // literal where an operand starts; template and regular expression literals
-// are opaque tokens); Rust the Rust scan (raw strings, lifetimes, nested
-// comments).
+// are opaque tokens), JavaScript and TSX files in jsx mode too (JSX markup
+// is opaque, its {...} expressions code; jsxPath); Rust the Rust scan (raw
+// strings, lifetimes, nested comments).
 // C and C++ text is scanned with comments, strings, character literals and
 // preprocessor lines blanked (nativeText), so "/" and "\" are operators. nil
-// when the scan cannot separate the text safely.
-func leadTokens(lang, text string) []callToken {
+// when the scan cannot separate the text safely or finds no token.
+func leadTokens(p, text string) []callToken {
+	tokens, _ := leadTokenScan(leadDefinitionLanguage(p), jsxPath(p), text)
+	return tokens
+}
+
+// leadTokenScan is leadTokens' scan of a text of language lang (jsx: a
+// JavaScript or TSX file); ok is false only when the scan cannot separate
+// the text safely, so a text without tokens (a header of preprocessor
+// lines) is read.
+func leadTokenScan(lang string, jsx bool, text string) (tokens []callToken, ok bool) {
+	var m lexMode
 	switch lang {
 	case "python":
-		return callTokens(text, true)
+		m.python = true
 	case "javascript":
-		return lexTokens(text, false, true, false, true, callMaxTokens)
+		m.member, m.slashes, m.jsx = true, true, jsx
 	case "rust":
-		return lexTokens(text, false, false, true, false, callMaxTokens)
+		m.rust = true
 	case "c", "cpp":
 		masked, ok := nativeText(text)
 		if !ok {
-			return nil
+			return nil, false
 		}
-		return lexTokens(masked, false, false, true, false, callMaxTokens)
+		text, m.rust = masked, true
+	default:
+		return nil, false
 	}
-	return nil
+	tokens, _, ok = lexScan(text, m, callMaxTokens, 0)
+	if !ok {
+		return nil, false
+	}
+	return tokens, true
+}
+
+// jsxPath reports a JavaScript or TSX file, whose "<" where an operand
+// starts opens JSX markup; in other TypeScript files it opens a type
+// assertion.
+func jsxPath(p string) bool {
+	return !typeScriptPath(p) || strings.EqualFold(path.Ext(p), ".tsx")
 }
 
 // nativeUnsafe finds C++ syntax the blanking pass cannot read: a raw string
