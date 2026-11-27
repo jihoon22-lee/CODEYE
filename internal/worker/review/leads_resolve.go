@@ -216,6 +216,11 @@ type leadHit struct {
 	// excerpt is the window when the resolver already built it (the Go
 	// caller expansion).
 	excerpt *record.Excerpt
+	// prototype marks a declaration without its body (a C or C++
+	// prototype): its target is partial. secondary marks a further target
+	// of the binding another hit names first (a header prototype after the
+	// definition): it does not make the lead ambiguous.
+	prototype, secondary bool
 }
 
 // declaration is the hit's whole declaration when known, else its location.
@@ -274,7 +279,7 @@ func (r *leadResolver) resolve(l record.Lead, anchor record.Excerpt) (record.Lea
 		}
 		outside = append(outside, h)
 	}
-	if len(outside) == 0 {
+	if !slices.ContainsFunc(outside, func(h leadHit) bool { return !h.secondary }) {
 		l.InRequest = inRequest
 		return unresolved(record.LeadInRequest)
 	}
@@ -314,7 +319,7 @@ func (r *leadResolver) resolve(l record.Lead, anchor record.Excerpt) (record.Lea
 		}
 		r.excerpts--
 		r.bytes -= record.JSONLen(x.Text)
-		l.Targets = append(l.Targets, record.LeadTarget{ID: x.ID, Path: x.Path, SHA256: x.SHA256, Start: x.Start, End: x.End, Kind: x.Kind, Origin: x.Origin, Symbol: x.Symbol, Partial: partial})
+		l.Targets = append(l.Targets, record.LeadTarget{ID: x.ID, Path: x.Path, SHA256: x.SHA256, Start: x.Start, End: x.End, Kind: x.Kind, Origin: x.Origin, Symbol: x.Symbol, Partial: partial || h.prototype})
 	}
 	switch {
 	case len(l.Targets) > 0:
@@ -356,6 +361,36 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 	}
 	called := false
 	switch lang := leadDefinitionLanguage(anchor.Path); lang {
+	case "c", "cpp":
+		found, ok, local, open, reason, err := r.nativeDefinitions(scan, anchor, symbol)
+		if err != nil {
+			return nil, "", err
+		}
+		if reason != "" {
+			return nil, reason, nil
+		}
+		called = ok || callAt(anchor.Text, symbol)
+		for _, h := range found {
+			add(h)
+		}
+		if ok && len(hits) == 0 && local {
+			return nil, record.LeadDefinitionMissing, nil
+		}
+		if !open {
+			break
+		}
+		// The anchor could not be read token by token: the call catalog's
+		// bound calls decide.
+		links, err := scan.index.from(anchor.Path, ".")
+		if err != nil {
+			return nil, "", err
+		}
+		for _, link := range links {
+			if link.caller.path == anchor.Path && anchor.Start <= link.caller.start && link.caller.start <= anchor.End && symbol == link.symbol {
+				called = true
+				add(leadHit{loc: link.callee, origin: "context", extent: link.calleeExtent})
+			}
+		}
 	case "python", "javascript":
 		found, ok, local, reason, err := r.scriptDefinitions(scan, anchor, symbol)
 		if err != nil {
@@ -419,7 +454,7 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 		return nil, record.LeadSymbolNotAtAnchor, nil
 	case len(hits) == 0:
 		return nil, r.definitionMissing(scan, anchor, symbol), nil
-	case len(hits) > 1:
+	case len(slices.DeleteFunc(slices.Clone(hits), func(h leadHit) bool { return h.secondary })) > 1:
 		return nil, record.LeadAmbiguous, nil
 	}
 	return hits, "", nil
