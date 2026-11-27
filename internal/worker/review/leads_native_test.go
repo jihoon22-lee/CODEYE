@@ -18,11 +18,13 @@ const ratesCaller = "#include <stdio.h>\n#include <string.h>\n#include \"rates.h
 // file-scope function pointer of the name, a macro of it, a call in a class
 // or a member function, a using directive, and in C++ a name of the C
 // library with a system include bind it to nothing; a conditional prototype
-// or include, two C++ overloads or two definitions are ambiguous. A read of
-// the name (qsort's comparator, a table) refuses nothing, nor does the name
-// in a template parameter list (a parameter, a default argument). In C++ the
-// innermost namespace declaring the name decides, an anonymous namespace's
-// names being visible around it.
+// or include, two C++ overloads or two definitions are ambiguous, as is a
+// C++ call another lookup may bind (a function of the name in an inline
+// namespace, or for a call with arguments in a namespace the lookup does not
+// reach or as a class's friend). A read of the name (qsort's comparator, a
+// table) refuses nothing, nor does the name in a template parameter list (a
+// parameter, a default argument). In C++ the innermost namespace declaring
+// the name decides, an anonymous namespace's names being visible around it.
 func TestNativeDefinitionLeadsFollowLookup(t *testing.T) {
 	runBindCases(t, nativeLookupCases())
 }
@@ -40,6 +42,8 @@ func nativeLookupCases() []bindCase {
 			path: "native/shape.cpp", line: "return name() * n;", symbol: "name", target: "native/shape.cpp", first: "constexpr int name() {", last: "// name end"},
 		{name: "a template parameter of the name", tree: map[string]string{"native/shape.cpp": "int name(int n) {\n  return n * 3;\n} // name end\n\ntemplate <int (*name)(int)> int apply(int n);\n\nint run(int n) {\n  return name(n);\n}\n"},
 			path: "native/shape.cpp", line: "return name(n);", symbol: "name", target: "native/shape.cpp", first: "int name(int n) {", last: "// name end"},
+		{name: "a call without arguments beside a function of the name in another namespace", tree: map[string]string{"native/geo.cpp": "int origin() {\n  return 1;\n} // origin end\n\nnamespace geo {\nint origin() {\n  return 0;\n}\n}  // namespace geo\n\nint run() {\n  return origin();\n}\n"},
+			path: "native/geo.cpp", line: "return origin();", symbol: "origin", target: "native/geo.cpp", first: "int origin() {", last: "// origin end"},
 		{name: "static inline definition of an included header beside system includes", tree: map[string]string{
 			"native/app.c":   "#include <stdlib.h>\n#include \"rates.h\"\n\nint run(int n) {\n  if (n < 0) {\n    exit(1);\n  }\n  return rate(n) / 2;\n}\n",
 			"native/rates.h": "#pragma once\n#include <stddef.h>\n\nstatic inline int rate(int n) {\n  return n * 7;\n} // rate end\n"},
@@ -87,6 +91,12 @@ func nativeLookupCases() []bindCase {
 			path: "native/clamp.cpp", line: "return clamp(3);", symbol: "clamp", reason: record.LeadAmbiguous},
 		{name: "C++ overloads", tree: map[string]string{"native/area.cpp": "int area(int w, int h) {\n  return w * h;\n}\n\ndouble area(double r) {\n  return 3.14 * r * r;\n}\n\nint run() {\n  return area(2, 3);\n}\n"},
 			path: "native/area.cpp", line: "return area(2, 3);", symbol: "area", reason: record.LeadAmbiguous},
+		{name: "a function of the name in the namespace of an argument's type", tree: map[string]string{"native/geo.cpp": "namespace geo {\nstruct Point {\n  int x, y;\n};\n\nint norm(Point p) {\n  return p.x * p.x + p.y * p.y;\n}\n}  // namespace geo\n\nint norm(int n) {\n  return n < 0 ? -n : n;\n}\n\nint run(geo::Point p) {\n  return norm(p);\n}\n"},
+			path: "native/geo.cpp", line: "return norm(p);", symbol: "norm", reason: record.LeadAmbiguous},
+		{name: "a friend function of the name in an argument's class", tree: map[string]string{"native/shop.cpp": "namespace shop {\nstruct Order {\n  int qty;\n  friend int price(const Order &o) {\n    return o.qty * 7;\n  }\n};\n}  // namespace shop\n\nint price(int n) {\n  return n;\n}\n\nint run(shop::Order o) {\n  return price(o);\n}\n"},
+			path: "native/shop.cpp", line: "return price(o);", symbol: "price", reason: record.LeadAmbiguous},
+		{name: "a declaration of the name in an inline namespace", tree: map[string]string{"native/rates.cpp": "inline namespace v2 {\nint rate(double n);\n}  // namespace v2\n\nint rate(int n) {\n  return n * 7;\n}\n\nint run() {\n  return rate(3);\n}\n"},
+			path: "native/rates.cpp", line: "return rate(3);", symbol: "rate", reason: record.LeadAmbiguous},
 		{name: "a conditional prototype", tree: map[string]string{"native/app.c": ratesCaller, "native/rates.h": "#pragma once\n\n#ifdef FAST\nint rate(int n);\n#endif\n", "native/rates.c": ratesSource},
 			path: "native/app.c", line: "return rate(", symbol: "rate", reason: record.LeadAmbiguous},
 		{name: "a header behind a conditional include", tree: map[string]string{"native/app.c": "#include <stdio.h>\n#ifdef FAST\n#include \"rates.h\"\n#endif\n\nint run(int n) {\n  return rate(n);\n}\n",

@@ -24,13 +24,17 @@ import (
 // (and, in C++, of the signature) among the readable C and C++ sources,
 // sent first with the header prototype marked partial after it; without
 // exactly one (or once the scan reached its limit, or with a quoted include
-// left unread) the header prototype alone. A macro of the name, a using
-// directive or declaration, a call in a class, a member function, an
-// initializer's braces or a lambda at namespace scope bind nothing; so does,
-// in C++ with a system include, a name the C library also declares. A name
-// in a template parameter list declares nothing. A header anchor reads with
-// C++ rules (no translation unit says which language includes it); an
-// included header follows its includer.
+// left unread) the header prototype alone. In C++ that binding is ambiguous
+// when a function of the name may be found otherwise: one in an inline
+// namespace, or, for a call with arguments, one in a namespace the lookup
+// does not reach or a class's friend (argument-dependent lookup decides by
+// the arguments' types). A macro of the name, a using directive or
+// declaration, a call in a class, a member function, an initializer's
+// braces or a lambda at namespace scope bind nothing; so does, in C++ with a
+// system include, a name the C library also declares. A name in a template
+// parameter list declares nothing. A header anchor reads with C++ rules (no
+// translation unit says which language includes it); an included header
+// follows its includer.
 
 // nativeUnit is one file of a C or C++ translation unit: its tokens
 // (comments, strings and preprocessor lines blanked), its directives and,
@@ -104,9 +108,10 @@ func (u *nativeUnit) head(b int) []int {
 }
 
 // nativeBlock is what a "{" opens: extern (a linkage block), namespace
-// (names its path, "" for an anonymous one), function (name its name token,
-// params its "(", member a name after "::", "~" or operator), class, init
-// (an initializer, a lambda at namespace scope) or "".
+// (names its path, "" for an anonymous one), inline (an inline namespace),
+// function (name its name token, params its "(", member a name after "::",
+// "~" or operator), class, init (an initializer, a lambda at namespace
+// scope) or "".
 type nativeBlock struct {
 	kind         string
 	names        []string
@@ -124,7 +129,7 @@ func (u *nativeUnit) block(b int) nativeBlock {
 		switch {
 		case tokenIs(t, k, "namespace"):
 			if x > 0 && tokenIs(t, h[x-1], "inline") {
-				return nativeBlock{}
+				return nativeBlock{kind: "inline"}
 			}
 			var names []string
 			for _, n := range h[x+1:] {
@@ -513,6 +518,40 @@ func (u *nativeUnit) using(name string) bool {
 	return false
 }
 
+// hides reports a declaration of name the namespace lookup does not place:
+// one in an inline namespace (its names are visible around it), or a friend
+// function a class declares (argument-dependent lookup finds it).
+func (u *nativeUnit) hides(name string) (inline, friend bool) {
+	t := u.tokens
+	for i := range t {
+		if !tokenIs(t, i, name) || !tokenIs(t, i+1, "(") || !nativeTypeToken(t, i-1) && !tokenIs(t, i-1, "*") && !tokenIs(t, i-1, "&") {
+			continue
+		}
+		for p := t[i].parent; p >= 0; p = t[p].parent {
+			if tokenIs(t, p, "{") && u.block(p).kind == "inline" {
+				inline = true
+			}
+		}
+		start := u.start(i)
+		if slices.ContainsFunc(t[start:i], func(x callToken) bool { return x.depth == t[i].depth && x.text == "friend" }) {
+			friend = true
+		}
+	}
+	return inline, friend
+}
+
+// nativeReached reports a namespace path the lookup of a call in namespace
+// call reaches: call or a namespace enclosing it, or an anonymous namespace
+// directly in one of them.
+func nativeReached(d, call []string) bool {
+	for k := 0; k <= len(call); k++ {
+		if slices.Equal(d, call[:k]) || len(d) == k+1 && d[k] == "" && slices.Equal(d[:k], call[:k]) {
+			return true
+		}
+	}
+	return false
+}
+
 // systemInclude reports a <...> include in the unit.
 func (u *nativeUnit) systemInclude() bool {
 	return slices.ContainsFunc(nativeIncludes(u.directives), func(inc nativeInclude) bool { return !inc.quoted })
@@ -663,12 +702,33 @@ func (r *leadResolver) nativeBind(scan *leadScan, tu nativeTU, i int, symbol, la
 			return !slices.Equal(d.scope, s) && !(len(d.scope) == len(s)+1 && d.scope[len(s)] == "" && slices.Equal(d.scope[:len(s)], s))
 		})
 		if len(decls) > 0 {
-			return r.nativeDecide(scan, tu, decls, s, symbol, lang)
+			out, err := r.nativeDecide(scan, tu, decls, s, symbol, lang)
+			if err == nil && len(out.hits) > 0 && lang == "cpp" && nativeOtherwiseFound(tu, all, i, scope, symbol) {
+				return nativeOutcome{ambiguous: true}, nil
+			}
+			return out, err
 		}
 		if len(s) == 0 {
 			return nativeOutcome{open: true}, nil
 		}
 	}
+}
+
+// nativeOtherwiseFound reports a C++ function of the name the call at token
+// i of the anchor may bind to outside its namespace lookup, whose binding
+// depends on types the reader does not know: a declaration in an inline
+// namespace (visible around it) or, for a call with arguments, one that
+// argument-dependent lookup may add (a namespace the lookup does not reach,
+// a class's friend).
+func nativeOtherwiseFound(tu nativeTU, all []nativeDecl, i int, scope []string, symbol string) bool {
+	t := tu.units[0].tokens
+	args := t[i+1].close > i+2
+	for _, x := range tu.units {
+		if inline, friend := x.hides(symbol); inline || args && friend {
+			return true
+		}
+	}
+	return args && slices.ContainsFunc(all, func(d nativeDecl) bool { return !nativeReached(d.scope, scope) })
 }
 
 // nativeDecide binds a call to the declarations of the scope its lookup
