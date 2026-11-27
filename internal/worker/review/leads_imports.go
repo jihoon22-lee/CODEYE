@@ -282,6 +282,41 @@ func leadScriptModule(files map[string]source.Entry, caller, module string) stri
 	return found
 }
 
+// leadScriptModuleFiles lists every snapshot file a relative JavaScript or
+// TypeScript specifier of caller may name: leadScriptModule's candidates,
+// all of them even when more than one exists.
+func leadScriptModuleFiles(files map[string]source.Entry, caller, module string) []string {
+	if !relativeSpecifier(module) {
+		return nil
+	}
+	base := path.Join(path.Dir(caller), module)
+	stem, ext := strings.TrimSuffix(base, path.Ext(base)), path.Ext(base)
+	var candidates []string
+	switch ext {
+	case "":
+		for _, e := range []string{".js", ".ts", ".mjs", ".mts", ".jsx", ".tsx", ".cjs", ".cts"} {
+			candidates = append(candidates, base+e, path.Join(base, "index"+e))
+		}
+	case ".js":
+		candidates = []string{base, stem + ".ts", stem + ".tsx"}
+	case ".jsx":
+		candidates = []string{base, stem + ".tsx"}
+	case ".mjs":
+		candidates = []string{base, stem + ".mts"}
+	case ".cjs":
+		candidates = []string{base, stem + ".cts"}
+	default:
+		candidates = []string{base}
+	}
+	var out []string
+	for _, p := range candidates {
+		if _, ok := files[p]; ok && p != caller && scriptFile(p) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // pythonModuleFiles lists the snapshot files a Python module name of caller
 // may be, in directModule's order: relative to the caller's package, then
 // (absolute names) from the project root and its src directory. A name may

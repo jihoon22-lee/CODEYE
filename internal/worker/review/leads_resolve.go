@@ -181,60 +181,6 @@ func (l *leadScan) missing(notFound string, relevant func(string) bool) string {
 	return notFound
 }
 
-var importLine = regexp.MustCompile(`^\s*(import|from|#\s*include|use|mod|require|export)\b|\brequire\s*\(`)
-
-// definitionFiles reports the files a definition lead may point into, by
-// path and text alone (they could not be read): for a qualified call
-// (q.symbol, q::symbol, q->symbol) a file whose name or directory is q or
-// that an import line naming q points at; for an unqualified call a file of
-// the anchor's directory or one that an import line naming the symbol
-// points at.
-func (r *leadResolver) definitionFiles(scan *leadScan, anchor record.Excerpt, symbol string) func(string) bool {
-	qualified := regexp.MustCompile(`([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:\.|::|->)\s*` + regexp.QuoteMeta(symbol) + `\s*\(`)
-	var names []string
-	for _, m := range qualified.FindAllStringSubmatch(anchor.Text, -1) {
-		names = addLim(names, m[1])
-	}
-	var imports []string
-	if f, err := scan.index.goFile(anchor.Path); err == nil && f.parsed != nil {
-		for _, spec := range f.parsed.Imports {
-			line := spec.Path.Value
-			if spec.Name != nil {
-				line = spec.Name.Name + " " + line
-			}
-			imports = append(imports, line)
-		}
-	} else if e, ok := r.catalog.files[anchor.Path]; ok {
-		if text, readable, err := scan.read(e); err == nil && readable {
-			for _, line := range strings.Split(text, "\n") {
-				if importLine.MatchString(line) {
-					imports = append(imports, line)
-				}
-			}
-		}
-	}
-	return func(p string) bool {
-		own := []string{strings.TrimSuffix(path.Base(p), path.Ext(p)), path.Base(path.Dir(p))}
-		points := func(token string) bool {
-			for _, line := range imports {
-				if symbolAt(line, token) && slices.ContainsFunc(own, func(n string) bool { return symbolAt(line, n) }) {
-					return true
-				}
-			}
-			return false
-		}
-		if len(names) == 0 {
-			return path.Dir(p) == path.Dir(anchor.Path) || points(symbol)
-		}
-		for _, q := range names {
-			if slices.Contains(own, q) || points(q) {
-				return true
-			}
-		}
-		return false
-	}
-}
-
 // callAt reports a call of symbol in text: the identifier followed by "(".
 func callAt(text, symbol string) bool {
 	return regexp.MustCompile(`(^|[^A-Za-z0-9_$])` + regexp.QuoteMeta(symbol) + `\s*\(`).MatchString(text)
@@ -438,7 +384,7 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 	case !called:
 		return nil, record.LeadSymbolNotAtAnchor, nil
 	case len(hits) == 0:
-		return nil, scan.missing(record.LeadDefinitionMissing, r.definitionFiles(scan, anchor, symbol)), nil
+		return nil, r.definitionMissing(scan, anchor, symbol), nil
 	case len(hits) > 1:
 		return nil, record.LeadAmbiguous, nil
 	}
