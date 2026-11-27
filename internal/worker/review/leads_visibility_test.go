@@ -91,19 +91,19 @@ func TestLeadReasonFollowsVisibility(t *testing.T) {
 			path: "app/use.py", line: "return len(b)", symbol: "len", resolvedPath: "app/util.py"},
 
 		{name: "TypeScript builtin beside an import of a withheld module", tree: map[string]string{
-			"app/use.ts": "import { other } from './secret.js';\n\nexport function use(s: string) {\n  return parseInt(s) + other();\n}\n",
+			"app/use.ts":    "import { other } from './secret.js';\n\nexport function use(s: string) {\n  return parseInt(s) + other();\n}\n",
 			"app/secret.ts": "export function other() {\n  return 1;\n}\n"},
 			path: "app/use.ts", line: "return parseInt(s)", symbol: "parseInt", withheld: []string{"app/secret.ts"}, reason: record.LeadDefinitionMissing},
 		{name: "TypeScript call an import of a withheld module binds", tree: map[string]string{
-			"app/use.ts": "import { count } from './secret.js';\n\nexport function use(s: string) {\n  return count(s);\n}\n",
+			"app/use.ts":    "import { count } from './secret.js';\n\nexport function use(s: string) {\n  return count(s);\n}\n",
 			"app/secret.ts": "export function count(s: string) {\n  return s.length;\n}\n"},
 			path: "app/use.ts", line: "return count(s)", symbol: "count", withheld: []string{"app/secret.ts"}, reason: record.LeadWithheld},
 		{name: "TypeScript call beside a withheld module imported for another name", tree: map[string]string{
-			"app/use.ts": "import { other } from './secret.js';\n\nexport function use(s: string) {\n  other();\n  return count(s);\n}\n",
+			"app/use.ts":    "import { other } from './secret.js';\n\nexport function use(s: string) {\n  other();\n  return count(s);\n}\n",
 			"app/secret.ts": "export function other() {\n  return 1;\n}\n"},
 			path: "app/use.ts", line: "return count(s)", symbol: "count", withheld: []string{"app/secret.ts"}, reason: record.LeadDefinitionMissing},
 		{name: "TypeScript project function named like a builtin", tree: map[string]string{
-			"app/use.ts": "import { parseInt } from './util.js';\n\nexport function use(s: string) {\n  return parseInt(s);\n}\n",
+			"app/use.ts":  "import { parseInt } from './util.js';\n\nexport function use(s: string) {\n  return parseInt(s);\n}\n",
 			"app/util.ts": "export function parseInt(s: string) {\n  return 0;\n}\n"},
 			path: "app/use.ts", line: "return parseInt(s)", symbol: "parseInt", resolvedPath: "app/util.ts"},
 
@@ -115,11 +115,11 @@ func TestLeadReasonFollowsVisibility(t *testing.T) {
 			path: "src/lib.rs", line: "count(v)", symbol: "count", withheld: []string{"src/secret.rs"}, reason: record.LeadWithheld},
 
 		{name: "C library call beside an included withheld header", tree: map[string]string{
-			"native/use.c": "#include <stdio.h>\n#include \"secret.h\"\n\nint use(void) {\n  return printf(\"%d\\n\", TOKEN);\n}\n",
+			"native/use.c":    "#include <stdio.h>\n#include \"secret.h\"\n\nint use(void) {\n  return printf(\"%d\\n\", TOKEN);\n}\n",
 			"native/secret.h": "#define TOKEN 7\n"},
 			path: "native/use.c", line: "return printf(", symbol: "printf", withheld: []string{"native/secret.h"}, reason: record.LeadDefinitionMissing},
 		{name: "C call an included withheld header may declare", tree: map[string]string{
-			"native/use.c": "#include <stdio.h>\n#include \"secret.h\"\n\nint use(void) {\n  return count(3);\n}\n",
+			"native/use.c":    "#include <stdio.h>\n#include \"secret.h\"\n\nint use(void) {\n  return count(3);\n}\n",
 			"native/secret.h": "int count(int n);\n"},
 			path: "native/use.c", line: "return count(3)", symbol: "count", withheld: []string{"native/secret.h"}, reason: record.LeadWithheld},
 		{name: "C call beside a withheld header it does not include", tree: map[string]string{
@@ -127,11 +127,11 @@ func TestLeadReasonFollowsVisibility(t *testing.T) {
 			path: "native/use.c", line: "return count(3)", symbol: "count", withheld: []string{"native/secret.h"}, reason: record.LeadDefinitionMissing},
 
 		{name: "Java standard class beside a withheld file of its package", tree: map[string]string{"pom.xml": "<project/>\n",
-			"src/main/java/app/Use.java": "package app;\n\npublic class Use {\n  static int use(int a, int b) {\n    return Math.max(a, b);\n  }\n}\n",
+			"src/main/java/app/Use.java":    "package app;\n\npublic class Use {\n  static int use(int a, int b) {\n    return Math.max(a, b);\n  }\n}\n",
 			"src/main/java/app/Secret.java": "package app;\n\nclass Secret {\n}\n"},
 			path: "src/main/java/app/Use.java", line: "return Math.max(a, b)", symbol: "max", withheld: []string{"src/main/java/app/Secret.java"}, reason: record.LeadDefinitionMissing},
 		{name: "Java call into a withheld class an import names", tree: map[string]string{"pom.xml": "<project/>\n",
-			"src/main/java/app/Use.java": "package app;\n\nimport pricing.Rules;\n\npublic class Use {\n  static int use(int a) {\n    return Rules.quote(a);\n  }\n}\n",
+			"src/main/java/app/Use.java":       "package app;\n\nimport pricing.Rules;\n\npublic class Use {\n  static int use(int a) {\n    return Rules.quote(a);\n  }\n}\n",
 			"src/main/java/pricing/Rules.java": "package pricing;\n\npublic final class Rules {\n  public static int quote(int a) {\n    return a;\n  }\n}\n"},
 			path: "src/main/java/app/Use.java", line: "return Rules.quote(a)", symbol: "quote", withheld: []string{"src/main/java/pricing/Rules.java"}, reason: record.LeadWithheld},
 	})
