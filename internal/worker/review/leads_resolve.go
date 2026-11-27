@@ -388,6 +388,22 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 			break
 		}
 		called = callAt(anchor.Text, symbol)
+		if lang == "rust" {
+			found, ok, local, open, reason := r.rustDefinitions(scan, anchor, symbol)
+			if reason != "" {
+				return nil, reason, nil
+			}
+			called = called || ok
+			for _, h := range found {
+				add(h)
+			}
+			if ok && len(hits) == 0 && local {
+				return nil, record.LeadDefinitionMissing, nil
+			}
+			if !open {
+				break
+			}
+		}
 		for _, link := range links {
 			// The call's name, or the imported name an alias binds it to.
 			if link.caller.path != anchor.Path || link.caller.start < anchor.Start || anchor.End < link.caller.start ||

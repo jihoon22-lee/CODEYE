@@ -370,17 +370,18 @@ func pythonModuleFiles(files map[string]source.Entry, caller, module string) []s
 
 // rustUse is one name a use declaration binds: path is the full path (a
 // glob ends in "*"), local the bound name ("" for a glob), token the bound
-// name's token (or the "*").
+// name's token (or the "*") and keyword the declaration's use token.
 type rustUse struct {
-	path  []string
-	local string
-	token int
+	path           []string
+	local          string
+	token, keyword int
 }
 
 // rustUses lists the bindings of the use declarations in tokens, nested
 // trees, aliases, self and globs included.
 func rustUses(tokens []callToken) []rustUse {
 	var out []rustUse
+	keyword := -1
 	var tree func(prefix []string, at, end int)
 	tree = func(prefix []string, at, end int) {
 		parts := append([]string(nil), prefix...)
@@ -398,7 +399,7 @@ func rustUses(tokens []callToken) []rustUse {
 				}
 				return
 			case tokenIs(tokens, at, "*"):
-				out = append(out, rustUse{path: append(parts, "*"), token: at})
+				out = append(out, rustUse{path: append(parts, "*"), token: at, keyword: keyword})
 				return
 			case tokenName(tokens, at):
 				parts = append(parts, tokens[at].text)
@@ -413,7 +414,7 @@ func rustUses(tokens []callToken) []rustUse {
 				if local == "self" && len(parts) > 1 {
 					parts, local = parts[:len(parts)-1], parts[len(parts)-2]
 				}
-				out = append(out, rustUse{path: parts, local: local, token: token})
+				out = append(out, rustUse{path: parts, local: local, token: token, keyword: keyword})
 				return
 			case tokenIs(tokens, at, ":") && tokenIs(tokens, at+1, ":"):
 				at += 2
@@ -430,6 +431,7 @@ func rustUses(tokens []callToken) []rustUse {
 		for end < len(tokens) && !(tokens[end].depth == tokens[i].depth && tokenIs(tokens, end, ";")) {
 			end++
 		}
+		keyword = i
 		tree(nil, i+1, end)
 	}
 	return out
