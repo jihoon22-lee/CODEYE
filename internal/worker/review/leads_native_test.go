@@ -70,6 +70,8 @@ func TestNativeDefinitionLeadsFollowLookup(t *testing.T) {
 		{name: "a C++ overload declared beside the definition of another", tree: map[string]string{"native/area.cpp": "#include \"area.h\"\n\ndouble area(double r) {\n  return 3.14 * r * r;\n}\n\nint run() {\n  return area(2, 3);\n}\n",
 			"native/area.h": "#pragma once\n\nint area(int w, int h);\n", "native/rect.cpp": "int area(int w, int h) {\n  return w * h;\n}\n"},
 			path: "native/area.cpp", line: "return area(2, 3);", symbol: "area", reason: record.LeadAmbiguous},
+		{name: "a template overload with a default template argument", tree: map[string]string{"native/clamp.cpp": "template <typename T = int>\nT clamp(T v) {\n  return v;\n}\n\nint clamp(int v, int lo) {\n  return v < lo ? lo : v;\n}\n\nint run() {\n  return clamp(3);\n}\n"},
+			path: "native/clamp.cpp", line: "return clamp(3);", symbol: "clamp", reason: record.LeadAmbiguous},
 		{name: "C++ overloads", tree: map[string]string{"native/area.cpp": "int area(int w, int h) {\n  return w * h;\n}\n\ndouble area(double r) {\n  return 3.14 * r * r;\n}\n\nint run() {\n  return area(2, 3);\n}\n"},
 			path: "native/area.cpp", line: "return area(2, 3);", symbol: "area", reason: record.LeadAmbiguous},
 		{name: "a conditional prototype", tree: map[string]string{"native/app.c": ratesCaller, "native/rates.h": "#pragma once\n\n#ifdef FAST\nint rate(int n);\n#endif\n", "native/rates.c": ratesSource},

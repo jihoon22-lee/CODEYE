@@ -341,7 +341,7 @@ func (u *nativeUnit) decls(name string) []nativeDecl {
 			continue
 		}
 		start := u.start(i)
-		if slices.ContainsFunc(t[start:head], func(x callToken) bool { return x.depth == t[i].depth && x.text == "=" }) {
+		if slices.ContainsFunc(t[nativeTemplateEnd(t, start):head], func(x callToken) bool { return x.depth == t[i].depth && x.text == "=" }) {
 			continue // an initializer's operand
 		}
 		d := nativeDecl{unit: u, name: i, first: start, scope: append(scope, qualifier...)}
@@ -383,6 +383,32 @@ func (u *nativeUnit) decls(name string) []nativeDecl {
 		out = append(out, d)
 	}
 	return out
+}
+
+// nativeTemplateEnd is the token after a template parameter list opening a
+// declaration at token k (template <class T = int>), else k.
+func nativeTemplateEnd(t []callToken, k int) int {
+	if !tokenIs(t, k, "template") || !tokenIs(t, k+1, "<") {
+		return k
+	}
+	depth := 0
+	for j := k + 1; j < len(t); j++ {
+		switch {
+		case tokenIs(t, j, "<"):
+			depth++
+		case tokenIs(t, j, ">") && !tokenIs(t, j-1, "-"):
+			depth--
+			if depth == 0 {
+				return j + 1
+			}
+		case tokenIs(t, j, ";") || tokenIs(t, j, "{"):
+			return k
+		}
+		if t[j].close > j {
+			j = t[j].close
+		}
+	}
+	return k
 }
 
 // headEnd is the "{", ";", "," or "=" that ends a declaration's head from
