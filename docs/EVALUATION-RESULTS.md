@@ -1004,3 +1004,245 @@ JS/TS 변형 3개와 Rust 변형 3개만 같은 도구 목록·설정으로 다�
 - 다른 분석기의 작업 상태·처리 파일·진단 수는 기준과 같다.
 - 채점기 집계 "tool diagnostic hits label, before": dev 1/11 → 1/11, holdout 2/9 → 2/9.
 - **남은 차이.** 처리 범위가 넓어졌는데도 도구 진단이 결함 줄에 닿는 사례 수는 그대로다. 남은 차이는 도구가 실행되지 않아서보다, 실행된 규칙이 그 줄에 진단을 내지 않아서 생긴다고 본다. 사례 라벨은 읽지 않았으므로 사례마다 확인하지는 않았다.
+
+## 단서 후속 조사(지침 2.11.0)의 비용 없는 확인과 회귀 기록
+
+[단서 후속 조사](REVIEW.md#단서-후속-조사)(PR #98, 검토 지침 2.11.0, 기록 schema 0.9, 보고서 생성기 26)를 병합하기 전에 한 확인의 기록이다. 비용 없는 확인 셋은 가짜 upstream과 시험 relay로 프로젝트 규모 결함 집합의 dev·spent 분할을 실행했고, 유료 실행은 합성 회귀 집합 한 번이다. 봉인한 holdout 분할은 쓰지 않았다. 유료 canary는 실행 전에 적은 규칙에 따라 하지 않았다. OpenCode는 1.19.6이다. 판정은 조정자와 조정자가 맡긴 모델 에이전트가 했고 사람의 판정이 아니다.
+
+### 실행 전에 적은 기준
+
+규칙은 확인마다 실행 전에 저장소 밖 읽기 전용 파일에 적었고, 결과를 본 뒤 바꾸지 않았다. 원문은 [아래](#단서-후속-조사의-기준-문서-전문)에 옮겼다.
+
+| 시점 | 규칙 | sha256 |
+|---|---|---|
+| 2026-11-26, 첫 확인 전 | 단서 제안 여부. dev 11·spent 9 사례의 변경 전 변형을 한 번씩 실행해, 조사 요청 하나 이상이 단서를 받는 사례의 비율 p를 잰다. p < 1/3이면 유료 canary도 봉인 측정 요청도 하지 않는다. p ≥ 1/3이면 단서를 받은 조사 요청이 가장 많은 dev 두 사례를 canary로 정한다 | `db23d3b23a2c3c44a73281a052ee6d71502d1060d9641153b56311de41e24efd` |
+| 2026-11-26, 첫 유료 호출 전 | 유료 확인. 회귀 집합 한 번(차단 조건은 [지침 개정과 회귀 검증](EVALUATION.md#지침-개정과-회귀-검증)), canary 두 사례의 통과 조건, 그리고 두 canary 사례 모두에서 새 줄을 더한 후속 조사가 한 번 이상 실행됐을 때만 봉인 측정을 권한다는 결정 규칙 | `d85fa4d8e61cb1ce096ca000beefe31cf49a22132724a9db59d47895e00c65fc` |
+| 2026-11-26, 둘째 확인 전 | 덧붙임. 승인 규칙을 바꾼 수정 뒤에 가짜 단서로 먼저 본다. 두 canary 사례 모두에서 후속 조사가 실행되지 않으면 유료 canary를 하지 않는다 | `71eab7aa425d001f883ff1621957d5c9aeed17f5d00e90ca2c77971e0ebef293` |
+| 2026-11-26, 셋째 확인 전 | 둘째 결과와 마지막 덧붙임. 계약대로 단서를 고르는 가짜 단서로 한 번만 더 본다. 어느 canary 사례라도 새 줄을 더한 후속 조사를 실행하면 유료 canary를 하고, 아니면 이 빌드에서는 하지 않는다. 회귀 실행은 지침 병합 관문으로 남는다 | `a5392760110eb6ad91f1ebd505204d8ee2ec2bbfb5e55f43c0f828cc328ccffa` |
+| 2026-11-27, 분류 전 | 분류 범주. 셋째 확인의 가짜 단서를 변경 전 트리에서 나눈다. 이름이 같은 다른 선언에 묶인 단서가 있으면 병합을 막는다 | `894836b7edbe422add7f5da4aa7ddc4c750b8de549b464ee1dc2623aec3609bf` |
+
+p의 문턱을 1/3로 잡은 이유는 첫 규칙에 적었다. 18짝의 양측 부호 검정이 p < 0.05에 닿으려면 한쪽으로만 갈린 짝이 6개 이상 있어야 한다. 기능을 실행할 수 있는 사례가 3분의 1보다 적으면 봉인 측정은 효과를 보일 수 없다.
+
+### 단서 제안 여부(빌드 `00a8848`)
+
+조사 요청이 검토 범위를 다 담지 못하면(`files_outside_review_context`·`excerpt_only`) 단서를 받는다(`scope.lead_limit`). 이것은 스냅샷·범위·요청 예산으로 정해지고 모델과 관계가 없으므로 가짜 upstream으로 정확히 잴 수 있다.
+
+- 20 실행 모두 AI 검토 `performed`였다. 18개는 `completed`, 2개는 분석기 실패로 `partial`이다.
+- 조사 요청 하나 이상이 단서를 받은 사례는 **10/20**이다(dev 5/11, spent 5/9). 그 열 사례에서는 조사 요청 1~6개가 모두 단서를 받았다. 나머지 열 사례는 조사 요청 하나가 범위를 모두 담았다.
+- p = 0.50 ≥ 1/3이다. 규칙대로 단서를 받은 조사 요청이 6개·5개인 dev 두 사례(아래 K1·K2)를 canary로 정했다.
+
+### 후속 조사가 실행되는가(가짜 단서, 단서를 받은 열 사례)
+
+| 빌드 | 가짜가 고른 단서 | 단서 | 찾음 | 후속 조사 실행 | 상한으로 거절 | K1·K2의 단서(찾음) |
+|---|---|---|---|---|---|---|
+| `02bdd8d` | 보낸 줄의 한정 호출(`pkg.Name(`) 중 보낸 발췌가 선언하지 않은 이름 | 51 | 0 | 0 | 0 | 7(0)·9(0) |
+| `9677e65` | 보낸 줄의 모든 호출(한정 여부 무관) 중 보낸 발췌가 선언하지 않은 이름. 작은 고정 목록의 내장·키워드·표준 이름공간, 생성자 호출, 주석 줄, 문자열 안 호출은 뺐다 | 53 | 1 | 1(새 발췌 1, 새 줄 3, 고침 1) | 0 | 9(0)·9(0) |
+
+- 두 확인 모두 열 실행이 `completed`이고 AI 검토 `performed`였다.
+- 두 확인 모두 K1·K2에서 후속 조사가 실행되지 않았다. 규칙대로 **유료 canary를 하지 않았고, 이 빌드로는 봉인 측정을 요청하지 않는다.**
+- 상한이 후속 조사를 거절한 경우는 없었다. 첫 확인에서 찾지 못한 이유는 승인 규칙이 아니라 가짜가 고른 한정 호출이 모두 프로젝트 밖(표준 라이브러리·외부 모듈) 이름이었기 때문이다(`lead_definition_not_found` 50, `lead_symbol_not_at_anchor` 1).
+- 둘째 확인에서 찾지 못한 52개의 이유는 `lead_definition_not_found` 47, `lead_symbol_not_at_anchor` 3, `lead_secret_withheld` 2, `lead_secondary_path` 1이다. 실행된 후속 조사 하나는 spent Go 사례에서 나왔다.
+
+### 가짜 단서의 분류(`9677e65`의 53개)
+
+단서마다 근거 줄(변경 전 트리의 인용 줄)과 그 트리의 정의 검색으로 분류했다. 품질 측정이 아니라 해석기 공백과 가짜의 잡음을 가르는 확인이다.
+
+| 분류 | C | Go | JS/TS | Java | Python | 합 |
+|---|---|---|---|---|---|---|
+| 호출이 아님(주석, annotation) | 6 | 3 | 1 | 3 | 0 | 13 |
+| 매크로 | 2 | 0 | 0 | 0 | 0 | 2 |
+| 내장·표준 라이브러리·외부 모듈 | 0 | 3 | 9 | 1 | 4 | 17 |
+| 값을 통한 호출(객체 메서드, 함수 값) | 0 | 6 | 5 | 0 | 0 | 11 |
+| 여러 정의·동적 선택 | 0 | 0 | 0 | 2 | 0 | 2 |
+| 같은 파일의 정의를 찾지 못함 | 1 | 0 | 1 | 0 | 0 | 2 |
+| 다른 프로젝트 파일의 정의를 찾지 못함 | 0 | 0 | 2 | 0 | 0 | 2 |
+| 해결됨 또는 다른 이유 | 0 | 2 | 0 | 0 | 2 | 4 |
+| 합 | 9 | 14 | 18 | 6 | 6 | 53 |
+
+- 45개는 설계대로 찾지 않는 것이다. 가짜의 잡음 15, 프로젝트 밖이거나 값을 통한 호출 28, 여러 정의 2다.
+- 다른 프로젝트 파일 2개는 모두 TypeScript의 상대 경로 named import다. 지정자는 `.js`로 끝나고 소스는 `.ts`다(TypeScript ESM의 일반 형태). 해석기는 이 지정자를 소스 파일에 잇지 않는다.
+- 같은 파일 2개는 같은 파일 뒤쪽에 정의된 C 함수 하나와, 같은 파일에 정의된 TS 함수 하나다. 해석기는 Go가 아닌 언어에서 같은 파일의 정의를 찾지 않는다.
+- 다른 이유 4개의 판정은 다음과 같다.
+  - Go 해결 1: 같은 package의 다른 파일이며 맞다.
+  - Go `lead_secondary_path` 1: 호출한 package가 보조 경로다. 그 이름의 프로젝트 선언이 없으므로 다른 선언에 잘못 묶인 경우가 아니다. 병합을 막는 확인은 통과했다.
+  - Python `lead_secret_withheld` 2: 하나는 비밀값 선별로 보류된 파일에서 가져온 이름이라 맞다. 다른 하나는 내장 예외 이름인데, 보류된 파일에서 가져오는 파일의 줄이라 이 이유가 잘못 붙었다(맞는 이유는 찾지 못함이다).
+
+### 회귀 집합 결과(2.11.0, 2026-11-27, 빌드 `942943b`)
+
+대상은 24사례다. 앞선 지침 회귀와 같은 22사례(Q01~Q10 수정 전·후, `modules`, `caller-closes`)에 파일럿 검사의 기본 목록에 있는 공개 파일럿 사본(`pilot`, 기준 `bcfad99d68b3`)과 공개 Git 입력(`git`)을 더했다. 단서를 받는 조사가 있는 사례는 파일럿 사본뿐이다. 모델은 relay를 거친 `gpt-6.2-sol`, 호출 상한은 99(에이전트 기본값), 분석기 설정은 gitleaks·ruff·eslint·node다. 병합한 PR head(`e6f7a5e`)는 이 빌드에 CI 제한시간과 문서 한 줄만 더했다.
+
+| 기준 | 결과 |
+|---|---|
+| a | AI 검토 23/24 `performed`. 22개 `completed`. `modules`는 `partial`이다(하위 모듈의 go vet이 요구 Go 버전을 노드에서 찾지 못함, 직전 기록과 같다). `git`은 `partial`·AI 검토 `not_performed`(`model_source_not_approved`)다. 공개 Git 입력은 모델 전송을 승인하지 않으며 파일럿 검사가 이 결과를 요구한다. 거절·차단 0. `--audit-results` 통과(보고서 24, claim 228, 근거 379). 파일럿 종료 코드 0, 브라우저 시험 10개 통과, 범위 검사의 실패 항목 없음 |
+| b | 관찰되지 않았다. 모델 발견은 25개(Q 13, 파일럿 12)이고 Q의 13개는 라벨 결함 10개와 아래 별개 지적 3개다. 파일럿 12개의 주장 48개(모두 `inferred`)와 조건·영향은 조정자가 맡긴 모델 에이전트가 인용 발췌와 대조했다. 발췌와 어긋나는 서술, 실행·재현 서술, 상태·수치 필드 안의 서술은 모두 0이다. 주장 6개는 그 주장이 인용하지 않은 줄(다른 인용 발췌나 연결 관계)에 기대는 부정·반대 근거·연결 서술이었다. 이름·상수값 셋은 인용 줄 밖에 있었고 트리에 있는 것을 확인했다 |
+| c 수정 전 | 10/10 |
+| c 수정 후 재지적 | 0/10. 별개 지적 3(Q03-after 잘린 UTF-8 입력의 대체 문자, Q05-after 열린 reader 없는 성공 반환, Q07-after 매우 큰 초 값의 오버플로). 모두 계약 밖 입력에 관한 low 지적이다 |
+| c 닫기 입력 | 발견 없음 |
+| d 호출 | 장부 요청 61회(documents 12, investigate 26, verify 16, environment 2, contract 2, interpret 1, triage 1, leads 1), 모두 정상 정산 |
+| d 사용량·차감 | 입력 743,211·출력 35,927토큰, 4.08달러(최악 요율. relay의 표준 요율 추정은 1.85달러). 시간상 마지막 13회는 파일럿 사본의 검토 호출 13회로 2.62달러다. 나머지 48회 1.46달러는 앞선 회귀(47회, 1.40달러)와 비슷하다 |
+| 단서(실모델) | 파일럿에서 단서를 받은 조사 요청 넷 중 하나가 단서 1개를 냈고 플랫폼이 찾았다. 후속 조사 1회(수락)가 새 발췌 1개·새 줄 20을 보냈고, 모델은 후보 넷을 모두 그대로 두었다(`kept` 4, 고침·반박·추가 0). 파일럿의 단서 task 97개는 실행 1, `no_leads` 3, `no_review_scope` 93(검토 대상이 없던 조사 slot)이고 상한 거절은 0이다. 나머지 22사례는 조사 요청이 범위를 모두 담아 단서를 받지 않았다(`leads_not_offered`) |
+
+- **판정.** 기준 a~c를 충족했다. 단, `modules`는 입력 설계 때문에 `partial`이다. 회귀 한 번의 통과는 품질 우월의 근거가 아니다. 단서 후속 조사가 결함 발견을 늘린다는 근거도 아니다.
+
+### 결론
+
+- 실모델로 단서 경로가 처음부터 끝까지 동작했다. 모델이 단서를 냈고, 플랫폼이 찾았고, 후속 조사가 새 줄을 받아 처리했다. 근거는 파일럿 한 사례의 단서 하나이고 후보는 바뀌지 않았다.
+- 프로젝트 규모 사례에서는 절반이 단서를 받는다. 하지만 가짜 단서로 보면 해석기가 프로젝트 정의를 찾는 경우가 드물다.
+- 남은 해석 공백은 Go 밖 언어의 같은 파일 정의, TS ESM의 `.js` 지정자, 내장 이름에 붙는 이유다. 이것을 먼저 메운다. 그다음 새 빌드에서 실행 전에 적은 규칙으로 유료 canary를 하고 봉인 측정 여부를 정한다.
+- 결함 발견의 개선은 측정하지 않았다.
+
+### 비용
+
+| 장부(상한) | 내용 | 차감 | 요청 |
+|---|---|---|---|
+| 여덟째(14.46달러) | 2.11.0 회귀 24사례 | 4.08달러 | 61 |
+
+남은 장부는 10.38달러이고 거절·차단 요청은 없다. 비용 없는 확인 셋은 시험 relay를 거쳐 차감이 없다. 이 평가 전체의 누적 차감은 59.62달러이고 예산은 70달러다. 앞 기록의 55.54달러에 이번 4.08달러를 더했고, 앞 기록 뒤에 소유자가 예산 10달러를 더했다. 최악 요율로 차감한 장부이고 공급자 청구서는 대조하지 않았다.
+
+### 독립성 공개
+
+- 기능 작성자(모델 에이전트)는 평가 자료(`fixtures/project-defects/`, `fixtures/quality-holdout/`)와 이 문서를 뺀 작업 사본(sparse checkout)에서 일했다. 이전 PR 본문과 댓글은 읽지 말라고 지시했다.
+  - 작성자의 보고에 따르면, 로드맵을 고치면서 앞선 보류 측정 문단을 읽었다. 검색 출력에는 평가를 높은 수준에서 언급한 변경 이력·로드맵·결정 기록 줄이 지나갔다.
+- 기능 지시에는 로드맵에 공개된 약점(원인 분기·발생 조건 추적 오류)만 넣었다.
+  - 첫 확인 뒤 조정자는 관찰 하나를 사례 ID와 수 없이 작성자에게 알렸다. 실제 프로젝트에서 한정 호출 단서가 표준 라이브러리·외부 모듈 호출이었다는 것이다. 그 결과 작성자는 가짜 upstream에 `--leads=project`를 더했고, 합성 fixture로만 시험했다.
+- 조정자는 앞선 보류 측정의 결과를 안다. 새 봉인 분할에 대해서는 PR 검토에서 다음을 보았다. 사례의 소스·패치·라벨·검사는 보지 않았다.
+  - 작성 에이전트의 보고: 언어·종류·범주별 수, 두 번째 파일이 필요한 사례 수와 필요 없는 사례의 ID, 출처 저장소 이름 하나.
+  - PR 본문의 사례 ID 줄 일부와 말뭉치 README의 제목.
+- 위 분류는 조정자가 dev·spent 사례로 했다. 로드맵과 다음 해석 범위 작업의 지시에는 언어 구문 수준의 공백 셋만 옮겼고 사례 ID·이름·수는 옮기지 않는다.
+- 봉인한 holdout 분할은 이 기록의 어떤 확인에도 쓰지 않았다.
+
+### 단서 후속 조사의 기준 문서 전문
+
+위 sha256은 원문의 값이다. 여기에 옮기면서 사례 ID를 K1·K2와 설명으로 바꿨다. 그래서 첫 문서를 뺀 나머지의 해시는 위 값과 다르다. 둘째 문서의 첫 줄은 첫 확인의 결과이고, 넷째 문서의 앞부분은 둘째 확인의 결과다.
+
+```
+# Lead-offer check for PR #98 (cost-free, fake upstream) — written 2026-11-26 before any capture
+
+Purpose: decide whether the leads follow-up of PR #98 can run often enough on project-scale cases for the sealed
+holdout split (18 pairs) to be able to show an effect, before any paid canary or any request to the owner for budget.
+
+Build: PR #98 head 00a884866c5d2594ff997f60948bd7d5f9524da1 (product, runner, corpus and fake upstream from one full
+checkout of that commit). Whether an investigate request offers leads depends on the snapshot, the run scope and the
+request budget, not on the model, so the fake upstream measures it exactly. The fake's own lead answers are ignored.
+
+Cases: fixtures/project-defects dev split (11) and spent split (9), the `before` variant of each, 20 runs. The sealed
+holdout split is not run.
+
+Settings (as a paid run would use): model codeye-gateway/gpt-6.2-sol through a test relay (--test-upstream), the
+product default request and output budgets, --review-max-calls 99 (product default), analyzer configuration from
+`codeye tools --json` of the same build passed with --tools-json, --agent-flag dependency-fetch.
+
+Metric, per case, from the fake upstream request dump: the number of investigate requests (overview and slots) whose
+input carries scope.lead_limit, over all investigate requests; and whether the case has at least one such request.
+
+Decision rule:
+- p = (cases with >= 1 lead-offering investigate request) / 20.
+- If p < 1/3: do not run a paid canary as a go/no-go for the sealed measurement, and do not ask the owner for sealed
+  budget for this feature. PR #98 may still merge on correctness as a large-project feature, after the investigate
+  instruction sentence about leads is sent only in lead-offering requests. Do not widen the offer to make it fire.
+- If p >= 1/3: pick two dev cases for the paid canary from those that offer leads (most lead-offering investigate
+  requests first, ties by case ID), state that choice in the canary criteria, and decide the sealed request after it.
+
+Rationale: with 18 sealed pairs, a two-sided sign test needs at least 6 discordant pairs all in one direction to reach
+p < 0.05 (5-0 gives p = 0.0625). If fewer than a third of cases can run the feature, no seal result can show it works.
+Prior (read before writing this rule): on the spent split the current build made 3-9 model calls per case and slice
+investigations produced 1 of 86 findings, which suggests most cases ran no slot.
+```
+
+```
+# Paid checks for PR #98 (leads follow-up, guideline 2.11.0) — written 2026-11-26 before any paid call
+
+Lead-offer check result (cost-free, rule db23d3b2…): 10 of 20 dev+spent cases offer leads, p = 0.50 >= 1/3.
+Canary cases by the pre-registered rule (dev cases that offer leads, most lead-offering investigate requests first,
+ties by case ID): K1 (C, 6), K2 (JS/TS, 5).
+
+Build: the final head of PR #98 after the independent-review fixes, the same commit for every check below. Before any
+paid call on it: the two fake-upstream checks (normal and --shape-errors 0.5) and a --compare-dumps of the synthetic
+set against main, all on that commit.
+
+## 1. Regression run of the synthetic set (guideline revision gate, docs/EVALUATION.md)
+- Target: the full synthetic regression set as in earlier guideline runs (default case list of
+  `scripts/test_postgres.py --pilot`), real model gpt-6.2-sol through the budget relay, ceiling 99 (agent default).
+- Blocking (any one -> do not merge): false evidence; a reproduction claimed without execution; statistics
+  contamination (model prose in state or numbers); an unapproved loss on an important existing case; pilot not
+  `completed` or AI review not `performed`; `check_coverage` failure; refused or blocked relay requests; audit failure.
+- Report only: calls, ledger charge, lead counters (offered, asked, resolved, unresolved by reason, follow-ups run and
+  not run by reason, new lines, dispositions), and the per-case comparison with the previous guideline run.
+
+## 2. Canary: K1 and K2, before variant, one run each
+- Settings: as the lead-offer check (default request and output budgets, --review-max-calls 99, the same tools.json,
+  --agent-flag dependency-fetch), real model through the relay.
+- Pass (any failure -> stop and record, no further paid runs on this build): AI review `performed`; required review
+  tasks failed 0; relay refusals 0; each case's charge within the plan's expected range.
+- Report only: the same lead counters, extra calls and charge per case. No quality claim (dev cases were used for
+  tuning, n = 2).
+
+## 3. Decision on asking the owner for the sealed measurement
+- GO: in BOTH canary cases at least one follow-up call was made with >= 1 resolved lead adding >= 1 new line.
+  Then recommend the sealed paired measurement (base 2f7ee0d vs this build, 18 pairs, ceiling 99) with its cost.
+- HOLD: in one or neither case. Then report why (not asked, not resolved by reason, refused by the ceiling) and
+  propose the resolver or contract change first; do not ask for sealed budget for this build.
+```
+
+```
+# Addendum to canary-criteria.md (sha256 d85fa4d8…) — written 2026-11-26 before the capture it describes
+
+The review fixes on PR #98 (head 02bdd8d395277cd36ae618f91077723324bcb83a) changed admission: a follow-up now runs
+only if the ceiling still covers every later task at its call cap. Before any paid call, one more cost-free capture:
+
+- Build 02bdd8d, fake upstream with --leads (its investigation names leads on qualified calls of sent lines, each for
+  its first candidate), test relay, the same settings as the lead-offer check (default budgets, ceiling 99, the same
+  tools.json, dependency-fetch, before variant, one run each), on the 10 cases that offered leads:
+  [IDs removed here: the five dev and five spent cases that offered leads].
+- Read from the stored reports (code_review.lead_followups) and task rows: follow-ups planned, admitted
+  (run), not admitted (leads_not_admitted), leads asked, resolved, unresolved by reason, new lines.
+- The fake's lead choice is not the model's; resolution counts only show what the resolvers can find for that choice.
+
+Rule: if neither canary case (K1, K2) admits any follow-up in this capture, do not run the paid canary;
+record HOLD with the reason "not admitted under the strict reserve". Otherwise run the regression run and the canary
+exactly as canary-criteria.md says. Nothing else in canary-criteria.md changes.
+```
+
+```
+# Result of the admission capture (addendum 71eab7aa…) and the next free gate — written 2026-11-26 before running it
+
+## Result (cost-free, build 02bdd8d, fake --leads, 10 lead-offering cases)
+- All 10 runs completed, AI review performed.
+- Leads asked 51; resolved 0 (lead_definition_not_found 50, lead_symbol_not_at_anchor 1). Follow-ups run 0, refused by the
+  ceiling (leads_not_admitted) 0. K1: 7 asked, 0 resolved. K2: 9 asked, 0 resolved.
+- Rule outcome: neither canary case ran a follow-up -> **HOLD: the paid canary is not run on this result.**
+- Cause, stated accurately: not the strict reserve (no follow-up was refused). The fake names leads only on qualified calls
+  (`pkg.Name(`) whose name no sent excerpt declares; in these projects those were all calls outside the project, which the
+  fixed resolver correctly does not resolve. So this capture did not exercise resolution of project code or admission.
+
+## Next and final free gate (decided before it runs)
+- Instrument: a fake lead mode that names leads the way the contract asks a model to: a call on a sent line to a name that
+  no sent excerpt declares, qualified or not (project functions in unsent files resolve; builtins and outside code don't).
+  The feature author adds it to scripts/fake_model_upstream.py, generic and tested on synthetic fixtures only.
+- Run on the final head of PR #98 (after the current fixes), same 10 cases and settings as the admission capture.
+- Rule: if K1 or K2 runs at least one follow-up with >= 1 resolved lead adding >= 1 new line, run the paid
+  regression run and the paid canary exactly as canary-criteria.md says. Otherwise the paid canary is not run for this
+  build and the report says why (no such calls, unresolved by reason, or refused by the ceiling); the regression run
+  still runs as the guideline merge gate. This is the last free gate for this build; it is not repeated with other
+  instruments.
+```
+
+```
+# Classification of the 53 fake leads of the last free gate — categories fixed 2026-11-27 before counting
+
+Purpose: tell resolver gaps from picker noise, and check two suspicious reason codes. Not a quality measure.
+Each lead is classified from its anchor line (the cited excerpt line in the before tree) and a search of the before tree:
+- N  not a call: comment, string, annotation/decorator, keyword, declaration head (picker noise)
+- B  builtin, standard library or external-module symbol (correctly not resolved)
+- V  call through a value: method on an object/receiver, function value, closure, field (not resolvable by design
+     unless the receiver type is a project type the type analysis can pin)
+- M  macro or preprocessor name
+- S  project function defined in the SAME file as the anchor, not resolved (same-file gap)
+- X  project function defined in ANOTHER project file, not resolved (cross-file gap for that construct)
+- A  project name with several definitions (ambiguity is correct)
+- R  resolved, or another reason code: check that the code is right (wrong-code = misattribution bug; a match on a
+     same-name declaration of a different receiver/type = wrong-function bug, blocks merge)
+Two checks named in advance: a dev Python case's `KeyError` -> lead_secret_withheld, a spent Go case's `Add` -> lead_secondary_path.
+Output: counts per category per language, the two checks' verdicts. Only structural statements leave this file for
+an author (no case IDs, symbols or counts), and that transfer is disclosed with the results.
+```
