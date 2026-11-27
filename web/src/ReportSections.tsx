@@ -1,6 +1,6 @@
 import { useContext, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { sourceEvidenceURL, type AnalysisReport, type Finding, type GoTestFailure, type Observation } from './analysisReport';
-import type { Dependency, Ledger, LedgerModule, ModelState, SectionStage, Sections } from './parseReportSections';
+import type { Dependency, LeadFollowups, Ledger, LedgerModule, ModelState, SectionStage, Sections } from './parseReportSections';
 import { ComparisonSection, HIDDEN } from './HistoryView';
 import { ko } from './locales/ko';
 import { reportKo as t, diagnosticDescription } from './locales/report-ko';
@@ -209,6 +209,34 @@ function ObservationTable({ ids, byID }: { ids: string[]; byID: Map<string, Obse
         ];
       })}
     />
+  );
+}
+
+// LeadFollowupsBlock is the run's lead follow-ups: the counts, then the
+// unresolved leads and the follow-ups that made no call by reason (the shared
+// reason catalog), then what the accepted follow-ups did with the candidates.
+function LeadFollowupsBlock({ leads }: { leads: LeadFollowups }) {
+  const l = s.leads;
+  const table = (heading: string, m: Record<string, number>, text: (k: string) => string) =>
+    Object.keys(m).length > 0 && (
+      <>
+        <h6>{heading}</h6>
+        <Table compact head={[s.col.reason, s.col.count]} rows={Object.keys(m).sort().map((k) => [text(k), m[k]])} />
+      </>
+    );
+  return (
+    <section className="report-lead-followups">
+      <h5>{l.heading}</h5>
+      <p className="small">{l.lead}</p>
+      <ul>
+        <li>{l.asked(leads.asked, leads.resolved)}</li>
+        <li>{l.tasks(leads.planned, leads.run, leads.accepted, leads.calls)}</li>
+        <li>{l.added(leads.newExcerpts, leads.newLines)}</li>
+      </ul>
+      {table(l.unresolved, leads.unresolved, explainReason)}
+      {table(l.notRun, leads.notRun, explainReason)}
+      {table(l.dispositions, leads.dispositions, (k) => label(l.disposition, k))}
+    </section>
   );
 }
 
@@ -821,6 +849,7 @@ export function SectionedReport({ report, sections, history }: { report: Analysi
           </>
         )}
         {cr.ledger && <LedgerBlock ledger={cr.ledger} />}
+        {cr.leadFollowups && <LeadFollowupsBlock leads={cr.leadFollowups} />}
         </details>
       </>
     ),

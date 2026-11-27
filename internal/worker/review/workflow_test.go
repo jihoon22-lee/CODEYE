@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/opencode"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
@@ -148,6 +149,24 @@ func checkWorkflowRecordExample(t *testing.T, compact []byte) {
 }
 
 func TestWorkflowContractFollowupReadsSelectedImplementation(t *testing.T) {
+	j, caller := workflowContractRun(t)
+	_, results := runRoleSmall(t, j, vetStub{}, caller, "1.27.4")
+	if r := results[record.TaskContract]; r.Status != domain.TaskSucceeded {
+		t.Fatalf("contract followup = %+v", r)
+	}
+	doc, inv, final := readRecord(t, j, record.StageDocuments), readRecord(t, j, record.StageInvestigate), readRecord(t, j, record.StageContract)
+	if inv.ContractComparisons[0].Status != "unknown" || final.ContractComparisons[0].Status != "match" ||
+		len(final.Calls) != 1 || !record.ValidateContractFollowup(final, doc, inv) {
+		t.Fatalf("followup comparison or lineage failed: %+v", final)
+	}
+}
+
+// workflowContractRun is a run whose documents select a delete and a list
+// route for one contract: the overview, offered leads because the storage
+// file does not fit, reads the workflow and probes the unread
+// implementation, and the contract follow-up matches it.
+func workflowContractRun(t *testing.T) (analysis.Job, *scriptedCaller) {
+	t.Helper()
 	const impl = "api/storage.go"
 	const statement = "찻잔을 내리면 목록에서 제외된다."
 	tree := map[string]string{
@@ -237,15 +256,7 @@ func TestLowerAndRead(t *testing.T) {
 			return asJSON(map[string]any{"contract_comparisons": []record.ContractComparison{comp}})
 		},
 	}}
-	_, results := runRoleSmall(t, j, vetStub{}, caller, "1.27.4")
-	if r := results[record.TaskContract]; r.Status != domain.TaskSucceeded {
-		t.Fatalf("contract followup = %+v", r)
-	}
-	doc, inv, final := readRecord(t, j, record.StageDocuments), readRecord(t, j, record.StageInvestigate), readRecord(t, j, record.StageContract)
-	if inv.ContractComparisons[0].Status != "unknown" || final.ContractComparisons[0].Status != "match" ||
-		len(final.Calls) != 1 || !record.ValidateContractFollowup(final, doc, inv) {
-		t.Fatalf("followup comparison or lineage failed: %+v", final)
-	}
+	return j, caller
 }
 
 func TestSupplementalWorkflowChoices(t *testing.T) {

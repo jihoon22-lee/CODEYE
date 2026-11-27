@@ -71,6 +71,27 @@ func TestRelatedWorkflowReportKeepsFindingsAndTestStatus(t *testing.T) {
 	if err := ValidateReport(r); err != nil {
 		t.Fatal(err)
 	}
+	// A later investigation record carries the same reading: with cited
+	// lines, or offered leads.
+	for since, decoder := range map[int]DecoderKey{CitedLinesSince: (CitedReviewDecoder{}).Key(), LeadsSince: (LeadsReviewDecoder{}).Key()} {
+		raw, err := json.Marshal(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var later Report
+		if err := json.Unmarshal(raw, &later); err != nil {
+			t.Fatal(err)
+		}
+		later.Builder.Version = strconv.Itoa(since)
+		for i := range later.Artifacts {
+			if a := &later.Artifacts[i]; deref(a.TaskKey) == investigate && a.MediaType == record.MediaType {
+				a.Decoder = strPtr(decoder.String())
+			}
+		}
+		if err := ValidateReport(later); err != nil {
+			t.Fatalf("builder %d, %s: %v", since, decoder, err)
+		}
+	}
 	testPath := "archive/routes_test.go:19-33"
 	for _, include := range []bool{false, true} {
 		projection := Project(r, include)

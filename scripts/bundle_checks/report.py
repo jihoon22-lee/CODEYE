@@ -86,7 +86,7 @@ def check_go_test_failure_contracts(validators: dict, base: dict) -> int:
 
 
 def check_document_excerpt_contracts(validators: dict, base: dict) -> int:
-    report = copy.deepcopy(base)
+    report = without_leads(base)
     report["builder"]["version"] = "18"
     lines = ["Readable document clause. " * 7 for _ in range(10)] + ["The revision is excluded." * 3]
     row = {"id": "ev_" + "a" * 24, "kind": "document", "path": "README.md", "start_line": 1, "end_line": len(lines),
@@ -104,6 +104,59 @@ def check_document_excerpt_contracts(validators: dict, base: dict) -> int:
     row["excerpt"]["text"] += "x" * 200
     expect_invalid("document excerpt exceeds its own budget", check_report_schema, report)
     return 3
+
+
+LEADS_DECODER = "application/vnd.codeye.review+json;schema_version=0.9"
+
+
+def without_leads(base: dict) -> dict:
+    """A copy of a report without its review records on schema 0.9 and its
+    lead follow-up calls, the two that bind it to builder 26."""
+    report = copy.deepcopy(base)
+    report["artifacts"] = [a for a in report.get("artifacts", []) if a.get("decoder") != LEADS_DECODER]
+    if "review_calls" in report.get("coverage", {}):
+        report["coverage"]["review_calls"] = [c for c in report["coverage"]["review_calls"] if c["role"] != "leads"]
+    return report
+
+
+def check_lead_builder_contract(validators: dict, base: dict) -> int:
+    """A review record on schema 0.9, a lead follow-up call or a refined
+    finding binds the report to builder 26 (docs/REVIEW.md#단서-후속-조사):
+    without them a builder 25 report is valid, with any it is not. Returns
+    the negative cases run."""
+    check_report_schema = validators["report.schema.json"].validate
+    plain = without_leads(base)
+    plain["builder"]["version"] = "25"
+    check_report_schema(plain)
+    record = next(a for a in base["artifacts"] if a.get("decoder") == LEADS_DECODER)
+    investigate = next(c for c in base["coverage"]["review_calls"] if c["role"] == "investigate")
+    call = dict(investigate, role="leads", task_key="review.leads")
+    cases = {
+        "review record 0.9 in a builder 25 report": dict(plain, artifacts=plain["artifacts"] + [record]),
+        "lead follow-up call in a builder 25 report": dict(plain, coverage=dict(plain["coverage"], review_calls=plain["coverage"]["review_calls"] + [call])),
+    }
+    for name, report in cases.items():
+        expect_invalid(name, check_report_schema, report)
+        check_report_schema(dict(report, builder=dict(report["builder"], version="26")))
+    # A refined finding's lineage (findings[].lead_refinement): only on an
+    # investigation finding, with a follow-up task key, in a builder 26 report.
+    lineage = {"task_key": "review.leads", "candidate_id": "investigate_1", "lead": "lead_1", "original_title": "원래 후보의 제목"}
+
+    def refined(report: dict, finding_id: str, **change) -> dict:
+        out = copy.deepcopy(report)
+        next(f for f in out["findings"] if f["id"] == finding_id)["lead_refinement"] = dict(lineage, **change)
+        return out
+
+    check_report_schema(refined(base, "review_investigate_1"))
+    lineage_cases = {
+        "refined finding in a builder 25 report": refined(plain, "review_investigate_1"),
+        "refined finding that is no investigation candidate": refined(base, "review_interpret_1"),
+        "refined finding of another task": refined(base, "review_investigate_1", task_key="review.investigate"),
+        "refined finding without its original title": refined(base, "review_investigate_1", original_title=""),
+    }
+    for name, report in lineage_cases.items():
+        expect_invalid(name, check_report_schema, report)
+    return len(cases) + len(lineage_cases)
 
 
 HYPOTHESIS_NOT_SHIPPED = "hypothesis_not_shipped"
@@ -549,6 +602,8 @@ def check_dependencies(report: dict) -> None:
 SLICE_TASK = re.compile(r"^review\.(investigate|verify)\.(s0(?:0[1-9]|[12][0-9]|3[0-2]))$")
 # A diagnostic triage slot's tasks (builder 22, docs/REVIEW.md#도구-진단-분류).
 TRIAGE_TASK = re.compile(r"^review\.(triage|verify)\.(t(?:00[1-9]|0[1-9][0-9]|[1-9][0-9]{2}))$")
+# A lead follow-up task (builder 26, docs/REVIEW.md#단서-후속-조사).
+LEADS_TASK = re.compile(r"^review\.(leads)(?:\.(s(?:00[1-9]|0[1-9][0-9]|[1-9][0-9]{2})))?$")
 SLICE_FINDING = re.compile(r"^review_(s[0-9]{3})_")
 LEDGER_FILE_COUNTS = ("files_sent_to_model", "files_withheld", "files_unreadable", "files_budget_exhausted", "files_not_planned",
                       "files_secondary_not_reached", "files_not_sent")
@@ -564,10 +619,11 @@ def check_ledger(report: dict) -> None:
             ensure(builder >= 12 and call.get("task_key") == "review.contract" and task is not None
                    and not task["required_for_verdict"], "Contract review call lacks an optional task")
         if "task_key" in call:
-            match = SLICE_TASK.match(call["task_key"]) or TRIAGE_TASK.match(call["task_key"])
+            match = SLICE_TASK.match(call["task_key"]) or TRIAGE_TASK.match(call["task_key"]) or LEADS_TASK.match(call["task_key"])
             stage = match.group(1) if match else call["task_key"].removeprefix("review.")
             ensure(builder >= 6 and call["task_key"] in tasks and stage == call["role"], "Review call names a task it does not belong to")
             ensure(not TRIAGE_TASK.match(call["task_key"]) or builder >= 22, "Triage call in a report before builder 22")
+            ensure(call["role"] != "leads" or builder >= 26, "Lead follow-up call in a report before builder 26")
     for finding in report["findings"]:
         match = SLICE_FINDING.match(finding["id"])
         ensure(not match or (builder >= 6 and "review.investigate." + match.group(1) in tasks), "Slice finding of a slice that was not planned")

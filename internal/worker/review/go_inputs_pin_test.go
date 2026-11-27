@@ -1,6 +1,7 @@
 package review
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -38,6 +39,12 @@ func fixIdentity(j analysis.Job) analysis.Job {
 // dirJob acquires a copy of a repository directory as a snapshot.
 func dirJob(t *testing.T, dir string) analysis.Job {
 	t.Helper()
+	return treeJob(t, dirTree(t, dir))
+}
+
+// dirTree reads a repository directory as a tree of relative paths.
+func dirTree(t *testing.T, dir string) map[string]string {
+	t.Helper()
 	tree := map[string]string{}
 	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -51,7 +58,7 @@ func dirJob(t *testing.T, dir string) analysis.Job {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return treeJob(t, tree)
+	return tree
 }
 
 // goBuildFilesTree is Go source with build files of every other ecosystem
@@ -101,7 +108,7 @@ func reviewRequestsWith(t *testing.T, j analysis.Job, rh Handler, script map[str
 	}
 	var out []string
 	for _, p := range plan {
-		if wholeRunRole(p.Key) || p.Key == record.TaskContract {
+		if wholeRunRole(p.Key) || p.Key == record.TaskContract || p.Key == record.TaskLeads {
 			out = append(out, fmt.Sprintf("%s %s/%s", p.Key, res[p.Key].Status, res[p.Key].Reason))
 		}
 	}
@@ -129,6 +136,20 @@ func reviewRequestsWith(t *testing.T, j analysis.Job, rh Handler, script map[str
 			}
 		}
 		out = append(out, fmt.Sprintf("%s %s %s", q.Role, pinHash([]byte(q.Instructions)), pinHash(q.Input)))
+		// An investigation offered leads carries the same instructions apart
+		// from the lead contract and the same input apart from
+		// scope.lead_limit: the offer is made after fitting and displaces
+		// nothing (leads_run.go). Without the offer both equal what the
+		// request was before leads existed.
+		if offer := []byte(`"lead_limit":3,`); q.Role == record.StageInvestigate && bytes.Contains(q.Input, offer) {
+			plain := strings.Replace(q.Instructions, fmt.Sprintf(investigateLeadsContract, record.MaxLeads), "", 1)
+			if plain == q.Instructions {
+				t.Fatal("an offering request without the lead contract")
+			}
+			out = append(out, fmt.Sprintf("%s-without-lead-offer %s %s", q.Role, pinHash([]byte(plain)), pinHash(bytes.Replace(q.Input, offer, nil, 1))))
+		} else if q.Role == record.StageInvestigate && strings.Contains(q.Instructions, "Optionally return up to") {
+			t.Fatal("the lead contract in a request that offers no lead")
+		}
 	}
 	return out
 }
@@ -200,11 +221,14 @@ func goPinJobs(t *testing.T) map[string]analysis.Job {
 	}
 }
 
+// The pins of the requests that offer no lead (go-build-files, modules) and
+// the modules-worst requests without the offer are those from before leads
+// existed.
 var pinnedGo = map[string][]string{
-	"go-build-files":         {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret skipped_policy/no_tool_observations", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment aa8c6caaf704d2c6 0f35e48b1837906c", "documents 20cb92232bdd441e cbb9d0c83ce64f50", "investigate 8b2524db6b1ebf80 81fed8ff5bf066ea", "verify 79d1e2e03d3a14ed 48b2217104110479"},
-	"modules":                {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment aa8c6caaf704d2c6 1591d2065785bf02", "documents 20cb92232bdd441e 044b26c350ee8aac", "investigate 8b2524db6b1ebf80 5b8413e0e1c249c2", "interpret e6268a7c7d386d77 c9450e5228781aca", "verify 79d1e2e03d3a14ed 0e7dfe8686abbccc"},
-	"modules-worst":          {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment aa8c6caaf704d2c6 a26534f4af3e1545", "documents 20cb92232bdd441e 8ea8deedb933224b", "investigate 75bb70a010fd0211 d0cbf04835661545", "interpret e6268a7c7d386d77 7f67451825912287", "verify 79d1e2e03d3a14ed d52bc0b334412fd7", "triage a4483761d8dcb809 8c0536779efd8097"},
-	"modules-worst-screened": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment aa8c6caaf704d2c6 a26534f4af3e1545", "documents 20cb92232bdd441e 8ea8deedb933224b", "investigate 75bb70a010fd0211 d0cbf04835661545", "interpret e6268a7c7d386d77 229298a67ef0c9b9", "verify 79d1e2e03d3a14ed d52bc0b334412fd7", "triage a4483761d8dcb809 8c0536779efd8097"},
+	"go-build-files":         {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret skipped_policy/no_tool_observations", "review.leads skipped_policy/leads_not_offered", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment aa8c6caaf704d2c6 0f35e48b1837906c", "documents 20cb92232bdd441e cbb9d0c83ce64f50", "investigate 8b2524db6b1ebf80 81fed8ff5bf066ea", "verify 79d1e2e03d3a14ed 48b2217104110479"},
+	"modules":                {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.leads skipped_policy/leads_not_offered", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment aa8c6caaf704d2c6 1591d2065785bf02", "documents 20cb92232bdd441e 044b26c350ee8aac", "investigate 8b2524db6b1ebf80 5b8413e0e1c249c2", "interpret e6268a7c7d386d77 c9450e5228781aca", "verify 79d1e2e03d3a14ed 0e7dfe8686abbccc"},
+	"modules-worst":          {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.leads skipped_policy/no_leads", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment aa8c6caaf704d2c6 a26534f4af3e1545", "documents 20cb92232bdd441e 8ea8deedb933224b", "investigate 484a8ee8ddb67b7f 74bd506d74bf3181", "investigate-without-lead-offer 75bb70a010fd0211 d0cbf04835661545", "interpret e6268a7c7d386d77 7f67451825912287", "verify 79d1e2e03d3a14ed d52bc0b334412fd7", "triage a4483761d8dcb809 8c0536779efd8097"},
+	"modules-worst-screened": {"review.environment succeeded/", "review.documents succeeded/", "review.investigate succeeded/", "review.interpret succeeded/", "review.leads skipped_policy/no_leads", "review.verify succeeded/", "review.contract skipped_policy/no_review_scope", "environment aa8c6caaf704d2c6 a26534f4af3e1545", "documents 20cb92232bdd441e 8ea8deedb933224b", "investigate 484a8ee8ddb67b7f 74bd506d74bf3181", "investigate-without-lead-offer 75bb70a010fd0211 d0cbf04835661545", "interpret e6268a7c7d386d77 229298a67ef0c9b9", "verify 79d1e2e03d3a14ed d52bc0b334412fd7", "triage a4483761d8dcb809 8c0536779efd8097"},
 }
 
 func TestGoReviewInputsUnchanged(t *testing.T) {

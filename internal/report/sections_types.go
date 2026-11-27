@@ -481,6 +481,9 @@ type CodeReviewSection struct {
 	// diagnostics (builder 22, review_triage.go); present when the plan held
 	// them.
 	DiagnosticTriage *DiagnosticTriage `json:"diagnostic_triage,omitempty"`
+	// LeadFollowups counts the run's leads and follow-up tasks (builder 26,
+	// review_leads.go); present when the plan held follow-up tasks.
+	LeadFollowups *LeadFollowups `json:"lead_followups,omitempty"`
 	// CandidatesNotShipped counts investigation candidates the verify stage
 	// did not send and the findings leave out because all their evidence is
 	// on test, example, benchmark, generated or vendored paths (builder 24).

@@ -128,8 +128,10 @@ it('opens three related positions without changing the comparison and keeps only
   const doc: Record<string, any> = structuredClone(example);
   doc.demo = false;
   doc.builder.version = '16';
-  // Builder 22 added the diagnostic triage; an older revision has none.
+  // Builder 22 added the diagnostic triage and builder 26 the lead
+  // follow-ups; an older revision has neither.
   delete doc.code_review.diagnostic_triage;
+  delete doc.code_review.lead_followups;
   const contract = workflowDocuments.contracts[0];
   const { contract_index: _index, ...comparison } = workflowInvestigation.contract_comparisons[0];
   const { read_evidence_id, change_evidence_id, test_evidence_id } = workflowInvestigation.workflow_reading;
@@ -162,6 +164,16 @@ it('opens three related positions without changing the comparison and keeps only
   expect(within(related).getByText(t.workflow.change)).toBeTruthy();
   expect(within(related).getByText(t.workflow.test)).toBeTruthy();
   expect(related.querySelector('pre')?.textContent).toContain(testText);
+
+  // An investigation record with cited lines (0.7, builder 20 on) or one
+  // offered leads (0.9, builder 26 on) carries the same workflow reading.
+  for (const [builder, schema] of [['20', '0.7'], [example.builder.version, '0.9']]) {
+    const later = structuredClone(doc);
+    later.builder.version = builder;
+    later.artifacts.find((a: Record<string, string>) => a.id === artifact.id).decoder = artifact.media_type + ';schema_version=' + schema;
+    const parsed = parseAnalysisReport(later, later.run_id);
+    expect(parsed.sections!.documents.comparisons[0].workflow).toEqual({ read: read_evidence_id, change: change_evidence_id, test: test_evidence_id });
+  }
 
   const old = structuredClone(doc);
   old.builder.version = '14';

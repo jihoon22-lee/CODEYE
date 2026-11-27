@@ -38,8 +38,10 @@ describe('summary grouping', () => {
   });
 
   it.each(['16', '17'])('distinguishes detections from successful screening in builder %s reports', version => {
-    // Builder 22 added the diagnostic triage; an older revision has none.
-    const report = load({ ...sectioned, builder: { ...sectioned.builder, version }, code_review: { ...sectioned.code_review, diagnostic_triage: undefined } });
+    // Builder 22 added the diagnostic triage and builder 26 the lead
+    // follow-ups; an older revision has neither.
+    const report = load({ ...sectioned, builder: { ...sectioned.builder, version },
+      code_review: { ...sectioned.code_review, diagnostic_triage: undefined, lead_followups: undefined } });
     const secrets = report.sections!.secrets;
     const row = () => readingSummary(report).find(result => result.section === 'secrets');
     expect(row()).toMatchObject({ status: t.reading.secretsDetected, tone: 'attention', count: '1',

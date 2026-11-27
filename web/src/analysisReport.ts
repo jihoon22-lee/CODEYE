@@ -34,6 +34,9 @@ export type Finding = {
   // Snapshot paths of the finding's locations and its tool diagnostics.
   locations: string[];
   observations: string[];
+  // The candidate a lead follow-up refined, its lead, the follow-up task and
+  // the original title (builder 26; the omission text in a code-free export).
+  refinement?: { task: string; candidate: string; lead: string; originalTitle: string };
 };
 export type Task = { key: string; status: string; reason: string | null; required?: boolean };
 export type GoTestFailure = { name?: string; path: string; line: number };
@@ -255,7 +258,20 @@ function finding(v: unknown, expandedDocuments: boolean, builder: unknown): Find
     counter: array(f.counterevidence_ids, str),
     locations: array(f.locations ?? [], (l) => str(object(l).path)),
     observations: array(f.observation_ids ?? [], str),
+    ...(f.lead_refinement == null ? {} : { refinement: leadRefinement(f.lead_refinement, str(f.id), builder) }),
   };
+}
+
+// leadRefinement reads the lineage of a refined investigation finding
+// (builder 26 on): the follow-up task of the finding's own slot, an
+// investigation candidate and a lead, as internal/report validates it.
+function leadRefinement(v: unknown, id: string, builder: unknown): NonNullable<Finding['refinement']> {
+  const x = object(v);
+  const out = { task: str(x.task_key), candidate: str(x.candidate_id), lead: str(x.lead), originalTitle: str(x.original_title) };
+  const slot = /^review_(?:(s[0-9]{3})_)?investigate_[0-9]+$/.exec(id);
+  if (Number(builder) < 26 || !slot || out.task !== (slot[1] ? 'review.leads.' + slot[1] : 'review.leads') ||
+    !/^investigate_[1-9][0-9]*$/.test(out.candidate) || !/^lead_[1-9]$/.test(out.lead) || out.originalTitle === '') invalid();
+  return out;
 }
 
 export function parseAnalysisReport(

@@ -13,6 +13,9 @@ func TaskMaxCalls(task string) int {
 	if task == TaskContract {
 		return ContractMaxCalls
 	}
+	if _, ok := LeadsTask(task); ok {
+		return LeadsMaxCalls
+	}
 	return RoleMaxCalls
 }
 

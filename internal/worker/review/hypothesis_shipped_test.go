@@ -58,7 +58,7 @@ func runHypothesis(t *testing.T, observed string, line int, mode string) hypothe
 		var out []any
 		for _, c := range in.Candidates {
 			if c.Origin != record.StageInterpret {
-				out = append(out, inconclusiveFor(c, c.Evidence[0]))
+				out = append(out, inconclusiveFor(c.Candidate, c.Evidence[0]))
 				continue
 			}
 			switch mode {
@@ -257,7 +257,7 @@ func TestInterpretReordersObservationsAndTheRecordsStayValid(t *testing.T) {
 		var out []any
 		for _, c := range in.Candidates {
 			if c.Origin != record.StageInterpret {
-				out = append(out, inconclusiveFor(c, c.Evidence[0]))
+				out = append(out, inconclusiveFor(c.Candidate, c.Evidence[0]))
 				continue
 			}
 			out = append(out, verdict(c.ID, "supported", func(m map[string]any) {
@@ -357,6 +357,12 @@ func TestEarlierRevisionTreatsLaterMarkersAsModelText(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			old := c.run.report
 			old.Builder.Version = c.version
+			// Those builders wrote no lead_followups.
+			if old.CodeReview != nil {
+				cr := *old.CodeReview
+				cr.LeadFollowups = nil
+				old.CodeReview = &cr
+			}
 			old.Findings = slices.Clone(old.Findings)
 			for i, f := range old.Findings {
 				if f.ID == c.run.finding.ID {

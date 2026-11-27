@@ -159,11 +159,12 @@ class PlannerTests(unittest.TestCase):
         est = quality_eval.estimate(plan)
         self.assertEqual(est["variants"], 10)
         self.assertTrue(est["basis"].startswith("constants:"))
-        # 5 original roles, a triage call and its verify, and up to 2 followup calls per variant
-        self.assertEqual(est["upper"]["calls"], 97)
-        self.assertAlmostEqual(est["upper"]["ledger_microusd"], 10 * (5 * 1.1 + 2 * 1.1 + 2) * 22_148 * 1.5, delta=2)
+        # 5 original roles, a triage call and its verify, up to 2 contract follow-up calls
+        # and up to 2 lead follow-up calls per variant
+        self.assertEqual(est["upper"]["calls"], 117)
+        self.assertAlmostEqual(est["upper"]["ledger_microusd"], 10 * (5 * 1.1 + 2 * 1.1 + 2 + 2) * 22_148 * 1.5, delta=2)
         self.assertLess(est["expected"]["ledger_microusd"], est["upper"]["ledger_microusd"])
-        report = {"remaining_microusd": 4_500_000, "max_requests": 200, "requests": 63, "halted": False}
+        report = {"remaining_microusd": 5_000_000, "max_requests": 200, "requests": 63, "halted": False}
         self.assertEqual(quality_eval.budget_gate(est, report, 1_000_000, 5), [])
         report["remaining_microusd"] = 2_500_000
         self.assertEqual(len(quality_eval.budget_gate(est, report, 1_000_000, 5)), 1)
@@ -206,9 +207,40 @@ class PlannerTests(unittest.TestCase):
             per_call = est["per_call_microusd"]
             self.assertEqual(est["max_calls"], 40)
             self.assertEqual(est["expected"]["calls"], 12)
-            self.assertEqual(est["upper"]["calls"], 40 + int(5 * 1.1 + 2 * 1.1 + 2 + 0.999))
-            dearest = max(per_call[r] for r in ("investigate", "verify", "contract"))
+            self.assertEqual(est["upper"]["calls"], 40 + int(5 * 1.1 + 2 * 1.1 + 2 + 2 + 0.999))
+            dearest = max(per_call[r] for r in ("investigate", "verify", "contract", "leads"))
             self.assertGreaterEqual(est["upper"]["ledger_microusd"], int(40 * dearest * 1.5))
+
+    def test_sliced_upper_prices_the_ceiling_at_a_dearer_lead_follow_up(self):
+        # Lead follow-ups share the ceiling with the slots: when a follow-up
+        # request is the dearest, every call of the ceiling is priced at it.
+        hist = {"dirs": ["h"], "calls_per_variant": {}, "input_bytes_max": {},
+                "usage_mean": {"investigate": (4000, 300), "verify": (5000, 300), "contract": (3000, 200), "leads": (9000, 600)},
+                "per_key": {("CASE-1", "after"): {"documents": 1, "investigate": 4, "verify": 4, "leads": 2}}}
+        est = quality_eval.estimate([({"id": "CASE-1"}, "after", None)], history=hist, max_calls=40)
+        per_call = est["per_call_microusd"]
+        self.assertEqual(max(per_call, key=per_call.get), "leads")
+        self.assertEqual(est["upper"], {"calls": 40, "ledger_microusd": int(40 * per_call["leads"] * est["margin"])})
+
+
+class DumpComparisonTests(unittest.TestCase):
+    """regression_pilot.compare_dumps: the request multisets of two dumps."""
+
+    def test_the_date_of_the_system_prompt_is_no_difference(self):
+        import regression_pilot
+        with tempfile.TemporaryDirectory() as tmp:
+            base, cand = Path(tmp, "base"), Path(tmp, "cand")
+            for d, date in ((base, "Thu Nov 26 2026"), (cand, "Fri Nov 27 2026")):
+                d.mkdir()
+                messages = [{"role": "system", "content": f"You review code.\nToday's date: {date}\n"},
+                            {"role": "user", "content": "Role: investigate\n<review-input>{}</review-input>"}]
+                (d / "0001.json").write_text(json.dumps({"input": messages}))
+            out = regression_pilot.compare_dumps(base, cand)
+            self.assertEqual((out["baseline"], out["candidate"], out["only_baseline"], out["only_candidate"]), (1, 1, [], []))
+            # Any other difference still counts.
+            (cand / "0001.json").write_text(json.dumps({"input": [{"role": "user", "content": "Role: investigate\nanother request"}]}))
+            out = regression_pilot.compare_dumps(base, cand)
+            self.assertEqual((len(out["only_baseline"]), len(out["only_candidate"])), (1, 1))
 
 
 class RegressionPilotCoverageTests(unittest.TestCase):
@@ -229,13 +261,14 @@ class RegressionPilotCoverageTests(unittest.TestCase):
 
     def test_kept_records_of_every_schema_version(self):
         # A kept record of any schema version counts; current records are 0.7
-        # (whole run, slices) and 0.8 (diagnostic triage).
+        # (whole run, slices), 0.8 (diagnostic triage) and 0.9 (investigations
+        # that name leads, lead follow-ups).
         schema = json.loads((SCRIPTS.parent / "schemas/review-record.schema.json").read_text())
         self.assertEqual(list(self.rp.RECORD_VERSIONS), schema["$defs"]["record"]["properties"]["schema_version"]["enum"])
-        for version, name in (("0.7", "investigate.s001"), ("0.8", "triage.t001")):
+        for version, name in (("0.7", "investigate.s001"), ("0.8", "triage.t001"), ("0.9", "leads.s001")):
             (self.out / "pilot" / (name + ".json")).write_text(json.dumps({"schema_version": version, "stage": name.split(".")[0]}))
         records, _ = self.rp._kept_docs(self.out / "pilot")
-        self.assertEqual(sorted(r["schema_version"] for r in records), ["0.7", "0.8"])
+        self.assertEqual(sorted(r["schema_version"] for r in records), ["0.7", "0.8", "0.9"])
 
     def record(self, name, stage, files, calls, slice_key=None, line=1):
         doc = {"schema_version": "0.3" if slice_key else "0.2", "stage": stage, "calls": [{}] * calls,
@@ -253,10 +286,11 @@ class RegressionPilotCoverageTests(unittest.TestCase):
                       "review_calls": [{"role": "investigate", "pack_sha256": self.digests["investigate"]}]}
         return [regression, {"case": "pilot", "status": "completed", "ai_review": "performed", "tasks": tasks}]
 
-    def check(self, rows, exposed=12, max_calls=99, ledger=None, calls_used=9, ledger_sent=5, required=(), limitations=(), calls=()):
+    def check(self, rows, exposed=12, max_calls=99, ledger=None, calls_used=9, ledger_sent=5, required=(), limitations=(), calls=(), sent=()):
         tasks = [dict(t, required_for_verdict=t["key"] in required) for t in rows[1]["tasks"]]
+        review_calls = [{"task_key": k} for k in calls] + [{"task_key": k, "request_sha256": "0" * 64} for k in sent]
         report = {"tasks": tasks, "limitations": list(limitations),
-                  "coverage": {"llm_exposed_files": exposed, "review_calls": [{"task_key": k} for k in calls]},
+                  "coverage": {"llm_exposed_files": exposed, "review_calls": review_calls},
                   "code_review": {"ledger": {"calls_used": calls_used, "max_calls": max_calls, "status": "partial", "modules": [{"files_sent_to_model": ledger_sent}]}}}
         (self.out / "pilot.json").write_text(json.dumps(report))
         (self.out / "pilot" / "scope.json").write_text(json.dumps({"kind": "review_scope", "budget": {"max_calls": max_calls}}))
@@ -320,6 +354,60 @@ class RegressionPilotCoverageTests(unittest.TestCase):
         self.assertTrue(any("refused" in f for f in self.check(self.rows(), ledger=ledger)[0]))
 
 
+    def test_lead_followups(self):
+        # A follow-up session sends the original candidates' code again by
+        # design: its record is outside the repeated-lines rule, and the lines
+        # of the excerpts it resolved count separately.
+        self.write_pilot()
+
+        def lead(name, slice_key, again, new):
+            doc = {"schema_version": "0.9", "stage": "leads", "calls": [{}],
+                   "evidence": [{"id": "ev_again", "path": again, "kind": "code", "origin": "context", "start_line": 1, "end_line": 1},
+                                {"id": "ev_new", "path": new, "kind": "code", "origin": "context", "start_line": 3, "end_line": 5}],
+                   "lead_followup": {"leads": ["lead_1"], "sent_evidence_ids": ["ev_again", "ev_new"], "new_evidence_ids": ["ev_new"],
+                                     "new_lines": 3, "dispositions": []}}
+            if slice_key:
+                doc["slice"] = {"key": slice_key, "modules": ["go:."]}
+            (self.out / "pilot" / (name + ".json")).write_text(json.dumps(doc))
+
+        lead("leads", None, "a.go", "f.go")
+        lead("leads.s001", "s001", "c.go", "c.go")
+        rows = self.rows()
+        rows[1]["tasks"] += [{"key": "review.leads", "status": "succeeded", "reason": None},
+                             {"key": "review.leads.s001", "status": "succeeded", "reason": None},
+                             {"key": "review.leads.s002", "status": "skipped_policy", "reason": "no_leads"},
+                             {"key": "review.leads.s003", "status": "skipped_policy", "reason": "leads_not_admitted"},
+                             {"key": "review.leads.s004", "status": "skipped_policy", "reason": "leads_slot_not_run"}]
+        sent = ("review.investigate", "review.leads", "review.leads.s001")
+        failures, pilot = self.check(rows, sent=sent)
+        self.assertEqual(failures, [])
+        self.assertEqual((pilot["lead_tasks"], pilot["lead_tasks_refused"], pilot["lead_records"], pilot["lead_calls"]), (5, 2, 2, 2))
+        self.assertEqual(pilot["lead_tasks_by_status"], {"skipped_policy/leads_not_admitted": 1, "skipped_policy/leads_slot_not_run": 1,
+                                                         "skipped_policy/no_leads": 1, "succeeded": 2})
+        # f.go:3-5 and c.go:3-5 are new; c.go:1 and a.go:1 were investigated.
+        self.assertEqual((pilot["lead_new_lines"], pilot["lead_lines_not_investigated"], pilot["new_source_lines"]), (6, 6, 3))
+        # llm_exposed_files covers the follow-up's f.go too.
+        self.assertIn("below 6 distinct files", self.check(rows, exposed=5, sent=sent)[0][0])
+        # calls_used counts the follow-up calls.
+        self.assertIn("below the 3 sent review calls", self.check(rows, calls_used=2, sent=sent)[0][0])
+        # A follow-up the ceiling refused has no call and no record.
+        self.assertIn("with a record or a call", self.check(rows, calls=("review.leads.s003",), sent=sent)[0][0])
+        self.assertIn("with a record or a call", self.check(rows, calls=("review.leads.s004",), sent=sent)[0][0])
+        # A follow-up the investigation did not need is no refusal: a call
+        # under it is not this check's failure.
+        self.assertEqual(self.check(rows, calls=("review.leads.s002",), sent=sent)[0], [])
+        rows[1]["tasks"][-5].update(status="skipped_policy", reason="leads_not_admitted")
+        self.assertIn("['review.leads']", self.check(rows, sent=sent[:1])[0][0])
+        # A short synthetic case: its slot follow-ups end like its slots.
+        regression = self.rows(regression_tasks=("review.investigate", "review.scope", "review.leads"))
+        regression[0]["tasks"].append({"key": "review.leads.s001", "status": "skipped_policy", "reason": "no_review_scope"})
+        self.assertEqual(self.check(regression)[0], [])
+        regression[0]["tasks"][-1].update(status="skipped_policy", reason="no_leads")
+        self.assertIn("incomplete follow-up review.leads.s001", self.check(regression)[0][0])
+        (self.out / "Q01-before.json").write_text(json.dumps({"coverage": {"review_calls": [{"task_key": "review.leads.s001"}]}}))
+        self.assertIn("unexpected model calls", self.check(self.rows())[0][0])
+
+
 class EchoAuditTests(unittest.TestCase):
     def test_exempted_ids_must_come_from_this_variants_model_output(self):
         import model_budget_relay as gateway
@@ -367,6 +455,21 @@ class ReviewOutcomeTests(unittest.TestCase):
                          "budget_refused")
         self.assertEqual(quality_eval.review_invalid(None, {**clean, "echo_unverified": ["x"]}, "secret_screen_failed"),
                          "answer_echo_unverified")
+
+    def test_lead_followup_counters(self):
+        block = {"leads_asked": 3, "leads_resolved": 1, "leads_unresolved": {"lead_secret_withheld": 1, "lead_ambiguous": 1},
+                 "tasks_planned": 4, "tasks_run": 1, "tasks_accepted": 1, "tasks_not_run": {"no_review_scope": 3},
+                 "calls": 2, "new_excerpts": 1, "new_lines": 9, "dispositions": {"refined": 1}}
+        with_leads = {"code_review": {"lead_followups": block}}
+        got = quality_eval.lead_followups(with_leads)
+        self.assertEqual((got["leads_asked"], got["calls"], got["new_lines"]), (3, 2, 9))
+        self.assertEqual(list(got["leads_unresolved"]), ["lead_ambiguous", "lead_secret_withheld"])
+        self.assertIsNone(quality_eval.lead_followups({"code_review": {}}))
+        self.assertIsNone(quality_eval.lead_followups({}))
+        total = quality_score.lead_followups([with_leads, with_leads, {"code_review": None}])
+        self.assertEqual((total["leads_asked"], total["tasks_run"], total["calls"], total["reports_without"]), (6, 2, 4, 1))
+        self.assertEqual(total["leads_unresolved"], {"lead_ambiguous": 2, "lead_secret_withheld": 2})
+        self.assertEqual(total["tasks_not_run"], {"no_review_scope": 6})
 
     def test_agent_switches(self):
         self.assertEqual(quality_eval.agent_switches(["python-both-type-checkers", "python-both-type-checkers"]),
@@ -885,7 +988,8 @@ class ProjectCorpusTests(unittest.TestCase):
         plan = quality_eval.variant_plan(PROJECT, [PROJECT.by_id[PCASE]])
         small = quality_eval.estimate(plan)
         sliced = quality_eval.estimate(plan, slices_unknown=True, max_calls=40)
-        self.assertEqual(small["upper"]["calls"], 20)  # 9.7 per variant (with a triage call and its verify), rounded up once
+        # 11.7 per variant (with a triage call and its verify, the contract and the lead follow-up), rounded up once
+        self.assertEqual(small["upper"]["calls"], 24)
         self.assertEqual(sliced["upper"]["calls"], 80)
         self.assertTrue(sliced["slices_unknown"])
 

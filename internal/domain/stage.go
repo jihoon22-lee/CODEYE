@@ -44,6 +44,19 @@ const (
 	// ReasonNoReviewScope: a review slice whose planned files the overview
 	// already sent, or that are all withheld or unreadable.
 	ReasonNoReviewScope = "no_review_scope"
+	// Lead follow-ups that made no call (docs/REVIEW.md#단서-후속-조사):
+	// ReasonLeadsNotOffered, the investigate request held its whole scope and
+	// offered no leads; ReasonNoLeads, it offered leads and the investigation
+	// named none; ReasonNoLeadsResolved, the platform found none of the
+	// leads (each lead keeps its reason); ReasonLeadsNotAdmitted, the call
+	// ceiling kept the calls for the work after it (follow-ups are dropped
+	// first); ReasonLeadsSlotNotRun, the ceiling refused its slot, so there
+	// was no investigation to follow.
+	ReasonLeadsNotOffered  = "leads_not_offered"
+	ReasonNoLeads          = "no_leads"
+	ReasonNoLeadsResolved  = "no_leads_resolved"
+	ReasonLeadsNotAdmitted = "leads_not_admitted"
+	ReasonLeadsSlotNotRun  = "leads_slot_not_run"
 )
 
 // Controlled skip reasons for a planned dependency task that had nothing to
@@ -69,16 +82,41 @@ func NothingToFetch(reason string) bool {
 // NothingToDo reports whether a skipped_policy task with this reason had no
 // input (a review role with nothing to review, a dependency task with
 // nothing to fetch). Such a skip does not make an otherwise successful stage
-// partial.
+// partial, and the report does not list it with the tasks that did not
+// succeed.
 func NothingToDo(reason string) bool { return NothingToReview(reason) || NothingToFetch(reason) }
 
+// SkipKeepsStage reports whether a skipped_policy task with this reason
+// leaves an otherwise successful stage as it is and is no gap of its
+// review role: a task with nothing to do, or a lead follow-up the call
+// ceiling refused (ReasonLeadsNotAdmitted). That follow-up had resolved
+// leads to read, so unlike a task with nothing to do the report lists it
+// with its reason among the tasks that did not run.
+func SkipKeepsStage(reason string) bool {
+	return NothingToDo(reason) || reason == ReasonLeadsNotAdmitted
+}
+
 // NothingToReview reports whether reason marks a planned role skipped because
-// its input was empty (docs/ARCHITECTURE.md#표시-단계와-task-단계). Such a skip is never a successful model
-// review, but it does not make an otherwise successful stage partial. Policy
-// exclusion and unreadable inputs are not in this set.
+// its input was empty (docs/ARCHITECTURE.md#표시-단계와-task-단계): no
+// documents, observations, environment gap or slot lines, or a lead
+// follow-up with no resolved lead to read (LeadsNotRun, but for the refusal
+// by the call ceiling). Such a skip is never a successful model review, but
+// it does not make an otherwise successful stage partial. Policy exclusion
+// and unreadable inputs are not in this set.
 func NothingToReview(reason string) bool {
 	switch reason {
 	case ReasonNoDocuments, ReasonNoToolObservations, ReasonNoEnvironmentGap, ReasonNoReviewScope:
+		return true
+	}
+	return LeadsNotRun(reason) && reason != ReasonLeadsNotAdmitted
+}
+
+// LeadsNotRun reports a lead follow-up skipped without a call. An optional
+// deeper reading the run did not need or could not afford: it never makes
+// the review stage partial (SkipKeepsStage), and its reason stays visible.
+func LeadsNotRun(reason string) bool {
+	switch reason {
+	case ReasonLeadsNotOffered, ReasonNoLeads, ReasonNoLeadsResolved, ReasonLeadsNotAdmitted, ReasonLeadsSlotNotRun:
 		return true
 	}
 	return false

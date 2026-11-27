@@ -99,13 +99,30 @@ type coverageCursor struct {
 // packs verified ranges using their actual encoded size and persists paths,
 // line counts and assignments, never source text.
 func (s *roleStage) scopeTask() analysis.TaskResult {
+	doc, r := s.scopeDoc()
+	if r != nil {
+		return *r
+	}
+	art, err := persistScope(s.j, doc)
+	if err != nil {
+		return result(domain.TaskFailed, "review_record_failed")
+	}
+	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}, Limitations: doc.Limitations}
+}
+
+// scopeDoc builds the scope artifact from the snapshot and the accepted
+// overview investigation: a pure function of both, the budget and the
+// analyzer results, so the overview's lead follow-up can count the slots
+// that will hold lines before review.scope writes it (leadsCallLimit).
+func (s *roleStage) scopeDoc() (record.ScopeDoc, *analysis.TaskResult) {
+	fail := func(r analysis.TaskResult) (record.ScopeDoc, *analysis.TaskResult) { return record.ScopeDoc{}, &r }
 	sel, err := reviewpack.For(record.StageInvestigate, languagesInScope(s.j))
 	if err != nil {
-		return result(domain.TaskFailed, "review_instructions_invalid")
+		return fail(result(domain.TaskFailed, "review_instructions_invalid"))
 	}
 	used, err := wholeRunCallsUsed(s.j)
 	if err != nil {
-		return result(domain.TaskFailed, reasonCallCountFailed)
+		return fail(result(domain.TaskFailed, reasonCallCountFailed))
 	}
 	rule := s.h.secondary()
 	changed := changedPaths(s.j)
@@ -118,7 +135,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		planner := roleStage{ctx: s.ctx, j: s.j}
 		slots, err = planner.coverageSlotPlan(groups)
 		if err != nil {
-			return s.unavailable()
+			return fail(s.unavailable())
 		}
 		maxSlots = record.MaxSlices
 	}
@@ -153,7 +170,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 		modules[id] = module
 		for _, e := range groups.files[key] {
 			if s.ctx.Err() != nil {
-				return result(domain.TaskCancelled, "cancelled")
+				return fail(result(domain.TaskCancelled, "cancelled"))
 			}
 			// Paths that cannot be validated as evidence cannot be published.
 			if domain.ValidateEvidencePath(e.Path) != nil {
@@ -164,7 +181,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 				Rank: []string{record.RankEntryPoint, record.RankSource, record.RankTest}[groups.rank[e.Path]], PullRequest: groups.change(e.Path)}
 			text, reason, err := s.reviewSource(e)
 			if err != nil {
-				return s.unavailable()
+				return fail(s.unavailable())
 			}
 			if seg := groups.secondary[e.Path]; seg != "" {
 				f.Class, f.Secondary = record.ClassSecondary, record.ReasonSecondaryPath+":"+seg
@@ -200,7 +217,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 				row.State = record.FileCoveredByOverview
 				for k, w := range prior {
 					if w.Start < 1 || w.End > len(lines) {
-						return s.unavailable()
+						return fail(s.unavailable())
 					}
 					// A window inside another travels as a reference
 					// (requestExcerpts) and adds no bytes.
@@ -265,11 +282,7 @@ func (s *roleStage) scopeTask() analysis.TaskResult {
 	for _, omission := range doc.Omitted {
 		doc.Limitations = addLim(doc.Limitations, omission.Reason)
 	}
-	art, err := persistScope(s.j, doc)
-	if err != nil {
-		return result(domain.TaskFailed, "review_record_failed")
-	}
-	return analysis.TaskResult{Status: domain.TaskSucceeded, Artifacts: []analysis.ArtifactFile{art}, Limitations: doc.Limitations}
+	return doc, nil
 }
 
 func prioritizeCoverageWindow(windows []record.ScopeFile, text, path string, diagnosticLine int) {

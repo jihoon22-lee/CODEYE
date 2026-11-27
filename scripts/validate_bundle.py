@@ -24,9 +24,9 @@ except ImportError as exc:
 
 # Other scripts import these names from validate_bundle.
 from bundle_checks.common import ROOT, ensure, expect_invalid, json_file, make_validators, within_root, yaml_file
-from bundle_checks.report import check_analyzer, check_analyzer_observations, check_document_comparisons, check_document_excerpt_contracts, check_go_test_failure_contracts, check_held_back_summary_contract, check_observations, check_plan, check_report
+from bundle_checks.report import check_analyzer, check_analyzer_observations, check_document_comparisons, check_document_excerpt_contracts, check_go_test_failure_contracts, check_held_back_summary_contract, check_lead_builder_contract, check_observations, check_plan, check_report
 from bundle_checks.analyzers import check_cpp_pack_contracts, check_js_ts_pack_contracts, check_opengrep_pack, check_python_pack, check_rust_pack, check_staticcheck_pack_contracts, check_structure_pack_contracts
-from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_path_class_table, check_not_shipped_examples, check_slice_examples, check_triage_examples, check_workflow_example, pack_selection, shared_excerpt, slice_examples, triage_examples
+from bundle_checks.review import ROLE_STAGES, check_contract_example, check_environment_example, check_probe_example, check_stage_examples, check_path_class_table, check_not_shipped_examples, check_slice_examples, check_triage_examples, check_workflow_example, pack_selection, shared_excerpt, slice_examples, triage_examples, check_leads_examples, leads_examples
 from bundle_checks.api import api_validator, check_account_contracts, check_activity, check_comparison_contracts, check_doctor_operations, check_openapi, check_schedule_contracts, check_shared_service_contracts, check_stage_enums, check_tools_contract, stage_vocabulary
 from bundle_checks.docs import check_code_doc_refs, check_doc_names, check_holdout_corpus, check_project_defect_corpus, check_markdown_anchors, check_mode_names, check_stage_labels, heading_anchors
 
@@ -113,6 +113,8 @@ def main() -> None:
         expect_invalid("test result without a terminal case or with an incomplete location", validate_test_results, bad)
     document_excerpt_negatives = check_document_excerpt_contracts(validators, report)
     print(f"PASS: complete document excerpt bounds and builder compatibility; {document_excerpt_negatives} negative cases")
+    lead_builder_negatives = check_lead_builder_contract(validators, report)
+    print(f"PASS: review records 0.9, lead follow-up calls and refined findings need builder 26; {lead_builder_negatives} negative cases")
     validators["analyzer.schema.json"].validate(analyzer)
     validators["analyzer.schema.json"].validate(go_vet)
     validators["go-vet-observations.schema.json"].validate(observations)
@@ -273,6 +275,8 @@ def main() -> None:
     print(f"PASS: review slices (scope and review records bound to the coverage fixture; {slice_negatives} negative cases)")
     triage_negatives = check_triage_examples(triage_examples(), validators)
     print(f"PASS: diagnostic triage slot (triage and verify records bound to the triage fixture; {triage_negatives} negative cases)")
+    leads_negatives = check_leads_examples(leads_examples(), validators)
+    print(f"PASS: lead follow-up (investigation, follow-up and verify records bound to each other; {leads_negatives} negative cases)")
     # Review 2.0.0 (docs/REVIEW.md#복구-경로): a stage keeps at most three calls (the
     # request, one repair, one retry of a reply that was not JSON).
     retried = copy.deepcopy(role_docs["verify"])

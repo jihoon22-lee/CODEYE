@@ -58,8 +58,16 @@ GATEWAY = SCRIPTS / "model_budget_relay.py"
 PACK = "review"
 BASE_REVIEW_ROLES = ("environment", "documents", "investigate", "interpret", "verify")
 # Diagnostic triage slots (docs/REVIEW.md#도구-진단-분류) record their calls as
-# triage and verify; they are not an original role of the slice check below.
-PACK_ROLES = (*BASE_REVIEW_ROLES, "triage", "contract")
+# triage and verify, lead follow-ups (docs/REVIEW.md#단서-후속-조사) as leads;
+# they are not an original role of the slice check below.
+PACK_ROLES = (*BASE_REVIEW_ROLES, "leads", "triage", "contract")
+# The roles whose calls fill the per-attempt ceiling of a variant with slices
+# (estimate): slot investigations and their verifies, their lead follow-ups
+# and the final contract review.
+SLICED_ROLES = ("investigate", "verify", "contract", "leads")
+# The counters of code_review.lead_followups (docs/REPORT.md#단서-후속-조사).
+LEAD_COUNTS = ("leads_asked", "leads_resolved", "tasks_planned", "tasks_run", "tasks_accepted", "calls", "new_excerpts", "new_lines")
+LEAD_MAPS = ("leads_unresolved", "tasks_not_run", "dispositions")
 MANIFEST_SCHEMA = "codeye-quality-eval-manifest"
 REGISTRY = "holdout-registry.jsonl"
 HOLDOUT_LABEL = "holdout_seen_by_prior_revision"
@@ -412,9 +420,9 @@ def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAU
     request bytes / bytes_per_token input tokens and output_tokens_upper output tokens at the
     relay's worst-case prices, else CONSTANTS.
     Module slices (docs/REVIEW.md#모듈-단위-검토-분할): a variant whose history made
-    more original-role calls than original roles may have planned slices. Slices and final
-    contract followup share the per-attempt ceiling. Its upper is max_calls calls at the
-    dearest per-call cost of investigate, verify and contract. A variant without history is
+    more original-role calls than original roles may have planned slices. Slices, their lead
+    follow-ups and final contract followup share the per-attempt ceiling. Its upper is max_calls
+    calls at the dearest per-call cost of investigate, verify, contract and leads. A variant without history is
     estimated as above (the constants are single-file inputs without slices); run the capture
     dry run with the same selection first. With slices_unknown (project-scale cases) a variant
     without history is treated as one that may plan slices: its upper is the per-attempt ceiling.
@@ -453,7 +461,7 @@ def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAU
                   else slices_unknown)
         if sliced:
             upper_calls += max_calls
-            upper_cost += max_calls * max(per_call[r] for r in ("investigate", "verify", "contract")) * margin
+            upper_cost += max_calls * max(per_call[r] for r in SLICED_ROLES) * margin
             continue
         for r in BASE_REVIEW_ROLES:
             count = max(1, seen.get(r, 0)) if seen is not None else 1
@@ -466,6 +474,9 @@ def estimate(plan, *, history=None, margin=DEFAULTS["margin"], repair_rate=DEFAU
         upper_cost += count * (1 + repair_rate) * (per_call["triage"] + per_call["verify"]) * margin
         upper_calls += 2
         upper_cost += 2 * per_call["contract"] * margin
+        # The whole run's lead follow-up: one request and one repair or retry.
+        upper_calls += 2
+        upper_cost += 2 * per_call["leads"] * margin
     out = {"variants": n, "basis": basis, "margin": margin, "repair_rate": repair_rate, "max_calls": max_calls,
            "slices_unknown": slices_unknown,
            "per_call_microusd": per_call, "calls_per_variant": rates,
@@ -560,6 +571,17 @@ def review_invalid(current, delta, outcome):
     return None
 
 
+def lead_followups(report):
+    """The report's lead follow-up counters (builder 26), None when the report
+    has none (an earlier builder, or no follow-up planned)."""
+    block = (report.get("code_review") or {}).get("lead_followups")
+    if not isinstance(block, dict):
+        return None
+    out = {k: block.get(k, 0) for k in LEAD_COUNTS}
+    out.update({k: dict(sorted((block.get(k) or {}).items())) for k in LEAD_MAPS})
+    return out
+
+
 def summarize_report(report, records):
     """Structured facts of one published report (no LLM narrative is used)."""
     tasks = [{k: t.get(k) for k in ("key", "status", "reason", "required_for_verdict")} for t in report["tasks"]]
@@ -589,7 +611,7 @@ def summarize_report(report, records):
             "review_calls": [{k: c.get(k) for k in ("role", "outcome", "pack_id", "pack_version", "pack_sha256", "model",
                                                     "opencode_version")} for c in calls],
             "calls": len(calls), "usage": dict(usage), "record_limitations": limitations,
-            "report_limitations": report.get("limitations", [])}
+            "report_limitations": report.get("limitations", []), "lead_followups": lead_followups(report)}
 
 
 # ---------------------------------------------------------------- run

@@ -161,7 +161,7 @@ func runShape(t *testing.T, maxCalls int, answer func(n int, in verifyInput, c r
 		run.requests = append(run.requests, in)
 		var out []any
 		for _, c := range in.Candidates {
-			reply := answer(n, in, c)
+			reply := answer(n, in, c.Candidate)
 			if reply.Reason != "" || reply.Output == nil {
 				return reply
 			}
@@ -415,7 +415,7 @@ func TestReportPublishesVerdictsOfAnIncompleteSliceVerify(t *testing.T) {
 			if c.ID == "investigate_2" {
 				ids = []string{"ev_" + strings.Repeat("0", 24)}
 			}
-			out = append(out, inconclusiveFor(c, ids...))
+			out = append(out, inconclusiveFor(c.Candidate, ids...))
 		}
 		return asJSON(map[string]any{"verifications": out})
 	}

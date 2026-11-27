@@ -53,12 +53,12 @@ func TestReviewPlanOrderStagesAndRequired(t *testing.T) {
 	}
 	want := []spec{{"env.discover", domain.StageEnvironment, true}, {"docs.discover", domain.StageDocuments, true}, {"go-vet", domain.StageStaticAnalysis, true},
 		{"review.environment", domain.StageEnvironment, false}, {"review.documents", domain.StageDocuments, true}, {"review.investigate", domain.StageCodeReview, true},
-		{"review.interpret", domain.StageCodeReview, false}, {"review.verify", domain.StageCodeReview, true}}
+		{"review.interpret", domain.StageCodeReview, false}, {record.TaskLeads, domain.StageCodeReview, false}, {"review.verify", domain.StageCodeReview, true}}
 	want = append(want, spec{record.TaskScope, domain.StageCodeReview, false})
 	slots := coverageSlots(planSlices(j.Snapshot.Manifest, j.Scope, record.DefaultSecondary))
 	for i := range slots {
 		inv, ver := slotTaskKeys(sliceKey(i))
-		want = append(want, spec{inv, domain.StageCodeReview, false}, spec{ver, domain.StageCodeReview, false})
+		want = append(want, spec{inv, domain.StageCodeReview, false}, spec{record.LeadsTaskKey(sliceKey(i)), domain.StageCodeReview, false}, spec{ver, domain.StageCodeReview, false})
 	}
 	for _, k := range triagePlanKeys(j) {
 		want = append(want, spec{k, domain.StageCodeReview, false})
@@ -83,7 +83,7 @@ func TestRolesAcceptValidOutputs(t *testing.T) {
 	f := &scriptedCaller{script: validScript(t)}
 	plan, res := runRole(t, j, vetStub{obs: gatewayObservation}, f, "1.27.4")
 	for _, r := range rows(plan, res) {
-		if r.status == "skipped_policy" && r.reason == domain.ReasonNoReviewScope && !r.required {
+		if (r.status == "skipped_policy" && r.reason == domain.ReasonNoReviewScope && !r.required) || leadsSkip(r.key, r.status, r.reason) {
 			continue
 		}
 		if r.status != "succeeded" {
@@ -97,7 +97,7 @@ func TestRolesAcceptValidOutputs(t *testing.T) {
 	}
 	env := readRecord(t, j, "environment")
 	if len(env.EnvironmentNotes) != 1 || env.EnvironmentNotes[0].Module != "go:svc/b" || env.Upstream[0].Source != "env.discover" || env.Upstream[0].State != record.UpstreamAccepted ||
-		env.Pack.ID != "review" || env.Calls[0].PackID != "review" || env.Calls[0].PackVersion != "2.10.0" {
+		env.Pack.ID != "review" || env.Calls[0].PackID != "review" || env.Calls[0].PackVersion != "2.11.0" {
 		t.Fatalf("environment %+v", env)
 	}
 	docs := readRecord(t, j, "documents")
@@ -420,12 +420,12 @@ func TestDiscoveryCompositionPlans(t *testing.T) {
 	for _, p := range plan {
 		keys = append(keys, p.Key)
 	}
-	want := []string{"env.discover", "docs.discover", "go-vet", "review.environment", "review.documents", "review.investigate", "review.interpret", "review.verify"}
+	want := []string{"env.discover", "docs.discover", "go-vet", "review.environment", "review.documents", "review.investigate", "review.interpret", record.TaskLeads, "review.verify"}
 	want = append(want, record.TaskScope)
 	slots := coverageSlots(planSlices(j.Snapshot.Manifest, j.Scope, record.DefaultSecondary))
 	for i := range slots {
 		inv, ver := slotTaskKeys(sliceKey(i))
-		want = append(want, inv, ver)
+		want = append(want, inv, record.LeadsTaskKey(sliceKey(i)), ver)
 	}
 	want = append(want, triagePlanKeys(j)...)
 	if !slices.Equal(keys, want) || w.Info() != h.Info() {

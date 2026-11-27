@@ -11,11 +11,11 @@
     },
     {
       "decoder": null,
-      "id": "0195f3a0-0000-7000-8000-000000000a15",
+      "id": "0195f3a0-0000-7000-8000-000000000a76",
       "media_type": "application/vnd.codeye.result-manifest+json",
       "role": "result_manifest",
-      "sha256": "49338b4bb0b343005213759c77c6ff54642da07316cbcbd78f8a0c24f7e5903c",
-      "size_bytes": 56251,
+      "sha256": "81e6341ca8a73fcfa2e7b184dafb91c6fe41f04117917cffe51b661701106bc1",
+      "size_bytes": 75091,
       "task_key": null
     },
     {
@@ -320,7 +320,7 @@
       "id": "0195f3a0-0000-7000-8000-000000000930",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "b5e16a092894f3692cb720c37dc0deb90ba8e2dd342bf7cbcb40ed47c8542880",
+      "sha256": "86c6cdde0a3460baf14403bb7206df2f6824536992cfccb153e5c73fd0c0b01f",
       "size_bytes": 4228,
       "task_key": "review.environment"
     },
@@ -329,196 +329,196 @@
       "id": "0195f3a0-0000-7000-8000-000000000932",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "0b0abc55f0f9e812c7c8b85b8ccc9f275f0dcab7c9dafb94892eaeebf39b07ba",
+      "sha256": "a8b2c9dfe00dd9ac2c03906740dd5747a0dffc9481170047762ba9d305a53a66",
       "size_bytes": 1376,
       "task_key": "review.documents"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.9",
       "id": "0195f3a0-0000-7000-8000-000000000934",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "cdd9196be184c940d55675004d962bb5560b1979d17453dab107336ced3cd3b7",
-      "size_bytes": 3414,
+      "sha256": "d9d9372f4d8cf72b49004fa9ed3e0610efe2f51e5b0731dd696f498c19f63f36",
+      "size_bytes": 3429,
       "task_key": "review.investigate"
     },
     {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
-      "id": "0195f3a0-0000-7000-8000-000000000937",
+      "id": "0195f3a0-0000-7000-8000-000000000938",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "2ccc37ef1ffad97eb4ee45c7bfb3c567a5bcf4c92f792ffc23f617ee5fa49e37",
+      "sha256": "d5eb7ac3c2c95517a599578c1354cce8a818e491b698be3c94859222c6708a56",
       "size_bytes": 4345,
       "task_key": "review.verify"
     },
     {
       "decoder": "application/vnd.codeye.review-scope+json;schema_version=0.3",
-      "id": "0195f3a0-0000-7000-8000-000000000939",
+      "id": "0195f3a0-0000-7000-8000-00000000093a",
       "media_type": "application/vnd.codeye.review-scope+json",
       "role": "other",
-      "sha256": "07f18cea48e8eeb05eb29c7f8972fc54eeb67e52a3c744881a528ef72247fc93",
+      "sha256": "f64d0941ac3e0aa2ea678c2392f95b64c755954290ed6d0d3cfada340f3f19ae",
       "size_bytes": 21613,
       "task_key": "review.scope"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
-      "id": "0195f3a0-0000-7000-8000-00000000093b",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.9",
+      "id": "0195f3a0-0000-7000-8000-00000000093c",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "27b603313e204ae7163966b5cafa11e70e4b5226e3d1ed17134ff789248b7334",
-      "size_bytes": 3189,
+      "sha256": "63ae32a53e636d023fc2c2a17818e25b988ff618a42ab02f1078924903fda7cf",
+      "size_bytes": 3204,
       "task_key": "review.investigate.s001"
-    },
-    {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
-      "id": "0195f3a0-0000-7000-8000-00000000093d",
-      "media_type": "application/vnd.codeye.review+json",
-      "role": "other",
-      "sha256": "39bc779630cc549537296ee313509a8042e4d27615a7de9a71fb17701b7e099e",
-      "size_bytes": 3814,
-      "task_key": "review.verify.s001"
     },
     {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-00000000093f",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "3fea3356712e5697ddafb0a5b82edeeafd2685c6f02da7308d8b515ccd7da371",
-      "size_bytes": 3182,
+      "sha256": "b8da5c494cc18c30cbca7bc2a34b4cecf4d90b077532fb0834ea97dc68093589",
+      "size_bytes": 3814,
+      "task_key": "review.verify.s001"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.9",
+      "id": "0195f3a0-0000-7000-8000-000000000941",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "709ee601fea6b45884774849ff735dbab2726eaea4507df107ac0e372c3f6ab0",
+      "size_bytes": 3197,
       "task_key": "review.investigate.s002"
     },
     {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
-      "id": "0195f3a0-0000-7000-8000-000000000941",
+      "id": "0195f3a0-0000-7000-8000-000000000944",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "0fd5e0931c0593be556b7f135174166ac5438889d2fd6e08986f30ba6fa9d300",
+      "sha256": "cbe2db3ce30ecb5984631dfdd78bced7939bd68a001a6309e0e5b5a887a8e2ad",
       "size_bytes": 3807,
       "task_key": "review.verify.s002"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
-      "id": "0195f3a0-0000-7000-8000-000000000943",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.9",
+      "id": "0195f3a0-0000-7000-8000-000000000946",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "e47e462aa5f6ba375b97c69f0f5b62246fdf5f72eaa1f6783845aed7b824037f",
-      "size_bytes": 3179,
+      "sha256": "abd9e75846c339c79a709c8ea81de72dbc56e77df5d149713ea870769d41ce64",
+      "size_bytes": 3194,
       "task_key": "review.investigate.s003"
-    },
-    {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
-      "id": "0195f3a0-0000-7000-8000-000000000945",
-      "media_type": "application/vnd.codeye.review+json",
-      "role": "other",
-      "sha256": "38919e635c60d6171b87f7397ff856e5bd73f962cb6978b5369df8e1c7adc7ca",
-      "size_bytes": 3804,
-      "task_key": "review.verify.s003"
-    },
-    {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
-      "id": "0195f3a0-0000-7000-8000-000000000947",
-      "media_type": "application/vnd.codeye.review+json",
-      "role": "other",
-      "sha256": "8603c78adce26cbb451801a1035b92f277042eb4676bc15954204d4579c55378",
-      "size_bytes": 3190,
-      "task_key": "review.investigate.s004"
     },
     {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-000000000949",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "899864cf0b5a81031c07443ecb6297f1a2012649f74c7fffe51dd302ecbb5f25",
+      "sha256": "ae469df208a425ff9733b010e23b92757d26c6563a603976a945055043ffdd19",
+      "size_bytes": 3804,
+      "task_key": "review.verify.s003"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.9",
+      "id": "0195f3a0-0000-7000-8000-00000000094b",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "aee507f51fd7b67402bcfb241e60bf6cab77e19034549443084b394fa8d340f2",
+      "size_bytes": 3205,
+      "task_key": "review.investigate.s004"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
+      "id": "0195f3a0-0000-7000-8000-00000000094e",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "dcb2f00223e256c2a91f951529ca97272caec1ef48d6db6104666ffdc4fce140",
       "size_bytes": 3815,
       "task_key": "review.verify.s004"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
-      "id": "0195f3a0-0000-7000-8000-00000000094b",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.9",
+      "id": "0195f3a0-0000-7000-8000-000000000950",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "d36f6f86d1fc75bff34ae5d4ad9ebd0b3d1b192683b09f43f6f315e954476e5c",
-      "size_bytes": 3845,
+      "sha256": "68414bcf9fe09a6a6d2f385644e27c2dfc3e9789e56071e3de1ea40aa3041505",
+      "size_bytes": 3860,
       "task_key": "review.investigate.s005"
-    },
-    {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
-      "id": "0195f3a0-0000-7000-8000-00000000094d",
-      "media_type": "application/vnd.codeye.review+json",
-      "role": "other",
-      "sha256": "00c7dc8a4db3cd1a4d05a6a55a485ec9dc1350dd48ef2da1231228c21f97f337",
-      "size_bytes": 4680,
-      "task_key": "review.verify.s005"
-    },
-    {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
-      "id": "0195f3a0-0000-7000-8000-00000000094f",
-      "media_type": "application/vnd.codeye.review+json",
-      "role": "other",
-      "sha256": "a12f6c4d85abe4af386b82328b08cc0893ac64b4ddded6a8e7c08ffe68e5ff3e",
-      "size_bytes": 5176,
-      "task_key": "review.investigate.s006"
-    },
-    {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
-      "id": "0195f3a0-0000-7000-8000-000000000951",
-      "media_type": "application/vnd.codeye.review+json",
-      "role": "other",
-      "sha256": "1298489d6b3b41ddd1897694235247733a166368f8bd7d48222175f9e7a0b457",
-      "size_bytes": 6009,
-      "task_key": "review.verify.s006"
     },
     {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-000000000953",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "7b3bbfe7eebdfb4e8e317e52fa79a569adcf967d7f1b46f9af14b365ae00921b",
-      "size_bytes": 5158,
-      "task_key": "review.investigate.s007"
+      "sha256": "52b220e0360390d6584a1d82816d21e56a7325b80c9246d4309ebaa961a24954",
+      "size_bytes": 4680,
+      "task_key": "review.verify.s005"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.9",
       "id": "0195f3a0-0000-7000-8000-000000000955",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "8813989f4ca6328d5ecb8c7753b67b9799c5326c124e2b0e7b8d4c333b140839",
-      "size_bytes": 5989,
-      "task_key": "review.verify.s007"
+      "sha256": "a31508f1824c62d0572bf24137937b427a8b84a66c39086e7bcd6f2cc019efff",
+      "size_bytes": 5191,
+      "task_key": "review.investigate.s006"
     },
     {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
-      "id": "0195f3a0-0000-7000-8000-000000000957",
+      "id": "0195f3a0-0000-7000-8000-000000000958",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "00f9b819d39ddec8cb827084eb5e17f1a8bcf40e9606ea06a3c695e56063912c",
-      "size_bytes": 5172,
-      "task_key": "review.investigate.s008"
+      "sha256": "47b91f221148ddc08969a42f574d14090b3df23c4f342b6fdcd1db57c25c2f37",
+      "size_bytes": 6009,
+      "task_key": "review.verify.s006"
     },
     {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
-      "id": "0195f3a0-0000-7000-8000-000000000959",
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.9",
+      "id": "0195f3a0-0000-7000-8000-00000000095a",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "14890db33722dc3fa77eefd079459e84375a0db5408765648e4ab64b111829e6",
-      "size_bytes": 6004,
-      "task_key": "review.verify.s008"
-    },
-    {
-      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
-      "id": "0195f3a0-0000-7000-8000-00000000095b",
-      "media_type": "application/vnd.codeye.review+json",
-      "role": "other",
-      "sha256": "1fd4a446d0e48005af190beb1bc21e9f16595ed171d7ccce878f40d3a9c2ac50",
-      "size_bytes": 3972,
-      "task_key": "review.investigate.s009"
+      "sha256": "6b9ab0aeff12f99f09e57b5364ed1cb107649f8d28a858cceaeb49d48404cf90",
+      "size_bytes": 5173,
+      "task_key": "review.investigate.s007"
     },
     {
       "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
       "id": "0195f3a0-0000-7000-8000-00000000095d",
       "media_type": "application/vnd.codeye.review+json",
       "role": "other",
-      "sha256": "4ace369f756f985aee33e0ac5362f29e14d6be95270888e4bef14e3ba1bf2167",
+      "sha256": "748c3993884591571d7d41e44f109b2ec69476d8db1d3a714a2c0bcc25f28250",
+      "size_bytes": 5989,
+      "task_key": "review.verify.s007"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.9",
+      "id": "0195f3a0-0000-7000-8000-00000000095f",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "8b0a7cf79b2c5dd1e382ea06c6032a44c419359920ddd20c8d5b4d6e016e99e8",
+      "size_bytes": 5187,
+      "task_key": "review.investigate.s008"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
+      "id": "0195f3a0-0000-7000-8000-000000000962",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "f5dbcd372abbac0c9e46e68cfb525e56aace531f11d9fa9022ddf430e0e8ac80",
+      "size_bytes": 6004,
+      "task_key": "review.verify.s008"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.9",
+      "id": "0195f3a0-0000-7000-8000-000000000964",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "47bd88612430a5738476cef7f4efb6003041599664d25862c88ab856e4d90859",
+      "size_bytes": 3987,
+      "task_key": "review.investigate.s009"
+    },
+    {
+      "decoder": "application/vnd.codeye.review+json;schema_version=0.7",
+      "id": "0195f3a0-0000-7000-8000-000000000967",
+      "media_type": "application/vnd.codeye.review+json",
+      "role": "other",
+      "sha256": "cc37256e239c9788b3106750a6cb466906547b0086edaab19805ff84a4914290",
       "size_bytes": 4806,
       "task_key": "review.verify.s009"
     }
@@ -533,9 +533,9 @@
   },
   "builder": {
     "id": "codeye-report",
-    "input_digest": "0fb0bf6ed8385aac53eea1ef3210ca356526a79905472bbe4d8ad3cb729ca539",
+    "input_digest": "9260e67e8c28c8dc4839e409e47d682e6472296f349ccba763ad6a3131db8ec2",
     "result_manifest_artifact_id": null,
-    "version": "25"
+    "version": "26"
   },
   "code_review": {
     "accepted_calls": 22,
@@ -612,6 +612,22 @@
     ],
     "interpretation_limits": [],
     "inventory_files": 44,
+    "lead_followups": {
+      "calls": 0,
+      "dispositions": {},
+      "leads_asked": 0,
+      "leads_resolved": 0,
+      "leads_unresolved": {},
+      "new_excerpts": 0,
+      "new_lines": 0,
+      "tasks_accepted": 0,
+      "tasks_not_run": {
+        "no_leads": 10,
+        "no_review_scope": 87
+      },
+      "tasks_planned": 97,
+      "tasks_run": 0
+    },
     "ledger": {
       "calls_used": 22,
       "files": [
@@ -1167,7 +1183,7 @@
           ]
         }
       ],
-      "request_bytes_sent": 633087,
+      "request_bytes_sent": 643257,
       "scope": {
         "key": "review.scope",
         "result": "accepted",
@@ -1176,8 +1192,8 @@
       "status": "complete"
     },
     "pack_id": "review",
-    "pack_version": "2.10.0",
-    "request_bytes": 633087,
+    "pack_version": "2.11.0",
+    "request_bytes": 643257,
     "roles": [
       {
         "key": "review.investigate",
@@ -1187,6 +1203,12 @@
       {
         "key": "review.interpret",
         "reason": "no_tool_observations",
+        "result": "skipped",
+        "task_status": "skipped_policy"
+      },
+      {
+        "key": "review.leads",
+        "reason": "no_leads",
         "result": "skipped",
         "task_status": "skipped_policy"
       },
@@ -1204,16 +1226,17 @@
     ],
     "stage": {
       "counts": {
-        "skipped_policy": 184
+        "skipped_policy": 281
       },
       "reasons": [
+        "no_leads",
         "no_review_scope",
         "no_tool_observations"
       ],
       "stage": "code_review",
       "state": "succeeded",
       "succeeded": 21,
-      "tasks": 205
+      "tasks": 302
     }
   },
   "coverage": {
@@ -1799,6 +1822,588 @@
         },
         {
           "key": "review.investigate.s096",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads",
+          "reason": "no_leads",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s001",
+          "reason": "no_leads",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s002",
+          "reason": "no_leads",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s003",
+          "reason": "no_leads",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s004",
+          "reason": "no_leads",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s005",
+          "reason": "no_leads",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s006",
+          "reason": "no_leads",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s007",
+          "reason": "no_leads",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s008",
+          "reason": "no_leads",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s009",
+          "reason": "no_leads",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s010",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s011",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s012",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s013",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s014",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s015",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s016",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s017",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s018",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s019",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s020",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s021",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s022",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s023",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s024",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s025",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s026",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s027",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s028",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s029",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s030",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s031",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s032",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s033",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s034",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s035",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s036",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s037",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s038",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s039",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s040",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s041",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s042",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s043",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s044",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s045",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s046",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s047",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s048",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s049",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s050",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s051",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s052",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s053",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s054",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s055",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s056",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s057",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s058",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s059",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s060",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s061",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s062",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s063",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s064",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s065",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s066",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s067",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s068",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s069",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s070",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s071",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s072",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s073",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s074",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s075",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s076",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s077",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s078",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s079",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s080",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s081",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s082",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s083",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s084",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s085",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s086",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s087",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s088",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s089",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s090",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s091",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s092",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s093",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s094",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s095",
+          "reason": "no_review_scope",
+          "result": "skipped",
+          "task_status": "skipped_policy"
+        },
+        {
+          "key": "review.leads.s096",
           "reason": "no_review_scope",
           "result": "skipped",
           "task_status": "skipped_policy"
@@ -2458,8 +3063,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "5fa5e99523ad4e0025da0ffb59bbde980111422d0c66311a1465c336a30bfe8f",
-        "pack_version": "2.10.0",
+        "pack_sha256": "e459017af1a47fdb6560ae39497047e0c3fe520bbe0a403325a43d37ef845281",
+        "pack_version": "2.11.0",
         "request_sha256": "e1a4e9486f920f8f62cc8f33026e6304c638a1b7cd3d872b0aff914c2c2c4fd8",
         "role": "environment",
         "task_key": "review.environment"
@@ -2469,8 +3074,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "1bba9be172a0d6929b6ece88b9ae94ca036867aaad7eaeb8bc4679b0004e7cd2",
-        "pack_version": "2.10.0",
+        "pack_sha256": "cb0e75dca8199052f4783196158ffc35822d0c15dfdce8e204a9d7e2ee5efef9",
+        "pack_version": "2.11.0",
         "request_sha256": "b02312fe04ee32215a9488510fb64113eee81b05162a27beec7eee530672ec63",
         "role": "documents",
         "task_key": "review.documents"
@@ -2480,9 +3085,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "0bd71a3fa7ea84d3eeb8c50e5322cc05a106941a96eb0bcee58fc3df17524ca5",
-        "pack_version": "2.10.0",
-        "request_sha256": "7776a8a691d002b768a5048fdc4cf90271bbe3d7648f9af6a1a62246f9425f3f",
+        "pack_sha256": "52a39bd30dc05d12d90a2930bf3971cf45e5bee818028526a7b521a7dab9ca04",
+        "pack_version": "2.11.0",
+        "request_sha256": "e41767484486205f6703bca2c80b03c19c3018752ba18daab21c94f67fb6054e",
         "role": "investigate",
         "task_key": "review.investigate"
       },
@@ -2491,8 +3096,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "2a50b80418ce27f4a107024e99fe9ef7220d76e05098707fac41cbba56c14590",
-        "pack_version": "2.10.0",
+        "pack_sha256": "679d927a84160e6dc00b185fafb9767c2242b85f9b1f904b4a1d60c263b29428",
+        "pack_version": "2.11.0",
         "request_sha256": "8797ca70eb06394359bc761bac691eedf6176c29eaecb3c5b517efb032cb5378",
         "role": "verify",
         "task_key": "review.verify"
@@ -2502,9 +3107,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "0bd71a3fa7ea84d3eeb8c50e5322cc05a106941a96eb0bcee58fc3df17524ca5",
-        "pack_version": "2.10.0",
-        "request_sha256": "ed5f84ad0f30cb46c8fd69cb9622a8f6cb31599588d7621c69da8f56b8bb6aa6",
+        "pack_sha256": "52a39bd30dc05d12d90a2930bf3971cf45e5bee818028526a7b521a7dab9ca04",
+        "pack_version": "2.11.0",
+        "request_sha256": "4e4b4939132b370bf65afa3f9afb1bb612ba43579adb98c51195846c0104138c",
         "role": "investigate",
         "task_key": "review.investigate.s001"
       },
@@ -2513,8 +3118,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "2a50b80418ce27f4a107024e99fe9ef7220d76e05098707fac41cbba56c14590",
-        "pack_version": "2.10.0",
+        "pack_sha256": "679d927a84160e6dc00b185fafb9767c2242b85f9b1f904b4a1d60c263b29428",
+        "pack_version": "2.11.0",
         "request_sha256": "37c623707d217612991ca7038408fd889808ceeb3c54905047f9a89041afd37a",
         "role": "verify",
         "task_key": "review.verify.s001"
@@ -2524,9 +3129,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "0bd71a3fa7ea84d3eeb8c50e5322cc05a106941a96eb0bcee58fc3df17524ca5",
-        "pack_version": "2.10.0",
-        "request_sha256": "374abc07cefc8d72cd36f0a380710a8f2f2268bec762819d89ddfacc72e6cd09",
+        "pack_sha256": "52a39bd30dc05d12d90a2930bf3971cf45e5bee818028526a7b521a7dab9ca04",
+        "pack_version": "2.11.0",
+        "request_sha256": "de95caf859aa6bd121d8f98607ec712274d4e137a6ac8023de7c10e69f4e66b2",
         "role": "investigate",
         "task_key": "review.investigate.s002"
       },
@@ -2535,8 +3140,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "2a50b80418ce27f4a107024e99fe9ef7220d76e05098707fac41cbba56c14590",
-        "pack_version": "2.10.0",
+        "pack_sha256": "679d927a84160e6dc00b185fafb9767c2242b85f9b1f904b4a1d60c263b29428",
+        "pack_version": "2.11.0",
         "request_sha256": "303fc702158537058d387ca2bd6a63404625f70c3d8e3f9f6c5e2f8fe906a897",
         "role": "verify",
         "task_key": "review.verify.s002"
@@ -2546,9 +3151,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "0bd71a3fa7ea84d3eeb8c50e5322cc05a106941a96eb0bcee58fc3df17524ca5",
-        "pack_version": "2.10.0",
-        "request_sha256": "4c32969afb3c96690725116c8856d408bae57bf1b904db4e0c06d4d2d51f9d6a",
+        "pack_sha256": "52a39bd30dc05d12d90a2930bf3971cf45e5bee818028526a7b521a7dab9ca04",
+        "pack_version": "2.11.0",
+        "request_sha256": "ee7ce40e3653505deb3de38d05db631a67c05ca55a3ca9aa635a9b7ab794cdcd",
         "role": "investigate",
         "task_key": "review.investigate.s003"
       },
@@ -2557,8 +3162,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "2a50b80418ce27f4a107024e99fe9ef7220d76e05098707fac41cbba56c14590",
-        "pack_version": "2.10.0",
+        "pack_sha256": "679d927a84160e6dc00b185fafb9767c2242b85f9b1f904b4a1d60c263b29428",
+        "pack_version": "2.11.0",
         "request_sha256": "0fc8b66afc5a03154f76f27b3a23f4d9f4d9140bf88d3e562f3452ea4ccd5685",
         "role": "verify",
         "task_key": "review.verify.s003"
@@ -2568,9 +3173,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "0bd71a3fa7ea84d3eeb8c50e5322cc05a106941a96eb0bcee58fc3df17524ca5",
-        "pack_version": "2.10.0",
-        "request_sha256": "8a655962a68eda68119da72210978ea01dcd174fec3a728cf21cf7a6d882ea08",
+        "pack_sha256": "52a39bd30dc05d12d90a2930bf3971cf45e5bee818028526a7b521a7dab9ca04",
+        "pack_version": "2.11.0",
+        "request_sha256": "75a925bfc95e017a74b663978e60fa6c0781b11f4cb77ed4c085522957f3c46c",
         "role": "investigate",
         "task_key": "review.investigate.s004"
       },
@@ -2579,8 +3184,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "2a50b80418ce27f4a107024e99fe9ef7220d76e05098707fac41cbba56c14590",
-        "pack_version": "2.10.0",
+        "pack_sha256": "679d927a84160e6dc00b185fafb9767c2242b85f9b1f904b4a1d60c263b29428",
+        "pack_version": "2.11.0",
         "request_sha256": "727ace1da0b404537d779209c70be8f8ff38f36c6dc64740383f8f8f2e960157",
         "role": "verify",
         "task_key": "review.verify.s004"
@@ -2590,9 +3195,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "0bd71a3fa7ea84d3eeb8c50e5322cc05a106941a96eb0bcee58fc3df17524ca5",
-        "pack_version": "2.10.0",
-        "request_sha256": "c45893aa64bf3fb632e47430ab71fda1129cce27182e7e005d939b18e831a434",
+        "pack_sha256": "52a39bd30dc05d12d90a2930bf3971cf45e5bee818028526a7b521a7dab9ca04",
+        "pack_version": "2.11.0",
+        "request_sha256": "81186631751cccb4653a206486624b5384bff051cbbc5db1ecc48d9624da63d2",
         "role": "investigate",
         "task_key": "review.investigate.s005"
       },
@@ -2601,8 +3206,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "2a50b80418ce27f4a107024e99fe9ef7220d76e05098707fac41cbba56c14590",
-        "pack_version": "2.10.0",
+        "pack_sha256": "679d927a84160e6dc00b185fafb9767c2242b85f9b1f904b4a1d60c263b29428",
+        "pack_version": "2.11.0",
         "request_sha256": "4e623870d16e6a1457ea3156e1f6247fc2ad24a61348be807e12c1edad0ea7d0",
         "role": "verify",
         "task_key": "review.verify.s005"
@@ -2612,9 +3217,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "0bd71a3fa7ea84d3eeb8c50e5322cc05a106941a96eb0bcee58fc3df17524ca5",
-        "pack_version": "2.10.0",
-        "request_sha256": "4f26a93594527d4d204dcbacdde92730f56b7ff893f25ba73ac4a5dfb36cdc1a",
+        "pack_sha256": "52a39bd30dc05d12d90a2930bf3971cf45e5bee818028526a7b521a7dab9ca04",
+        "pack_version": "2.11.0",
+        "request_sha256": "cdec92fd894020e5a7d5f58cb6acc2c524fc6ac028043497689905e78a8d9ede",
         "role": "investigate",
         "task_key": "review.investigate.s006"
       },
@@ -2623,8 +3228,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "2a50b80418ce27f4a107024e99fe9ef7220d76e05098707fac41cbba56c14590",
-        "pack_version": "2.10.0",
+        "pack_sha256": "679d927a84160e6dc00b185fafb9767c2242b85f9b1f904b4a1d60c263b29428",
+        "pack_version": "2.11.0",
         "request_sha256": "a10a96b0397bfbf71e3d2c9d745cf1904262384c1a8da06369c9213838b65c36",
         "role": "verify",
         "task_key": "review.verify.s006"
@@ -2634,9 +3239,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "0bd71a3fa7ea84d3eeb8c50e5322cc05a106941a96eb0bcee58fc3df17524ca5",
-        "pack_version": "2.10.0",
-        "request_sha256": "03e6c5f9252170c1c13fc5b7676487c2e62c7e7df02bc4f97a70ff2bff8795dc",
+        "pack_sha256": "52a39bd30dc05d12d90a2930bf3971cf45e5bee818028526a7b521a7dab9ca04",
+        "pack_version": "2.11.0",
+        "request_sha256": "84d3f76aa7aa677cfe202dde3cc23947526ee355c1fd81e50049a648e9bedfdb",
         "role": "investigate",
         "task_key": "review.investigate.s007"
       },
@@ -2645,8 +3250,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "2a50b80418ce27f4a107024e99fe9ef7220d76e05098707fac41cbba56c14590",
-        "pack_version": "2.10.0",
+        "pack_sha256": "679d927a84160e6dc00b185fafb9767c2242b85f9b1f904b4a1d60c263b29428",
+        "pack_version": "2.11.0",
         "request_sha256": "eaf5677fa864eb122dd44293831da19077ec04f1ae3047030c6e74f9abe6c255",
         "role": "verify",
         "task_key": "review.verify.s007"
@@ -2656,9 +3261,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "0bd71a3fa7ea84d3eeb8c50e5322cc05a106941a96eb0bcee58fc3df17524ca5",
-        "pack_version": "2.10.0",
-        "request_sha256": "b13a99b6d8a3ab9cc4cb1f1df18fdedf90ab2995fe90134c6731de5fbaad8a25",
+        "pack_sha256": "52a39bd30dc05d12d90a2930bf3971cf45e5bee818028526a7b521a7dab9ca04",
+        "pack_version": "2.11.0",
+        "request_sha256": "c96783506ed23b7b84b6167d1bd01136b4e5887e97bd8071645c64a07abc2ece",
         "role": "investigate",
         "task_key": "review.investigate.s008"
       },
@@ -2667,8 +3272,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "2a50b80418ce27f4a107024e99fe9ef7220d76e05098707fac41cbba56c14590",
-        "pack_version": "2.10.0",
+        "pack_sha256": "679d927a84160e6dc00b185fafb9767c2242b85f9b1f904b4a1d60c263b29428",
+        "pack_version": "2.11.0",
         "request_sha256": "3d2731eae4dfa02769f936dc640045de2e5b8b1a213cf572e52a4440bb2e35d6",
         "role": "verify",
         "task_key": "review.verify.s008"
@@ -2678,9 +3283,9 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "0bd71a3fa7ea84d3eeb8c50e5322cc05a106941a96eb0bcee58fc3df17524ca5",
-        "pack_version": "2.10.0",
-        "request_sha256": "01cd56549191f1a40e4f0785fbb925fc435bac0042888c7a16fe16092f087296",
+        "pack_sha256": "52a39bd30dc05d12d90a2930bf3971cf45e5bee818028526a7b521a7dab9ca04",
+        "pack_version": "2.11.0",
+        "request_sha256": "59b0d84a9f6cd5dce90538c6657dfc719c8787a4ed1d1b38a277521496e36ee1",
         "role": "investigate",
         "task_key": "review.investigate.s009"
       },
@@ -2689,8 +3294,8 @@
         "opencode_version": "1.19.5",
         "outcome": "accepted",
         "pack_id": "review",
-        "pack_sha256": "2a50b80418ce27f4a107024e99fe9ef7220d76e05098707fac41cbba56c14590",
-        "pack_version": "2.10.0",
+        "pack_sha256": "679d927a84160e6dc00b185fafb9767c2242b85f9b1f904b4a1d60c263b29428",
+        "pack_version": "2.11.0",
         "request_sha256": "7f8dfd15fcd66696a883fcb1fce6dce88c42ed41364e402fe755eb142ad0fc59",
         "role": "verify",
         "task_key": "review.verify.s009"
@@ -4896,7 +5501,7 @@
       "status": "unsupported"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000a0c",
+      "id": "0195f3a0-0000-7000-8000-000000000a6d",
       "key": "review.contract",
       "reason": "no_review_scope",
       "required_for_verdict": false,
@@ -4931,1414 +5536,2093 @@
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000093a",
+      "id": "0195f3a0-0000-7000-8000-00000000093b",
       "key": "review.investigate.s001",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000093e",
+      "id": "0195f3a0-0000-7000-8000-000000000940",
       "key": "review.investigate.s002",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000942",
+      "id": "0195f3a0-0000-7000-8000-000000000945",
       "key": "review.investigate.s003",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000946",
+      "id": "0195f3a0-0000-7000-8000-00000000094a",
       "key": "review.investigate.s004",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000094a",
+      "id": "0195f3a0-0000-7000-8000-00000000094f",
       "key": "review.investigate.s005",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000094e",
+      "id": "0195f3a0-0000-7000-8000-000000000954",
       "key": "review.investigate.s006",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000952",
+      "id": "0195f3a0-0000-7000-8000-000000000959",
       "key": "review.investigate.s007",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000956",
+      "id": "0195f3a0-0000-7000-8000-00000000095e",
       "key": "review.investigate.s008",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000095a",
+      "id": "0195f3a0-0000-7000-8000-000000000963",
       "key": "review.investigate.s009",
       "reason": null,
       "required_for_verdict": false,
       "status": "succeeded"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000095e",
+      "id": "0195f3a0-0000-7000-8000-000000000968",
       "key": "review.investigate.s010",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000960",
+      "id": "0195f3a0-0000-7000-8000-00000000096b",
       "key": "review.investigate.s011",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000962",
+      "id": "0195f3a0-0000-7000-8000-00000000096e",
       "key": "review.investigate.s012",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000964",
+      "id": "0195f3a0-0000-7000-8000-000000000971",
       "key": "review.investigate.s013",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000966",
+      "id": "0195f3a0-0000-7000-8000-000000000974",
       "key": "review.investigate.s014",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000968",
+      "id": "0195f3a0-0000-7000-8000-000000000977",
       "key": "review.investigate.s015",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000096a",
+      "id": "0195f3a0-0000-7000-8000-00000000097a",
       "key": "review.investigate.s016",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000096c",
+      "id": "0195f3a0-0000-7000-8000-00000000097d",
       "key": "review.investigate.s017",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000096e",
+      "id": "0195f3a0-0000-7000-8000-000000000980",
       "key": "review.investigate.s018",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000970",
+      "id": "0195f3a0-0000-7000-8000-000000000983",
       "key": "review.investigate.s019",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000972",
+      "id": "0195f3a0-0000-7000-8000-000000000986",
       "key": "review.investigate.s020",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000974",
+      "id": "0195f3a0-0000-7000-8000-000000000989",
       "key": "review.investigate.s021",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000976",
+      "id": "0195f3a0-0000-7000-8000-00000000098c",
       "key": "review.investigate.s022",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000978",
+      "id": "0195f3a0-0000-7000-8000-00000000098f",
       "key": "review.investigate.s023",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000097a",
+      "id": "0195f3a0-0000-7000-8000-000000000992",
       "key": "review.investigate.s024",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000097c",
+      "id": "0195f3a0-0000-7000-8000-000000000995",
       "key": "review.investigate.s025",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000097e",
+      "id": "0195f3a0-0000-7000-8000-000000000998",
       "key": "review.investigate.s026",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000980",
+      "id": "0195f3a0-0000-7000-8000-00000000099b",
       "key": "review.investigate.s027",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000982",
+      "id": "0195f3a0-0000-7000-8000-00000000099e",
       "key": "review.investigate.s028",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000984",
+      "id": "0195f3a0-0000-7000-8000-0000000009a1",
       "key": "review.investigate.s029",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000986",
+      "id": "0195f3a0-0000-7000-8000-0000000009a4",
       "key": "review.investigate.s030",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000988",
+      "id": "0195f3a0-0000-7000-8000-0000000009a7",
       "key": "review.investigate.s031",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000098a",
+      "id": "0195f3a0-0000-7000-8000-0000000009aa",
       "key": "review.investigate.s032",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000098c",
+      "id": "0195f3a0-0000-7000-8000-0000000009ad",
       "key": "review.investigate.s033",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000098e",
+      "id": "0195f3a0-0000-7000-8000-0000000009b0",
       "key": "review.investigate.s034",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000990",
+      "id": "0195f3a0-0000-7000-8000-0000000009b3",
       "key": "review.investigate.s035",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000992",
+      "id": "0195f3a0-0000-7000-8000-0000000009b6",
       "key": "review.investigate.s036",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000994",
+      "id": "0195f3a0-0000-7000-8000-0000000009b9",
       "key": "review.investigate.s037",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000996",
+      "id": "0195f3a0-0000-7000-8000-0000000009bc",
       "key": "review.investigate.s038",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000998",
+      "id": "0195f3a0-0000-7000-8000-0000000009bf",
       "key": "review.investigate.s039",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000099a",
+      "id": "0195f3a0-0000-7000-8000-0000000009c2",
       "key": "review.investigate.s040",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000099c",
+      "id": "0195f3a0-0000-7000-8000-0000000009c5",
       "key": "review.investigate.s041",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000099e",
+      "id": "0195f3a0-0000-7000-8000-0000000009c8",
       "key": "review.investigate.s042",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009a0",
+      "id": "0195f3a0-0000-7000-8000-0000000009cb",
       "key": "review.investigate.s043",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009a2",
+      "id": "0195f3a0-0000-7000-8000-0000000009ce",
       "key": "review.investigate.s044",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009a4",
+      "id": "0195f3a0-0000-7000-8000-0000000009d1",
       "key": "review.investigate.s045",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009a6",
+      "id": "0195f3a0-0000-7000-8000-0000000009d4",
       "key": "review.investigate.s046",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009a8",
+      "id": "0195f3a0-0000-7000-8000-0000000009d7",
       "key": "review.investigate.s047",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009aa",
+      "id": "0195f3a0-0000-7000-8000-0000000009da",
       "key": "review.investigate.s048",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009ac",
+      "id": "0195f3a0-0000-7000-8000-0000000009dd",
       "key": "review.investigate.s049",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009ae",
+      "id": "0195f3a0-0000-7000-8000-0000000009e0",
       "key": "review.investigate.s050",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009b0",
+      "id": "0195f3a0-0000-7000-8000-0000000009e3",
       "key": "review.investigate.s051",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009b2",
+      "id": "0195f3a0-0000-7000-8000-0000000009e6",
       "key": "review.investigate.s052",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009b4",
+      "id": "0195f3a0-0000-7000-8000-0000000009e9",
       "key": "review.investigate.s053",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009b6",
+      "id": "0195f3a0-0000-7000-8000-0000000009ec",
       "key": "review.investigate.s054",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009b8",
+      "id": "0195f3a0-0000-7000-8000-0000000009ef",
       "key": "review.investigate.s055",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009ba",
+      "id": "0195f3a0-0000-7000-8000-0000000009f2",
       "key": "review.investigate.s056",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009bc",
+      "id": "0195f3a0-0000-7000-8000-0000000009f5",
       "key": "review.investigate.s057",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009be",
+      "id": "0195f3a0-0000-7000-8000-0000000009f8",
       "key": "review.investigate.s058",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009c0",
+      "id": "0195f3a0-0000-7000-8000-0000000009fb",
       "key": "review.investigate.s059",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009c2",
+      "id": "0195f3a0-0000-7000-8000-0000000009fe",
       "key": "review.investigate.s060",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009c4",
+      "id": "0195f3a0-0000-7000-8000-000000000a01",
       "key": "review.investigate.s061",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009c6",
+      "id": "0195f3a0-0000-7000-8000-000000000a04",
       "key": "review.investigate.s062",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009c8",
+      "id": "0195f3a0-0000-7000-8000-000000000a07",
       "key": "review.investigate.s063",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009ca",
+      "id": "0195f3a0-0000-7000-8000-000000000a0a",
       "key": "review.investigate.s064",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009cc",
+      "id": "0195f3a0-0000-7000-8000-000000000a0d",
       "key": "review.investigate.s065",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009ce",
+      "id": "0195f3a0-0000-7000-8000-000000000a10",
       "key": "review.investigate.s066",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009d0",
+      "id": "0195f3a0-0000-7000-8000-000000000a13",
       "key": "review.investigate.s067",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009d2",
+      "id": "0195f3a0-0000-7000-8000-000000000a16",
       "key": "review.investigate.s068",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009d4",
+      "id": "0195f3a0-0000-7000-8000-000000000a19",
       "key": "review.investigate.s069",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009d6",
+      "id": "0195f3a0-0000-7000-8000-000000000a1c",
       "key": "review.investigate.s070",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009d8",
+      "id": "0195f3a0-0000-7000-8000-000000000a1f",
       "key": "review.investigate.s071",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009da",
+      "id": "0195f3a0-0000-7000-8000-000000000a22",
       "key": "review.investigate.s072",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009dc",
+      "id": "0195f3a0-0000-7000-8000-000000000a25",
       "key": "review.investigate.s073",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009de",
+      "id": "0195f3a0-0000-7000-8000-000000000a28",
       "key": "review.investigate.s074",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009e0",
+      "id": "0195f3a0-0000-7000-8000-000000000a2b",
       "key": "review.investigate.s075",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009e2",
+      "id": "0195f3a0-0000-7000-8000-000000000a2e",
       "key": "review.investigate.s076",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009e4",
+      "id": "0195f3a0-0000-7000-8000-000000000a31",
       "key": "review.investigate.s077",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009e6",
+      "id": "0195f3a0-0000-7000-8000-000000000a34",
       "key": "review.investigate.s078",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009e8",
+      "id": "0195f3a0-0000-7000-8000-000000000a37",
       "key": "review.investigate.s079",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009ea",
+      "id": "0195f3a0-0000-7000-8000-000000000a3a",
       "key": "review.investigate.s080",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009ec",
+      "id": "0195f3a0-0000-7000-8000-000000000a3d",
       "key": "review.investigate.s081",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009ee",
+      "id": "0195f3a0-0000-7000-8000-000000000a40",
       "key": "review.investigate.s082",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009f0",
+      "id": "0195f3a0-0000-7000-8000-000000000a43",
       "key": "review.investigate.s083",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009f2",
+      "id": "0195f3a0-0000-7000-8000-000000000a46",
       "key": "review.investigate.s084",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009f4",
+      "id": "0195f3a0-0000-7000-8000-000000000a49",
       "key": "review.investigate.s085",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009f6",
+      "id": "0195f3a0-0000-7000-8000-000000000a4c",
       "key": "review.investigate.s086",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009f8",
+      "id": "0195f3a0-0000-7000-8000-000000000a4f",
       "key": "review.investigate.s087",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009fa",
+      "id": "0195f3a0-0000-7000-8000-000000000a52",
       "key": "review.investigate.s088",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009fc",
+      "id": "0195f3a0-0000-7000-8000-000000000a55",
       "key": "review.investigate.s089",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009fe",
+      "id": "0195f3a0-0000-7000-8000-000000000a58",
       "key": "review.investigate.s090",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000a00",
+      "id": "0195f3a0-0000-7000-8000-000000000a5b",
       "key": "review.investigate.s091",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000a02",
+      "id": "0195f3a0-0000-7000-8000-000000000a5e",
       "key": "review.investigate.s092",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000a04",
+      "id": "0195f3a0-0000-7000-8000-000000000a61",
       "key": "review.investigate.s093",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000a06",
+      "id": "0195f3a0-0000-7000-8000-000000000a64",
       "key": "review.investigate.s094",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000a08",
+      "id": "0195f3a0-0000-7000-8000-000000000a67",
       "key": "review.investigate.s095",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000a0a",
+      "id": "0195f3a0-0000-7000-8000-000000000a6a",
       "key": "review.investigate.s096",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000938",
-      "key": "review.scope",
-      "reason": null,
-      "required_for_verdict": false,
-      "status": "succeeded"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000a0d",
-      "key": "review.triage.t001",
-      "reason": "no_tool_observations",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000a0f",
-      "key": "review.triage.t002",
-      "reason": "no_tool_observations",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000a11",
-      "key": "review.triage.t003",
-      "reason": "no_tool_observations",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000a13",
-      "key": "review.triage.t004",
-      "reason": "no_tool_observations",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
       "id": "0195f3a0-0000-7000-8000-000000000936",
-      "key": "review.verify",
-      "reason": null,
-      "required_for_verdict": true,
-      "status": "succeeded"
+      "key": "review.leads",
+      "reason": "no_leads",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000093c",
-      "key": "review.verify.s001",
-      "reason": null,
+      "id": "0195f3a0-0000-7000-8000-00000000093d",
+      "key": "review.leads.s001",
+      "reason": "no_leads",
       "required_for_verdict": false,
-      "status": "succeeded"
+      "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000940",
-      "key": "review.verify.s002",
-      "reason": null,
+      "id": "0195f3a0-0000-7000-8000-000000000942",
+      "key": "review.leads.s002",
+      "reason": "no_leads",
       "required_for_verdict": false,
-      "status": "succeeded"
+      "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000944",
-      "key": "review.verify.s003",
-      "reason": null,
+      "id": "0195f3a0-0000-7000-8000-000000000947",
+      "key": "review.leads.s003",
+      "reason": "no_leads",
       "required_for_verdict": false,
-      "status": "succeeded"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000948",
-      "key": "review.verify.s004",
-      "reason": null,
-      "required_for_verdict": false,
-      "status": "succeeded"
+      "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-00000000094c",
-      "key": "review.verify.s005",
-      "reason": null,
-      "required_for_verdict": false,
-      "status": "succeeded"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000950",
-      "key": "review.verify.s006",
-      "reason": null,
-      "required_for_verdict": false,
-      "status": "succeeded"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000954",
-      "key": "review.verify.s007",
-      "reason": null,
-      "required_for_verdict": false,
-      "status": "succeeded"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000958",
-      "key": "review.verify.s008",
-      "reason": null,
-      "required_for_verdict": false,
-      "status": "succeeded"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-00000000095c",
-      "key": "review.verify.s009",
-      "reason": null,
-      "required_for_verdict": false,
-      "status": "succeeded"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-00000000095f",
-      "key": "review.verify.s010",
-      "reason": "no_review_scope",
+      "key": "review.leads.s004",
+      "reason": "no_leads",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000961",
-      "key": "review.verify.s011",
-      "reason": "no_review_scope",
+      "id": "0195f3a0-0000-7000-8000-000000000951",
+      "key": "review.leads.s005",
+      "reason": "no_leads",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000963",
-      "key": "review.verify.s012",
-      "reason": "no_review_scope",
+      "id": "0195f3a0-0000-7000-8000-000000000956",
+      "key": "review.leads.s006",
+      "reason": "no_leads",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000095b",
+      "key": "review.leads.s007",
+      "reason": "no_leads",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000960",
+      "key": "review.leads.s008",
+      "reason": "no_leads",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000965",
-      "key": "review.verify.s013",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000967",
-      "key": "review.verify.s014",
-      "reason": "no_review_scope",
+      "key": "review.leads.s009",
+      "reason": "no_leads",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000969",
-      "key": "review.verify.s015",
+      "key": "review.leads.s010",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000096b",
-      "key": "review.verify.s016",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-00000000096d",
-      "key": "review.verify.s017",
+      "id": "0195f3a0-0000-7000-8000-00000000096c",
+      "key": "review.leads.s011",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-00000000096f",
-      "key": "review.verify.s018",
+      "key": "review.leads.s012",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000971",
-      "key": "review.verify.s019",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000973",
-      "key": "review.verify.s020",
+      "id": "0195f3a0-0000-7000-8000-000000000972",
+      "key": "review.leads.s013",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000975",
-      "key": "review.verify.s021",
+      "key": "review.leads.s014",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000977",
-      "key": "review.verify.s022",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000979",
-      "key": "review.verify.s023",
+      "id": "0195f3a0-0000-7000-8000-000000000978",
+      "key": "review.leads.s015",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-00000000097b",
-      "key": "review.verify.s024",
+      "key": "review.leads.s016",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000097d",
-      "key": "review.verify.s025",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-00000000097f",
-      "key": "review.verify.s026",
+      "id": "0195f3a0-0000-7000-8000-00000000097e",
+      "key": "review.leads.s017",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000981",
-      "key": "review.verify.s027",
+      "key": "review.leads.s018",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000983",
-      "key": "review.verify.s028",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000985",
-      "key": "review.verify.s029",
+      "id": "0195f3a0-0000-7000-8000-000000000984",
+      "key": "review.leads.s019",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000987",
-      "key": "review.verify.s030",
+      "key": "review.leads.s020",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000989",
-      "key": "review.verify.s031",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-00000000098b",
-      "key": "review.verify.s032",
+      "id": "0195f3a0-0000-7000-8000-00000000098a",
+      "key": "review.leads.s021",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-00000000098d",
-      "key": "review.verify.s033",
+      "key": "review.leads.s022",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000098f",
-      "key": "review.verify.s034",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000991",
-      "key": "review.verify.s035",
+      "id": "0195f3a0-0000-7000-8000-000000000990",
+      "key": "review.leads.s023",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000993",
-      "key": "review.verify.s036",
+      "key": "review.leads.s024",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000995",
-      "key": "review.verify.s037",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000997",
-      "key": "review.verify.s038",
+      "id": "0195f3a0-0000-7000-8000-000000000996",
+      "key": "review.leads.s025",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000999",
-      "key": "review.verify.s039",
+      "key": "review.leads.s026",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-00000000099b",
-      "key": "review.verify.s040",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-00000000099d",
-      "key": "review.verify.s041",
+      "id": "0195f3a0-0000-7000-8000-00000000099c",
+      "key": "review.leads.s027",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-00000000099f",
-      "key": "review.verify.s042",
+      "key": "review.leads.s028",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009a1",
-      "key": "review.verify.s043",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009a3",
-      "key": "review.verify.s044",
+      "id": "0195f3a0-0000-7000-8000-0000000009a2",
+      "key": "review.leads.s029",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009a5",
-      "key": "review.verify.s045",
+      "key": "review.leads.s030",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009a7",
-      "key": "review.verify.s046",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009a9",
-      "key": "review.verify.s047",
+      "id": "0195f3a0-0000-7000-8000-0000000009a8",
+      "key": "review.leads.s031",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009ab",
-      "key": "review.verify.s048",
+      "key": "review.leads.s032",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009ad",
-      "key": "review.verify.s049",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009af",
-      "key": "review.verify.s050",
+      "id": "0195f3a0-0000-7000-8000-0000000009ae",
+      "key": "review.leads.s033",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009b1",
-      "key": "review.verify.s051",
+      "key": "review.leads.s034",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009b3",
-      "key": "review.verify.s052",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009b5",
-      "key": "review.verify.s053",
+      "id": "0195f3a0-0000-7000-8000-0000000009b4",
+      "key": "review.leads.s035",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009b7",
-      "key": "review.verify.s054",
+      "key": "review.leads.s036",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009b9",
-      "key": "review.verify.s055",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009bb",
-      "key": "review.verify.s056",
+      "id": "0195f3a0-0000-7000-8000-0000000009ba",
+      "key": "review.leads.s037",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009bd",
-      "key": "review.verify.s057",
+      "key": "review.leads.s038",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009bf",
-      "key": "review.verify.s058",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009c1",
-      "key": "review.verify.s059",
+      "id": "0195f3a0-0000-7000-8000-0000000009c0",
+      "key": "review.leads.s039",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009c3",
-      "key": "review.verify.s060",
+      "key": "review.leads.s040",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009c5",
-      "key": "review.verify.s061",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009c7",
-      "key": "review.verify.s062",
+      "id": "0195f3a0-0000-7000-8000-0000000009c6",
+      "key": "review.leads.s041",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009c9",
-      "key": "review.verify.s063",
+      "key": "review.leads.s042",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009cb",
-      "key": "review.verify.s064",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009cd",
-      "key": "review.verify.s065",
+      "id": "0195f3a0-0000-7000-8000-0000000009cc",
+      "key": "review.leads.s043",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009cf",
-      "key": "review.verify.s066",
+      "key": "review.leads.s044",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009d1",
-      "key": "review.verify.s067",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009d3",
-      "key": "review.verify.s068",
+      "id": "0195f3a0-0000-7000-8000-0000000009d2",
+      "key": "review.leads.s045",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009d5",
-      "key": "review.verify.s069",
+      "key": "review.leads.s046",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009d7",
-      "key": "review.verify.s070",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009d9",
-      "key": "review.verify.s071",
+      "id": "0195f3a0-0000-7000-8000-0000000009d8",
+      "key": "review.leads.s047",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009db",
-      "key": "review.verify.s072",
+      "key": "review.leads.s048",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009dd",
-      "key": "review.verify.s073",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009df",
-      "key": "review.verify.s074",
+      "id": "0195f3a0-0000-7000-8000-0000000009de",
+      "key": "review.leads.s049",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009e1",
-      "key": "review.verify.s075",
+      "key": "review.leads.s050",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009e3",
-      "key": "review.verify.s076",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009e5",
-      "key": "review.verify.s077",
+      "id": "0195f3a0-0000-7000-8000-0000000009e4",
+      "key": "review.leads.s051",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009e7",
-      "key": "review.verify.s078",
+      "key": "review.leads.s052",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009e9",
-      "key": "review.verify.s079",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009eb",
-      "key": "review.verify.s080",
+      "id": "0195f3a0-0000-7000-8000-0000000009ea",
+      "key": "review.leads.s053",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009ed",
-      "key": "review.verify.s081",
+      "key": "review.leads.s054",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009ef",
-      "key": "review.verify.s082",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009f1",
-      "key": "review.verify.s083",
+      "id": "0195f3a0-0000-7000-8000-0000000009f0",
+      "key": "review.leads.s055",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009f3",
-      "key": "review.verify.s084",
+      "key": "review.leads.s056",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009f5",
-      "key": "review.verify.s085",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009f7",
-      "key": "review.verify.s086",
+      "id": "0195f3a0-0000-7000-8000-0000000009f6",
+      "key": "review.leads.s057",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009f9",
-      "key": "review.verify.s087",
+      "key": "review.leads.s058",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-0000000009fb",
-      "key": "review.verify.s088",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-0000000009fd",
-      "key": "review.verify.s089",
+      "id": "0195f3a0-0000-7000-8000-0000000009fc",
+      "key": "review.leads.s059",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-0000000009ff",
-      "key": "review.verify.s090",
+      "key": "review.leads.s060",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000a01",
-      "key": "review.verify.s091",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000a03",
-      "key": "review.verify.s092",
+      "id": "0195f3a0-0000-7000-8000-000000000a02",
+      "key": "review.leads.s061",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000a05",
-      "key": "review.verify.s093",
+      "key": "review.leads.s062",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000a07",
-      "key": "review.verify.s094",
-      "reason": "no_review_scope",
-      "required_for_verdict": false,
-      "status": "skipped_policy"
-    },
-    {
-      "id": "0195f3a0-0000-7000-8000-000000000a09",
-      "key": "review.verify.s095",
+      "id": "0195f3a0-0000-7000-8000-000000000a08",
+      "key": "review.leads.s063",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000a0b",
-      "key": "review.verify.s096",
+      "key": "review.leads.s064",
       "reason": "no_review_scope",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
       "id": "0195f3a0-0000-7000-8000-000000000a0e",
+      "key": "review.leads.s065",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a11",
+      "key": "review.leads.s066",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a14",
+      "key": "review.leads.s067",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a17",
+      "key": "review.leads.s068",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a1a",
+      "key": "review.leads.s069",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a1d",
+      "key": "review.leads.s070",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a20",
+      "key": "review.leads.s071",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a23",
+      "key": "review.leads.s072",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a26",
+      "key": "review.leads.s073",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a29",
+      "key": "review.leads.s074",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a2c",
+      "key": "review.leads.s075",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a2f",
+      "key": "review.leads.s076",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a32",
+      "key": "review.leads.s077",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a35",
+      "key": "review.leads.s078",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a38",
+      "key": "review.leads.s079",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a3b",
+      "key": "review.leads.s080",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a3e",
+      "key": "review.leads.s081",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a41",
+      "key": "review.leads.s082",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a44",
+      "key": "review.leads.s083",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a47",
+      "key": "review.leads.s084",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a4a",
+      "key": "review.leads.s085",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a4d",
+      "key": "review.leads.s086",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a50",
+      "key": "review.leads.s087",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a53",
+      "key": "review.leads.s088",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a56",
+      "key": "review.leads.s089",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a59",
+      "key": "review.leads.s090",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a5c",
+      "key": "review.leads.s091",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a5f",
+      "key": "review.leads.s092",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a62",
+      "key": "review.leads.s093",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a65",
+      "key": "review.leads.s094",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a68",
+      "key": "review.leads.s095",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a6b",
+      "key": "review.leads.s096",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000939",
+      "key": "review.scope",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a6e",
+      "key": "review.triage.t001",
+      "reason": "no_tool_observations",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a70",
+      "key": "review.triage.t002",
+      "reason": "no_tool_observations",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a72",
+      "key": "review.triage.t003",
+      "reason": "no_tool_observations",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a74",
+      "key": "review.triage.t004",
+      "reason": "no_tool_observations",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000937",
+      "key": "review.verify",
+      "reason": null,
+      "required_for_verdict": true,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000093e",
+      "key": "review.verify.s001",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000943",
+      "key": "review.verify.s002",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000948",
+      "key": "review.verify.s003",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000094d",
+      "key": "review.verify.s004",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000952",
+      "key": "review.verify.s005",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000957",
+      "key": "review.verify.s006",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000095c",
+      "key": "review.verify.s007",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000961",
+      "key": "review.verify.s008",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000966",
+      "key": "review.verify.s009",
+      "reason": null,
+      "required_for_verdict": false,
+      "status": "succeeded"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000096a",
+      "key": "review.verify.s010",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000096d",
+      "key": "review.verify.s011",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000970",
+      "key": "review.verify.s012",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000973",
+      "key": "review.verify.s013",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000976",
+      "key": "review.verify.s014",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000979",
+      "key": "review.verify.s015",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000097c",
+      "key": "review.verify.s016",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000097f",
+      "key": "review.verify.s017",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000982",
+      "key": "review.verify.s018",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000985",
+      "key": "review.verify.s019",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000988",
+      "key": "review.verify.s020",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000098b",
+      "key": "review.verify.s021",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000098e",
+      "key": "review.verify.s022",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000991",
+      "key": "review.verify.s023",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000994",
+      "key": "review.verify.s024",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000997",
+      "key": "review.verify.s025",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000099a",
+      "key": "review.verify.s026",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-00000000099d",
+      "key": "review.verify.s027",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009a0",
+      "key": "review.verify.s028",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009a3",
+      "key": "review.verify.s029",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009a6",
+      "key": "review.verify.s030",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009a9",
+      "key": "review.verify.s031",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009ac",
+      "key": "review.verify.s032",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009af",
+      "key": "review.verify.s033",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009b2",
+      "key": "review.verify.s034",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009b5",
+      "key": "review.verify.s035",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009b8",
+      "key": "review.verify.s036",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009bb",
+      "key": "review.verify.s037",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009be",
+      "key": "review.verify.s038",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009c1",
+      "key": "review.verify.s039",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009c4",
+      "key": "review.verify.s040",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009c7",
+      "key": "review.verify.s041",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009ca",
+      "key": "review.verify.s042",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009cd",
+      "key": "review.verify.s043",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009d0",
+      "key": "review.verify.s044",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009d3",
+      "key": "review.verify.s045",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009d6",
+      "key": "review.verify.s046",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009d9",
+      "key": "review.verify.s047",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009dc",
+      "key": "review.verify.s048",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009df",
+      "key": "review.verify.s049",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009e2",
+      "key": "review.verify.s050",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009e5",
+      "key": "review.verify.s051",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009e8",
+      "key": "review.verify.s052",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009eb",
+      "key": "review.verify.s053",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009ee",
+      "key": "review.verify.s054",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009f1",
+      "key": "review.verify.s055",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009f4",
+      "key": "review.verify.s056",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009f7",
+      "key": "review.verify.s057",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009fa",
+      "key": "review.verify.s058",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-0000000009fd",
+      "key": "review.verify.s059",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a00",
+      "key": "review.verify.s060",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a03",
+      "key": "review.verify.s061",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a06",
+      "key": "review.verify.s062",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a09",
+      "key": "review.verify.s063",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a0c",
+      "key": "review.verify.s064",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a0f",
+      "key": "review.verify.s065",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a12",
+      "key": "review.verify.s066",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a15",
+      "key": "review.verify.s067",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a18",
+      "key": "review.verify.s068",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a1b",
+      "key": "review.verify.s069",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a1e",
+      "key": "review.verify.s070",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a21",
+      "key": "review.verify.s071",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a24",
+      "key": "review.verify.s072",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a27",
+      "key": "review.verify.s073",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a2a",
+      "key": "review.verify.s074",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a2d",
+      "key": "review.verify.s075",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a30",
+      "key": "review.verify.s076",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a33",
+      "key": "review.verify.s077",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a36",
+      "key": "review.verify.s078",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a39",
+      "key": "review.verify.s079",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a3c",
+      "key": "review.verify.s080",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a3f",
+      "key": "review.verify.s081",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a42",
+      "key": "review.verify.s082",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a45",
+      "key": "review.verify.s083",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a48",
+      "key": "review.verify.s084",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a4b",
+      "key": "review.verify.s085",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a4e",
+      "key": "review.verify.s086",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a51",
+      "key": "review.verify.s087",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a54",
+      "key": "review.verify.s088",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a57",
+      "key": "review.verify.s089",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a5a",
+      "key": "review.verify.s090",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a5d",
+      "key": "review.verify.s091",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a60",
+      "key": "review.verify.s092",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a63",
+      "key": "review.verify.s093",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a66",
+      "key": "review.verify.s094",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a69",
+      "key": "review.verify.s095",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a6c",
+      "key": "review.verify.s096",
+      "reason": "no_review_scope",
+      "required_for_verdict": false,
+      "status": "skipped_policy"
+    },
+    {
+      "id": "0195f3a0-0000-7000-8000-000000000a6f",
       "key": "review.verify.t001",
       "reason": "no_tool_observations",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000a10",
+      "id": "0195f3a0-0000-7000-8000-000000000a71",
       "key": "review.verify.t002",
       "reason": "no_tool_observations",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000a12",
+      "id": "0195f3a0-0000-7000-8000-000000000a73",
       "key": "review.verify.t003",
       "reason": "no_tool_observations",
       "required_for_verdict": false,
       "status": "skipped_policy"
     },
     {
-      "id": "0195f3a0-0000-7000-8000-000000000a14",
+      "id": "0195f3a0-0000-7000-8000-000000000a75",
       "key": "review.verify.t004",
       "reason": "no_tool_observations",
       "required_for_verdict": false,

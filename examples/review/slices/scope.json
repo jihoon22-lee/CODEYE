@@ -3,7 +3,7 @@
   "kind": "review_scope",
   "pack": {
     "id": "review",
-    "version": "2.10.0"
+    "version": "2.11.0"
   },
   "snapshot_manifest_digest": "5555555555555555555555555555555555555555555555555555555555555555",
   "run_id": "0195f3a0-0000-7000-8000-000000000041",
@@ -56,7 +56,7 @@
     {
       "source": "review.investigate",
       "state": "accepted",
-      "sha256": "8c20064ec281e846c48403d878a92da65bf655a48b099ecfe94a48ce1528732f"
+      "sha256": "19f61643235fd02b7fc6e1014a65ed4c3a9bd11e18a38b9222bc9266741c42cf"
     }
   ],
   "modules": [

@@ -527,7 +527,7 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 	for _, t := range append(append([]AIReviewTask{}, ai.RequiredTasks...), ai.OptionalTasks...) {
 		// The scope and slice tasks are the ledger's rows, the triage slots
 		// the diagnostic triage's, not roles.
-		if t.Key == record.TaskScope || isSliceTask(t.Key) || isTriageTask(t.Key) {
+		if t.Key == record.TaskScope || isSliceTask(t.Key) || isTriageTask(t.Key) || isLeadsSlotTask(t.Key) {
 			continue
 		}
 		if t.Key != "review.environment" && t.Key != "review.documents" && (c.reviewPlanned || t.Result != "not_planned") {
@@ -581,6 +581,7 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 		s.Ledger = c.ledger()
 	}
 	s.DiagnosticTriage = c.diagnosticTriage()
+	s.LeadFollowups = c.leadFollowups()
 	s.CandidatesNotShipped = c.candidatesNotShipped(s.FindingIDs)
 	s.HypothesesNotShipped = countHypothesesNotShipped(c.r.Findings, s.FindingIDs)
 	if c.r.scopeNonShipped {
@@ -591,7 +592,7 @@ func (c sectionContext) codeReview() *CodeReviewSection {
 }
 
 func roleOrder(key string) int {
-	for i, k := range []string{"review.investigate", "review.interpret", "review.verify", record.TaskContract} {
+	for i, k := range []string{"review.investigate", "review.interpret", record.TaskLeads, "review.verify", record.TaskContract} {
 		if k == key {
 			return i
 		}

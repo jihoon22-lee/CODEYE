@@ -265,7 +265,7 @@ func outcome(r executor.Result) string {
 // instruction pack (prompts/review.Roles) and the live probe.
 func ReviewRole(role string) bool {
 	switch role {
-	case "environment", "documents", "investigate", "interpret", "triage", "verify", "contract", "probe":
+	case "environment", "documents", "investigate", "interpret", "leads", "triage", "verify", "contract", "probe":
 		return true
 	}
 	return false

@@ -80,7 +80,9 @@ const (
 	RoleMaxCalls = 3
 )
 
-// Stages in plan order.
+// Stages are the whole-run roles in plan order. The lead follow-up of an
+// investigation (StageLeads, schema 0.9) runs between it and its verify
+// and writes a record only when it calls.
 var Stages = []string{StageEnvironment, StageDocuments, StageInvestigate, StageInterpret, StageVerify}
 
 // PackRef identifies the instruction pack a record was produced with.
@@ -224,6 +226,13 @@ type Record struct {
 	Verifications       []Verification          `json:"verifications,omitempty"`
 	// TriageGroups are the diagnostic groups of a triage record (0.8).
 	TriageGroups []TriageGroup `json:"triage_groups,omitempty"`
+	// LeadLimit is how many leads the investigate request offered
+	// (MaxLeads; absent when it offered none), Leads are the investigation's
+	// leads with their resolution and LeadFollowup what a follow-up sent and
+	// decided (0.9).
+	LeadLimit    int           `json:"lead_limit,omitempty"`
+	Leads        []Lead        `json:"leads,omitempty"`
+	LeadFollowup *LeadFollowup `json:"lead_followup,omitempty"`
 	Limitations  []string      `json:"limitations"`
 	Calls        []Call        `json:"calls"`
 }
@@ -247,6 +256,9 @@ type bounds struct {
 func boundsOf(schema string) bounds {
 	switch schema {
 	case SchemaVersionCitedLines:
+		return bounds{evidence: maxCitedEvidence, observations: maxObservations, lines: MaxSourceBytes, text: MaxProseText, mechanism: MaxMechanismText, listText: MaxProseText,
+			candidates: MaxCandidates, origins: citedOrigins, ids: candidateIDRuleWide}
+	case SchemaVersionLeads:
 		return bounds{evidence: maxCitedEvidence, observations: maxObservations, lines: MaxSourceBytes, text: MaxProseText, mechanism: MaxMechanismText, listText: MaxProseText,
 			candidates: MaxCandidates, origins: citedOrigins, ids: candidateIDRuleWide}
 	case SchemaVersionTriage:
@@ -282,7 +294,8 @@ var (
 		StageDocuments:   {"docs.discover"},
 		StageInvestigate: {"review.environment", "review.documents"},
 		StageInterpret:   {analyzerSource},
-		StageVerify:      {"review.documents", "review.investigate", "review.interpret"},
+		StageLeads:       {"review.investigate"},
+		StageVerify:      {"review.documents", "review.investigate", "review.interpret", TaskLeads},
 	}
 )
 
@@ -394,6 +407,24 @@ func Validate(r Record, want Expect) error {
 		if r.WorkflowReading != nil && (r.Stage != StageInvestigate || !r.Accepted()) {
 			return invalid("workflow reading requires an accepted global investigation")
 		}
+	case SchemaVersionLeads:
+		if (r.Slice != nil) != (want.Slice != "") {
+			return invalid("slice reference")
+		}
+		if r.Slice != nil {
+			if err := checkSlice(r, want); err != nil {
+				return err
+			}
+			if r.ContractProbe != nil || r.WorkflowReading != nil || r.WorkflowSelections != nil {
+				return invalid("whole-run content on a slice")
+			}
+		}
+		if r.Stage == StageLeads && (r.ContractProbe != nil || r.WorkflowReading != nil || r.WorkflowSelections != nil || r.ContractComparisons != nil || r.Strengths != nil) {
+			return invalid("investigation content on a lead follow-up")
+		}
+		if r.WorkflowReading != nil && (r.Stage != StageInvestigate || !r.Accepted()) {
+			return invalid("workflow reading requires an accepted global investigation")
+		}
 	case SchemaVersionTriage:
 		if err := checkTriageSlot(r, want); err != nil {
 			return err
@@ -406,8 +437,8 @@ func Validate(r Record, want Expect) error {
 	}
 	b := boundsOf(r.Schema)
 	switch {
-	case (r.Stage != StageContract && r.Stage != StageTriage && !slices.Contains(Stages, r.Stage)) || (want.Stage != "" && want.Stage != r.Stage) ||
-		(r.Stage == StageTriage && r.Schema != SchemaVersionTriage):
+	case (r.Stage != StageContract && r.Stage != StageTriage && r.Stage != StageLeads && !slices.Contains(Stages, r.Stage)) || (want.Stage != "" && want.Stage != r.Stage) ||
+		(r.Stage == StageTriage && r.Schema != SchemaVersionTriage) || (r.Stage == StageLeads && r.Schema != SchemaVersionLeads):
 		return invalid("stage")
 	case !packID.MatchString(r.Pack.ID) || !version.MatchString(r.Pack.Version):
 		return invalid("pack identity")
@@ -472,6 +503,9 @@ func Validate(r Record, want Expect) error {
 	if err := checkTriage(r, catalog, observations, b); err != nil {
 		return err
 	}
+	if err := checkLeads(r, catalog, r.Snapshot, want.Lookup, b); err != nil {
+		return err
+	}
 	if err := checkInsights(r, catalog, b); err != nil {
 		return err
 	}
@@ -530,7 +564,7 @@ func checkSlice(r Record, want Expect) error {
 	switch {
 	case s == nil || s.Modules == nil:
 		return invalid("slice record without its slice")
-	case r.Stage != StageInvestigate && r.Stage != StageVerify:
+	case r.Stage != StageInvestigate && r.Stage != StageVerify && r.Stage != StageLeads:
 		return invalid("slice stage")
 	case !ValidSliceKey(s.Key) || s.Key != want.Slice:
 		return invalid("slice key")
@@ -561,10 +595,13 @@ func upstreamSources(r Record) []string {
 		}
 		return []string{"review.documents", "review." + StageTriage + "." + r.Slice.Key}
 	}
-	if r.Stage == StageInvestigate {
+	switch r.Stage {
+	case StageInvestigate:
 		return []string{"review.environment", "review.documents", TaskScope}
+	case StageLeads:
+		return []string{"review.investigate." + r.Slice.Key, TaskScope}
 	}
-	return []string{"review.documents", "review.investigate." + r.Slice.Key, TaskScope}
+	return []string{"review.documents", "review.investigate." + r.Slice.Key, TaskScope, LeadsTaskKey(r.Slice.Key)}
 }
 
 // AnalyzerTaskKey reports whether key can name an analyzer task: a valid
@@ -717,6 +754,10 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 		if !empty(notes, docs, len(r.Candidates), len(r.Limits), len(r.Verifications), len(r.Observations)) {
 			return invalid("contract content")
 		}
+	case StageLeads:
+		if !empty(notes, docs, len(r.Limits), len(r.Verifications), len(r.Observations)) || len(r.Candidates) > b.candidates || (failed && len(r.Candidates) != 0) {
+			return invalid("lead follow-up content")
+		}
 	case StageTriage:
 		// A failed record may hold no group: its request could not be built.
 		if !empty(notes, docs, len(r.Limits), len(r.Verifications)) || len(r.Candidates) > b.candidates || (len(r.TriageGroups) == 0 && r.Outcome != OutcomeFailed) {
@@ -783,10 +824,22 @@ func checkStageContent(r Record, catalog map[string]Excerpt, observations map[st
 		if (r.Stage == StageInvestigate || r.Stage == StageInterpret || r.Stage == StageTriage) && c.Origin != r.Stage {
 			return invalid("candidate origin")
 		}
+		if r.Stage == StageLeads && c.Origin != StageInvestigate {
+			return invalid("candidate origin")
+		}
 		if (r.Schema == SchemaVersionTriage) != (c.Origin == StageTriage) {
 			return invalid("candidate origin")
 		}
-		if !candidateTextWithin(c.CandidateText, b) || !refs(c.Evidence, catalog, 6, "code", "test", "document") || !hasKind(c.Evidence, catalog, "code") ||
+		// A refined investigate candidate of a lead follow-up, and the
+		// verify record that checks it, may cite up to MaxRefinedEvidence;
+		// checkLeadFollowup and LeadFollowupMatches bound it to refinements,
+		// and the report takes a verify only with its upstream's candidates
+		// unchanged.
+		cite := MaxCandidateEvidence
+		if (r.Stage == StageLeads || r.Stage == StageVerify) && c.Origin == StageInvestigate {
+			cite = MaxRefinedEvidence
+		}
+		if !candidateTextWithin(c.CandidateText, b) || !refs(c.Evidence, catalog, cite, "code", "test", "document") || !hasKind(c.Evidence, catalog, "code") ||
 			(b.mechanism > 0 && (c.Origin == StageInvestigate || c.Origin == StageInterpret) && r.Stage == c.Origin && c.Mechanism == "") {
 			return invalid("candidate %s", c.ID)
 		}
@@ -870,19 +923,28 @@ func candidateTextWithin(c CandidateText, b bounds) bool {
 // and may narrow one of those further.
 func checkCitedRanges(r Record) error {
 	cited := map[string]bool{}
-	if r.Stage == StageVerify {
+	if r.Stage == StageVerify || r.Stage == StageLeads {
 		for _, c := range r.Candidates {
 			for _, id := range c.Evidence {
 				cited[id] = true
 			}
 		}
 	}
+	// A lead follow-up sends the cited lines of its leads and candidates as
+	// excerpts of their own, as the investigation recorded them: an accepted
+	// record lists what it sent, and a failed one records only what it sent.
+	sent := map[string]bool{}
+	if r.Stage == StageLeads {
+		for _, e := range r.Evidence {
+			sent[e.ID] = r.LeadFollowup == nil || slices.Contains(r.LeadFollowup.Sent, e.ID)
+		}
+	}
 	for _, e := range r.Evidence {
-		if e.Origin != OriginCited || cited[e.ID] {
+		if e.Origin != OriginCited || cited[e.ID] || sent[e.ID] {
 			continue
 		}
 		if !slices.ContainsFunc(r.Evidence, func(x Excerpt) bool {
-			return (x.Origin != OriginCited || cited[x.ID]) && x.ID != e.ID && x.Path == e.Path && x.SHA256 == e.SHA256 && x.Start <= e.Start && e.End <= x.End
+			return (x.Origin != OriginCited || cited[x.ID] || sent[x.ID]) && x.ID != e.ID && x.Path == e.Path && x.SHA256 == e.SHA256 && x.Start <= e.Start && e.End <= x.End
 		}) {
 			return invalid("cited range outside the sent evidence")
 		}
@@ -891,7 +953,7 @@ func checkCitedRanges(r Record) error {
 }
 
 func checkCalls(r Record) error {
-	if len(r.Calls) > RoleMaxCalls || (r.Stage == StageContract && len(r.Calls) > ContractMaxCalls) {
+	if len(r.Calls) > RoleMaxCalls || (r.Stage == StageContract && len(r.Calls) > ContractMaxCalls) || (r.Stage == StageLeads && len(r.Calls) > LeadsMaxCalls) {
 		return invalid("too many calls")
 	}
 	accepted, degraded := false, slices.Contains(r.Limitations, LimOutputDegraded)

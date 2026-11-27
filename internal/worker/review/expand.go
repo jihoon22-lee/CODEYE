@@ -163,14 +163,20 @@ func enclosing(lines []string, at int) window {
 	return w
 }
 
-// expansionCaps bound the excerpts and bytes an expansion adds.
-type expansionCaps struct{ count, bytes int }
+// expansionCaps bound the excerpts and bytes an expansion adds. read, when
+// set, replaces the expansion's own bounded reads: the lead resolver passes
+// its scan, so the reads of one lead share one file and byte limit and skip
+// the files the lead may not read (ok false).
+type expansionCaps struct {
+	count, bytes int
+	read         func(source.Entry) (text string, ok bool, err error)
+}
 
 // expand returns caller/test excerpts for the cited symbols, each bound to
 // the snapshot blob and line range, plus limitation codes, within the caps
 // of the smallest request budget.
 func expand(ctx context.Context, snapshot source.Snapshot, scope domain.Scope, catalog []Excerpt, candidates []CandidateText, withheld, changed map[string]bool) ([]Excerpt, []string, error) {
-	return expandWithin(ctx, snapshot, scope, catalog, candidates, withheld, changed, expansionCaps{maxExpansion, maxExpansionBytes})
+	return expandWithin(ctx, snapshot, scope, catalog, candidates, withheld, changed, expansionCaps{count: maxExpansion, bytes: maxExpansionBytes})
 }
 
 // expandWithin is expand within caps (the request budget's expansion).
@@ -207,15 +213,26 @@ func expandWithin(ctx context.Context, snapshot source.Snapshot, scope domain.Sc
 		if p, cached := parsedFiles[f.Path]; cached {
 			return p, nil
 		}
-		if len(parsedFiles) >= maxScanFiles || scannedBytes+*f.Size > maxScanBytes {
-			overflow = true
-			return nil, nil
-		}
-		scannedBytes += *f.Size
-		parsedFiles[f.Path] = nil
-		b, err := readVerified(root, f)
-		if err != nil {
-			return nil, err
+		var b []byte
+		if caps.read != nil {
+			parsedFiles[f.Path] = nil
+			text, ok, err := caps.read(f)
+			if err != nil || !ok {
+				return nil, err
+			}
+			b = []byte(text)
+		} else {
+			if len(parsedFiles) >= maxScanFiles || scannedBytes+*f.Size > maxScanBytes {
+				overflow = true
+				return nil, nil
+			}
+			scannedBytes += *f.Size
+			parsedFiles[f.Path] = nil
+			read, err := readVerified(root, f)
+			if err != nil {
+				return nil, err
+			}
+			b = read
 		}
 		if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 || record.Sensitive(b) {
 			return nil, nil

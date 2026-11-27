@@ -1,0 +1,262 @@
+{
+  "schema_version": "0.9",
+  "pack": {
+    "id": "review",
+    "version": "2.11.0"
+  },
+  "snapshot_manifest_digest": "4c4c1f1b52d2168d3c26fc150556c86a9e275bd2a2ddf0512b5178549bd871d8",
+  "run_id": "0195f3a0-0000-7000-8000-000000000b01",
+  "attempt_id": "0195f3a0-0000-7000-8000-000000000b02",
+  "stage": "investigate",
+  "slice": {
+    "key": "s001",
+    "modules": [
+      "go:."
+    ]
+  },
+  "outcome": "accepted",
+  "upstream": [
+    {
+      "source": "review.environment",
+      "state": "skipped",
+      "reason": "no_environment_gap"
+    },
+    {
+      "source": "review.documents",
+      "state": "skipped",
+      "reason": "no_documents"
+    },
+    {
+      "source": "review.scope",
+      "state": "accepted",
+      "sha256": "6b8844ad8c08f7fa2cfc458bbdca27d6d71f047932ab574d7486acc79a08dca6"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_742be915c85408ba6a07f843",
+      "path": "p00/f.go",
+      "sha256": "7d7d10e57564a377661b21772406e240e69d435f60c9f2902386007cf9b53c18",
+      "start_line": 1,
+      "end_line": 3,
+      "kind": "code",
+      "origin": "header"
+    },
+    {
+      "id": "ev_f6089b7104cddb8f72e6fbf5",
+      "path": "p00/f.go",
+      "sha256": "7d7d10e57564a377661b21772406e240e69d435f60c9f2902386007cf9b53c18",
+      "start_line": 37,
+      "end_line": 52,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_43da162944bfc677dbc62de4",
+      "path": "p01/f.go",
+      "sha256": "1ef3b6bfcf48fd46b4c9ffa52ea20ee567d1e7989c30040d71ce91d25c166702",
+      "start_line": 1,
+      "end_line": 3,
+      "kind": "code",
+      "origin": "header"
+    },
+    {
+      "id": "ev_15fae9918a3ae93bc5327c09",
+      "path": "p01/f.go",
+      "sha256": "1ef3b6bfcf48fd46b4c9ffa52ea20ee567d1e7989c30040d71ce91d25c166702",
+      "start_line": 37,
+      "end_line": 52,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_474ab750950f75d98acebe61",
+      "path": "p02/f.go",
+      "sha256": "8456c9d24026265f4ba18317298adcd1e9ce10b6fac2173ecfd86f6a617d7fb3",
+      "start_line": 1,
+      "end_line": 3,
+      "kind": "code",
+      "origin": "header"
+    },
+    {
+      "id": "ev_407cea6b97fb569a5697d0d1",
+      "path": "p02/f.go",
+      "sha256": "8456c9d24026265f4ba18317298adcd1e9ce10b6fac2173ecfd86f6a617d7fb3",
+      "start_line": 37,
+      "end_line": 52,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_0be7752a6187d3df88884ad4",
+      "path": "p03/f.go",
+      "sha256": "b2a1e3658c13d8ffb2cf5d4eebe8b359d99411505c32d0086446484d6c04a009",
+      "start_line": 1,
+      "end_line": 3,
+      "kind": "code",
+      "origin": "header"
+    },
+    {
+      "id": "ev_d1cf6ec48388137690c9d3bb",
+      "path": "p03/f.go",
+      "sha256": "b2a1e3658c13d8ffb2cf5d4eebe8b359d99411505c32d0086446484d6c04a009",
+      "start_line": 37,
+      "end_line": 52,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_8440df20fc199d72159f128b",
+      "path": "p08/f.go",
+      "sha256": "28ccd503290d36e2eff4fe42b0ab6242a763ff7d30a5e63e1fe909b9a5a95399",
+      "start_line": 1,
+      "end_line": 3,
+      "kind": "code",
+      "origin": "header"
+    },
+    {
+      "id": "ev_b8c124e3ebc192e8a76fc522",
+      "path": "p08/f.go",
+      "sha256": "28ccd503290d36e2eff4fe42b0ab6242a763ff7d30a5e63e1fe909b9a5a95399",
+      "start_line": 37,
+      "end_line": 52,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_fdcf7659c98a57e00bd27754",
+      "path": "p09/f.go",
+      "sha256": "d771548c065ef5850d5df697f4abd42545d23b93a36edf0be2e5352a52ae61d3",
+      "start_line": 1,
+      "end_line": 3,
+      "kind": "code",
+      "origin": "header"
+    },
+    {
+      "id": "ev_e906be12e3f8e2313c97eb24",
+      "path": "p09/f.go",
+      "sha256": "d771548c065ef5850d5df697f4abd42545d23b93a36edf0be2e5352a52ae61d3",
+      "start_line": 37,
+      "end_line": 52,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_2dea5bffefafaa3394198a27",
+      "path": "p10/f.go",
+      "sha256": "272b8af13e354d9671618813f86d7d24b20cb22c24f7c55d5166f9530a2d6c01",
+      "start_line": 1,
+      "end_line": 3,
+      "kind": "code",
+      "origin": "header"
+    },
+    {
+      "id": "ev_fc4515c4b618790d4cde2d8a",
+      "path": "p10/f.go",
+      "sha256": "272b8af13e354d9671618813f86d7d24b20cb22c24f7c55d5166f9530a2d6c01",
+      "start_line": 37,
+      "end_line": 52,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_ec3208cec7c53fe74fd3c095",
+      "path": "p11/f.go",
+      "sha256": "dc695fcfac08b232e688b791c551aea1540f99253eda29422dbdc610053d6c6f",
+      "start_line": 1,
+      "end_line": 1,
+      "kind": "code",
+      "origin": "header"
+    },
+    {
+      "id": "ev_da7bb9f880f7ae335d65f807",
+      "path": "p11/f.go",
+      "sha256": "dc695fcfac08b232e688b791c551aea1540f99253eda29422dbdc610053d6c6f",
+      "start_line": 35,
+      "end_line": 50,
+      "kind": "code",
+      "origin": "context"
+    },
+    {
+      "id": "ev_52d092ed61aa42665bb8ccd0",
+      "path": "p03/f.go",
+      "sha256": "b2a1e3658c13d8ffb2cf5d4eebe8b359d99411505c32d0086446484d6c04a009",
+      "start_line": 51,
+      "end_line": 51,
+      "kind": "code",
+      "origin": "cited"
+    }
+  ],
+  "observations": [],
+  "candidates": [
+    {
+      "id": "investigate_1",
+      "title": "다음 패키지의 음수 처리에 따라 결과가 달라질 수 있음",
+      "condition": "n이 0보다 큰 호출",
+      "impact": "끝 패키지가 음수를 돌려주면 합계가 줄어든다.",
+      "improvement": "반환값의 범위를 확인한다.",
+      "counterpoint": "다음 패키지가 음수를 돌려주지 않을 수 있다.",
+      "mechanism": "인용한 줄이 다음 패키지 함수의 반환값을 그대로 더한다.",
+      "evidence_ids": [
+        "ev_52d092ed61aa42665bb8ccd0"
+      ],
+      "origin": "investigate"
+    }
+  ],
+  "lead_limit": 3,
+  "leads": [
+    {
+      "id": "lead_1",
+      "need": "definition",
+      "symbol": "F04",
+      "evidence_id": "ev_52d092ed61aa42665bb8ccd0",
+      "suspicion": "다음 패키지 함수가 음수를 돌려주는 조건이 이 요청에 없다.",
+      "candidate_id": "investigate_1",
+      "resolution": "resolved",
+      "targets": [
+        {
+          "id": "ev_bbee5b59f41f44a574bc7b07",
+          "path": "p04/f.go",
+          "sha256": "bba116d96a188772888ce25d04bd0f5cd5eab7b24bb7581968fd7bec7e479719",
+          "start_line": 47,
+          "end_line": 52,
+          "kind": "code",
+          "origin": "context"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "excerpt_only",
+    "files_outside_review_context",
+    "model_input_not_secret_screened",
+    "upstream_documents_skipped",
+    "upstream_environment_skipped"
+  ],
+  "calls": [
+    {
+      "role": "investigate",
+      "model": "fake/scripted",
+      "opencode_version": "1.19.5",
+      "pack_id": "review",
+      "pack_version": "2.11.0",
+      "pack_sha256": "50b3d1082190476fa1d57da08e02c505732d4ee61732a0a217b87a893379d363",
+      "pack_files": [
+        "00-core.md",
+        "domains.md",
+        "investigate.md",
+        "languages/go.md",
+        "pack.yaml"
+      ],
+      "request_sha256": "74338dc3f9af20b47512ccf3be3575da8ebfeb95f925576a150adbdd39681edc",
+      "request_bytes": 25423,
+      "usage": {
+        "input": 10100,
+        "output": 50
+      },
+      "attempt": 1,
+      "outcome": "accepted",
+      "output_errors": []
+    }
+  ]
+}

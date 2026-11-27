@@ -527,6 +527,9 @@ func (v secView) findingCard(f Finding) secCard {
 	add(&c.Lines, "opening.impact", f.Impact, impactRefs)
 	add(&c.Lines, "opening.recommendation", f.Recommendation.Summary, nil)
 	add(&c.Lines, "opening.severity_reason", f.SeverityReason, nil)
+	if x := f.LeadRefinement; x != nil {
+		add(&c.Context, "finding.lead_refinement", leadRefinementText(*x), nil)
+	}
 	for _, x := range f.Conditions {
 		add(&c.Context, "opening.condition."+x.Status, x.Statement, x.EvidenceIDs)
 	}
@@ -545,6 +548,16 @@ func (v secView) findingCard(f Finding) secCard {
 	}
 	add(&c.Context, "opening.disposition", lab(l, "disposition", f.Disposition), nil)
 	return c
+}
+
+// leadRefinementText names the candidate a follow-up refined, its lead and
+// the follow-up task, then the original title unless the export omits it.
+func leadRefinementText(x LeadRefinement) string {
+	text := x.CandidateID + " · " + x.Lead + " · " + x.TaskKey
+	if title := openingText(x.OriginalTitle, ""); title != "" {
+		text += " — " + title
+	}
+	return text
 }
 
 // findingSecondary reports a finding supported only by secondary source.

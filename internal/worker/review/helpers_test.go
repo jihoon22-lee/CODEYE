@@ -280,6 +280,28 @@ func validScript(t *testing.T) map[string]func(int, opencode.Request) opencode.R
 
 // wholeRunRole reports one of the five whole-run role tasks (not
 // review.scope or a slice task).
+// leadsSkip reports a lead follow-up that made no call: its request
+// offered no lead, its investigation named or resolved none, or it ran no
+// slice.
+func leadsSkip(key, status, reason string) bool {
+	_, ok := record.LeadsTask(key)
+	return ok && status == string(domain.TaskSkippedPolicy) &&
+		(domain.LeadsNotRun(reason) || reason == domain.ReasonNoReviewScope || reason == reasonDependency)
+}
+
+// roleSchema is the schema of a role record of this worker: 0.9 for an
+// investigation whose request offered leads, 0.7 for the others.
+func roleSchema(r record.Record) string {
+	if r.Stage == record.StageInvestigate && r.LeadLimit > 0 {
+		return record.SchemaVersionLeads
+	}
+	return record.SchemaVersionCitedLines
+}
+
+func leadsNotRun(key string, r analysis.TaskResult) bool {
+	return leadsSkip(key, string(r.Status), r.Reason)
+}
+
 func wholeRunRole(key string) bool {
 	role, ok := strings.CutPrefix(key, "review.")
 	return ok && slices.Contains(record.Stages, role)
@@ -320,7 +342,7 @@ func readRecord(t *testing.T, j analysis.Job, stage string) record.Record {
 	if strings.Contains(string(b), `"text":`) {
 		t.Fatal("record stores source text")
 	}
-	r, err := record.Decode(b, expectStage(j, stage))
+	r, err := record.Decode(b, expectRecord(j, stage))
 	if err != nil {
 		t.Fatal(stage, err)
 	}

@@ -72,6 +72,11 @@ type limits struct {
 	// candidates bounds the candidates one investigation may return; more
 	// sent source allows more (candidateLimit).
 	candidates int
+	// leadExcerpts and leadBytes bound the resolved excerpts of one
+	// investigation's leads, which its follow-up sends: the verify
+	// expansion's count and bytes, at most three windows for each of the
+	// three leads.
+	leadExcerpts, leadBytes int
 }
 
 // limitsOf derives every bound from b. At MinRequestBytes and
@@ -96,6 +101,8 @@ func (b Budget) limits() limits {
 	scale := max(1, l.source/roleMaxCodeBytes)
 	l.expansion = min(maxExpansion*scale, 24)
 	l.expansionBytes = maxExpansionBytes * scale
+	l.leadExcerpts = min(record.MaxLeads*record.MaxLeadTargets, l.expansion)
+	l.leadBytes = min(l.expansionBytes, record.MaxLeads*record.MaxLeadTargets*maxWindowBytes)
 	// A short paragraph per field: 1200 bytes (360 Korean characters) once
 	// the output allows 16384 tokens, 400 bytes (120 characters) at the
 	// smallest output.

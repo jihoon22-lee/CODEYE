@@ -194,7 +194,7 @@ func TestRequiredRolesFromPlan(t *testing.T) {
 		t.Fatal("the newly eligible design document did not count as exposed")
 	}
 	for _, c := range r.Coverage.ReviewCalls {
-		if c.PackID != "review" || c.PackVersion != "2.10.0" || len(c.PackDigest) != 64 {
+		if c.PackID != "review" || c.PackVersion != "2.11.0" || len(c.PackDigest) != 64 {
 			t.Fatalf("call %+v", c)
 		}
 	}

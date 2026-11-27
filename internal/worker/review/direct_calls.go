@@ -31,6 +31,9 @@ type callBinding struct {
 type callSite struct {
 	module, symbol string
 	line, end      int
+	// local is the name the call uses: the import's binding, which an alias
+	// makes differ from symbol.
+	local string
 }
 
 type callToken struct {
@@ -413,7 +416,7 @@ func importedCalls(tokens []callToken, python bool) []callSite {
 			i != names[0].token && !ambiguous[t.text] && isDirectCall(tokens, i) {
 			close := tokens[i+1].close
 			if !tokenIs(tokens, close+1, "{") {
-				out = append(out, callSite{names[0].module, names[0].symbol, t.line, tokens[close].line})
+				out = append(out, callSite{module: names[0].module, symbol: names[0].symbol, line: t.line, end: tokens[close].line, local: t.text})
 				if len(out) > callMaxSites {
 					return nil
 				}
@@ -506,72 +509,9 @@ func directModule(files map[string]source.Entry, caller, module string, python b
 // including async variants, and refuses declarations that have other uses
 // which might replace their binding.
 func directDefinition(tokens []callToken, symbol string, python bool) (start, end int) {
-	if python && pythonDynamicBindings(tokens) {
+	decl, body, ok := directDeclaration(tokens, symbol, python)
+	if !ok {
 		return 0, 0
-	}
-	name := -1
-	for i, t := range tokens {
-		if !t.name || t.text != symbol {
-			continue
-		}
-		decl := tokenIs(tokens, i-1, "def")
-		if !python {
-			decl = tokenIs(tokens, i-1, "function")
-		}
-		if !decl {
-			if !isDirectCall(tokens, i) {
-				return 0, 0
-			}
-			continue
-		}
-		if name >= 0 || t.depth != 0 {
-			return 0, 0
-		}
-		name = i
-	}
-	if name < 0 || !tokenIs(tokens, name+1, "(") {
-		return 0, 0
-	}
-	decl := name - 1
-	if tokenIs(tokens, decl-1, "async") {
-		decl--
-	}
-	if python {
-		if tokens[decl].column != 0 {
-			return 0, 0
-		}
-		for i := decl - 1; i >= 0; i-- {
-			if tokens[i].depth == 0 && tokens[i].column == 0 {
-				if tokenIs(tokens, i, "@") {
-					return 0, 0
-				}
-				break
-			}
-		}
-	} else {
-		decl--
-		if !tokenIs(tokens, decl, "export") {
-			return 0, 0
-		}
-	}
-	close := tokens[name+1].close
-	body := close + 1
-	if python {
-		// A return annotation can follow the parameter list.
-		for body < len(tokens) && tokens[body].line == tokens[close].line && !tokenIs(tokens, body, ":") {
-			body++
-		}
-		if !tokenIs(tokens, body, ":") {
-			return 0, 0
-		}
-	} else {
-		// Accept a simple return annotation before the opening brace.
-		if tokenIs(tokens, body, ":") && tokenName(tokens, body+1) {
-			body += 2
-		}
-		if !tokenIs(tokens, body, "{") {
-			return 0, 0
-		}
 	}
 	start = tokens[decl].line
 	for i := body + 1; i < len(tokens); i++ {
@@ -607,4 +547,102 @@ func directDefinition(tokens []callToken, symbol string, python bool) (start, en
 		}
 	}
 	return 0, 0
+}
+
+// directDeclarationExtent is the whole declaration directDefinition selects:
+// from its first line to the closing brace, or for Python to the last line
+// before the next module-level statement.
+func directDeclarationExtent(tokens []callToken, symbol string, python bool) (start, end int) {
+	decl, body, ok := directDeclaration(tokens, symbol, python)
+	if !ok {
+		return 0, 0
+	}
+	start = tokens[decl].line
+	if !python {
+		if c := tokens[body].close; c > body {
+			return start, tokens[c].line
+		}
+		return 0, 0
+	}
+	end = tokens[body].endLine
+	for _, t := range tokens[body+1:] {
+		if t.column == 0 && t.depth == 0 {
+			break
+		}
+		end = max(end, t.endLine)
+	}
+	return start, end
+}
+
+// directDeclaration finds the declaration directDefinition accepts: its
+// first token and the token opening its body.
+func directDeclaration(tokens []callToken, symbol string, python bool) (decl, body int, ok bool) {
+	if python && pythonDynamicBindings(tokens) {
+		return 0, 0, false
+	}
+	name := -1
+	for i, t := range tokens {
+		if !t.name || t.text != symbol {
+			continue
+		}
+		decl := tokenIs(tokens, i-1, "def")
+		if !python {
+			decl = tokenIs(tokens, i-1, "function")
+		}
+		if !decl {
+			if !isDirectCall(tokens, i) {
+				return 0, 0, false
+			}
+			continue
+		}
+		if name >= 0 || t.depth != 0 {
+			return 0, 0, false
+		}
+		name = i
+	}
+	if name < 0 || !tokenIs(tokens, name+1, "(") {
+		return 0, 0, false
+	}
+	decl = name - 1
+	if tokenIs(tokens, decl-1, "async") {
+		decl--
+	}
+	if python {
+		if tokens[decl].column != 0 {
+			return 0, 0, false
+		}
+		for i := decl - 1; i >= 0; i-- {
+			if tokens[i].depth == 0 && tokens[i].column == 0 {
+				if tokenIs(tokens, i, "@") {
+					return 0, 0, false
+				}
+				break
+			}
+		}
+	} else {
+		decl--
+		if !tokenIs(tokens, decl, "export") {
+			return 0, 0, false
+		}
+	}
+	close := tokens[name+1].close
+	body = close + 1
+	if python {
+		// A return annotation can follow the parameter list.
+		for body < len(tokens) && tokens[body].line == tokens[close].line && !tokenIs(tokens, body, ":") {
+			body++
+		}
+		if !tokenIs(tokens, body, ":") {
+			return 0, 0, false
+		}
+	} else {
+		// Accept a simple return annotation before the opening brace.
+		if tokenIs(tokens, body, ":") && tokenName(tokens, body+1) {
+			body += 2
+		}
+		if !tokenIs(tokens, body, "{") {
+			return 0, 0, false
+		}
+	}
+	return decl, body, true
 }

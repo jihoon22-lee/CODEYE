@@ -24,6 +24,9 @@
     "fingerprint": {"type": "string", "description": "fp2:<sha256>. 이전 revision의 값은 저장된 형식 그대로 둔다(비교 불가)."},
     "fingerprint_basis": {"$ref": "#/$defs/fingerprintBasis"},
     "disposition_version": {"type": "integer", "minimum": 1, "description": "게시 시점에 적용한 사람 검토 version. disposition이 open이면 없다."},
+    "lead_refinement": {"type": "object", "additionalProperties": false, "required": ["task_key", "candidate_id", "lead", "original_title"],
+      "description": "단서 후속 조사가 고친 조사 후보(생성기 26부터): 후속 조사 task, 고치기 전 조사 후보 ID, 고친 근거가 된 단서, 원래 후보의 제목(모델 서술, 코드 미포함 내보내기에서는 생략 문구). 원래 후보의 글 전체는 후속 조사 기록의 lead_followup.dispositions[].original에 있다.",
+      "properties": {"task_key": {"type": "string", "pattern": "^review\\.leads(\\.s[0-9]{3})?$"}, "candidate_id": {"type": "string", "pattern": "^investigate_[1-9][0-9]*$"}, "lead": {"type": "string", "pattern": "^lead_[1-9]$"}, "original_title": {"type": "string", "minLength": 1}}},
     "recommendation": {"type": "object", "additionalProperties": false, "required": ["summary", "tradeoffs"], "properties": {"summary": {"type": "string", "minLength": 1}, "tradeoffs": {"$ref": "#/$defs/strings"}}},
     "verification": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
     "limitations": {"$ref": "#/$defs/strings"}
@@ -31,7 +34,8 @@
   "allOf": [
     {"if": {"properties": {"validation": {"const": "reproduced"}}, "required": ["validation"]}, "then": {"properties": {"evidence": {"contains": {"properties": {"kind": {"const": "execution"}}, "required": ["kind"]}}}}},
     {"if": {"required": ["fingerprint_basis"]}, "then": {"required": ["fingerprint"], "properties": {"fingerprint": {"pattern": "^fp2:[0-9a-f]{64}$"}}}},
-    {"if": {"required": ["disposition_version"]}, "then": {"required": ["fingerprint_basis"], "properties": {"disposition": {"not": {"const": "open"}}}}}
+    {"if": {"required": ["disposition_version"]}, "then": {"required": ["fingerprint_basis"], "properties": {"disposition": {"not": {"const": "open"}}}}},
+    {"if": {"required": ["lead_refinement"]}, "then": {"properties": {"id": {"pattern": "^review_(s[0-9]{3}_)?investigate_[0-9]+$"}}}}
   ],
   "$defs": {
     "ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},

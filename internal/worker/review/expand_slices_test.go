@@ -42,7 +42,7 @@ func TestVerifyLateGoSliceReceivesCallersAndTests(t *testing.T) {
 	sawCandidate := false
 	script["verify"] = func(n int, q opencode.Request) opencode.Reply {
 		in := decodeAs[verifyInput](t, q)
-		if slices.ContainsFunc(in.Candidates, func(c record.Candidate) bool { return c.Title == title }) {
+		if slices.ContainsFunc(in.Candidates, func(c verifyCandidate) bool { return c.Title == title }) {
 			sawCandidate = true
 			if !slices.ContainsFunc(in.Scope.Excerpts, func(e record.Excerpt) bool {
 				return e.Path == "request.go" && e.Symbol == "Amount" && e.Origin == "caller" && strings.Contains(e.Text, "return Amount(amount)")

@@ -19,6 +19,13 @@ type outputFaults struct {
 	issues    []itemIssue // the repair's items
 	integrity bool        // a required item has a fault the repair alone may resolve
 	lims      []string    // limitations of what the platform resolved
+	rejected  []string    // faults of items left out at once, asking no repair
+}
+
+// reject leaves an optional item out at once: its code is an output error
+// of the call, but it asks no repair (a lead refinement outside its bounds).
+func (f *outputFaults) reject(code string) {
+	f.rejected = addLim(f.rejected, code)
 }
 
 // item adds the faults of a required item (a candidate, a note, a
@@ -48,15 +55,18 @@ func (f *outputFaults) output(code string) {
 // outcome is parse's answer. Before the repair it names every fault and
 // sets repairable when all are of form. After it, the faults of form are
 // resolved (degraded lists them) and only an integrity fault rejects.
+// Items rejected at once (f.rejected) never ask a repair: alone they leave
+// the output accepted with their codes, and beside other faults they are
+// named with them.
 func (s *roleStage) outcome(f *outputFaults) []string {
-	if !s.lastChance {
-		s.repairable = len(f.codes) > 0 && !f.integrity
-		return f.codes
+	if !s.lastChance && len(f.codes) > 0 {
+		s.repairable = !f.integrity
+		return addLim(slices.Clone(f.codes), f.rejected...)
 	}
 	if f.integrity {
-		return f.codes
+		return addLim(slices.Clone(f.codes), f.rejected...)
 	}
-	s.degraded = f.codes
+	s.degraded = addLim(slices.Clone(f.codes), f.rejected...)
 	return nil
 }
 
@@ -76,10 +86,15 @@ type candidateCheck struct {
 // or surplus IDs cut; one with a citation without a usable range, or any
 // other fault of form, is left out with the limitation omitted.
 func (s *roleStage) checkCandidate(c record.CandidateText, list string, index int, reply *citer, mechanism, final bool, omitted string, more func(base []string) []record.FieldProblem) candidateCheck {
+	return s.checkCandidateCiting(c, list, index, reply, mechanism, final, omitted, record.MaxCandidateEvidence, more)
+}
+
+// checkCandidateCiting is checkCandidate with a citation cap of its own.
+func (s *roleStage) checkCandidateCiting(c record.CandidateText, list string, index int, reply *citer, mechanism, final bool, omitted string, cite int, more func(base []string) []record.FieldProblem) candidateCheck {
 	raw := c.Evidence
 	ids, base, citeIssues := reply.resolveIssues(raw, citeNarrow)
 	c.Evidence = ids
-	problems := append(s.candidateProblems(c, reply.catalog(), mechanism), more(base)...)
+	problems := append(s.candidateProblems(c, reply.catalog(), mechanism, cite), more(base)...)
 	r := candidateCheck{text: c}
 	for _, is := range citeIssues {
 		r.codes = addLim(r.codes, is.code)
@@ -93,10 +108,10 @@ func (s *roleStage) checkCandidate(c record.CandidateText, list string, index in
 	if r.keep || !final || !formOnly(r.codes) {
 		return r
 	}
-	ids, lims, errs := reply.degrade(raw, citeNarrow, 6, nil)
+	ids, lims, errs := reply.degrade(raw, citeNarrow, cite, nil)
 	if len(errs) == 0 && !slices.Contains(lims, limCitationUnspecified) {
 		c.Evidence = ids
-		if len(s.candidateProblems(c, reply.catalog(), mechanism))+len(more(base)) == 0 {
+		if len(s.candidateProblems(c, reply.catalog(), mechanism, cite))+len(more(base)) == 0 {
 			r.text, r.keep, r.lims = c, true, lims
 			return r
 		}
@@ -107,8 +122,8 @@ func (s *roleStage) checkCandidate(c record.CandidateText, list string, index in
 
 // candidateProblems are the faults of one candidate's prose and citations
 // with the field each concerns; mechanism says whether the role's contract
-// asks for one.
-func (s *roleStage) candidateProblems(c record.CandidateText, catalog map[string]record.Excerpt, mechanism bool) []record.FieldProblem {
+// asks for one, cite caps the citations.
+func (s *roleStage) candidateProblems(c record.CandidateText, catalog map[string]record.Excerpt, mechanism bool, cite int) []record.FieldProblem {
 	var out []record.FieldProblem
 	add := func(field string, codes ...string) {
 		for _, code := range codes {
@@ -128,7 +143,7 @@ func (s *roleStage) candidateProblems(c record.CandidateText, catalog map[string
 	case c.Mechanism != "":
 		add("mechanism", "item_schema_invalid")
 	}
-	add("evidence_ids", idErrors(c.Evidence, catalog, 6, "code", "test", "document")...)
+	add("evidence_ids", idErrors(c.Evidence, catalog, cite, "code", "test", "document")...)
 	code := false
 	for _, id := range c.Evidence {
 		k := catalog[id].Kind

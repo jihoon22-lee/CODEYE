@@ -801,7 +801,10 @@ type investigateScope struct {
 	WorkflowRoutes  []workflowEvidenceInput `json:"workflow_routes,omitempty"`
 	ContractAnchors []contractAnchorInput   `json:"contract_anchors,omitempty"`
 	RustAPIs        []rustAPILink           `json:"rust_api,omitempty"`
-	Limitations     []string                `json:"limitations"`
+	// LeadLimit is how many leads the output may name; 0 (absent) when
+	// the request offers none (leadsOffered).
+	LeadLimit   int      `json:"lead_limit,omitempty"`
+	Limitations []string `json:"limitations"`
 }
 
 func (scope investigateScope) withExcerpts(list []record.Excerpt, links corpusLinks) investigateScope {
@@ -1040,6 +1043,20 @@ func (s *roleStage) investigate() analysis.TaskResult {
 			contract += investigateProbeContract
 		}
 	}
+	// Leads are offered after fitting, when the code sent leaves files or
+	// lines out and the request still fits with the offer: it never
+	// displaces an excerpt, a document or a note.
+	offered := false
+	if leadsOffered(s.rec.Limitations) {
+		x := in
+		x.Scope.LeadLimit = record.MaxLeads
+		withLeads := contract + fmt.Sprintf(investigateLeadsContract, record.MaxLeads)
+		if body, err := marshal(x); err == nil {
+			if _, ok := s.fits(s.instructions(withLeads), body, true); ok {
+				in, contract, offered = x, withLeads, true
+			}
+		}
+	}
 	s.setEvidence(append(append([]record.Excerpt{}, sent...), docEv...))
 	javaBindings, err := s.javaAPIBindings(docEv)
 	if err != nil {
@@ -1054,6 +1071,8 @@ func (s *roleStage) investigate() analysis.TaskResult {
 	var probe *record.ContractProbe
 	var probeObservation string
 	var cite *citer
+	var leads []record.Lead
+	var leadsOmitted bool
 	parse := func(raw json.RawMessage) []string {
 		issues = nil
 		var out struct {
@@ -1061,6 +1080,7 @@ func (s *roleStage) investigate() analysis.TaskResult {
 			Strengths           []record.Strength           `json:"strengths"`
 			ContractComparisons []record.ContractComparison `json:"contract_comparisons"`
 			ContractProbe       json.RawMessage             `json:"contract_probe"`
+			Leads               []leadOutput                `json:"leads"`
 		}
 		if errs := decodeOutput(raw, &out, "candidates"); errs != nil {
 			return errs
@@ -1068,6 +1088,9 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		var f outputFaults
 		reply := newCiter(s.j.Snapshot.Digest, sent, docEv)
 		var list []record.Candidate
+		// keptAs maps an output candidate's 1-based position to the ID it
+		// was kept with (a lead names its candidate by position).
+		keptAs := map[int]string{}
 		for i, c := range out.Candidates {
 			var schema []record.FieldProblem
 			if c.ID != "" {
@@ -1081,6 +1104,7 @@ func (s *roleStage) investigate() analysis.TaskResult {
 			}
 			if r.keep {
 				r.text.ID = fmt.Sprintf("investigate_%d", len(list)+1)
+				keptAs[i+1] = r.text.ID
 				list = append(list, record.Candidate{CandidateText: r.text, Origin: record.StageInvestigate})
 			}
 		}
@@ -1124,6 +1148,7 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		if len(errs) == 0 {
 			candidates, strengths, comparisons, cite, outputLims = list, supported, kept, reply, f.lims
 			strengthsOmitted = len(supported) != len(out.Strengths)
+			leads, leadsOmitted = s.checkLeads(out.Leads, offered, reply, keptAs)
 			probe, probeObservation = selectContractProbe(out.ContractProbe, navigation, comparisons, in)
 		}
 		return errs
@@ -1146,10 +1171,36 @@ func (s *roleStage) investigate() analysis.TaskResult {
 		for _, x := range comparisons {
 			ids = append(ids, x.CodeEvidenceIDs)
 		}
+		for _, l := range leads {
+			ids = append(ids, []string{l.EvidenceID})
+		}
 		s.rec.Evidence = withCited(s.rec.Evidence, textless(cite.used(ids...)))
 	}
 	if strengthsOmitted {
 		s.rec.Limitations = addLim(s.rec.Limitations, "review_strength_omitted")
+	}
+	if leadsOmitted {
+		s.rec.Limitations = addLim(s.rec.Limitations, limLeadOmitted)
+	}
+	if len(leads) > 0 && cite != nil {
+		// A lead's lines are a narrowed range of a sent excerpt or a short
+		// sent excerpt itself.
+		anchors := catalogOf(sent)
+		for _, l := range leads {
+			for _, x := range cite.used([]string{l.EvidenceID}) {
+				anchors[x.ID] = x
+			}
+		}
+		resolved, err := s.resolveLeads(leads, anchors, sent)
+		if err != nil {
+			return *s.fail(result(domain.TaskCancelled, "cancelled"))
+		}
+		s.rec.Leads = resolved
+	}
+	if offered && cite != nil {
+		// The record keeps the offer, so a follow-up tells an offer the
+		// investigation did not use (no_leads) from none (leads_not_offered).
+		s.rec.Schema, s.rec.LeadLimit = record.SchemaVersionLeads, record.MaxLeads
 	}
 	s.rec.Limitations = addLim(s.rec.Limitations, outputLims...)
 	if probe != nil {

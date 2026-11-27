@@ -74,6 +74,25 @@ requests in flight at once (`peak_in_flight`).
 `--echo-text TEXT` appends an operator-chosen text to every investigate candidate
 title, to see whether a model's own words reach the verify request (the relay's
 `--allow-model-echo` path). The text comes from the operator, never from labels.
+`--leads` (or `--leads=qualified`) makes an investigation with a candidate whose
+request offers leads (`scope.lead_limit`, docs/REVIEW.md#단서-후속-조사) name up to
+that many: one per qualified call (`pkg.Name(`) on a sent code line whose name no
+sent excerpt declares, each for its first candidate. `--leads=project` chooses
+leads the way the lead contract asks a model to: any call on a sent code line,
+qualified or not (`Name(`, `pkg.Name(`, `recv.Name(`), whose name no sent
+excerpt declares, leaving out the builtins, keywords and standard namespaces of
+Go, Java, Python, JS/TS, C/C++ and Rust in a small fixed list (`NOT_PROJECT`),
+constructor calls (`new Name(`), comment lines and calls inside string
+literals (quoted, or backtick and triple-quoted strings across lines),
+up to `lead_limit`, each a `definition` lead of the first candidate. In both
+modes the follow-up (role `leads`) refines that candidate from its first lead
+and adds one candidate from each other lead (basis the lead). A refinement
+keeps every evidence ID of the candidate and adds one citation, the first
+resolved excerpt that is not partial (`partial_evidence_ids`); with no such
+excerpt that lead gets no result. An added candidate cites the lead's
+line and its first resolved excerpt. `--shape-errors` makes a share of the
+results repeat (`lead_result_duplicate`, the repeat is dropped). Without
+`--leads`, or without a candidate, the investigation names no lead.
 
 Stdlib only.
 """
@@ -144,6 +163,160 @@ def _texts(node, out):
 
 
 FUNCTION = re.compile(r"^\d+\| func ([A-Za-z_][A-Za-z0-9_]*)\(", re.M)
+NUMBERED = re.compile(r"^(\d+)\| (.*)$")
+QUALIFIED_CALL = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\(")
+# Qualifiers of common standard-library calls. A snapshot holds no
+# definition for them, so the double names them last.
+STANDARD_QUALIFIERS = frozenset((
+    "atomic", "base64", "binary", "bufio", "bytes", "context", "errors", "exec", "filepath", "flag", "fmt", "fs", "hex",
+    "http", "io", "json", "log", "maps", "math", "os", "path", "rand", "reflect", "regexp", "runtime", "sha256", "slices",
+    "slog", "sort", "strconv", "strings", "sync", "syscall", "time", "unicode", "url", "utf8"))
+DECLARATION = re.compile(r"\bfunc (?:\([^)]*\) )?([A-Za-z_][A-Za-z0-9_]*)\(")
+# --leads=project: every call on a line (an optional qualifier or receiver,
+# then the name), the declarations of the six languages a sent excerpt may
+# hold (Go, Python, Rust and JS functions by keyword; a Java, C/C++ or JS/TS
+# method or function head is a line ending in "{" whose first call-like name
+# is not a keyword, with or without a type before it; a class, struct,
+# interface, enum, trait or type by keyword), comment lines, string
+# literals (quoted on one line, or Go/JS backtick and Python triple-quoted
+# strings across lines, as SQL in a Go raw string), and the names no
+# project holds.
+ANY_CALL = re.compile(r"(?:\b([A-Za-z_][A-Za-z0-9_]*)\s*(?:\.|->|::)\s*)?\b([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+KEYWORD_DECLARATION = re.compile(r"\b(?:func(?:\s*\([^)]*\))?|def|fn|function)\s+([A-Za-z_][A-Za-z0-9_]*)")
+HEAD_DECLARATION = re.compile(r"^\s*(?:[A-Za-z_][\w<>\[\],:*&.?]*\s+)+[*&]*([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)[^;]*\{\s*$")
+# A JS/TS method head has no type before its name; its parameters hold no
+# call, so a call that opens a callback block is not taken for one.
+METHOD_HEAD = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^;()]*\)\s*(?::\s*[^;{}()]*)?\{\s*$")
+TYPE_DECLARATION = re.compile(r"\b(?:class|struct|interface|enum|trait|type|union)\s+([A-Za-z_][A-Za-z0-9_]*)")
+COMMENT = re.compile(r"^\s*(?://|#|/\*|\*|--)")
+QUOTED = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
+FENCE = re.compile(r'"""|\'\'\'|`')
+# A line opening with one of these is a statement, not a declaration head.
+CONTROL = frozenset(("if", "for", "while", "switch", "catch", "return", "else", "do", "try", "case", "defer", "go", "await", "yield",
+                     "throw", "new", "synchronized", "elif", "with", "assert", "match", "loop", "foreach", "using", "lock"))
+NOT_PROJECT = frozenset((
+    # keywords that take parentheses
+    "if", "for", "while", "switch", "catch", "return", "sizeof", "typeof", "alignof", "decltype", "new", "delete", "throw", "match",
+    "await", "yield", "super", "this", "self", "assert", "elif", "not", "and", "or", "in", "lambda", "with", "func", "function", "def", "fn",
+    "defer", "go", "select", "case", "else", "do", "try", "synchronized", "import", "require", "loop", "where", "impl",
+    "const", "var", "type", "void", "static_assert", "noexcept", "alignas", "typeid", "operator", "__attribute__",
+    # Go builtins and conversions
+    "append", "cap", "clear", "close", "complex", "copy", "imag", "len", "make", "max", "min", "panic", "print", "println", "real",
+    "recover", "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "uintptr", "float32", "float64",
+    "complex64", "complex128", "string", "byte", "rune", "bool", "error", "any",
+    # Python builtins
+    "range", "str", "float", "list", "dict", "set", "tuple", "open", "isinstance", "issubclass", "type", "repr", "sorted", "reversed",
+    "enumerate", "zip", "map", "filter", "sum", "abs", "all", "getattr", "setattr", "hasattr", "iter", "next", "id", "hash", "format",
+    "vars", "dir", "round", "divmod", "chr", "ord", "bytes", "bytearray", "object", "property", "staticmethod", "classmethod", "input",
+    # JS/TS builtins
+    "parseInt", "parseFloat", "setTimeout", "setInterval", "clearTimeout", "clearInterval", "isNaN", "isFinite", "fetch", "Number",
+    "String", "Boolean", "Array", "Object", "Error", "Promise", "Symbol", "Map", "Set", "Date", "RegExp", "BigInt",
+    # Java, C/C++ and Rust names a project does not define
+    "equals", "hashCode", "toString", "valueOf", "printf", "fprintf", "sprintf", "snprintf", "puts", "malloc", "calloc", "realloc",
+    "free", "memcpy", "memmove", "memset", "memcmp", "strlen", "strcmp", "strncmp", "strcpy", "strncpy", "exit", "abort", "Some", "Ok",
+    "Err", "Box", "Vec", "Option", "Result", "unwrap", "expect", "clone", "into", "collect", "to_string", "as_str", "push", "iter_mut",
+))
+# Qualifiers of standard or runtime namespaces (and the Go ones above).
+STANDARD_NAMESPACES = STANDARD_QUALIFIERS | frozenset((
+    "console", "Math", "JSON", "Object", "Array", "Promise", "Number", "String", "Reflect", "process", "Buffer", "window", "document",
+    "System", "Integer", "Long", "Double", "Arrays", "Collections", "Objects", "List", "Set", "Map", "Optional", "Stream", "Files",
+    "Paths", "Thread", "sys", "re", "logging", "itertools", "functools", "collections", "subprocess", "shutil", "std", "Vec", "Box"))
+
+
+def _leads(review_input, limit: int) -> list[dict]:
+    """Leads of an investigation that offers them, all for its first
+    candidate: one per qualified call on a sent code line whose name no sent
+    excerpt declares. Calls whose qualifier names a directory of a sent path
+    (a package of the project) come first and calls of standard-library
+    qualifiers last."""
+    scope = review_input.get("scope") if isinstance(review_input, dict) else None
+    excerpts = [e for e in (scope or {}).get("excerpts") or [] if isinstance(e, dict) and e.get("kind") == "code"
+                and isinstance(e.get("id"), str) and isinstance(e.get("text"), str)]
+    declared = {m for e in excerpts for line in e["text"].split("\n") for m in DECLARATION.findall(line)}
+    dirs = {d for e in excerpts if isinstance(e.get("path"), str) for d in e["path"].split("/")[:-1]}
+    calls = []
+    for e in excerpts:
+        for line in e["text"].split("\n"):
+            numbered = NUMBERED.match(line)
+            if not numbered or DECLARATION.search(numbered.group(2)):
+                continue
+            for qualifier, name in QUALIFIED_CALL.findall(numbered.group(2)):
+                if name not in declared:
+                    rank = 0 if qualifier in dirs else 2 if qualifier in STANDARD_QUALIFIERS else 1
+                    calls.append((rank, name, f"{e['id']}:{numbered.group(1)}-{numbered.group(1)}"))
+    out: list[dict] = []
+    for _, name, ref in sorted(calls, key=lambda c: c[0]):
+        if len(out) == limit:
+            break
+        if not any(x["symbol"] == name for x in out):
+            out.append({"need": "definition", "evidence_id": ref, "symbol": name, "suspicion": TEXT, "candidate": 1})
+    return out
+
+
+def _code_lines(text: str):
+    """(line number, code) for the numbered lines of an excerpt, comment
+    lines left out and string literals blanked: quoted strings on a line,
+    and backtick and triple-quoted strings that span lines."""
+    fence = None
+    for line in text.split("\n"):
+        numbered = NUMBERED.match(line)
+        if not numbered:
+            continue
+        body, code = numbered.group(2), ""
+        if not fence and COMMENT.match(body):
+            continue
+        while body:
+            if fence:
+                end = body.find(fence)
+                if end < 0:
+                    break
+                body, fence, code = body[end + len(fence):], None, code + '""'
+                continue
+            m = FENCE.search(body)
+            if not m:
+                code += body
+                break
+            code, fence, body = code + body[:m.start()], m.group(0), body[m.end():]
+        yield numbered.group(1), QUOTED.sub('""', code)
+
+
+def _project_leads(review_input, limit: int) -> list[dict]:
+    """Leads of --leads=project, all for the first candidate: one per call
+    on a sent code line, qualified or not, whose name no sent excerpt
+    declares and that is no builtin, keyword or standard namespace call.
+    Calls whose qualifier names a directory of a sent path come first, then
+    unqualified calls, then calls on another receiver."""
+    scope = review_input.get("scope") if isinstance(review_input, dict) else None
+    excerpts = [e for e in (scope or {}).get("excerpts") or [] if isinstance(e, dict) and e.get("kind") == "code"
+                and isinstance(e.get("id"), str) and isinstance(e.get("text"), str)]
+    declared = set()
+    for e in excerpts:
+        for line in e["text"].split("\n"):
+            numbered = NUMBERED.match(line)
+            body = numbered.group(2) if numbered else line
+            declared.update(KEYWORD_DECLARATION.findall(body))
+            declared.update(TYPE_DECLARATION.findall(body))
+            head = HEAD_DECLARATION.match(body) or METHOD_HEAD.match(body)
+            if head and body.split()[0] not in CONTROL and head.group(1) not in CONTROL:
+                declared.add(head.group(1))
+    dirs = {d for e in excerpts if isinstance(e.get("path"), str) for d in e["path"].split("/")[:-1]}
+    calls = []
+    for e in excerpts:
+        for number, body in _code_lines(e["text"]):
+            for m in ANY_CALL.finditer(body):
+                qualifier, name = m.group(1) or "", m.group(2)
+                # A constructor call, new Name(), names a type, not a function.
+                if name in declared or name in NOT_PROJECT or qualifier in STANDARD_NAMESPACES or re.search(r"\bnew\s+$", body[:m.start()]):
+                    continue
+                rank = 1 if not qualifier else 0 if qualifier in dirs else 2
+                calls.append((rank, name, f"{e['id']}:{number}-{number}"))
+    out: list[dict] = []
+    for _, name, ref in sorted(calls, key=lambda c: c[0]):
+        if len(out) == limit:
+            break
+        if not any(x["symbol"] == name for x in out):
+            out.append({"need": "definition", "evidence_id": ref, "symbol": name, "suspicion": TEXT, "candidate": 1})
+    return out
 
 
 def _candidates(node, out):
@@ -259,7 +432,9 @@ def _comparisons(data: dict) -> list[dict]:
     return out
 
 
-def result_for(role: str, review_input, echo: str | None = None, shape: float = 0.0, integrity: float = 0.0) -> dict:
+def result_for(role: str, review_input, echo: str | None = None, shape: float = 0.0, integrity: float = 0.0, leads: bool | str = False) -> dict:
+    """The double's answer to one role request. leads is the --leads mode:
+    "qualified" (or True), "project", or off (False, None, "")."""
     evidence: dict[str, str] = {}
     cited: dict[str, str] = {}
     classes: dict[str, str] = {}
@@ -284,7 +459,52 @@ def result_for(role: str, review_input, echo: str | None = None, shape: float = 
             comparisons = _comparisons(data)
             if comparisons:
                 out["contract_comparisons"] = comparisons
+        limit = data["scope"].get("lead_limit") if isinstance(data.get("scope"), dict) else None
+        if leads and isinstance(limit, int) and limit > 0 and out["candidates"]:
+            named = _project_leads(data, limit) if leads == "project" else _leads(data, limit)
+            if named:
+                out["leads"] = named
         return out
+    if role == "leads":
+        data = review_input if isinstance(review_input, dict) else {}
+        results, bases = [], set()
+        originals = {c["id"]: [i for i in c.get("evidence_ids") or [] if isinstance(i, str)]
+                     for c in data.get("candidates") or [] if isinstance(c, dict) and isinstance(c.get("id"), str)}
+        for lead in data.get("leads") or []:
+            if not isinstance(lead, dict) or not isinstance(lead.get("id"), str) or not isinstance(lead.get("evidence_id"), str):
+                continue
+            # The first lead of a candidate refines it; any other lead adds.
+            basis = lead.get("candidate_id")
+            if not isinstance(basis, str) or basis in bases:
+                basis = lead["id"]
+            ids = [i for i in lead.get("resolved_evidence_ids") or [] if isinstance(i, str)]
+            partial = set(i for i in lead.get("partial_evidence_ids") or [] if isinstance(i, str))
+            if basis in bases or not ids:
+                continue
+            line = cited.get(lead["evidence_id"], lead["evidence_id"])
+            if basis == lead["id"]:
+                evidence = [line, cited.get(ids[0], ids[0])]
+            else:
+                # A refinement keeps the candidate's citations and adds one
+                # line of a whole resolved excerpt; without one this lead gets
+                # no result.
+                whole = [i for i in ids if i not in partial]
+                if not whole:
+                    continue
+                kept = originals.get(basis, [])
+                new = cited.get(whole[0], whole[0])
+                if new in kept:
+                    continue
+                evidence = kept + [new]
+            # The basis is used once a result is emitted: a candidate whose
+            # first lead gave none is refined from its next.
+            bases.add(basis)
+            result = dict(candidate, title="Placeholder candidate after a lead (dry run)", basis=basis,
+                          disposition="added" if basis == lead["id"] else "refined", evidence_ids=evidence)
+            results.append(result)
+            if _pick(shape, role, review_input, basis):
+                results.append(dict(result))  # lead_result_duplicate
+        return {"results": results}
     if role == "verify":
         found: list[tuple[str, list[str]]] = []
         _candidates(review_input, found)
@@ -384,7 +604,7 @@ def content_text(content) -> str:
     return ""
 
 
-def reply_text(payload: dict, echo: str | None = None, shape: float = 0.0, integrity: float = 0.0) -> tuple[str, str]:
+def reply_text(payload: dict, echo: str | None = None, shape: float = 0.0, integrity: float = 0.0, leads: bool | str = False) -> tuple[str, str]:
     """Return (role, assistant text) for a Responses payload."""
     texts = [content_text(m.get("content", "")) for m in payload.get("input", [])
              if isinstance(m, dict) and m.get("role") == "user"]
@@ -401,7 +621,7 @@ def reply_text(payload: dict, echo: str | None = None, shape: float = 0.0, integ
     head = prompt[:found.start()] if found else prompt  # the attachment precedes the prompt
     proofs = PROOF.findall(head)
     proof = proofs[-1] if proofs else ""
-    return role, json.dumps({"workspace_proof": proof, "result": result_for(role, review_input, echo, shape, integrity)},
+    return role, json.dumps({"workspace_proof": proof, "result": result_for(role, review_input, echo, shape, integrity, leads)},
                             ensure_ascii=False)
 
 
@@ -421,8 +641,9 @@ def request_delay(payload: dict, delay: float, jitter: float, seed: int) -> floa
 
 class FakeUpstream:
     def __init__(self, mode: str, dump: Path | None, echo: str | None = None, delay: float = 0.0,
-                 shape: float = 0.0, integrity: float = 0.0, jitter: float = 0.0, seed: int = 0):
+                 shape: float = 0.0, integrity: float = 0.0, jitter: float = 0.0, seed: int = 0, leads: bool | str = False):
         self.mode = mode
+        self.leads = leads
         self.shape = shape
         self.integrity = integrity
         self.delay = delay
@@ -457,7 +678,7 @@ class FakeUpstream:
             return 500, {"error": {"message": "fake failure", "type": "server_error", "code": "fake_failure"}}
         if self.mode == "unauthorized":
             return 401, {"error": {"message": "fake: invalid api key", "type": "invalid_request_error", "code": "invalid_api_key"}}
-        role, text = reply_text(payload, self.echo, self.shape, self.integrity)
+        role, text = reply_text(payload, self.echo, self.shape, self.integrity, self.leads)
         messages = payload.get("input", [])
         input_bytes = sum(len(content_text(m.get("content", "")).encode()) for m in messages if isinstance(m, dict))
         cap = int(payload.get("max_output_tokens") or 1)
@@ -538,6 +759,9 @@ def main(argv=None) -> int:
     parser.add_argument("--mode", choices=("normal", "expensive", "fail", "unauthorized"), default="normal")
     parser.add_argument("--dump", type=Path, help="write every received payload here (dry-run analysis only)")
     parser.add_argument("--echo-text", help="append this operator text to investigate candidate titles")
+    parser.add_argument("--leads", nargs="?", const="qualified", choices=("qualified", "project"), default=None, metavar="MODE",
+                        help="name leads when an investigation offers them and answer their follow-up: qualified (the default "
+                             "of a bare --leads) names qualified calls only, project any undeclared project call")
     parser.add_argument("--delay-seconds", type=float, default=0.0, help="answer every request this many seconds late")
     parser.add_argument("--delay-jitter", type=float, default=0.0, metavar="SECONDS",
                         help="add a seeded delay between 0 and SECONDS per request (see --seed)")
@@ -564,7 +788,7 @@ def main(argv=None) -> int:
         print("--shape-errors and --integrity-errors are between 0 and 1", file=sys.stderr)
         return 2
     fake = FakeUpstream(args.mode, args.dump, args.echo_text, args.delay_seconds, args.shape_errors, args.integrity_errors,
-                        args.delay_jitter, args.seed)
+                        args.delay_jitter, args.seed, args.leads)
     server = make_server(fake)
     if args.tls_cert is not None:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

@@ -15,42 +15,9 @@ import (
 )
 
 func TestAcceptedWorkflowReadingRetainsSubmittedContextWithoutModelCitations(t *testing.T) {
-	const statement = "목록에서 책장을 비운 뒤 같은 항목을 조회하면 비어 있음을 안내한다."
 	j := dirJob(t, workflowReadingFixture)
 	j.Snapshot.Digest, j.RunID, j.AttemptID = exampleSnapshot, exampleRun, exampleAttempt
-	caller := &scriptedCaller{script: map[string]func(int, opencode.Request) opencode.Reply{
-		"documents": func(_ int, q opencode.Request) opencode.Reply {
-			in := decodeAs[docsInput](t, q)
-			var selected string
-			for _, r := range in.WorkflowRoutes {
-				if r.Method == "GET" && r.Path == "/browse/{label}" {
-					selected = r.ID
-				}
-			}
-			if selected == "" || len(in.Documents) == 0 || !strings.Contains(in.Documents[0].Text, statement) {
-				t.Fatalf("missing read route or contract: %+v", in)
-			}
-			out := docsOutput{Contracts: []record.Contract{{Statement: statement, AppliesTo: "archive", EvidenceIDs: []string{in.Documents[0].EvidenceID}}},
-				Conflicts: []record.Conflict{}, Questions: []record.Question{}, InstructionNotes: []record.InstructionNote{}}
-			out.WorkflowSelections, _ = json.Marshal([]workflowChoice{{ContractIndex: 1, RouteIDs: []string{selected}}})
-			return asJSON(out)
-		},
-		"investigate": func(_ int, q opencode.Request) opencode.Reply {
-			in := decodeAs[investigateInput](t, q)
-			if !in.Scope.WholeRun {
-				return asJSON(map[string]any{"candidates": []any{}})
-			}
-			if len(in.Scope.WorkflowRoutes) != 1 || in.Scope.WorkflowRoutes[0].Test == "" ||
-				in.Scope.WorkflowRoutes[0].Handler == "" || in.Scope.WorkflowRoutes[0].RelatedMutation == nil ||
-				in.Scope.WorkflowRoutes[0].RelatedMutation.Handler == "" {
-				t.Fatalf("request lacks submitted reading: %+v", in.Scope.WorkflowRoutes)
-			}
-			return asJSON(map[string]any{"candidates": []any{}, "contract_comparisons": []record.ContractComparison{{
-				ContractIndex: 1, AppliesTo: "archive", Status: "unknown", Reason: "빈 결과에 오류 응답을 내는 조회 처리기를 확인했다.",
-				DocumentEvidenceIDs: in.Documents.Contracts[0].EvidenceIDs, CodeEvidenceIDs: []string{in.Scope.WorkflowRoutes[0].Handler},
-			}}})
-		},
-	}}
+	caller := workflowReadingCaller(t)
 	_, results := runRole(t, j, vetStub{}, caller, "1.27.4")
 	for _, stage := range []string{record.StageDocuments, record.StageInvestigate} {
 		if res := results["review."+stage]; res.Status != domain.TaskSucceeded {
@@ -60,7 +27,7 @@ func TestAcceptedWorkflowReadingRetainsSubmittedContextWithoutModelCitations(t *
 	doc := readRecord(t, j, record.StageDocuments)
 	inv := readRecord(t, j, record.StageInvestigate)
 	reading := inv.WorkflowReading
-	if inv.Schema != record.SchemaVersionCitedLines || reading == nil || !inv.WorkflowReadingMatches(doc) ||
+	if inv.Schema != roleSchema(inv) || reading == nil || !inv.WorkflowReadingMatches(doc) ||
 		len(inv.ContractComparisons) != 1 || inv.ContractComparisons[0].Status != "unknown" ||
 		!slices.Equal(inv.ContractComparisons[0].CodeEvidenceIDs, []string{reading.ReadEvidenceID}) ||
 		len(inv.WorkflowReadingEvidence()) != 3 || slices.ContainsFunc(inv.CitedEvidence(), func(e record.Excerpt) bool {
@@ -112,4 +79,44 @@ func TestAcceptedWorkflowReadingRetainsSubmittedContextWithoutModelCitations(t *
 			compareStoredExample(t, p, pretty.Bytes())
 		}
 	}
+}
+
+// workflowReadingCaller answers the documents role with the fixture's
+// contract and its read route, and the overview with a comparison citing
+// the submitted read handler.
+func workflowReadingCaller(t *testing.T) *scriptedCaller {
+	const statement = "목록에서 책장을 비운 뒤 같은 항목을 조회하면 비어 있음을 안내한다."
+	return &scriptedCaller{script: map[string]func(int, opencode.Request) opencode.Reply{
+		"documents": func(_ int, q opencode.Request) opencode.Reply {
+			in := decodeAs[docsInput](t, q)
+			var selected string
+			for _, r := range in.WorkflowRoutes {
+				if r.Method == "GET" && r.Path == "/browse/{label}" {
+					selected = r.ID
+				}
+			}
+			if selected == "" || len(in.Documents) == 0 || !strings.Contains(in.Documents[0].Text, statement) {
+				t.Fatalf("missing read route or contract: %+v", in)
+			}
+			out := docsOutput{Contracts: []record.Contract{{Statement: statement, AppliesTo: "archive", EvidenceIDs: []string{in.Documents[0].EvidenceID}}},
+				Conflicts: []record.Conflict{}, Questions: []record.Question{}, InstructionNotes: []record.InstructionNote{}}
+			out.WorkflowSelections, _ = json.Marshal([]workflowChoice{{ContractIndex: 1, RouteIDs: []string{selected}}})
+			return asJSON(out)
+		},
+		"investigate": func(_ int, q opencode.Request) opencode.Reply {
+			in := decodeAs[investigateInput](t, q)
+			if !in.Scope.WholeRun {
+				return asJSON(map[string]any{"candidates": []any{}})
+			}
+			if len(in.Scope.WorkflowRoutes) != 1 || in.Scope.WorkflowRoutes[0].Test == "" ||
+				in.Scope.WorkflowRoutes[0].Handler == "" || in.Scope.WorkflowRoutes[0].RelatedMutation == nil ||
+				in.Scope.WorkflowRoutes[0].RelatedMutation.Handler == "" {
+				t.Fatalf("request lacks submitted reading: %+v", in.Scope.WorkflowRoutes)
+			}
+			return asJSON(map[string]any{"candidates": []any{}, "contract_comparisons": []record.ContractComparison{{
+				ContractIndex: 1, AppliesTo: "archive", Status: "unknown", Reason: "빈 결과에 오류 응답을 내는 조회 처리기를 확인했다.",
+				DocumentEvidenceIDs: in.Documents.Contracts[0].EvidenceIDs, CodeEvidenceIDs: []string{in.Scope.WorkflowRoutes[0].Handler},
+			}}})
+		},
+	}}
 }

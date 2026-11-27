@@ -238,7 +238,7 @@ func TestVerifyFollowsImportedGoCallFromCandidate(t *testing.T) {
 	seen := false
 	script[record.StageVerify] = func(n int, q opencode.Request) opencode.Reply {
 		in := decodeAs[verifyInput](t, q)
-		if slices.ContainsFunc(in.Candidates, func(c record.Candidate) bool { return c.Title == title }) {
+		if slices.ContainsFunc(in.Candidates, func(c verifyCandidate) bool { return c.Title == title }) {
 			seen = true
 			line := evidenceLine(t, p.tree[p.caller], p.call)
 			if !slices.ContainsFunc(in.Scope.Excerpts, func(e record.Excerpt) bool {

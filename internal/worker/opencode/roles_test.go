@@ -16,6 +16,11 @@ func TestEveryPackRoleIsAReviewRole(t *testing.T) {
 			t.Errorf("pack role %q is refused", role)
 		}
 	}
+	// The lead follow-up (docs/REVIEW.md#단서-후속-조사) is a pack role the
+	// adapter must take; it once refused it with invalid_review_role.
+	if !ReviewRole("leads") {
+		t.Error("lead follow-up role is refused")
+	}
 	for _, role := range []string{"", "scope", "Triage", "review.triage"} {
 		if ReviewRole(role) {
 			t.Errorf("role %q is accepted", role)

@@ -690,6 +690,12 @@ func TestReportExample(t *testing.T) {
 		len(r.CodeReview.Strengths) != 1 || len(r.CodeReview.Evidence) != 1 || r.CodeReview.Evidence[0].Excerpt == nil {
 		t.Fatalf("report insight sections were not carried through")
 	}
+	// The overview was offered leads: the comparisons, the strength and the
+	// diagnostic triage come from its 0.9 record.
+	requireLeadsRecords(t, r, "review.investigate")
+	if r.CodeReview.DiagnosticTriage == nil {
+		t.Fatal("the diagnostic triage was not carried through")
+	}
 	// The stored example is marked demo: Marshal accepts product reports
 	// only, so the flag is set on the canonical bytes.
 	raw, err := report.Marshal(r)
@@ -739,7 +745,7 @@ func checkReportExample(t *testing.T, r report.Report, plan []analysis.TaskSpec,
 		t.Fatalf("ai review %+v (tasks %v)", ai, rows)
 	}
 	for _, x := range append(append([]report.AIReviewTask{}, ai.RequiredTasks...), ai.OptionalTasks...) {
-		if x.Result == "skipped" && x.Reason != nil && *x.Reason == domain.ReasonNoReviewScope {
+		if x.Result == "skipped" && x.Reason != nil && (*x.Reason == domain.ReasonNoReviewScope || leadsSkip(x.Key, deref(x.TaskStatus), *x.Reason)) {
 			continue
 		}
 		if x.Result != "accepted" {

@@ -111,7 +111,8 @@ func TestDiscoveryTasksThroughTheWorker(t *testing.T) {
 		if task.Reason != nil {
 			r = *task.Reason
 		}
-		if _, _, slice := record.SliceTask(task.Key); slice {
+		_, _, slice := record.SliceTask(task.Key)
+		if leadSlot, ok := record.LeadsTask(task.Key); slice || ok && leadSlot != "" {
 			if task.Status != "skipped_policy" || r != "model_source_not_approved" {
 				t.Fatalf("slice reused an unapproved source: %+v", task)
 			}
@@ -123,7 +124,7 @@ func TestDiscoveryTasksThroughTheWorker(t *testing.T) {
 		{"env.discover", "succeeded", ""}, {"docs.discover", "succeeded", ""},
 		{"go-vet", "succeeded", ""}, {"go-vet.m01", "succeeded", ""}, {"go-vet.m02", "failed", govet.ReasonToolchain},
 		{"review.environment", "skipped_policy", "model_source_not_approved"}, {"review.documents", "skipped_policy", "model_source_not_approved"}, {"review.investigate", "skipped_policy", "model_source_not_approved"},
-		{"review.interpret", "skipped_policy", "model_source_not_approved"}, {"review.verify", "skipped_policy", "model_source_not_approved"},
+		{"review.interpret", "skipped_policy", "model_source_not_approved"}, {"review.leads", "skipped_policy", "model_source_not_approved"}, {"review.verify", "skipped_policy", "model_source_not_approved"},
 		{"review.scope", "skipped_policy", "model_source_not_approved"},
 		{"review.triage.t001", "skipped_policy", "model_source_not_approved"}, {"review.verify.t001", "skipped_policy", "model_source_not_approved"},
 		{"review.triage.t002", "skipped_policy", "model_source_not_approved"}, {"review.verify.t002", "skipped_policy", "model_source_not_approved"},

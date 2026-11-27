@@ -194,6 +194,8 @@ export type Sections = {
     ledger: Ledger | null;
     // The diagnostic triage (builder 22), null when no triage slot was planned.
     triage: DiagnosticTriage | null;
+    // The lead follow-ups (builder 26), null when none was planned.
+    leadFollowups: LeadFollowups | null;
     // Investigation candidates left out of the findings because all their
     // evidence is on paths that are not shipped code (builder 24; 0 otherwise).
     candidatesNotShipped: number;
@@ -278,6 +280,50 @@ export type DiagnosticTriage = {
 };
 
 const TRIAGE_BUCKETS: Record<string, string[]> = { problem: ['attention', 'refuted'], harmless: ['harmless'], unclear: ['attention'] };
+
+// LeadFollowups counts the leads the investigations left and their follow-up
+// tasks (docs/REPORT.md#단서-후속-조사). Every count comes from the review
+// records, the task rows and the call records, none from model text.
+export type LeadFollowups = {
+  asked: number;
+  resolved: number;
+  unresolved: Record<string, number>;
+  planned: number;
+  run: number;
+  accepted: number;
+  notRun: Record<string, number>;
+  calls: number;
+  newExcerpts: number;
+  newLines: number;
+  dispositions: Record<string, number>;
+};
+
+const LEAD_DISPOSITIONS = ['kept', 'refined', 'contested', 'added'];
+const LEADS_TASK = /^review\.leads(\.s[0-9]{3})?$/;
+
+function parseLeadFollowups(v: unknown): LeadFollowups | null {
+  if (v == null) return null;
+  const x = object(v);
+  return {
+    asked: count(x.leads_asked), resolved: count(x.leads_resolved), unresolved: counts(x.leads_unresolved),
+    planned: count(x.tasks_planned), run: count(x.tasks_run), accepted: count(x.tasks_accepted), notRun: counts(x.tasks_not_run),
+    calls: count(x.calls), newExcerpts: count(x.new_excerpts), newLines: count(x.new_lines), dispositions: counts(x.dispositions),
+  };
+}
+
+// validateLeadFollowups checks the counts against the report: builder 26 on,
+// the planned tasks are the follow-up task rows, a run task is one with a
+// call, the others are counted by reason, and the lead counts add up.
+function validateLeadFollowups(r: Record<string, unknown>, l: LeadFollowups) {
+  const sum = (m: Record<string, number>) => Object.values(m).reduce((a, n) => a + n, 0);
+  const tasks = array(r.tasks, object).filter(t => LEADS_TASK.test(str(t.key)));
+  const calls = array(object(r.coverage).review_calls ?? [], object).filter(c => typeof c.task_key === 'string' && LEADS_TASK.test(c.task_key));
+  const run = tasks.filter(t => calls.some(c => c.task_key === t.key)).length;
+  if (Number(str(object(r.builder).version)) < 26 || tasks.length === 0 || l.planned !== tasks.length || l.run !== run ||
+    l.run + sum(l.notRun) !== l.planned || l.accepted > l.run || l.calls !== calls.length ||
+    l.asked !== l.resolved + sum(l.unresolved) || Object.keys(l.dispositions).some(d => !LEAD_DISPOSITIONS.includes(d)) ||
+    (l.newExcerpts === 0 && l.newLines !== 0) || (l.accepted === 0 && (l.newExcerpts !== 0 || sum(l.dispositions) !== 0))) invalid();
+}
 
 function parseTriage(v: unknown): DiagnosticTriage | null {
   if (v == null) return null;
@@ -747,6 +793,7 @@ export function parseSections(
       }),
       ledger: parseLedger(cr.ledger),
       triage: parseTriage(cr.diagnostic_triage),
+      leadFollowups: parseLeadFollowups(cr.lead_followups),
       candidatesNotShipped: cr.candidates_not_shipped === undefined ? 0 : count(cr.candidates_not_shipped),
       hypothesesNotShipped: cr.hypotheses_not_shipped === undefined ? 0 : count(cr.hypotheses_not_shipped),
     },
@@ -773,6 +820,7 @@ export function parseSections(
   if (out.codeReview.candidatesNotShipped > 0 && Number(str(object(r.builder).version)) < 24) invalid();
   if (out.codeReview.hypothesesNotShipped > 0 && Number(str(object(r.builder).version)) < 25) invalid();
   if (out.codeReview.triage) validateTriage(out.codeReview.triage, Number(str(object(r.builder).version)), observationIDs, out.codeReview.findings);
+  if (out.codeReview.leadFollowups) validateLeadFollowups(r, out.codeReview.leadFollowups);
   const ledger = out.codeReview.ledger;
   if (ledger?.extended && Number(str(object(r.builder).version)) < 16) invalid();
   if (ledger?.files !== null && ledger?.files !== undefined) {
@@ -815,7 +863,7 @@ function checkRelatedWorkflow(r: Record<string, unknown>, documents: Sections['d
     !array(object(r.code_review).roles, object).some(role =>
       role.key === key && role.result === 'accepted' && role.task_status === 'succeeded') ||
     !array(r.artifacts, object).some(artifact => artifact.task_key === key && artifact.role === 'other' &&
-      artifact.media_type === mediaType && artifact.decoder === mediaType + ';schema_version=0.6')) invalid();
+      artifact.media_type === mediaType && ['0.6', '0.7', '0.9'].some(v => artifact.decoder === mediaType + ';schema_version=' + v))) invalid();
 }
 
 function checkContractFollowup(r: Record<string, unknown>, documents: Sections['documents'], includesCode: boolean) {

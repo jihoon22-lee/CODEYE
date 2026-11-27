@@ -48,6 +48,12 @@ func validateSections(r Report) error {
 	if err := validateLedger(r); err != nil {
 		return err
 	}
+	if err := validateLeadFollowups(r); err != nil {
+		return err
+	}
+	if err := validateLeadRefinements(r); err != nil {
+		return err
+	}
 	if cr := r.CodeReview; cr != nil && cr.Subject != "" && (cr.Subject != record.SubjectNonShipped || !builderAtLeast(r.Builder.Version, ShippedFocusSince)) {
 		return invalidf("code_review.subject %q in a revision of builder %s", cr.Subject, r.Builder.Version)
 	}
@@ -639,7 +645,7 @@ func validWorkflowCitations(workflow RelatedWorkflow, scope string, catalog map[
 func hasAcceptedWorkflowReading(r Report) bool {
 	version, _ := strconv.Atoi(r.Builder.Version)
 	const taskKey = "review.investigate"
-	decoders := []string{(WorkflowReadingDecoder{}).Key().String(), (CitedReviewDecoder{}).Key().String()}
+	decoders := []string{(WorkflowReadingDecoder{}).Key().String(), (CitedReviewDecoder{}).Key().String(), (LeadsReviewDecoder{}).Key().String()}
 	return version >= WorkflowReadingSince && r.CodeReview != nil &&
 		slices.ContainsFunc(r.Tasks, func(t Task) bool {
 			return t.Key == taskKey && t.Status == string(domain.TaskSucceeded)

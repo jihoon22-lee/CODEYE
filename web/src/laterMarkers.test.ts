@@ -12,6 +12,8 @@ function load(builder: string, edit: (findings: Record<string, any>[]) => void) 
   const d = structuredClone(sectioned) as Record<string, any>;
   d.demo = false;
   d.builder.version = builder;
+  // Builder 26 added the lead follow-ups; an older revision has none.
+  if (Number(builder) < 26) delete d.code_review.lead_followups;
   edit(d.findings);
   return parseAnalysisReport(d, d.run_id);
 }
