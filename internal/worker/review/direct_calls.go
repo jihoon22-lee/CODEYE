@@ -72,6 +72,15 @@ func documentationTokens(content string, python bool) []callToken {
 }
 
 func lexicalCallTokens(content string, python, member, rust bool, limit int) []callToken {
+	return lexTokens(content, python, member, rust, false, limit)
+}
+
+// lexTokens is lexicalCallTokens with one more mode: division reads a
+// JavaScript "/" as the division operator where the token before it ends an
+// operand (a name that is no keyword, a digit, a quoted string, "]", or a
+// ")" that closes no if, while, for or with condition). A "/" anywhere else
+// may open a regular expression, so the scan is still abandoned there.
+func lexTokens(content string, python, member, rust, division bool, limit int) []callToken {
 	var tokens []callToken
 	var stack []int
 	line, column := 1, 0
@@ -168,6 +177,8 @@ func lexicalCallTokens(content string, python, member, rust bool, limit int) []c
 				t.text, t.quoted = raw, true
 			}
 			size += len(quote)
+		case division && c == '/' && slashDivides(tokens):
+			t.text = "/"
 		case !python && !rust && (c == '/' || c == '\\'):
 			return nil
 		default:
@@ -211,6 +222,37 @@ func lexicalCallTokens(content string, python, member, rust bool, limit int) []c
 		return nil
 	}
 	return tokens
+}
+
+// slashDivides reports a "/" after an operand: the last token is a name that
+// is no keyword before an expression, a digit, a quoted string, "]", or a
+// ")" whose "(" follows no if, while, for or with.
+func slashDivides(tokens []callToken) bool {
+	if len(tokens) == 0 {
+		return false
+	}
+	last := len(tokens) - 1
+	t := tokens[last]
+	switch {
+	case t.stringLiteral:
+		return true
+	case t.name:
+		switch t.text {
+		case "return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw", "case", "do", "else",
+			"yield", "await", "extends", "export", "import", "default", "if", "while", "for", "with", "as", "satisfies":
+			return false
+		}
+		return true
+	case len(t.text) == 1 && t.text[0] >= '0' && t.text[0] <= '9', t.text == "]":
+		return true
+	case t.text == ")":
+		for i := last - 1; i >= 0; i-- {
+			if tokens[i].text == "(" && !tokens[i].quoted && tokens[i].close == last {
+				return !(tokenIs(tokens, i-1, "if") || tokenIs(tokens, i-1, "while") || tokenIs(tokens, i-1, "for") || tokenIs(tokens, i-1, "with"))
+			}
+		}
+	}
+	return false
 }
 
 func rustCommentSize(content string) int {
