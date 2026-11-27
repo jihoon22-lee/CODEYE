@@ -721,7 +721,7 @@ python3 scripts/test_postgres.py --web --nodes --scheduler --instance --web-serv
 ```
 
 - 필요: PATH의 `initdb`·`postgres`·`psql`·`go`, `scripts/requirements.txt`의 Python 패키지(jsonschema 등). `--web`은 위 웹 빌드와 Chromium도 필요하다. 기존 DB 서비스를 쓰지 않고 loopback의 빈 포트에 임시 PostgreSQL을 만들고 끝나면 지운다.
-- 기본 단계: `CODEYE_TEST_DATABASE_URL`을 준 `go test -race -count=1 ./...`, CLI 빌드, `codeye migrate` 두 번, `codeye doctor` schema 검증과 credential 비노출 확인.
+- 기본 단계: `CODEYE_TEST_DATABASE_URL`을 준 `go test -race -count=1 -timeout=25m ./...`(package마다 25분. review package가 CI runner에서 10~14분 걸린다), CLI 빌드, `codeye migrate` 두 번, `codeye doctor` schema 검증과 credential 비노출 확인.
 - `--web`: 실제 `codeye serve`에 대한 브라우저 smoke(Playwright·Chromium).
 - `--nodes`: 서로 다른 노드 신원 두 개의 Linux Native 수용 시험. `CODEYE_TEST_STATICCHECK`·`CODEYE_TEST_NODE`·`CODEYE_TEST_RUFF` 등 도구 변수가 있으면 실제 도구로도 실행하고, 없으면 해당 smoke를 SKIP으로 출력한다.
 - `--scheduler`: 별도 DB에서 실제 controller·autoscaler와 `-tags codeye_fixture`로 빌드한 agent·worker(TC-71~75). fixture handler는 시험용이며 분석 결과가 아니다.
