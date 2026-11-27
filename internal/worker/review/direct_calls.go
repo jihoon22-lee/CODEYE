@@ -2,6 +2,7 @@ package review
 
 import (
 	"path"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -75,13 +76,28 @@ func lexicalCallTokens(content string, python, member, rust bool, limit int) []c
 	return lexTokens(content, python, member, rust, false, limit)
 }
 
-// lexTokens is lexicalCallTokens with one more mode: division reads a
-// JavaScript "/" as the division operator where the token before it ends an
-// operand (a name that is no keyword, a digit, a quoted string, "]", or a
-// ")" that closes no if, while, for or with condition). A "/" anywhere else
-// may open a regular expression, so the scan is still abandoned there.
-func lexTokens(content string, python, member, rust, division bool, limit int) []callToken {
-	var tokens []callToken
+// lexTokens is lexicalCallTokens with one more mode, slashes, for the lead
+// reader of JavaScript and TypeScript (member mode). A "/" after an operand
+// (slashDivides) is the division operator; a "/" where an operand starts
+// (slashRegex) opens a regular expression literal, one opaque token like a
+// string. A template literal is one opaque token too, its ${...}
+// expressions read as code to the "}" that ends each. A "/" where neither
+// can be told (after "}" or "<") and a "\" outside a literal still abandon
+// the scan.
+func lexTokens(content string, python, member, rust, slashes bool, limit int) []callToken {
+	tokens, _, ok := lexScan(content, python, member, rust, slashes, limit, 0)
+	if !ok {
+		return nil
+	}
+	return tokens
+}
+
+// lexScan reads content as lexTokens does. With nesting above 0 it reads the
+// expression of a template's ${...} (slashes mode): the "}" that closes no
+// bracket ends it, and used counts the bytes read through that "}". ok is
+// false when the text cannot be separated safely.
+func lexScan(content string, python, member, rust, slashes bool, limit, nesting int) (tokens []callToken, used int, ok bool) {
+	length := len(content)
 	var stack []int
 	line, column := 1, 0
 	advance := func(chunk string) {
@@ -94,7 +110,7 @@ func lexTokens(content string, python, member, rust, division bool, limit int) [
 	}
 	for len(content) > 0 {
 		if len(tokens) >= limit || len(stack) > callMaxDepth {
-			return nil
+			return nil, 0, false
 		}
 		t := callToken{line: line, column: column, depth: len(stack), parent: -1}
 		if len(stack) > 0 {
@@ -118,7 +134,7 @@ func lexTokens(content string, python, member, rust, division bool, limit int) [
 			if rust {
 				size = rustCommentSize(content)
 				if size == 0 {
-					return nil
+					return nil, 0, false
 				}
 				advance(content[:size])
 				content = content[size:]
@@ -126,23 +142,27 @@ func lexTokens(content string, python, member, rust, division bool, limit int) [
 			}
 			end := strings.Index(content[2:], "*/")
 			if end < 0 {
-				return nil
+				return nil, 0, false
 			}
 			size = end + 4
 			advance(content[:size])
 			content = content[size:]
 			continue
 		case !python && member && c == '`':
-			size = memberTemplateSize(content)
+			if slashes {
+				size, t.stringLiteral = codeTemplateSize(content, limit, nesting), true
+			} else {
+				size = memberTemplateSize(content)
+			}
 			if size == 0 {
-				return nil
+				return nil, 0, false
 			}
 		case rust && rustRawStringPrefix(content) != "":
 			prefix := rustRawStringPrefix(content)
 			end := `"` + prefix[1:len(prefix)-1]
 			at := strings.Index(content[len(prefix):], end)
 			if at < 0 {
-				return nil
+				return nil, 0, false
 			}
 			size = len(prefix) + at + len(end)
 			t.stringLiteral = true
@@ -164,23 +184,29 @@ func lexTokens(content string, python, member, rust, division bool, limit int) [
 				size++
 			}
 			if size >= len(content) {
-				return nil
+				return nil, 0, false
 			}
 			raw := content[len(quote):size]
 			if c == '`' && (strings.Contains(raw, "${") || strings.Contains(raw, "\\")) {
-				return nil
+				return nil, 0, false
 			}
 			if len(quote) == 1 && c != '`' && strings.Contains(raw, "\n") && !strings.Contains(raw, "\\") {
-				return nil
+				return nil, 0, false
 			}
 			if len(quote) == 1 && c != '`' && !strings.ContainsAny(raw, "\\\n") {
 				t.text, t.quoted = raw, true
 			}
 			size += len(quote)
-		case division && c == '/' && slashDivides(tokens):
+		case slashes && c == '/' && slashDivides(tokens):
 			t.text = "/"
+		case slashes && c == '/' && slashRegex(tokens):
+			size = regexSize(content)
+			if size == 0 {
+				return nil, 0, false
+			}
+			t.text, t.stringLiteral = content[:size], true
 		case !python && !rust && (c == '/' || c == '\\'):
-			return nil
+			return nil, 0, false
 		default:
 			first, n := utf8.DecodeRuneInString(content)
 			isName := func(r rune) bool {
@@ -203,11 +229,14 @@ func lexTokens(content string, python, member, rust, division bool, limit int) [
 			case ')', ']', '}':
 				matching := "([{"[strings.IndexByte(")]}", c)]
 				if len(stack) == 0 {
-					return nil
+					if nesting > 0 && c == '}' {
+						return tokens, length - len(content) + 1, true
+					}
+					return nil, 0, false
 				}
 				open := stack[len(stack)-1]
 				if tokens[open].text[0] != matching {
-					return nil
+					return nil, 0, false
 				}
 				tokens[open].close = len(tokens)
 				stack = stack[:len(stack)-1]
@@ -218,25 +247,43 @@ func lexTokens(content string, python, member, rust, division bool, limit int) [
 		tokens = append(tokens, t)
 		content = content[size:]
 	}
-	if len(stack) != 0 {
-		return nil
+	if len(stack) != 0 || nesting > 0 {
+		return nil, 0, false
 	}
-	return tokens
+	return tokens, length, true
 }
 
-// slashDivides reports a "/" after an operand: the last token is a name that
-// is no keyword before an expression, a digit, a quoted string, "]", or a
-// ")" whose "(" follows no if, while, for or with.
+// slashDivides reports a "/" after an operand: the last token is a string,
+// template or regular expression literal, a name that is no keyword before
+// an expression (a property name after "." is none), a digit, "]", or a ")"
+// whose "(" follows no if, while, for or with. A TypeScript non-null "!" or
+// a postfix "++" or "--" on the operand's line leaves the operand ended.
 func slashDivides(tokens []callToken) bool {
-	if len(tokens) == 0 {
+	last := len(tokens) - 1
+	for last > 0 {
+		t := tokens[last]
+		if tokenIs(tokens, last, "!") && tokens[last-1].endLine == t.line {
+			last--
+			continue
+		}
+		if (tokenIs(tokens, last, "+") || tokenIs(tokens, last, "-")) && last > 1 && tokenIs(tokens, last-1, t.text) &&
+			tokens[last-1].line == t.line && tokens[last-1].column+1 == t.column && tokens[last-2].endLine == t.line {
+			last -= 2
+			continue
+		}
+		break
+	}
+	if last < 0 {
 		return false
 	}
-	last := len(tokens) - 1
 	t := tokens[last]
 	switch {
 	case t.stringLiteral:
 		return true
 	case t.name:
+		if tokenIs(tokens, last-1, ".") {
+			return true
+		}
 		switch t.text {
 		case "return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw", "case", "do", "else",
 			"yield", "await", "extends", "export", "import", "default", "if", "while", "for", "with", "as", "satisfies":
@@ -251,6 +298,94 @@ func slashDivides(tokens []callToken) bool {
 		return open >= 0 && !(tokenIs(tokens, open-1, "if") || tokenIs(tokens, open-1, "while") || tokenIs(tokens, open-1, "for") || tokenIs(tokens, open-1, "with"))
 	}
 	return false
+}
+
+// regexKeywords are the keywords an expression, so a regular expression
+// literal, may follow.
+var regexKeywords = []string{"return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw", "case", "do", "else",
+	"yield", "await", "extends", "default"}
+
+// slashRegex reports a "/" that slashDivides does not read as division and
+// that opens a regular expression literal because an operand starts there:
+// at the start of the text, after an opening bracket or an operator, after a
+// keyword an expression follows, or after the ")" of an if, while, for or
+// with condition. After "}" (a block or an object literal may end there),
+// after "<" (a JSX closing tag) and after a keyword no expression follows,
+// the "/" is not read.
+func slashRegex(tokens []callToken) bool {
+	if len(tokens) == 0 {
+		return true
+	}
+	t := tokens[len(tokens)-1]
+	switch {
+	case t.quoted || t.stringLiteral:
+		return false
+	case t.name:
+		return slices.Contains(regexKeywords, t.text)
+	case t.text == ")":
+		return true
+	}
+	return len(t.text) == 1 && strings.Contains("([{,;:=!?&|^~+-*%>.", t.text)
+}
+
+// regexSize is the length of the regular expression literal content opens:
+// its body to the first "/" no "\" escapes and no character class holds,
+// then its flags; 0 when a line or the text ends first.
+func regexSize(content string) int {
+	class := false
+	for i := 1; i < len(content); i++ {
+		switch c := content[i]; {
+		case c == '\\':
+			i++
+			if i < len(content) && (content[i] == '\n' || content[i] == '\r') {
+				return 0
+			}
+		case c == '\n' || c == '\r' || strings.HasPrefix(content[i:], "\u2028") || strings.HasPrefix(content[i:], "\u2029"):
+			return 0
+		case c == '[':
+			class = true
+		case c == ']':
+			class = false
+		case c == '/' && !class:
+			i++
+			for i < len(content) {
+				r, n := utf8.DecodeRuneInString(content[i:])
+				if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '$' {
+					break
+				}
+				i += n
+			}
+			return i
+		}
+	}
+	return 0
+}
+
+// codeTemplateSize is the length of the template literal content opens, its
+// ${...} expressions read as code (lexScan, nesting one deeper) to the "}"
+// that ends each, so their strings, comments, templates and regular
+// expressions are their own; 0 when the template cannot be read.
+func codeTemplateSize(content string, limit, nesting int) int {
+	if nesting >= callMaxDepth {
+		return 0
+	}
+	for i := 1; i < len(content); i++ {
+		switch content[i] {
+		case '\\':
+			i++
+		case '`':
+			return i + 1
+		case '$':
+			if i+1 < len(content) && content[i+1] == '{' {
+				_, used, ok := lexScan(content[i+2:], false, true, false, true, limit, nesting+1)
+				if !ok {
+					return 0
+				}
+				i += 1 + used
+			}
+		}
+	}
+	return 0
 }
 
 func rustCommentSize(content string) int {

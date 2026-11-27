@@ -46,9 +46,11 @@ func typeScriptPath(p string) bool {
 }
 
 // leadTokens scans text of language lang for a lead's binding. Python uses
-// the shared scan; JavaScript and TypeScript the member scan (a template
-// literal is one opaque token) that also reads "/" as division after an
-// operand; Rust the Rust scan (raw strings, lifetimes, nested comments).
+// the shared scan; JavaScript and TypeScript the member scan in slashes mode
+// (a "/" is division after an operand and opens a regular expression
+// literal where an operand starts; template and regular expression literals
+// are opaque tokens); Rust the Rust scan (raw strings, lifetimes, nested
+// comments).
 // C and C++ text is scanned with comments, strings, character literals and
 // preprocessor lines blanked (nativeText), so "/" and "\" are operators. nil
 // when the scan cannot separate the text safely.

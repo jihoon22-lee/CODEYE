@@ -1,6 +1,7 @@
 package review
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -272,6 +273,137 @@ func specifierCases() []bindCase {
 		body := "export function run(x) {\n  return helper(x);\n}\n\nfunction helper(x) {\n  return x * 2;\n} // helper end\n"
 		cases = append(cases, bindCase{name: "same-file function in " + anchor, tree: map[string]string{anchor: body},
 			path: anchor, line: "return helper(x)", symbol: "helper", target: anchor, first: "function helper(", last: "// helper end"})
+	}
+	return cases
+}
+
+// slashCase is a JavaScript or TypeScript text and how the lead scan reads
+// its slashes: the regular expression literals in order, the number of
+// division operators, names the scan must see and names a literal must hide;
+// or nothing, the scan giving up.
+type slashCase struct {
+	name      string
+	text      string
+	regexes   []string
+	divisions int
+	names     []string
+	hidden    []string
+	abandon   bool
+}
+
+// The lead scan reads a "/" after an operand as division and a "/" where an
+// operand starts as a regular expression literal, one opaque token; a
+// template's ${...} expressions are read as code to their "}". Where the two
+// cannot be told apart (after "}" or "<"), at an unterminated literal and at
+// a "\" outside a literal it gives up.
+func TestScriptLeadTokensTellRegularExpressionsFromDivision(t *testing.T) {
+	for _, c := range slashCases() {
+		t.Run(c.name, func(t *testing.T) {
+			tokens := leadTokens("javascript", c.text)
+			if c.abandon {
+				if tokens != nil {
+					t.Fatalf("read %d tokens, want none", len(tokens))
+				}
+				return
+			}
+			if tokens == nil {
+				t.Fatal("the scan gave up")
+			}
+			var regexes, names []string
+			divisions := 0
+			for _, tok := range tokens {
+				switch {
+				case tok.stringLiteral && !tok.quoted && strings.HasPrefix(tok.text, "/"):
+					regexes = append(regexes, tok.text)
+				case !tok.quoted && !tok.stringLiteral && tok.text == "/":
+					divisions++
+				case tok.name:
+					names = append(names, tok.text)
+				}
+			}
+			if strings.Join(regexes, " ") != strings.Join(c.regexes, " ") || divisions != c.divisions {
+				t.Fatalf("regular expressions %q and %d divisions, want %q and %d", regexes, divisions, c.regexes, c.divisions)
+			}
+			for _, n := range c.names {
+				if !slices.Contains(names, n) {
+					t.Fatalf("name %s missing from %q", n, names)
+				}
+			}
+			for _, n := range c.hidden {
+				if slices.Contains(names, n) {
+					t.Fatalf("name %s of a literal read as code: %q", n, names)
+				}
+			}
+		})
+	}
+}
+
+// slashCases lists the test's cases; the scan's fuzz test seeds with their
+// texts.
+func slashCases() []slashCase {
+	return []slashCase{
+		{name: "a call argument", text: `s = s.replace(/[\u0100-\uffff]/g, '');`, regexes: []string{`/[\u0100-\uffff]/g`}},
+		{name: "a class of characters beyond ASCII", text: "s = s.replace(/[Ā-ɏ]/g, '');", regexes: []string{"/[Ā-ɏ]/g"}},
+		{name: "after = and :", text: "const re = /a+b/;\nconst o = { re: /x/i };", regexes: []string{"/a+b/", "/x/i"}},
+		{name: "after , and [", text: "f(a, /y/);\nconst list = [/a/, /b/g];", regexes: []string{"/y/", "/a/", "/b/g"}},
+		{name: "after !, &&, || and ?", text: `ok = !/^\d+$/.test(s) && /x/.test(s) || b ? /y/ : /z/;`, regexes: []string{`/^\d+$/`, "/x/", "/y/", "/z/"}},
+		{name: "after ;, return and typeof", text: "x = 1;/re/.test(s);\nfunction f(s) {\n  return /x/.test(s) && typeof /y/;\n}\n", regexes: []string{"/re/", "/x/", "/y/"}},
+		{name: "after an if condition, else and an arrow", text: "if (s) /x/.exec(s);\nelse /w/.exec(s);\nconst f = (s) => /y/.test(s);", regexes: []string{"/x/", "/w/", "/y/"}},
+		{name: "a class holding a slash", text: "parts = path.split(/[/]/);", regexes: []string{"/[/]/"}},
+		{name: "an escaped slash and an escaped bracket", text: `parts = path.split(/a\/b/);` + "\n" + `m = /[\]/]+/u;`, regexes: []string{`/a\/b/`, `/[\]/]+/u`}},
+		{name: "quotes, a comment opener and flags", text: `q = s.split(/['"]/);` + "\n" + `c = /\/*/dgimsuy.test(s);`, regexes: []string{`/['"]/`, `/\/*/dgimsuy`}},
+		{name: "a declaration spelled in a literal", text: "const re = /function helper\\(x\\)/;\nrun(re);", regexes: []string{`/function helper\(x\)/`},
+			names: []string{"run"}, hidden: []string{"helper"}},
+		{name: "template expressions", text: "msg = `a ${s.replace(/[}`/]/g, '')} b ${`c ${d / 2}`} e ${x /* } */ + y}`;\ndone(msg);",
+			names: []string{"msg", "done"}, hidden: []string{"replace", "d", "x", "y"}},
+
+		{name: "division after operands", text: "a = b / c;\nd = f(x) / 2;\ne = arr[0] / n;\ng = (a + b) / 2;\nh = 10 / 3;\ni = 's'.length / 2;", divisions: 6},
+		{name: "division after a template, a non-null assertion and a postfix increment", text: "a = `t` / 2;\nb = x! / 2;\nc = this.count! / total;\nd = i++ / 2;\ne = j-- / 2;",
+			divisions: 5},
+		{name: "division after a property named like a keyword", text: "a = mod.default / 2;\nb = obj.return / 3;", divisions: 2},
+		{name: "a compound division and a division on the next line", text: "total /= n;\nx = a\n  / b;", divisions: 2},
+		{name: "code between two divisions", text: "x = a / (helper = other) / 2;\ny = a! / (helper = other) / 2;", divisions: 4, names: []string{"helper", "other"}},
+
+		{name: "a slash after a closing brace", text: "function f() {}\n/x/.test(s);", abandon: true},
+		{name: "JSX closing tags", text: "const v = <p>a</p><b>c</b>;", abandon: true},
+		{name: "an unterminated literal", text: "s.split(/abc\n);", abandon: true},
+		{name: "a backslash outside a literal", text: `const \u0061 = 1;`, abandon: true},
+	}
+}
+
+// A regular expression literal no longer hides a JavaScript or TypeScript
+// file from the lead reader: a same-file function and an imported function
+// beside literals resolve, a declaration spelled inside a literal is none,
+// and an assignment between two divisions (after an operand, a non-null
+// assertion, a postfix increment or a property named like a keyword) is
+// still seen.
+func TestScriptLeadsReadPastRegularExpressions(t *testing.T) {
+	runBindCases(t, regexLiteralCases())
+}
+
+// regexLiteralCases lists the test's cases; the lead reader fuzz tests seed
+// with their trees.
+func regexLiteralCases() []bindCase {
+	run := "import { share } from './share.js';\n\nconst prefix = `id-${name.replace(/[^a-z/]/g, '')}`;\n\n" +
+		"function clean(s: string) {\n  return s.replace(/[\\u0100-\\uffff]/g, '');\n} // clean end\n\n" +
+		"export function run(total: number, people: number) {\n  return clean(String(share(total, people)));\n}\n"
+	share := "const digits = /^\\d+$/;\n\nexport function share(total: number, people: number) {\n  return digits.test(String(people)) ? total / people : 0;\n} // share end\n"
+	tree := map[string]string{"app/run.ts": run, "app/share.ts": share}
+	caller := "export function run(x: number) {\n  return helper(x);\n}\n"
+	assigned := func(division string) map[string]string {
+		return map[string]string{"app/run.ts": caller + "\nexport function swap(a: number, other: (x: number) => number) {\n  const y = " + division + ";\n  return y;\n}\n" + tsHelper}
+	}
+	cases := []bindCase{
+		{name: "a same-file function beside literals", tree: tree, path: "app/run.ts", line: "return clean(String(share(", symbol: "clean",
+			target: "app/run.ts", first: "function clean(", last: "// clean end"},
+		{name: "an imported function from a file with a literal", tree: tree, path: "app/run.ts", line: "return clean(String(share(", symbol: "share",
+			target: "app/share.ts", first: "export function share(", last: "// share end"},
+		{name: "a declaration spelled in a literal", tree: map[string]string{"app/run.ts": "const re = /function helper\\(x: number\\)/;\n\n" + caller + tsHelper},
+			path: "app/run.ts", line: "return helper(x)", symbol: "helper", target: "app/run.ts", first: "function helper(x: number)", last: "// helper end"},
+	}
+	for _, division := range []string{"a / (helper = other) / 2", "a! / (helper = other) / 2", "a++ / (helper = other) / 2", "Math.default / (helper = other) / 2"} {
+		cases = append(cases, bindCase{name: "an assignment between divisions: " + division, tree: assigned(division),
+			path: "app/run.ts", line: "return helper(x)", symbol: "helper", reason: record.LeadAmbiguous})
 	}
 	return cases
 }

@@ -50,7 +50,7 @@ func (x leadFixture) files() []leadFile {
 func leadFixtures() []leadFixture {
 	var out []leadFixture
 	for _, cases := range [][]bindCase{pythonScopingCases(), scriptScopingCases(), returnAnnotationCases(), specifierCases(),
-		rustScopingCases(), rustMethodCases(), nativeLookupCases()} {
+		regexLiteralCases(), rustScopingCases(), rustMethodCases(), nativeLookupCases()} {
 		for _, c := range cases {
 			out = append(out, leadFixture{c.tree, c.path, c.symbol, c.withheld})
 		}
@@ -415,11 +415,15 @@ func addLeadSeeds(f *testing.F, langs ...string) {
 	}
 }
 
-// The JavaScript and TypeScript scan (a "/" after an operand read as
-// division) and its import reader.
+// The JavaScript and TypeScript scan (a "/" read as division or as a
+// regular expression literal, template expressions read as code) and its
+// import reader.
 func FuzzLeadScriptTokens(f *testing.F) {
 	for _, text := range leadSeedTexts("javascript") {
 		f.Add(text)
+	}
+	for _, c := range slashCases() {
+		f.Add(c.text)
 	}
 	f.Fuzz(func(t *testing.T, text string) {
 		tokens := leadTokens("javascript", text)
