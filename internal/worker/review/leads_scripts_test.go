@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
 )
@@ -507,7 +508,9 @@ type jsxTokenCase struct {
 // attributes, values, children) are code, markup nesting again inside them.
 // A "<" after an operand is a comparison, and TypeScript's type parameters
 // of a generic arrow function, a function type or a call signature stay
-// code. Markup JSX rejects or the reader cannot follow stops the scan.
+// code (a parameter list ending past the scan's lookahead is read as markup,
+// which stops the scan). Markup JSX rejects or the reader cannot follow
+// stops the scan.
 func TestScriptLeadTokensReadJSXMarkup(t *testing.T) {
 	for _, c := range jsxTokenCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -557,7 +560,10 @@ func jsxTokenCases() []jsxTokenCase {
 		{name: "a constrained generic arrow function", text: "const f = <T extends object>(x: T) => x;", names: []string{"f", "T", "extends", "object", "x"}},
 		{name: "a generic function type", text: "let g: <T>(x: T) => T = id;", names: []string{"g", "T", "x", "id"}},
 		{name: "a generic call signature", text: "interface I {\n  <T>(x: T): T;\n}", names: []string{"I", "T", "x"}},
+		{name: "a generic function type whose parameters end within the lookahead", text: "let g: <T>(" + strings.Repeat("x: T, ", 300) + "y: T) => T = id;",
+			names: []string{"g", "T", "x", "y", "id"}},
 
+		{name: "a generic function type whose parameters end past the lookahead", text: "let g: <T>(" + strings.Repeat("x: T, ", 400) + "y: T) => T = id;", abandon: true},
 		{name: "a > in text", text: "a = <p>x > y</p>;", abandon: true},
 		{name: "a } in text", text: "a = <p>x } y</p>;", abandon: true},
 		{name: "an unclosed element", text: "a = <p>x", abandon: true},
@@ -566,6 +572,53 @@ func jsxTokenCases() []jsxTokenCase {
 		{name: "an element as an attribute value", text: "a = <A b=<c /> />;", abandon: true},
 		{name: "a < before no element", text: "a = < 3;", abandon: true},
 		{name: "an unterminated attribute string", text: "a = <A b=\"x />;", abandon: true},
+	}
+}
+
+// angleForm is a TSX text repeating one form a "<" takes, and whether the
+// lead scan reads a few hundred of them (or gives up at once).
+type angleForm struct {
+	name, line string
+	read       bool
+}
+
+// angleForms lists the forms of the test below; the script scan fuzz test
+// seeds with each.
+func angleForms() []angleForm {
+	return []angleForm{
+		{name: "comparisons", line: "if (a < b && c <= d) {\n  e = f < g ? h : i;\n}\n", read: true},
+		{name: "generic calls and type parameters", line: "f<T>(x);\ng<A, B>(y);\nconst h = <T,>(x: T) => x;\nlet k: <T>(x: T) => T = h;\n", read: true},
+		{name: "markup", line: "const e = <div className=\"a\">{x}</div>;\n", read: true},
+		// Each "<" here makes the scan look for the ")" of a <p>(...),
+		// which no later text holds.
+		{name: "markup whose text opens a parenthesis", line: "x = <p>(a</p>;\n", read: true},
+		{name: "a < opening nothing readable", line: "y = <T(z);\n"},
+	}
+}
+
+// The lead scan reads a "<" where an operand starts with a bounded
+// lookahead: a TSX file of about 1 MB repeating one form of "<" (tens of
+// thousands of them) takes well under a second, the scan giving up at its
+// token limit, while a few hundred of them are read whole (or the scan
+// gives up at the first, for a "<" it cannot read). The race detector slows
+// every reading alike, so the bound is wider there.
+func TestScriptLeadScanOfManyAnglesIsBounded(t *testing.T) {
+	limit := 500 * time.Millisecond
+	if raceDetector {
+		limit = 5 * time.Second
+	}
+	for _, form := range angleForms() {
+		t.Run(form.name, func(t *testing.T) {
+			if tokens := leadTokens("app/view.tsx", strings.Repeat(form.line, 200)); (tokens != nil) != form.read {
+				t.Fatalf("read %d tokens of 200 lines, want them read: %v", len(tokens), form.read)
+			}
+			text := strings.Repeat(form.line, (1<<20)/len(form.line))
+			began := time.Now()
+			leadTokens("app/view.tsx", text)
+			if took := time.Since(began); took > limit {
+				t.Fatalf("the scan of %d bytes took %v", len(text), took)
+			}
+		})
 	}
 }
 

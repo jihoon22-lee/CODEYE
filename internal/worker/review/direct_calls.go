@@ -234,7 +234,8 @@ func lexScan(content string, m lexMode, limit, nesting int) (tokens []callToken,
 				return nil, 0, false
 			}
 			t.text, t.stringLiteral = content[:size], true
-		case m.jsx && c == '<' && !slashDivides(tokens) && slashRegex(tokens) && !tokenIs(tokens, len(tokens)-1, ".") && !tsTypeParameters(content):
+		case m.jsx && c == '<' && !slashDivides(tokens) && slashRegex(tokens) && !tokenIs(tokens, len(tokens)-1, ".") &&
+			!tsTypeParameters(content[:min(len(content), tsLookahead)]):
 			// Where an operand starts, "<" opens JSX markup, or nothing the
 			// scan can read.
 			if !jsxOpens(content) {
@@ -489,11 +490,22 @@ func jsxOpens(content string) bool {
 	return len(content) > 1 && (content[1] == '>' || identifierSize(content[1:], false) > 0)
 }
 
+// tsLookahead bounds the text tsTypeParameters reads after a "<", so that
+// every "<" where an operand starts costs the scan a bounded read (the scan
+// reads untrusted source, and an unbounded search for the ")" of each
+// <T>(... would make a file of many such "<" cost its length squared). A
+// <T>(...) whose ")" lies farther is read as the start of JSX markup
+// instead, and that markup reads no further (JSX text holds no ">" of an
+// "=>", and no closing tag ends the element): the file stays unread, not
+// mis-read.
+const tsLookahead = 2 << 10
+
 // tsTypeParameters reports a "<" (content's first byte) opening the type
 // parameters of a TypeScript generic arrow function or function type, not
 // JSX: TypeScript's own reading of <T,>, <T = U> and <T extends U> (not an
 // attribute named extends), after an optional const, and <T>(...) followed
-// by "=>" or ":" (no JSX text holds the ">" of "=>").
+// by "=>" or ":" (no JSX text holds the ">" of "=>"). It reads content only,
+// which lexScan cuts to tsLookahead.
 func tsTypeParameters(content string) bool {
 	i := blankEnd(content, 1)
 	if strings.HasPrefix(content[i:], "const") && blankEnd(content, i+5) > i+5 {

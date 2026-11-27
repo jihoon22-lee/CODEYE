@@ -433,6 +433,9 @@ func FuzzLeadScriptTokens(f *testing.F) {
 	for _, c := range jsxTokenCases() {
 		f.Add(c.text)
 	}
+	for _, form := range angleForms() {
+		f.Add(strings.Repeat(form.line, 3))
+	}
 	f.Fuzz(func(t *testing.T, text string) {
 		for _, p := range []string{"app/fuzz.ts", "app/fuzz.tsx"} {
 			tokens := leadTokens(p, text)
