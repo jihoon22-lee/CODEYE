@@ -186,7 +186,8 @@ func callAt(text, symbol string) bool {
 	return regexp.MustCompile(`(^|[^A-Za-z0-9_$])` + regexp.QuoteMeta(symbol) + `\s*\(`).MatchString(text)
 }
 
-// leadLanguage reports a source file whose leads a resolver reads.
+// leadLanguage reports a source file whose callers leads a resolver reads;
+// definition leads read every file leadDefinitionLanguage names.
 func leadLanguage(p string) bool {
 	switch path.Ext(p) {
 	case ".go", ".java", ".c", ".cc", ".cpp", ".cxx", ".c++", ".rs":
@@ -231,7 +232,11 @@ func (r *leadResolver) resolve(l record.Lead, anchor record.Excerpt) (record.Lea
 		l.Resolution, l.Reason, l.Targets = record.LeadUnresolved, reason, nil
 		return l, nil
 	}
-	if !leadLanguage(anchor.Path) {
+	supported := leadLanguage(anchor.Path)
+	if l.Need == record.LeadNeedDefinition {
+		supported = leadDefinitionLanguage(anchor.Path) != ""
+	}
+	if !supported {
 		return unresolved(record.LeadLanguage)
 	}
 	// A definition lead's call is checked where it binds (definitions).
@@ -337,15 +342,12 @@ func cmpReason(have, next string) string {
 }
 
 // definitions finds the declaration a call of the symbol on the anchor
-// lines binds to: by goCallees for Go, by the bound calls of sourceCalls for
-// the other languages. The symbol names the callee itself, never another
-// token of the line: no such call is lead_symbol_not_at_anchor. More than
-// one distinct declaration is ambiguous.
+// lines binds to: by goCallees for Go, by scriptDefinitions for Python,
+// JavaScript and TypeScript, by the bound calls of sourceCalls for the other
+// languages. The symbol names the callee itself, never another token of the
+// line: no such call is lead_symbol_not_at_anchor. More than one distinct
+// declaration is ambiguous.
 func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.Excerpt) ([]leadHit, string, error) {
-	links, err := scan.index.from(anchor.Path, ".")
-	if err != nil {
-		return nil, "", err
-	}
 	var hits []leadHit
 	add := func(h leadHit) {
 		if !slices.ContainsFunc(hits, func(o leadHit) bool { return o.declaration() == h.declaration() }) {
@@ -353,16 +355,38 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 		}
 	}
 	called := false
-	if strings.HasSuffix(anchor.Path, ".go") {
-		found, ok, err := r.goCallees(scan, anchor, symbol, links)
+	switch lang := leadDefinitionLanguage(anchor.Path); lang {
+	case "python", "javascript":
+		found, ok, local, reason, err := r.scriptDefinitions(scan, anchor, symbol)
 		if err != nil {
 			return nil, "", err
 		}
-		called = ok
+		if reason != "" {
+			return nil, reason, nil
+		}
+		called = ok || callAt(anchor.Text, symbol)
 		for _, h := range found {
 			add(h)
 		}
-	} else {
+		if called && len(hits) == 0 && local {
+			return nil, record.LeadDefinitionMissing, nil
+		}
+	default:
+		links, err := scan.index.from(anchor.Path, ".")
+		if err != nil {
+			return nil, "", err
+		}
+		if lang == "go" {
+			found, ok, err := r.goCallees(scan, anchor, symbol, links)
+			if err != nil {
+				return nil, "", err
+			}
+			called = ok
+			for _, h := range found {
+				add(h)
+			}
+			break
+		}
 		called = callAt(anchor.Text, symbol)
 		for _, link := range links {
 			// The call's name, or the imported name an alias binds it to.
@@ -371,13 +395,7 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 				continue
 			}
 			called = true
-			extent := link.calleeExtent
-			if extent.start == 0 && callLanguage(link.callee.path) != "" {
-				if extent, err = r.scriptExtent(scan, link); err != nil {
-					return nil, "", err
-				}
-			}
-			add(leadHit{loc: link.callee, origin: "context", extent: extent})
+			add(leadHit{loc: link.callee, origin: "context", extent: link.calleeExtent})
 		}
 	}
 	switch {
@@ -389,21 +407,6 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 		return nil, record.LeadAmbiguous, nil
 	}
 	return hits, "", nil
-}
-
-// scriptExtent is the whole Python or JavaScript declaration whose window
-// (up to its first return) a bound call names.
-func (r *leadResolver) scriptExtent(scan *leadScan, link sourceCall) (sourceCallLocation, error) {
-	text, ok, err := scan.index.text(link.callee.path)
-	if err != nil || !ok {
-		return sourceCallLocation{}, err
-	}
-	python := callLanguage(link.callee.path) == "python"
-	start, end := directDeclarationExtent(callTokens(text, python), link.symbol, python)
-	if start != link.callee.start || end < link.callee.end {
-		return sourceCallLocation{}, nil
-	}
-	return sourceCallLocation{link.callee.path, start, end}, nil
 }
 
 // goCallees finds what the Go calls of symbol on the anchor lines bind to;

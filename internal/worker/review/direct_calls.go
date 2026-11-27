@@ -591,31 +591,6 @@ func directDefinition(tokens []callToken, symbol string, python bool) (start, en
 	return 0, 0
 }
 
-// directDeclarationExtent is the whole declaration directDefinition selects:
-// from its first line to the closing brace, or for Python to the last line
-// before the next module-level statement.
-func directDeclarationExtent(tokens []callToken, symbol string, python bool) (start, end int) {
-	decl, body, ok := directDeclaration(tokens, symbol, python)
-	if !ok {
-		return 0, 0
-	}
-	start = tokens[decl].line
-	if !python {
-		if c := tokens[body].close; c > body {
-			return start, tokens[c].line
-		}
-		return 0, 0
-	}
-	end = tokens[body].endLine
-	for _, t := range tokens[body+1:] {
-		if t.column == 0 && t.depth == 0 {
-			break
-		}
-		end = max(end, t.endLine)
-	}
-	return start, end
-}
-
 // directDeclaration finds the declaration directDefinition accepts: its
 // first token and the token opening its body.
 func directDeclaration(tokens []callToken, symbol string, python bool) (decl, body int, ok bool) {
