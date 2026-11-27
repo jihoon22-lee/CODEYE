@@ -852,8 +852,8 @@ func (l *nativeLead) externalDefinition(scope []string, signature string) (leadH
 
 // nativeExternals are the definitions of a name at namespace scope (not
 // static, not conditional, no variable) in the project's C and C++ sources
-// outside a translation unit; complete reports a search that read every
-// such source.
+// outside a translation unit, those on a secondary path included; complete
+// reports a search that read every such source.
 type nativeExternals struct {
 	defs     []nativeDecl
 	complete bool
@@ -863,7 +863,10 @@ type nativeExternals struct {
 // be complete when the scan reached its limit, a source holding the name
 // could not be tokenized, or a source could not be read at all (withheld,
 // outside the scope or the change, generated, unreadable): that source may
-// hold the definition the readable ones only stand in for.
+// hold the definition the readable ones only stand in for. A source on a
+// secondary path is read for the search alone (checkText): its definition
+// counts, so beside another one neither is chosen, and is never sent
+// (resolve refuses its window, lead_secondary_path).
 func (r *leadResolver) nativeExternals(scan *leadScan, tu nativeTU, lang, name string) (nativeExternals, error) {
 	in := map[string]bool{}
 	for _, u := range tu.units {
@@ -874,7 +877,7 @@ func (r *leadResolver) nativeExternals(scan *leadScan, tu nativeTU, lang, name s
 		if in[p] || !nativeSource(p, lang) {
 			continue
 		}
-		text, ok, err := scan.index.text(p)
+		text, ok, err := scan.checkText(p)
 		if err != nil {
 			return nativeExternals{}, err
 		}

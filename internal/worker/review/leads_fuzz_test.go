@@ -519,7 +519,8 @@ func FuzzLeadGoJavaReasons(f *testing.F) {
 
 // Full lead resolution of a small tree, its windows included: no input may
 // panic it, and every target lies in its file, bound to its blob, within the
-// window limits and outside the excerpts the request sent; a definition
+// window limits, in a file the lead may send (not withheld, not on a
+// secondary path) and outside the excerpts the request sent; a definition
 // target not marked partial is the whole of a declaration the lead's
 // definitions found (a clipped window is always partial). The input names
 // the anchor's tree and symbol and, in sent, lines of a second file the
@@ -641,13 +642,17 @@ func resolveFuzzLead(t *testing.T, s *roleStage, need, symbol string, anchor rec
 }
 
 // checkLeadTarget fails unless target is a window of its file's blob within
-// the limits, none of whose lines the request sent, and, as a definition
-// target not marked partial, the whole declaration of one of hits.
+// the limits, in a file the lead may send, none of whose lines the request
+// sent, and, as a definition target not marked partial, the whole
+// declaration of one of hits.
 func checkLeadTarget(t *testing.T, s *roleStage, carried []record.Excerpt, hits []leadHit, target record.LeadTarget) {
 	t.Helper()
 	e, ok := s.entries()[target.Path]
 	if !ok || target.SHA256 != e.SHA256 || target.ID != record.ExcerptID(s.j.Snapshot.Digest, target.Path, e.SHA256, target.Start, target.End) {
 		t.Fatalf("target %+v not bound to its blob", target)
+	}
+	if why := s.newLeadResolver(carried).blocked(target.Path); why != "" {
+		t.Fatalf("target %+v in a file the lead may not send (%s)", target, why)
 	}
 	lines, ok, err := s.sourceLines(e, nil)
 	if err != nil || !ok || target.Start < 1 || target.End < target.Start || target.End > len(lines) || target.End-target.Start+1 > record.MaxLeadWindowLines ||

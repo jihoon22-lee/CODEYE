@@ -133,10 +133,12 @@ func nativeLookupCases() []bindCase {
 // A header prototype the anchor includes, beside system includes, binds the
 // call to the one non-static, unconditional definition among the project's
 // sources (a static function of the name in another file is not it, nor
-// does a header of preprocessor lines alone stop the search): the
-// definition is sent first and the prototype after it, marked partial.
-// Without exactly one such definition, or beside a source the lead may not
-// read (withheld), the prototype alone is sent.
+// does a header of preprocessor lines alone stop the search, nor do sources
+// on a secondary path that do not define the name): the definition is sent
+// first and the prototype after it, marked partial. Without exactly one such
+// definition (one on a secondary path counts, and is never sent), or beside
+// a source the lead may not read (withheld by the screen or for its content,
+// in a directory the review does not read), the prototype alone is sent.
 func TestNativeHeaderPrototypeReachesItsDefinition(t *testing.T) {
 	for _, c := range prototypeCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -205,8 +207,20 @@ func prototypeCases() []prototypeCase {
 		{name: "only a static function of the name", extra: map[string]string{"native/legacy.c": legacy}},
 		{name: "one readable definition beside a withheld source", extra: map[string]string{"native/rates.c": ratesSource, "test/fake_rates.c": fakeRates},
 			withheld: []string{"native/rates.c"}},
+		{name: "one definition beside sources on a secondary path that do not define it", extra: map[string]string{"native/rates.c": ratesSource,
+			"examples/demo.c": "#include \"../native/rates.h\"\n\nint main(void) {\n  return rate(3);\n}\n", "examples/hello.c": helloSource}, def: true},
+		{name: "a second definition on a secondary path", extra: map[string]string{"native/rates.c": ratesSource, "examples/rates.c": fakeRates}},
+		{name: "the one definition on a secondary path", extra: map[string]string{"examples/rates.c": ratesSource}},
+		{name: "the one definition in a directory the review does not read", extra: map[string]string{"vendor/rates.c": ratesSource}},
+		{name: "one definition beside a withheld source on a secondary path", extra: map[string]string{"native/rates.c": ratesSource, "examples/hello.c": helloSource},
+			withheld: []string{"examples/hello.c"}},
+		{name: "one definition beside a source on a secondary path holding a credential", extra: map[string]string{"native/rates.c": ratesSource,
+			"examples/keys.c": "static const char *password = \"" + "codeye" + "fixture" + strings.Repeat("0", 8) + "\";\n"}},
 	}
 }
+
+// helloSource is a C source no lead of rate reaches.
+const helloSource = "int hello(void) {\n  return 0;\n}\n"
 
 // A source the lead may not read (outside the scope or outside a pull
 // request's changed files) may hold the definition the readable one only
@@ -231,6 +245,54 @@ func TestNativeExternalDefinitionNeedsEverySourceRead(t *testing.T) {
 				t.Fatalf("lead %+v", l)
 			}
 		})
+	}
+}
+
+// A definition on a secondary path is never sent, and the lead names that
+// path as its reason when nothing else is sent: the header prototype already
+// in the request, or a prototype in the anchor itself. A definition in a
+// directory the review does not read stays unknown: the prototype in the
+// request is what the lead holds.
+func TestNativeDefinitionOnASecondaryPathIsNeverSent(t *testing.T) {
+	inAnchor := "int rate(int n);\n\nint run(int n) {\n  return rate(n) / 2;\n}\n"
+	for _, c := range []struct {
+		name   string
+		tree   map[string]string
+		sent   bool
+		reason string
+	}{
+		{"the header prototype in the request", prototypeCase{extra: map[string]string{"examples/rates.c": ratesSource}}.tree(), true, record.LeadSecondary},
+		{"a prototype in the anchor", map[string]string{"native/app.c": inAnchor, "examples/rates.c": ratesSource}, false, record.LeadSecondary},
+		{"a definition in a directory the review does not read", prototypeCase{extra: map[string]string{"vendor/rates.c": ratesSource}}.tree(), true, record.LeadInRequest},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := leadStage(t, treeJob(t, c.tree))
+			window, anchor := leadWindow(t, s, "native/app.c", "return rate(", 0)
+			var sent []record.Excerpt
+			if c.sent {
+				sent = append(sent, sentLines(t, s, "native/rates.h", 4, 4))
+			}
+			l := resolveOne(t, s, record.LeadNeedDefinition, "rate", window, anchor, sent...)
+			if l.Resolved() || l.Reason != c.reason || l.Targets != nil {
+				t.Fatalf("lead %+v, want %s", l, c.reason)
+			}
+		})
+	}
+}
+
+// The one-definition check counts the sources on a secondary path it reads
+// against the scan's limits: past them not every source was read, and the
+// header prototype alone is sent beside the one definition elsewhere.
+func TestNativeExternalDefinitionStopsAtTheScanLimit(t *testing.T) {
+	tree := prototypeCase{extra: map[string]string{"native/rates.c": ratesSource}}.tree()
+	for k := range maxScanFiles + 10 {
+		tree[fmt.Sprintf("examples/demo%03d.c", k)] = fmt.Sprintf("int demo%d(void) {\n  return %d;\n}\n", k, k)
+	}
+	s := leadStage(t, treeJob(t, tree))
+	window, anchor := leadWindow(t, s, "native/app.c", "return rate(", 0)
+	l := resolveOne(t, s, record.LeadNeedDefinition, "rate", window, anchor)
+	if !l.Resolved() || len(l.Targets) != 1 || l.Targets[0].Path != "native/rates.h" || !l.Targets[0].Partial {
+		t.Fatalf("lead %+v", l)
 	}
 }
 

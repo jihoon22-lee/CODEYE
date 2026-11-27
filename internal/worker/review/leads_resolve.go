@@ -33,7 +33,9 @@ import (
 // nothing. It reads only files the run may send: in scope, inside a pull
 // request's changed files, not withheld by the secrets screen, not
 // generated and not on a secondary path, each blob checked against the
-// manifest (readVerified). Every lead gets one scan within maxScanFiles and
+// manifest (readVerified); a check that no other source declares a name
+// also reads the sources on a secondary path, and never sends them
+// (checkText). Every lead gets one scan within maxScanFiles and
 // maxScanBytes, the caller expansion's reads included. A location the
 // investigate request already carried is named by that excerpt's ID and not
 // sent again; two declarations the lead could mean are never chosen
@@ -77,7 +79,8 @@ func (s *roleStage) newLeadResolver(sent []record.Excerpt) *leadResolver {
 }
 
 // blocked is why a file may not be read for a lead or sent as one of its
-// excerpts; "" when it may.
+// excerpts; "" when it may. A file on a secondary path is still read for a
+// check that no other source declares a name (checkText), never sent.
 func (r *leadResolver) blocked(p string) string {
 	switch {
 	case r.s.secretFiles()[p] || record.Sensitive([]byte(p)):
@@ -99,22 +102,35 @@ func (r *leadResolver) blocked(p string) string {
 	return ""
 }
 
-// leadScan is the bounded read of one lead's resolution.
+// leadScan is the bounded read of one lead's resolution: what it read
+// (leadReads), and limited, set once it reached its file or byte limit.
+// checked holds the sources on a secondary path it read for a check alone
+// (checkText), apart, so that read still refuses them.
 type leadScan struct {
-	r        *leadResolver
-	files    int
-	bytes    int64
-	texts    map[string]string
-	readable map[string]bool
-	// refused holds the files the scan did not read and why; limited is set
-	// once the scan reached its file or byte limit.
-	refused map[string]string
+	r     *leadResolver
+	files int
+	bytes int64
+	leadReads
 	limited bool
+	checked leadReads
 	index   *sourceCalls
 }
 
+// leadReads is what a scan read: the text of each file it could read,
+// whether it could (readable, for each file it read within its limits), and
+// the files it did not read and why (refused).
+type leadReads struct {
+	texts    map[string]string
+	readable map[string]bool
+	refused  map[string]string
+}
+
+func newLeadReads() leadReads {
+	return leadReads{texts: map[string]string{}, readable: map[string]bool{}, refused: map[string]string{}}
+}
+
 func (r *leadResolver) scan() *leadScan {
-	l := &leadScan{r: r, texts: map[string]string{}, readable: map[string]bool{}, refused: map[string]string{}}
+	l := &leadScan{r: r, leadReads: newLeadReads(), checked: newLeadReads()}
 	l.index = r.catalog.calls(l.read)
 	return l
 }
@@ -134,20 +150,27 @@ func (l *leadScan) read(e source.Entry) (string, bool, error) {
 			return "", false, nil
 		}
 	}
+	return l.load(e, &l.leadReads)
+}
+
+// load reads e into reads within the scan's file and byte limits, through
+// the review's reader (the manifest check, the secrets screen of the
+// content); a generated file is refused.
+func (l *leadScan) load(e source.Entry, reads *leadReads) (string, bool, error) {
 	if l.files >= maxScanFiles || *e.Size > maxScanBytes-l.bytes {
 		l.limited = true
 		return "", false, nil
 	}
 	l.files++
 	l.bytes += *e.Size
-	l.readable[e.Path] = false
+	reads.readable[e.Path] = false
 	text, reason, err := l.r.s.reviewSource(e)
 	if err != nil {
 		return "", false, err
 	}
 	switch {
 	case reason == record.ScopeReasonWithheld:
-		l.refused[e.Path] = record.LeadWithheld
+		reads.refused[e.Path] = record.LeadWithheld
 		return "", false, nil
 	case reason == record.ScopeReasonTooLarge:
 		l.limited = true
@@ -156,11 +179,32 @@ func (l *leadScan) read(e source.Entry) (string, bool, error) {
 		return "", false, nil
 	case record.GeneratedHeader([]byte(text)) && !callPathMetadata(e.Path):
 		// A generated file is neither read for a lead nor sent.
-		l.refused[e.Path] = record.LeadGenerated
+		reads.refused[e.Path] = record.LeadGenerated
 		return "", false, nil
 	}
-	l.texts[e.Path], l.readable[e.Path] = text, true
+	reads.texts[e.Path], reads.readable[e.Path] = text, true
 	return text, true, nil
+}
+
+// checkText is the text of p for a check that no other source of the
+// project declares a name (the one definition of a C or C++ prototype), as
+// the call index reads it (index.text), and also when read refused p only
+// for lying on a secondary path: such a source is read like any other
+// (within the scan's limits, its content screened for secrets, a generated
+// one refused) into checked, so read still refuses it and no window or
+// target comes from it.
+func (l *leadScan) checkText(p string) (string, bool, error) {
+	text, ok, err := l.index.text(p)
+	if err != nil || ok || l.limited || l.refused[p] != record.LeadSecondary {
+		return text, ok, err
+	}
+	if err := l.r.s.ctx.Err(); err != nil {
+		return "", false, err
+	}
+	if ok, seen := l.checked.readable[p]; seen {
+		return l.checked.texts[p], ok, nil
+	}
+	return l.load(l.r.catalog.files[p], &l.checked)
 }
 
 // missing is the reason of a lead the scan found nothing for: a file it
