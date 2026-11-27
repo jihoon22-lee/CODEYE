@@ -27,9 +27,10 @@ import (
 // left unread) the header prototype alone. A macro of the name, a using
 // directive or declaration, a call in a class, a member function, an
 // initializer's braces or a lambda at namespace scope bind nothing; so does,
-// in C++ with a system include, a name the C library also declares. A
-// header anchor reads with C++ rules (no translation unit says which
-// language includes it); an included header follows its includer.
+// in C++ with a system include, a name the C library also declares. A name
+// in a template parameter list declares nothing. A header anchor reads with
+// C++ rules (no translation unit says which language includes it); an
+// included header follows its includer.
 
 // nativeUnit is one file of a C or C++ translation unit: its tokens
 // (comments, strings and preprocessor lines blanked), its directives and,
@@ -312,8 +313,8 @@ func (u *nativeUnit) decls(name string) []nativeDecl {
 			!slices.ContainsFunc(t[p+1:i], func(x callToken) bool { return !slices.Contains([]string{"*", "&", "const", "volatile"}, x.text) }) {
 			scope, ok := u.declScope(p)
 			start := u.start(p)
-			if !ok || slices.ContainsFunc(t[start:p], func(x callToken) bool { return x.depth == t[p].depth && x.text == "=" }) {
-				continue
+			if !ok || nativeTemplateEnd(t, start) > p || slices.ContainsFunc(t[start:p], func(x callToken) bool { return x.depth == t[p].depth && x.text == "=" }) {
+				continue // a template parameter, or an initializer's operand
 			}
 			d := nativeDecl{unit: u, name: i, first: start, scope: scope, value: true, last: u.headEnd(t[p].close+1, t[p].depth)}
 			if d.last < 0 {
@@ -341,7 +342,11 @@ func (u *nativeUnit) decls(name string) []nativeDecl {
 			continue
 		}
 		start := u.start(i)
-		if slices.ContainsFunc(t[nativeTemplateEnd(t, start):head], func(x callToken) bool { return x.depth == t[i].depth && x.text == "=" }) {
+		params := nativeTemplateEnd(t, start)
+		if params > i {
+			continue // in a template parameter list (template <int N = name>): no declaration
+		}
+		if slices.ContainsFunc(t[params:head], func(x callToken) bool { return x.depth == t[i].depth && x.text == "=" }) {
 			continue // an initializer's operand
 		}
 		d := nativeDecl{unit: u, name: i, first: start, scope: append(scope, qualifier...)}

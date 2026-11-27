@@ -193,9 +193,15 @@ func (r *leadResolver) goVisible(scan *leadScan, anchor record.Excerpt, symbol s
 			continue
 		}
 		other = true
+		// A method of a value (a local, a field, a call's result) or a call
+		// qualified by no import: the anchor's package.
 		x, ok := selector.X.(*ast.Ident)
+		if !ok || x.Obj != nil {
+			files = append(files, pkg(dir)...)
+			continue
+		}
 		imported, isImport := imports[x.Name]
-		if !ok || x.Obj != nil || !isImport {
+		if !isImport {
 			files = append(files, pkg(dir)...)
 			continue
 		}

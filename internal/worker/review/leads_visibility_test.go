@@ -52,14 +52,21 @@ func runReasonCases(t *testing.T, cases []reasonCase) {
 
 // A withheld file names the reason of an unresolved definition lead only
 // when the anchor language lets that file define the name the call uses:
-// Go's package of the call, an import (or wildcard import) of the name for
-// Python, JavaScript and Rust, an include for C. A builtin name of the
+// Go's package of the call (the anchor's for a method of a field or of a
+// call's result), an import (or wildcard import) of the name for Python,
+// JavaScript and Rust, an include for C. A builtin name of the
 // anchor's language never takes the withheld reason, and a project
 // definition of a builtin's name is resolved like any other.
 func TestLeadReasonFollowsVisibility(t *testing.T) {
+	runReasonCases(t, reasonCases())
+}
+
+// reasonCases lists the test's cases; the lead reader fuzz tests
+// seed with their trees.
+func reasonCases() []reasonCase {
 	goMod := "module example.org/app\n\ngo 1.23\n"
 	secretGo := "package app\n\nconst token = \"x\"\n"
-	runReasonCases(t, []reasonCase{
+	return []reasonCase{
 		{name: "Go builtin beside a withheld file of its package", tree: map[string]string{"go.mod": goMod,
 			"app/use.go": "package app\n\nfunc Use(b []byte) int {\n\treturn len(b)\n}\n", "app/secret.go": secretGo},
 			path: "app/use.go", line: "return len(b)", symbol: "len", withheld: []string{"app/secret.go"}, reason: record.LeadDefinitionMissing},
@@ -69,6 +76,14 @@ func TestLeadReasonFollowsVisibility(t *testing.T) {
 		{name: "Go call beside a withheld file of another package", tree: map[string]string{"go.mod": goMod,
 			"app/use.go": "package app\n\nfunc Use(b []byte) int {\n\treturn count(b)\n}\n", "vault/secret.go": "package vault\n\nconst token = \"x\"\n"},
 			path: "app/use.go", line: "return count(b)", symbol: "count", withheld: []string{"vault/secret.go"}, reason: record.LeadDefinitionMissing},
+		{name: "Go method of a field beside a withheld file of its package", tree: map[string]string{"go.mod": goMod,
+			"app/use.go":    "package app\n\ntype Shop struct {\n\tcfg Config\n}\n\nfunc (s *Shop) Use(b []byte) int {\n\treturn s.cfg.count(b)\n}\n",
+			"app/secret.go": "package app\n\ntype Config struct{}\n\nfunc (Config) count(b []byte) int {\n\treturn len(b)\n}\n"},
+			path: "app/use.go", line: "return s.cfg.count(b)", symbol: "count", withheld: []string{"app/secret.go"}, reason: record.LeadWithheld},
+		{name: "Go method of a call's result beside a withheld file of another package", tree: map[string]string{"go.mod": goMod,
+			"app/use.go":      "package app\n\ntype Shop struct{}\n\nfunc open() *Shop {\n\treturn &Shop{}\n}\n\nfunc Use(b []byte) int {\n\treturn open().count(b)\n}\n",
+			"vault/secret.go": "package vault\n\nconst token = \"x\"\n"},
+			path: "app/use.go", line: "return open().count(b)", symbol: "count", withheld: []string{"vault/secret.go"}, reason: record.LeadDefinitionMissing},
 		{name: "Go project function named like a builtin", tree: map[string]string{"go.mod": goMod,
 			"app/use.go": "package app\n\nfunc Use(b []byte) int {\n\treturn len(b)\n}\n",
 			"app/len.go": "package app\n\nfunc len(b []byte) int {\n\treturn 0\n}\n"},
@@ -134,7 +149,7 @@ func TestLeadReasonFollowsVisibility(t *testing.T) {
 			"src/main/java/app/Use.java":       "package app;\n\nimport pricing.Rules;\n\npublic class Use {\n  static int use(int a) {\n    return Rules.quote(a);\n  }\n}\n",
 			"src/main/java/pricing/Rules.java": "package pricing;\n\npublic final class Rules {\n  public static int quote(int a) {\n    return a;\n  }\n}\n"},
 			path: "src/main/java/app/Use.java", line: "return Rules.quote(a)", symbol: "quote", withheld: []string{"src/main/java/pricing/Rules.java"}, reason: record.LeadWithheld},
-	})
+	}
 }
 
 // The builtin lists are small, fixed and per language.

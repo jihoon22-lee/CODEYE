@@ -19,14 +19,27 @@ const ratesCaller = "#include <stdio.h>\n#include <string.h>\n#include \"rates.h
 // or a member function, a using directive, and in C++ a name of the C
 // library with a system include bind it to nothing; a conditional prototype
 // or include, two C++ overloads or two definitions are ambiguous. A read of
-// the name (qsort's comparator, a table) refuses nothing. In C++ the
+// the name (qsort's comparator, a table) refuses nothing, nor does the name
+// in a template parameter list (a parameter, a default argument). In C++ the
 // innermost namespace declaring the name decides, an anonymous namespace's
 // names being visible around it.
 func TestNativeDefinitionLeadsFollowLookup(t *testing.T) {
+	runBindCases(t, nativeLookupCases())
+}
+
+// nativeLookupCases lists the test's cases; the lead reader fuzz tests
+// seed with their trees.
+func nativeLookupCases() []bindCase {
 	scale := "#include <stdio.h>\n#include <string.h>\n\nstatic int scale(int n);\n\nint run(const char *name) {\n  printf(\"%s\\n\", name);\n  return scale((int)strlen(name)) / 2;\n}\n\nstatic int scale(int n) {\n  return n * 3;\n} // scale end\n"
-	runBindCases(t, []bindCase{
+	return []bindCase{
 		{name: "same-file definition after a static prototype", tree: map[string]string{"native/app.c": scale},
 			path: "native/app.c", line: "return scale(", symbol: "scale", target: "native/app.c", first: "static int scale(int n) {", last: "// scale end"},
+		{name: "a default template argument of the name", tree: map[string]string{"native/shape.cpp": "int name(int n) {\n  return n * 3;\n} // name end\n\ntemplate <class T, int N = name> void f();\n\nint run(int n) {\n  return name(n);\n}\n"},
+			path: "native/shape.cpp", line: "return name(n);", symbol: "name", target: "native/shape.cpp", first: "int name(int n) {", last: "// name end"},
+		{name: "a default template argument calling the name", tree: map[string]string{"native/shape.cpp": "constexpr int name() {\n  return 3;\n} // name end\n\ntemplate <class T, int N = name()> void f();\n\nint run(int n) {\n  return name() * n;\n}\n"},
+			path: "native/shape.cpp", line: "return name() * n;", symbol: "name", target: "native/shape.cpp", first: "constexpr int name() {", last: "// name end"},
+		{name: "a template parameter of the name", tree: map[string]string{"native/shape.cpp": "int name(int n) {\n  return n * 3;\n} // name end\n\ntemplate <int (*name)(int)> int apply(int n);\n\nint run(int n) {\n  return name(n);\n}\n"},
+			path: "native/shape.cpp", line: "return name(n);", symbol: "name", target: "native/shape.cpp", first: "int name(int n) {", last: "// name end"},
 		{name: "static inline definition of an included header beside system includes", tree: map[string]string{
 			"native/app.c":   "#include <stdlib.h>\n#include \"rates.h\"\n\nint run(int n) {\n  if (n < 0) {\n    exit(1);\n  }\n  return rate(n) / 2;\n}\n",
 			"native/rates.h": "#pragma once\n#include <stddef.h>\n\nstatic inline int rate(int n) {\n  return n * 7;\n} // rate end\n"},
@@ -81,7 +94,7 @@ func TestNativeDefinitionLeadsFollowLookup(t *testing.T) {
 			path: "native/app.c", line: "return rate(n);", symbol: "rate", reason: record.LeadAmbiguous},
 		{name: "definitions under both branches of a condition", tree: map[string]string{"native/app.c": "#ifdef FAST\nstatic int rate(int n) {\n  return n * 8;\n}\n#else\nstatic int rate(int n) {\n  return n * 7;\n}\n#endif\n\nint run(int n) {\n  return rate(n);\n}\n"},
 			path: "native/app.c", line: "return rate(n);", symbol: "rate", reason: record.LeadAmbiguous},
-	})
+	}
 }
 
 // A header prototype the anchor includes, beside system includes, binds the
@@ -90,23 +103,9 @@ func TestNativeDefinitionLeadsFollowLookup(t *testing.T) {
 // definition is sent first and the prototype after it, marked partial.
 // Without exactly one such definition the prototype alone is sent.
 func TestNativeHeaderPrototypeReachesItsDefinition(t *testing.T) {
-	legacy := "static int rate(int n) {\n  return n * 9;\n}\n"
-	for _, c := range []struct {
-		name  string
-		extra map[string]string
-		def   bool
-	}{
-		{"one definition", map[string]string{"native/rates.c": ratesSource}, true},
-		{"one definition beside a static function of the name", map[string]string{"native/rates.c": ratesSource, "native/legacy.c": legacy}, true},
-		{"two definitions", map[string]string{"native/rates.c": ratesSource, "native/stub.c": "int rate(int n) {\n  return 0;\n}\n"}, false},
-		{"only a static function of the name", map[string]string{"native/legacy.c": legacy}, false},
-	} {
+	for _, c := range prototypeCases() {
 		t.Run(c.name, func(t *testing.T) {
-			tree := map[string]string{"native/app.c": ratesCaller, "native/rates.h": ratesHeader}
-			for k, v := range c.extra {
-				tree[k] = v
-			}
-			s := leadStage(t, treeJob(t, tree))
+			s := leadStage(t, treeJob(t, c.tree()))
 			window, anchor := leadWindow(t, s, "native/app.c", "return rate(", 0)
 			l := resolveOne(t, s, record.LeadNeedDefinition, "rate", window, anchor)
 			proto := record.LeadTarget{Path: "native/rates.h", Start: 4, End: 4, Partial: true}
@@ -123,5 +122,34 @@ func TestNativeHeaderPrototypeReachesItsDefinition(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// prototypeCase is a project whose anchor native/app.c calls rate through
+// the prototype of native/rates.h: the files beside them and whether the one
+// definition is found.
+type prototypeCase struct {
+	name  string
+	extra map[string]string
+	def   bool
+}
+
+func (c prototypeCase) tree() map[string]string {
+	tree := map[string]string{"native/app.c": ratesCaller, "native/rates.h": ratesHeader}
+	for k, v := range c.extra {
+		tree[k] = v
+	}
+	return tree
+}
+
+// prototypeCases lists the cases of the test above; the lead reader fuzz
+// tests seed with their trees.
+func prototypeCases() []prototypeCase {
+	legacy := "static int rate(int n) {\n  return n * 9;\n}\n"
+	return []prototypeCase{
+		{"one definition", map[string]string{"native/rates.c": ratesSource}, true},
+		{"one definition beside a static function of the name", map[string]string{"native/rates.c": ratesSource, "native/legacy.c": legacy}, true},
+		{"two definitions", map[string]string{"native/rates.c": ratesSource, "native/stub.c": "int rate(int n) {\n  return 0;\n}\n"}, false},
+		{"only a static function of the name", map[string]string{"native/legacy.c": legacy}, false},
 	}
 }

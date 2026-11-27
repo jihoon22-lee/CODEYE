@@ -23,8 +23,14 @@ const rustPrice = "\n/// The unit price.\n#[inline]\nfn price(qty: u32) -> u32 {
 // conditional fn of the name leave it ambiguous; an item of another inline
 // module is not in scope, nor is a call inside a macro_rules body bound.
 func TestRustDefinitionLeadsFollowScoping(t *testing.T) {
+	runBindCases(t, rustScopingCases())
+}
+
+// rustScopingCases lists the test's cases; the lead reader fuzz tests
+// seed with their trees.
+func rustScopingCases() []bindCase {
 	total := "#[derive(Debug)]\npub struct Order {\n    pub qty: u32,\n}\n\npub fn total(o: &Order) -> u32 {\n    println!(\"{:?}\", o);\n    price(o.qty)\n}\n"
-	runBindCases(t, []bindCase{
+	return []bindCase{
 		{name: "same-file fn beside a derive and a macro", tree: rustTree(total + rustPrice),
 			path: "src/lib.rs", line: "price(o.qty)", symbol: "price", target: "src/lib.rs", first: "#[inline]", last: "// price end"},
 		{name: "a glob use yields to the item", tree: rustTree("use crate::rates::*;\n\n" + total + rustPrice),
@@ -59,7 +65,7 @@ func TestRustDefinitionLeadsFollowScoping(t *testing.T) {
 			path: "src/lib.rs", line: "price(o.qty)", symbol: "price", reason: record.LeadAmbiguous},
 		{name: "a fn under one cfg attribute", tree: rustTree(total + "\n#[cfg(feature = \"fast\")]\nfn price(qty: u32) -> u32 {\n    qty * 7\n}\n"),
 			path: "src/lib.rs", line: "price(o.qty)", symbol: "price", reason: record.LeadAmbiguous},
-	})
+	}
 }
 
 // Self::m, Type::m and self.m bind to the one fn m of the plain inherent
@@ -68,10 +74,16 @@ func TestRustDefinitionLeadsFollowScoping(t *testing.T) {
 // a type name the enclosing function rebinds (a type parameter) and two
 // conditional methods are not bound.
 func TestRustMethodLeadsBindInherentImpls(t *testing.T) {
+	runBindCases(t, rustMethodCases())
+}
+
+// rustMethodCases lists the test's cases; the lead reader fuzz tests
+// seed with their trees.
+func rustMethodCases() []bindCase {
 	impl := "#[derive(Debug, Default)]\npub struct Order {\n    qty: u32,\n}\n\nimpl Order {\n    pub fn new(qty: u32) -> Self {\n        Self { qty }\n    } // new end\n\n" +
 		"    fn price(&self) -> u32 {\n        self.qty * 7\n    } // price end\n\n    pub fn total(&self) -> u32 {\n        self.price() + Self::new(1).qty\n    }\n\n" +
 		"    pub fn bump(&mut self) -> u32 {\n        self.qty += 1;\n        self.price() // after the bump\n    }\n}\n"
-	runBindCases(t, []bindCase{
+	return []bindCase{
 		{name: "Self::new", tree: rustTree(impl), path: "src/lib.rs", line: "self.price() + Self::new(1).qty", symbol: "new",
 			target: "src/lib.rs", first: "pub fn new(qty: u32)", last: "// new end"},
 		{name: "Type::new from a free fn", tree: rustTree(impl + "\npub fn make() -> Order {\n    Order::new(2)\n}\n"), path: "src/lib.rs", line: "Order::new(2)", symbol: "new",
@@ -87,13 +99,17 @@ func TestRustMethodLeadsBindInherentImpls(t *testing.T) {
 		{name: "a type parameter of the type's name", tree: rustTree(impl + "\npub fn make<Order: Default>() -> Order {\n    Order::new(2)\n}\n"), path: "src/lib.rs", line: "Order::new(2)", symbol: "new", reason: record.LeadDefinitionMissing},
 		{name: "methods under two cfg attributes", tree: rustTree("pub struct Order;\n\n#[cfg(unix)]\nimpl Order {\n    fn price(&self) -> u32 {\n        7\n    }\n}\n\n#[cfg(not(unix))]\nimpl Order {\n    fn price(&self) -> u32 {\n        8\n    }\n}\n\nimpl Order {\n    pub fn total(&self) -> u32 {\n        self.price()\n    }\n}\n"),
 			path: "src/lib.rs", line: "        self.price()", symbol: "price", reason: record.LeadAmbiguous},
-	})
+	}
 }
+
+// rustWholeFile holds a raw string, a lifetime, nested block comments, a
+// char literal and a division before the call it resolves.
+const rustWholeFile = "/* outer /* nested */ still a comment */\npub fn total<'a>(name: &'a str, q: u32) -> u32 {\n    let _raw = r#\"quote \" inside\"#;\n    let _c = '}';\n    price(q / 2)\n}\n" + rustPrice
 
 // The Rust reader keeps the file it reads whole: a raw string, a lifetime,
 // nested block comments, a char literal and a division do not stop it.
 func TestRustLeadTokensReadTheWholeFile(t *testing.T) {
-	body := "/* outer /* nested */ still a comment */\npub fn total<'a>(name: &'a str, q: u32) -> u32 {\n    let _raw = r#\"quote \" inside\"#;\n    let _c = '}';\n    price(q / 2)\n}\n" + rustPrice
+	body := rustWholeFile
 	s := leadStage(t, treeJob(t, rustTree(body)))
 	window, anchor := leadWindow(t, s, "src/lib.rs", "price(q / 2)", 0)
 	l := resolveOne(t, s, record.LeadNeedDefinition, "price", window, anchor)

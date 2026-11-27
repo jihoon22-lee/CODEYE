@@ -64,7 +64,13 @@ const pyHelper = "\n\ndef helper(x):\n    return x * 2\n"
 // leave the run-time order to decide; a read of the name binds nothing; a
 // method through self is left to its receiver.
 func TestPythonDefinitionLeadsFollowScoping(t *testing.T) {
-	runBindCases(t, []bindCase{
+	runBindCases(t, pythonScopingCases())
+}
+
+// pythonScopingCases lists the test's cases; the lead reader fuzz tests
+// seed with their trees.
+func pythonScopingCases() []bindCase {
+	return []bindCase{
 		{name: "same-file def after the caller", tree: map[string]string{"app/jobs.py": "def run(x):\n    return helper(x)\n" + pyHelper},
 			path: "app/jobs.py", line: "return helper(x)", symbol: "helper", target: "app/jobs.py", first: "def helper(x):", last: "return x * 2"},
 		{name: "decorated same-file def", tree: map[string]string{"app/jobs.py": "import functools\n\n\ndef run(x):\n    return helper(x)\n\n\n@functools.lru_cache(maxsize=None)\ndef helper(x):\n    return x * 2\n"},
@@ -102,7 +108,7 @@ func TestPythonDefinitionLeadsFollowScoping(t *testing.T) {
 			path: "app/jobs.py", line: "return helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
 		{name: "defs on both branches of a condition", tree: map[string]string{"app/jobs.py": "import sys\n\nif sys.platform == 'win32':\n    def helper(x):\n        return x\nelse:\n    def helper(x):\n        return x * 2\n\n\ndef run(x):\n    return helper(x)\n"},
 			path: "app/jobs.py", line: "return helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
-	})
+	}
 }
 
 const tsHelper = "\nfunction helper(x: number): number {\n  return x * 2;\n} // helper end\n"
@@ -117,8 +123,14 @@ const tsHelper = "\nfunction helper(x: number): number {\n  return x * 2;\n} // 
 // an assignment to a parameter of the name refuse nothing; this.m() and
 // this.#m() are left to their receiver.
 func TestScriptDefinitionLeadsFollowScoping(t *testing.T) {
+	runBindCases(t, scriptScopingCases())
+}
+
+// scriptScopingCases lists the test's cases; the lead reader fuzz tests
+// seed with their trees.
+func scriptScopingCases() []bindCase {
 	run := "export function run(x: number) {\n  return helper(x);\n}\n"
-	runBindCases(t, []bindCase{
+	return []bindCase{
 		{name: "same-file function declaration", tree: map[string]string{"app/run.ts": run + tsHelper},
 			path: "app/run.ts", line: "return helper(x)", symbol: "helper", target: "app/run.ts", first: "function helper(", last: "// helper end"},
 		{name: "same-file arrow function", tree: map[string]string{"app/run.ts": run + "\nconst helper = (x: number): number => x * 2;\n"},
@@ -166,7 +178,7 @@ func TestScriptDefinitionLeadsFollowScoping(t *testing.T) {
 			path: "app/run.ts", line: "return helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
 		{name: "assignment to the module binding", tree: map[string]string{"app/run.js": "export function run(x) {\n  return helper(x);\n}\n\nlet helper = function (x) {\n  return x * 2;\n};\n\nexport function swap(other) {\n  helper = other;\n}\n"},
 			path: "app/run.js", line: "return helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
-	})
+	}
 }
 
 // A TypeScript return annotation is read to the body it ends at: unions,
@@ -175,6 +187,12 @@ func TestScriptDefinitionLeadsFollowScoping(t *testing.T) {
 // annotation the reader cannot follow (a conditional type, a function type)
 // refuses the declaration: nothing is sent rather than a wrong window.
 func TestTypeScriptReturnAnnotationsReachTheBody(t *testing.T) {
+	runBindCases(t, returnAnnotationCases())
+}
+
+// returnAnnotationCases lists the test's cases; the lead reader fuzz tests
+// seed with their trees.
+func returnAnnotationCases() []bindCase {
 	var cases []bindCase
 	for _, c := range []struct {
 		name, annotation string
@@ -203,7 +221,7 @@ func TestTypeScriptReturnAnnotationsReachTheBody(t *testing.T) {
 		}
 		cases = append(cases, bc)
 	}
-	runBindCases(t, cases)
+	return cases
 }
 
 // A relative specifier names the file it spells, else (that file absent)
@@ -212,6 +230,12 @@ func TestTypeScriptReturnAnnotationsReachTheBody(t *testing.T) {
 // A .js file beside its .ts source is refused, as is a package import.
 // Anchors of every script extension resolve.
 func TestScriptSpecifiersReachTypeScriptSources(t *testing.T) {
+	runBindCases(t, specifierCases())
+}
+
+// specifierCases lists the test's cases; the lead reader fuzz tests
+// seed with their trees.
+func specifierCases() []bindCase {
 	callee := "export function helper(x: number) {\n  return x * 2;\n} // helper end\n"
 	caller := func(specifier string) string {
 		return "import { helper } from '" + specifier + "';\n\nexport function run(x: number) {\n  return helper(x);\n}\n"
@@ -249,5 +273,5 @@ func TestScriptSpecifiersReachTypeScriptSources(t *testing.T) {
 		cases = append(cases, bindCase{name: "same-file function in " + anchor, tree: map[string]string{anchor: body},
 			path: anchor, line: "return helper(x)", symbol: "helper", target: anchor, first: "function helper(", last: "// helper end"})
 	}
-	runBindCases(t, cases)
+	return cases
 }

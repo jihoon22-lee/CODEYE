@@ -246,11 +246,9 @@ func slashDivides(tokens []callToken) bool {
 	case len(t.text) == 1 && t.text[0] >= '0' && t.text[0] <= '9', t.text == "]":
 		return true
 	case t.text == ")":
-		for i := last - 1; i >= 0; i-- {
-			if tokens[i].text == "(" && !tokens[i].quoted && tokens[i].close == last {
-				return !(tokenIs(tokens, i-1, "if") || tokenIs(tokens, i-1, "while") || tokenIs(tokens, i-1, "for") || tokenIs(tokens, i-1, "with"))
-			}
-		}
+		// A ")" token's parent is its "(".
+		open := t.parent
+		return open >= 0 && !(tokenIs(tokens, open-1, "if") || tokenIs(tokens, open-1, "while") || tokenIs(tokens, open-1, "for") || tokenIs(tokens, open-1, "with"))
 	}
 	return false
 }
