@@ -89,3 +89,81 @@ func TestDryRunUpstreamProjectLeads(t *testing.T) {
 		})
 	}
 }
+
+// dryRunLeadCase is a project whose anchor (anchor) calls share in a file
+// the overview leaves out, and the targets its lead resolves to.
+type dryRunLeadCase struct {
+	name, anchor string
+	tree         map[string]string
+	targets      []record.LeadTarget
+}
+
+// dryRunLeadCases are the projects of the test below with lines lines of
+// padding before the callee (the line numbers of the targets assume 900).
+func dryRunLeadCases(lines int) []dryRunLeadCase {
+	padding := strings.Repeat("// setup note\n", lines)
+	return []dryRunLeadCase{
+		{"TypeScript", "app/run.ts", map[string]string{
+			"README.md":    "# Bill\n\nThe bill is split between the people present.\n",
+			"app/run.ts":   "import { share } from './share.js';\n\n// run splits the bill.\nexport function run(total: number, people: number): number {\n  return share(total, people) + 1;\n}\n",
+			"app/share.ts": padding + "\n// share divides the total.\nexport function share(total: number, people: number): number {\n  return total / people;\n}\n",
+		}, []record.LeadTarget{{Path: "app/share.ts", Start: 903, End: 905}}},
+		{"C", "native/main.c", map[string]string{
+			"README.md":      "# Bill\n\nThe bill is split between the people present.\n",
+			"native/main.c":  "#include <stdio.h>\n#include <stdlib.h>\n#include \"split.h\"\n\n// main prints each share.\nint main(void) {\n  printf(\"%d\\n\", share(10, 3) + 1);\n  return EXIT_SUCCESS;\n}\n",
+			"native/split.h": "#ifndef SPLIT_H\n#define SPLIT_H\n\nint share(int total, int people);\n\n#endif\n",
+			"native/split.c": "#include \"split.h\"\n" + padding + "\n// share divides the total.\nint share(int total, int people) {\n  return total / people;\n}\n",
+		}, []record.LeadTarget{{Path: "native/split.c", Start: 904, End: 906}, {Path: "native/split.h", Start: 4, End: 4, Partial: true}}},
+	}
+}
+
+// TC-345: the dry-run upstream's project lead mode, on a TypeScript project
+// whose imports name .js files of .ts sources (the callee divides, which
+// the shared call reader gives up on) and on a C project that includes
+// system headers beside its own: the lead resolves to the definition (for C
+// the defining source, after it the header prototype marked partial unless
+// the overview already sent the header), the follow-up runs and its
+// refinement passes the record checks.
+func TestDryRunUpstreamProjectLeadsAcrossLanguages(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("dry runs with scripts/fake_model_upstream.py are a Linux procedure")
+	}
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 is not installed")
+	}
+	for _, c := range dryRunLeadCases(900) {
+		t.Run(c.name, func(t *testing.T) {
+			j := treeJob(t, c.tree)
+			script := goBuildFilesScript(t)
+			for _, role := range []string{record.StageInvestigate, record.StageLeads, record.StageVerify} {
+				script[role] = func(_ int, q opencode.Request) opencode.Reply { return dryRunLeads(t, python, role, q, "project") }
+			}
+			_, results := runRoleWith(t, j, Handler{Static: vetStub{}, Caller: &scriptedCaller{script: script}, Budget: smallBudget}, "1.27.4")
+			inv := readRecord(t, j, record.StageInvestigate)
+			named := slices.IndexFunc(inv.Leads, func(l record.Lead) bool { return l.Symbol == "share" })
+			followup := results[record.TaskLeads]
+			if named < 0 || !inv.Leads[named].Resolved() || followup.Status != domain.TaskSucceeded {
+				t.Fatalf("leads %+v, follow-up %+v", inv.Leads, followup)
+			}
+			// The overview may have sent the header: its prototype is then
+			// already in the request and only the definition is new.
+			got := inv.Leads[named].Targets
+			want := slices.DeleteFunc(slices.Clone(c.targets), func(w record.LeadTarget) bool {
+				return w.Partial && !slices.ContainsFunc(got, func(g record.LeadTarget) bool { return g.Path == w.Path })
+			})
+			if len(got) != len(want) {
+				t.Fatalf("targets %+v, want %+v", got, want)
+			}
+			for k, w := range want {
+				if g := got[k]; g.Path != w.Path || g.Start != w.Start || g.End != w.End || g.Partial != w.Partial {
+					t.Fatalf("target %d %+v, want %+v", k, g, w)
+				}
+			}
+			d := readRecord(t, j, record.StageLeads).LeadFollowup.Dispositions
+			if len(d) == 0 || d[0].Disposition != record.DispositionRefined || d[0].Original == nil {
+				t.Fatalf("dispositions %+v", d)
+			}
+		})
+	}
+}

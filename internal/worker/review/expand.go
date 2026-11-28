@@ -387,12 +387,17 @@ func expandWithin(ctx context.Context, snapshot source.Snapshot, scope domain.Sc
 }
 
 func readVerified(root *os.Root, e source.Entry) ([]byte, error) {
+	return readVerifiedWithin(root, e, maxFileBytes)
+}
+
+// readVerifiedWithin is readVerified for a blob of at most limit bytes.
+func readVerifiedWithin(root *os.Root, e source.Entry, limit int64) ([]byte, error) {
 	f, err := root.Open(e.Path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	b, err := io.ReadAll(io.LimitReader(f, maxFileBytes+1))
+	b, err := io.ReadAll(io.LimitReader(f, limit+1))
 	if err != nil {
 		return nil, err
 	}

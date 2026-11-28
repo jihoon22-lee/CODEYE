@@ -33,7 +33,9 @@ import (
 // nothing. It reads only files the run may send: in scope, inside a pull
 // request's changed files, not withheld by the secrets screen, not
 // generated and not on a secondary path, each blob checked against the
-// manifest (readVerified). Every lead gets one scan within maxScanFiles and
+// manifest (readVerified); a check that no other source declares or writes
+// a name reads the task's closed world (leadWorld), which sends nothing.
+// Every lead gets one scan within maxScanFiles and
 // maxScanBytes, the caller expansion's reads included. A location the
 // investigate request already carried is named by that excerpt's ID and not
 // sent again; two declarations the lead could mean are never chosen
@@ -61,6 +63,10 @@ type leadResolver struct {
 	carried []record.Excerpt
 	// excerpts and bytes are what the follow-up's caps leave.
 	excerpts, bytes int
+	// world is the task's closed world (closedWorld); worldRead, when set,
+	// is how it reads a source's bytes (else worldBytes).
+	world     *leadWorld
+	worldRead func(source.Entry) (string, bool, error)
 }
 
 func (s *roleStage) newLeadResolver(sent []record.Excerpt) *leadResolver {
@@ -77,7 +83,8 @@ func (s *roleStage) newLeadResolver(sent []record.Excerpt) *leadResolver {
 }
 
 // blocked is why a file may not be read for a lead or sent as one of its
-// excerpts; "" when it may.
+// excerpts; "" when it may. The closed world (leadWorld) reads every
+// source but a withheld one for its checks, and sends none.
 func (r *leadResolver) blocked(p string) string {
 	switch {
 	case r.s.secretFiles()[p] || record.Sensitive([]byte(p)):
@@ -181,66 +188,13 @@ func (l *leadScan) missing(notFound string, relevant func(string) bool) string {
 	return notFound
 }
 
-var importLine = regexp.MustCompile(`^\s*(import|from|#\s*include|use|mod|require|export)\b|\brequire\s*\(`)
-
-// definitionFiles reports the files a definition lead may point into, by
-// path and text alone (they could not be read): for a qualified call
-// (q.symbol, q::symbol, q->symbol) a file whose name or directory is q or
-// that an import line naming q points at; for an unqualified call a file of
-// the anchor's directory or one that an import line naming the symbol
-// points at.
-func (r *leadResolver) definitionFiles(scan *leadScan, anchor record.Excerpt, symbol string) func(string) bool {
-	qualified := regexp.MustCompile(`([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:\.|::|->)\s*` + regexp.QuoteMeta(symbol) + `\s*\(`)
-	var names []string
-	for _, m := range qualified.FindAllStringSubmatch(anchor.Text, -1) {
-		names = addLim(names, m[1])
-	}
-	var imports []string
-	if f, err := scan.index.goFile(anchor.Path); err == nil && f.parsed != nil {
-		for _, spec := range f.parsed.Imports {
-			line := spec.Path.Value
-			if spec.Name != nil {
-				line = spec.Name.Name + " " + line
-			}
-			imports = append(imports, line)
-		}
-	} else if e, ok := r.catalog.files[anchor.Path]; ok {
-		if text, readable, err := scan.read(e); err == nil && readable {
-			for _, line := range strings.Split(text, "\n") {
-				if importLine.MatchString(line) {
-					imports = append(imports, line)
-				}
-			}
-		}
-	}
-	return func(p string) bool {
-		own := []string{strings.TrimSuffix(path.Base(p), path.Ext(p)), path.Base(path.Dir(p))}
-		points := func(token string) bool {
-			for _, line := range imports {
-				if symbolAt(line, token) && slices.ContainsFunc(own, func(n string) bool { return symbolAt(line, n) }) {
-					return true
-				}
-			}
-			return false
-		}
-		if len(names) == 0 {
-			return path.Dir(p) == path.Dir(anchor.Path) || points(symbol)
-		}
-		for _, q := range names {
-			if slices.Contains(own, q) || points(q) {
-				return true
-			}
-		}
-		return false
-	}
-}
-
 // callAt reports a call of symbol in text: the identifier followed by "(".
 func callAt(text, symbol string) bool {
 	return regexp.MustCompile(`(^|[^A-Za-z0-9_$])` + regexp.QuoteMeta(symbol) + `\s*\(`).MatchString(text)
 }
 
-// leadLanguage reports a source file whose leads a resolver reads.
+// leadLanguage reports a source file whose callers leads a resolver reads;
+// definition leads read every file leadDefinitionLanguage names.
 func leadLanguage(p string) bool {
 	switch path.Ext(p) {
 	case ".go", ".java", ".c", ".cc", ".cpp", ".cxx", ".c++", ".rs":
@@ -269,6 +223,13 @@ type leadHit struct {
 	// excerpt is the window when the resolver already built it (the Go
 	// caller expansion).
 	excerpt *record.Excerpt
+	// partial marks a hit whose window is never its whole declaration: a C
+	// or C++ prototype (the body is elsewhere), a declaration whose end the
+	// reader is not sure of. secondary marks a further target of the
+	// binding another hit names first (a header prototype after the
+	// definition): it does not make the lead ambiguous, and it is sent only
+	// beside a hit the request did not hold.
+	partial, secondary bool
 }
 
 // declaration is the hit's whole declaration when known, else its location.
@@ -285,7 +246,11 @@ func (r *leadResolver) resolve(l record.Lead, anchor record.Excerpt) (record.Lea
 		l.Resolution, l.Reason, l.Targets = record.LeadUnresolved, reason, nil
 		return l, nil
 	}
-	if !leadLanguage(anchor.Path) {
+	supported := leadLanguage(anchor.Path)
+	if l.Need == record.LeadNeedDefinition {
+		supported = leadDefinitionLanguage(anchor.Path) != ""
+	}
+	if !supported {
 		return unresolved(record.LeadLanguage)
 	}
 	// A definition lead's call is checked where it binds (definitions).
@@ -323,47 +288,60 @@ func (r *leadResolver) resolve(l record.Lead, anchor record.Excerpt) (record.Lea
 		}
 		outside = append(outside, h)
 	}
-	if len(outside) == 0 {
+	if !slices.ContainsFunc(outside, func(h leadHit) bool { return !h.secondary }) {
 		l.InRequest = inRequest
 		return unresolved(record.LeadInRequest)
 	}
-	// sentAll: a hit's window held no line the request did not send.
-	blockedBy, overCap, sentAll := "", false, false
-	for _, h := range outside {
-		if len(l.Targets) == record.MaxLeadTargets {
+	// sentAll: a hit's window held no line the request did not send. The
+	// primary hits go first; a secondary one (a header prototype after its
+	// definition) only beside a primary hit the request did not hold, so a
+	// definition the request sent in parts leaves the lead in the request.
+	blockedBy, overCap, sentAll, primaryOut := "", false, false, false
+	for _, secondary := range []bool{false, true} {
+		if secondary && !primaryOut {
 			break
 		}
-		why := r.blocked(h.loc.path)
-		if scan.refused[h.loc.path] == record.LeadGenerated {
-			why = record.LeadGenerated
-		}
-		if why != "" {
-			blockedBy = cmpReason(blockedBy, why)
-			continue
-		}
-		x, partial, held, ok := r.window(scan, h)
-		if len(held) > 0 {
-			sentAll = true
-			for _, id := range held {
-				if len(inRequest) < record.MaxLeadTargets {
-					inRequest = addLim(inRequest, id)
-				}
+		for _, h := range outside {
+			if h.secondary != secondary {
+				continue
 			}
-			continue
+			if len(l.Targets) == record.MaxLeadTargets {
+				break
+			}
+			why := r.blocked(h.loc.path)
+			if scan.refused[h.loc.path] == record.LeadGenerated {
+				why = record.LeadGenerated
+			}
+			if why != "" {
+				blockedBy = cmpReason(blockedBy, why)
+				primaryOut = true
+				continue
+			}
+			x, partial, held, ok := r.window(scan, h)
+			if len(held) > 0 {
+				sentAll = true
+				for _, id := range held {
+					if len(inRequest) < record.MaxLeadTargets {
+						inRequest = addLim(inRequest, id)
+					}
+				}
+				continue
+			}
+			primaryOut = true
+			if !ok {
+				continue
+			}
+			if r.excerpts <= 0 || record.JSONLen(x.Text) > r.bytes {
+				overCap = true
+				continue
+			}
+			if slices.ContainsFunc(l.Targets, func(t record.LeadTarget) bool { return t.ID == x.ID }) {
+				continue
+			}
+			r.excerpts--
+			r.bytes -= record.JSONLen(x.Text)
+			l.Targets = append(l.Targets, record.LeadTarget{ID: x.ID, Path: x.Path, SHA256: x.SHA256, Start: x.Start, End: x.End, Kind: x.Kind, Origin: x.Origin, Symbol: x.Symbol, Partial: partial || h.partial})
 		}
-		if !ok {
-			continue
-		}
-		if r.excerpts <= 0 || record.JSONLen(x.Text) > r.bytes {
-			overCap = true
-			continue
-		}
-		if slices.ContainsFunc(l.Targets, func(t record.LeadTarget) bool { return t.ID == x.ID }) {
-			continue
-		}
-		r.excerpts--
-		r.bytes -= record.JSONLen(x.Text)
-		l.Targets = append(l.Targets, record.LeadTarget{ID: x.ID, Path: x.Path, SHA256: x.SHA256, Start: x.Start, End: x.End, Kind: x.Kind, Origin: x.Origin, Symbol: x.Symbol, Partial: partial})
 	}
 	switch {
 	case len(l.Targets) > 0:
@@ -391,15 +369,12 @@ func cmpReason(have, next string) string {
 }
 
 // definitions finds the declaration a call of the symbol on the anchor
-// lines binds to: by goCallees for Go, by the bound calls of sourceCalls for
-// the other languages. The symbol names the callee itself, never another
-// token of the line: no such call is lead_symbol_not_at_anchor. More than
-// one distinct declaration is ambiguous.
+// lines binds to: by goCallees for Go, by scriptDefinitions for Python,
+// JavaScript and TypeScript, by the bound calls of sourceCalls for the other
+// languages. The symbol names the callee itself, never another token of the
+// line: no such call is lead_symbol_not_at_anchor. More than one distinct
+// declaration is ambiguous.
 func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.Excerpt) ([]leadHit, string, error) {
-	links, err := scan.index.from(anchor.Path, ".")
-	if err != nil {
-		return nil, "", err
-	}
 	var hits []leadHit
 	add := func(h leadHit) {
 		if !slices.ContainsFunc(hits, func(o leadHit) bool { return o.declaration() == h.declaration() }) {
@@ -407,17 +382,85 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 		}
 	}
 	called := false
-	if strings.HasSuffix(anchor.Path, ".go") {
-		found, ok, err := r.goCallees(scan, anchor, symbol, links)
+	switch lang := leadDefinitionLanguage(anchor.Path); lang {
+	case "c", "cpp":
+		found, ok, local, open, reason, err := r.nativeDefinitions(scan, anchor, symbol)
 		if err != nil {
 			return nil, "", err
 		}
-		called = ok
+		if reason != "" {
+			return nil, reason, nil
+		}
+		called = ok || callAt(anchor.Text, symbol)
 		for _, h := range found {
 			add(h)
 		}
-	} else {
+		if ok && len(hits) == 0 && local {
+			return nil, record.LeadDefinitionMissing, nil
+		}
+		if !open {
+			break
+		}
+		// The anchor could not be read token by token: the call catalog's
+		// bound calls decide.
+		links, err := scan.index.from(anchor.Path, ".")
+		if err != nil {
+			return nil, "", err
+		}
+		for _, link := range links {
+			if link.caller.path == anchor.Path && anchor.Start <= link.caller.start && link.caller.start <= anchor.End && symbol == link.symbol {
+				called = true
+				add(leadHit{loc: link.callee, origin: "context", extent: link.calleeExtent})
+			}
+		}
+	case "python", "javascript":
+		found, ok, local, reason, err := r.scriptDefinitions(scan, anchor, symbol)
+		if err != nil {
+			return nil, "", err
+		}
+		if reason != "" {
+			return nil, reason, nil
+		}
+		called = ok || callAt(anchor.Text, symbol)
+		for _, h := range found {
+			add(h)
+		}
+		if called && len(hits) == 0 && local {
+			return nil, record.LeadDefinitionMissing, nil
+		}
+	default:
+		links, err := scan.index.from(anchor.Path, ".")
+		if err != nil {
+			return nil, "", err
+		}
+		if lang == "go" {
+			found, ok, err := r.goCallees(scan, anchor, symbol, links)
+			if err != nil {
+				return nil, "", err
+			}
+			called = ok
+			for _, h := range found {
+				add(h)
+			}
+			break
+		}
 		called = callAt(anchor.Text, symbol)
+		if lang == "rust" {
+			found, ok, local, open, reason := r.rustDefinitions(scan, anchor, symbol)
+			if reason != "" {
+				return nil, reason, nil
+			}
+			called = called || ok
+			for _, h := range found {
+				add(h)
+			}
+			if ok && len(hits) == 0 && local {
+				return nil, record.LeadDefinitionMissing, nil
+			}
+			if !open {
+				break
+			}
+		}
 		for _, link := range links {
 			// The call's name, or the imported name an alias binds it to.
 			if link.caller.path != anchor.Path || link.caller.start < anchor.Start || anchor.End < link.caller.start ||
@@ -425,39 +468,18 @@ func (r *leadResolver) definitions(scan *leadScan, symbol string, anchor record.
 				continue
 			}
 			called = true
-			extent := link.calleeExtent
-			if extent.start == 0 && callLanguage(link.callee.path) != "" {
-				if extent, err = r.scriptExtent(scan, link); err != nil {
-					return nil, "", err
-				}
-			}
-			add(leadHit{loc: link.callee, origin: "context", extent: extent})
+			add(leadHit{loc: link.callee, origin: "context", extent: link.calleeExtent})
 		}
 	}
 	switch {
 	case !called:
 		return nil, record.LeadSymbolNotAtAnchor, nil
 	case len(hits) == 0:
-		return nil, scan.missing(record.LeadDefinitionMissing, r.definitionFiles(scan, anchor, symbol)), nil
-	case len(hits) > 1:
+		return nil, r.definitionMissing(scan, anchor, symbol), nil
+	case len(slices.DeleteFunc(slices.Clone(hits), func(h leadHit) bool { return h.secondary })) > 1:
 		return nil, record.LeadAmbiguous, nil
 	}
 	return hits, "", nil
-}
-
-// scriptExtent is the whole Python or JavaScript declaration whose window
-// (up to its first return) a bound call names.
-func (r *leadResolver) scriptExtent(scan *leadScan, link sourceCall) (sourceCallLocation, error) {
-	text, ok, err := scan.index.text(link.callee.path)
-	if err != nil || !ok {
-		return sourceCallLocation{}, err
-	}
-	python := callLanguage(link.callee.path) == "python"
-	start, end := directDeclarationExtent(callTokens(text, python), link.symbol, python)
-	if start != link.callee.start || end < link.callee.end {
-		return sourceCallLocation{}, nil
-	}
-	return sourceCallLocation{link.callee.path, start, end}, nil
 }
 
 // goCallees finds what the Go calls of symbol on the anchor lines bind to;

@@ -78,7 +78,9 @@ def main():
             go_suite = "--smokes-only" not in sys.argv[1:]
             if go_suite:
                 # Cumulative deadline for each package's race-enabled test binary.
-                subprocess.run(["go", "test", "-race", "-count=1", "-timeout=15m", "./..."],
+                # The review package takes 10 to 14 minutes on a CI runner; 25
+                # minutes leaves a slow runner room.
+                subprocess.run(["go", "test", "-race", "-count=1", "-timeout=25m", "./..."],
                                cwd=ROOT, env=env, check=True)
             subprocess.run(["go", "build", "-o", str(base / "codeye"), "./cmd/codeye"], cwd=ROOT, env=env, check=True)
             env["CODEYE_DATABASE_URL"] = url
