@@ -66,8 +66,9 @@ const pyHelper = "\n\ndef helper(x):\n    return x * 2\n"
 // with, an assignment or a comprehension, nested or starred); a def and an
 // import of the name, or a module-level rebinding (a tuple target too),
 // leave the run-time order to decide; a read of the name (in a tuple
-// argument or a subscript key too) binds nothing; a method through self is
-// left to its receiver.
+// argument or a subscript key too) binds nothing; a method through self
+// binds to the class's method, not to a module function of the name
+// (TestMethodLeadsBindInAClosedWorld).
 func TestPythonDefinitionLeadsFollowScoping(t *testing.T) {
 	runBindCases(t, pythonScopingCases())
 }
@@ -122,7 +123,7 @@ func pythonScopingCases() []bindCase {
 			"app/secret.py": "def helper(x):\n    return x\n"},
 			path: "app/jobs.py", line: "return helper(x)", symbol: "helper", withheld: []string{"app/secret.py"}, reason: record.LeadDefinitionMissing},
 		{name: "self call beside a module function of the name", tree: map[string]string{"app/jobs.py": "def helper(x):\n    return x * 2\n\n\nclass Job:\n    def helper(self, x):\n        return x\n\n    def run(self, x):\n        return self.helper(x)\n"},
-			path: "app/jobs.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadDefinitionMissing},
+			path: "app/jobs.py", line: "return self.helper(x)", symbol: "helper", target: "app/jobs.py", first: "def helper(self, x):", last: "        return x\n"},
 
 		{name: "def and import of the name", tree: map[string]string{"app/jobs.py": "from .other import helper\n\n\ndef run(x):\n    return helper(x)\n" + pyHelper,
 			"app/other.py": "def helper(x):\n    return x\n"},
@@ -150,7 +151,8 @@ const tsHelper = "\nfunction helper(x: number): number {\n  return x * 2;\n} // 
 // binding, or a var or a function declaration of the name in a module-level
 // block are ambiguous; a read, a condition, a class member of the name, an
 // assignment to a parameter of the name and a var in another function's
-// block refuse nothing; this.m() and this.#m() are left to their receiver.
+// block refuse nothing; this.m() and this.#m() bind to the class's method,
+// not to a module function of the name (TestMethodLeadsBindInAClosedWorld).
 // An arrow function's expression ends where its line no longer goes on (a
 // line opening with ".", "?" or ":", one after an operator); where a later
 // line may go on with it (a template), the window is partial.
@@ -237,9 +239,9 @@ func scriptScopingCases() []bindCase {
 		{name: "catch variable of the name", tree: map[string]string{"app/run.js": "export function run(x) {\n  try {\n    return x();\n  } catch (helper) {\n    return helper(x);\n  }\n}\n\nfunction helper(x) {\n  return x;\n}\n"},
 			path: "app/run.js", line: "return helper(x)", symbol: "helper", reason: record.LeadDefinitionMissing},
 		{name: "this call beside a module function of the name", tree: map[string]string{"app/run.ts": "export class Job {\n  helper(x: number) {\n    return x;\n  }\n  run(x: number) {\n    return this.helper(x);\n  }\n}\n" + tsHelper},
-			path: "app/run.ts", line: "return this.helper(x)", symbol: "helper", reason: record.LeadDefinitionMissing},
+			path: "app/run.ts", line: "return this.helper(x)", symbol: "helper", target: "app/run.ts", first: "helper(x: number) {", last: "  }\n  run(x: number) {"},
 		{name: "private method call beside a module function of the name", tree: map[string]string{"app/run.ts": "export class Job {\n  #helper(x: number) {\n    return x;\n  }\n  run(x: number) {\n    return this.#helper(x);\n  }\n}\n" + tsHelper},
-			path: "app/run.ts", line: "return this.#helper(x)", symbol: "helper", reason: record.LeadDefinitionMissing},
+			path: "app/run.ts", line: "return this.#helper(x)", symbol: "helper", target: "app/run.ts", first: "#helper(x: number) {", last: "  }\n  run(x: number) {"},
 
 		{name: "import and declaration of the name", tree: map[string]string{"app/run.ts": "import { helper } from './other.js';\n\n" + run + tsHelper,
 			"app/other.ts": "export function helper(x: number) {\n  return x;\n}\n"},

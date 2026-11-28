@@ -20,8 +20,8 @@ import (
 // re-exports. Two module-level bindings of the name, or an assignment to it
 // anywhere, are ambiguous: the language decides by run-time order (Python)
 // or rejects the module (JavaScript). A read of the name, such as a callback
-// argument, binds nothing and refuses nothing. Calls through self or this
-// are left unresolved: a subclass or the caller decides their receiver.
+// argument, binds nothing and refuses nothing. Calls through this, self or
+// a class's name bind by the rules of leads_methods.go (scriptMethods).
 
 // Kinds of an occurrence of a name in a script's tokens.
 const (
@@ -1406,10 +1406,21 @@ func (r *leadResolver) scriptDefinitions(scan *leadScan, anchor record.Excerpt, 
 		}
 		add(declarationHit(anchor.Path, d))
 	}
-	if ambiguous || len(hits) > 1 {
-		return nil, calls > 0, false, record.LeadAmbiguous, nil
+	// Calls through this, self or a class's name.
+	methods, through, why, err := r.scriptMethods(scan, anchor, tokens, symbol, python, typeScript, imports)
+	if err != nil {
+		return nil, true, false, "", err
 	}
-	return hits, calls > 0, calls > 0 && locals == calls, "", nil
+	for _, h := range methods {
+		add(h)
+	}
+	switch {
+	case ambiguous || why == record.LeadAmbiguous || len(hits) > 1:
+		return nil, calls > 0 || through, false, record.LeadAmbiguous, nil
+	case len(hits) == 0 && why != "":
+		return nil, true, false, why, nil
+	}
+	return hits, calls > 0 || through, calls > 0 && locals == calls, "", nil
 }
 
 // pythonClassScope reports a call directly in a class body whose class

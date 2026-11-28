@@ -54,7 +54,7 @@ func (x leadFixture) files() []leadFile {
 func leadFixtures() []leadFixture {
 	var out []leadFixture
 	for _, cases := range [][]bindCase{pythonScopingCases(), scriptScopingCases(), returnAnnotationCases(), specifierCases(),
-		regexLiteralCases(), jsxCases(), rustScopingCases(), rustMethodCases(), nativeLookupCases()} {
+		regexLiteralCases(), jsxCases(), methodCases(), rustScopingCases(), rustMethodCases(), nativeLookupCases()} {
 		for _, c := range cases {
 			out = append(out, leadFixture{c.tree, c.path, c.symbol, c.withheld})
 		}
@@ -173,7 +173,24 @@ func runLeadFinders(t testing.TB, files []leadFile, symbol string, depth leadRea
 		entries[f.path] = source.Entry{Path: f.path, Kind: "file", Size: &size, SHA256: "fuzz"}
 		lines[f.path] = strings.Count(f.text, "\n") + 1
 	}
-	r := &leadResolver{s: &roleStage{ctx: t.Context()}, catalog: newSourceCallCatalog(entries), sentPaths: map[string]bool{}}
+	withheld := map[string]bool{}
+	for _, f := range files {
+		if f.refused {
+			withheld[f.path] = true
+		}
+	}
+	// The closed world reads the same files, a refused one withheld by the
+	// screen (searched, never tokenized).
+	r := &leadResolver{s: &roleStage{ctx: t.Context(), screen: secretScreen{state: screenApplied, withheld: withheld}}, catalog: newSourceCallCatalog(entries),
+		sentPaths: map[string]bool{}}
+	r.worldRead = func(e source.Entry) (string, bool, error) {
+		for _, f := range files {
+			if f.path == e.Path {
+				return f.text, true, nil
+			}
+		}
+		return "", false, nil
+	}
 	scan := func(limited bool) *leadScan {
 		l := r.scan()
 		for _, f := range files {
@@ -272,6 +289,9 @@ func checkLeadTokens(t testing.TB, text string, tokens []callToken) {
 			bad = "close of no bracket"
 		case closer(i) && (tok.parent < 0 || tokens[tok.parent].close != i):
 			bad = "closer"
+		case (tok.name || tok.quoted) && record.ValidEvidenceSymbol(tok.text) && !holdsWord(text, tok.text):
+			// The closed world searches for a name before it tokenizes.
+			bad = "missed by the word search"
 		}
 		if bad != "" {
 			t.Fatalf("token %d %+v: %s (%d lines)", i, tok, bad, lines)
@@ -377,6 +397,12 @@ func checkLeadFileReaders(t testing.TB, f leadFile) {
 			return
 		}
 		checkLeadTokens(t, masked, u.tokens)
+		for _, tok := range u.tokens {
+			// The closed world searches the text as written.
+			if tok.name && record.ValidEvidenceSymbol(tok.text) && !holdsWord(f.text, tok.text) {
+				t.Fatalf("token %+v of %s missed by the word search", tok, f.path)
+			}
+		}
 		for _, name := range leadTokenNames(u.tokens, 16) {
 			for _, d := range u.decls(name) {
 				span("declaration", d.first, d.last, len(u.tokens))

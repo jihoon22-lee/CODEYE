@@ -829,7 +829,7 @@ func nativeSource(p, lang string) bool {
 // search could not read every source.
 func (l *nativeLead) externalDefinition(scope []string, signature string) (leadHit, bool, error) {
 	if l.external == nil {
-		x, err := l.r.nativeExternals(l.scan, l.tu, l.lang, l.symbol)
+		x, err := l.r.nativeExternals(l.tu, l.lang, l.symbol)
 		if err != nil {
 			return leadHit{}, false, err
 		}
@@ -852,50 +852,50 @@ func (l *nativeLead) externalDefinition(scope []string, signature string) (leadH
 
 // nativeExternals are the definitions of a name at namespace scope (not
 // static, not conditional, no variable) in the project's C and C++ sources
-// outside a translation unit, those on a secondary path included; complete
-// reports a search that read every such source.
+// outside a translation unit; complete reports a search that read every
+// such source.
 type nativeExternals struct {
 	defs     []nativeDecl
 	complete bool
 }
 
-// nativeExternals reads the external definitions of name. The search cannot
-// be complete when the scan reached its limit, a source holding the name
-// could not be tokenized, or a source could not be read at all (withheld,
-// outside the scope or the change, generated, unreadable): that source may
-// hold the definition the readable ones only stand in for. A source on a
-// secondary path is read for the search alone (checkText): its definition
-// counts, so beside another one neither is chosen, and is never sent
-// (resolve refuses its window, lead_secondary_path).
-func (r *leadResolver) nativeExternals(scan *leadScan, tu nativeTU, lang, name string) (nativeExternals, error) {
+// nativeExternals reads the external definitions of name in the task's
+// closed world (leadWorld): every C or C++ source of the snapshot outside
+// the translation unit, inside or outside the run's scope and a pull
+// request's change, on a secondary path or in a directory the review does
+// not read. Their definitions all count, so beside another one neither is
+// chosen; one found in a file the lead may not send is a hit resolve
+// refuses with the file's reason. The search is not complete when the world
+// cannot answer for the language (a source it holds no bytes of, its byte
+// bound), when more sources than maxWorldFiles hold the name, or when one
+// holding it is withheld, not UTF-8 text or cannot be tokenized: that
+// source may hold the definition the others only stand in for.
+func (r *leadResolver) nativeExternals(tu nativeTU, lang, name string) (nativeExternals, error) {
 	in := map[string]bool{}
 	for _, u := range tu.units {
 		in[u.path] = true
 	}
+	w := r.closedWorld()
+	holding, reason, err := w.holdingName(lang, name)
+	if err != nil || reason != "" {
+		return nativeExternals{}, err
+	}
+	var paths []string
+	for _, p := range w.sets[lang].paths {
+		if holding[p] && !in[p] {
+			paths = append(paths, p)
+		}
+	}
+	if len(paths) > maxWorldFiles || w.opaqueAmong(paths) != "" {
+		return nativeExternals{}, nil
+	}
 	var x nativeExternals
-	for _, p := range r.catalog.ordered {
-		if in[p] || !nativeSource(p, lang) {
-			continue
-		}
-		text, ok, err := scan.checkText(p)
-		if err != nil {
-			return nativeExternals{}, err
-		}
-		if scan.limited || !ok {
+	for _, p := range paths {
+		defs, ok := w.nativeDefinitions(p, name)
+		if !ok {
 			return nativeExternals{}, nil
 		}
-		if !strings.Contains(text, name) {
-			continue
-		}
-		u := newNativeUnit(p, text)
-		if u == nil {
-			return nativeExternals{}, nil
-		}
-		for _, d := range u.decls(name) {
-			if d.body && !d.static && !d.value && !d.conditional {
-				x.defs = append(x.defs, d)
-			}
-		}
+		x.defs = append(x.defs, defs...)
 	}
 	x.complete = true
 	return x, nil

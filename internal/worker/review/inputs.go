@@ -88,16 +88,19 @@ func (s *roleStage) reviewSource(e source.Entry) (string, string, error) {
 	if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 {
 		return "", record.ScopeReasonUnreadable, nil
 	}
-	var sensitive bool
-	if index := s.sourceIndex(); index != nil {
-		sensitive = index.sensitive(e.SHA256, b)
-	} else {
-		sensitive = record.Sensitive(b)
-	}
-	if sensitive {
+	if s.sensitiveBlob(e, b) {
 		return "", record.ScopeReasonWithheld, nil
 	}
 	return strings.TrimSuffix(string(b), "\n"), "", nil
+}
+
+// sensitiveBlob reports the verified bytes b of e that the content screen
+// withholds (record.Sensitive, memoized by blob in the attempt's index).
+func (s *roleStage) sensitiveBlob(e source.Entry, b []byte) bool {
+	if index := s.sourceIndex(); index != nil {
+		return index.sensitive(e.SHA256, b)
+	}
+	return record.Sensitive(b)
 }
 
 // readLines returns lines start..end (1-based, inclusive) of a verified
