@@ -866,8 +866,8 @@ type nativeExternals struct {
 // not read. Their definitions all count, so beside another one neither is
 // chosen; one found in a file the lead may not send is a hit resolve
 // refuses with the file's reason. The search is not complete when the world
-// cannot answer for the language (a source it holds no bytes of, its byte
-// bound), when more sources than maxWorldFiles hold the name, or when one
+// cannot answer for the language (a source the snapshot policy left
+// out, its byte bound), when more sources than maxWorldFiles hold the name, or when one
 // holding it is withheld, not UTF-8 text or cannot be tokenized: that
 // source may hold the definition the others only stand in for.
 func (r *leadResolver) nativeExternals(tu nativeTU, lang, name string) (nativeExternals, error) {

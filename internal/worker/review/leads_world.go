@@ -27,17 +27,16 @@ import (
 // source the review withholds (by the secrets screen, its path or its
 // content) is searched too but never tokenized or sent: holding the name,
 // it leaves the question unanswered (lead_secret_withheld), as a source
-// that is not UTF-8 text does (lead_read_failed). A source the snapshot
-// holds no bytes of leaves every question of its language unanswered: one
-// the snapshot policy left out for credentials (lead_secret_withheld), a
-// link, a special file or a submodule it did not acquire (lead_read_failed;
-// a submodule for every language). So do sources of the language past
-// maxWorldBytes, and a question that would tokenize more than maxWorldFiles
-// of them (lead_scan_limit). The snapshot's build outputs and dependency
-// caches (generated_or_cache) are no project source. The task's leads share
-// what the world read and found, and each gets the answer it would get
-// alone. The scan limits (maxScanFiles, maxScanBytes) stay with what a lead
-// reads to send.
+// that is not UTF-8 text does (lead_read_failed). A source of the language
+// the snapshot policy left out for credentials leaves every question of
+// the language unanswered (lead_secret_withheld), as do one the snapshot
+// holds as a Git LFS pointer only (lead_read_failed), sources of the
+// language past maxWorldBytes and a question that would tokenize more than
+// maxWorldFiles of them (lead_scan_limit). What the snapshot did not acquire
+// is outside the world (worldOutside), as are its build outputs and
+// dependency caches. The task's leads share what the world read and found,
+// and each gets the answer it would get alone. The scan limits
+// (maxScanFiles, maxScanBytes) stay with what a lead reads to send.
 
 const (
 	// maxWorldBytes bounds the bytes of one language's sources the world
@@ -46,6 +45,12 @@ const (
 	maxWorldBytes = 64 << 20
 	maxWorldFiles = 200
 )
+
+// worldOutside are the reasons a snapshot gives for entries outside the
+// closed world: build outputs and dependency caches, a submodule (another
+// repository, as a dependency is), a link it did not follow (a target
+// inside the snapshot is read under its own path) and a special file.
+var worldOutside = map[string]bool{"generated_or_cache": true, "submodule_not_acquired": true, "link_not_followed": true, "special_file_not_copied": true}
 
 // leadWorld is the closed world of one investigate task.
 type leadWorld struct {
@@ -135,8 +140,8 @@ func worldSource(p, lang string) bool {
 	return leadDefinitionLanguage(p) == lang
 }
 
-// sources reads the sources of lang. Which sources give no bytes or pass
-// the byte bound is decided before any is read.
+// sources reads the sources of lang. Which sources the world cannot read
+// or pass the byte bound is decided before any is read.
 func (w *leadWorld) sources(lang string) (*worldSet, error) {
 	if s, ok := w.sets[lang]; ok {
 		return s, nil
@@ -148,10 +153,7 @@ func (w *leadWorld) sources(lang string) (*worldSet, error) {
 	for _, p := range w.r.catalog.ordered {
 		e := w.r.catalog.files[p]
 		switch {
-		case e.Kind == "submodule":
-			// Its sources were not acquired: any language's may be there.
-			unread = true
-		case !worldSource(p, lang) || e.Kind == "directory" || e.ExcludedReason == "generated_or_cache":
+		case !worldSource(p, lang) || e.Kind == "directory" || worldOutside[e.ExcludedReason]:
 		case e.ExcludedReason == "credential_directory" || e.ExcludedReason == "secret_file_policy":
 			withheld = true
 		case e.Kind != "file" || e.Size == nil || e.SHA256 == "" || e.ExcludedReason != "":

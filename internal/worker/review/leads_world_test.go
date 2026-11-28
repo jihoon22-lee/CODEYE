@@ -118,11 +118,10 @@ func TestLeadWorldSearchesSourcesLargerThanAReviewSends(t *testing.T) {
 }
 
 // The world cannot answer for a language whose sources pass maxWorldBytes,
-// or when the snapshot holds no bytes of a source it may need: a link of
-// the language or a submodule (any language's sources may be there). A
-// method is left unanswered (lead_scan_limit, lead_read_failed) and a C
-// prototype sent alone; nothing is read past the bound.
-func TestLeadWorldNeedsEverySourceAcquired(t *testing.T) {
+// or that has a source the snapshot policy left out for credentials: a
+// method is left unanswered (lead_scan_limit, lead_secret_withheld) and a C
+// prototype sent alone; nothing is read.
+func TestLeadWorldNeedsEveryProjectSource(t *testing.T) {
 	huge := int64(maxWorldBytes)
 	for _, c := range []struct {
 		name   string
@@ -130,8 +129,7 @@ func TestLeadWorldNeedsEverySourceAcquired(t *testing.T) {
 		reason string
 	}{
 		{"past the byte bound", source.Entry{Path: "app/huge.js", Kind: "file", Size: &huge, SHA256: strings.Repeat("0", 64)}, record.LeadScanLimit},
-		{"a link", source.Entry{Path: "app/linked.ts", Kind: "symlink", ExcludedReason: "link_not_followed"}, record.LeadReadFailed},
-		{"a submodule", source.Entry{Path: "third_party/lib", Kind: "submodule", ExcludedReason: "submodule_not_acquired"}, record.LeadReadFailed},
+		{"left out for credentials", source.Entry{Path: "app/.aws/keys.js", Kind: "file", ExcludedReason: "credential_directory"}, record.LeadWithheld},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			j := treeJob(t, map[string]string{"app/job.ts": tsJob})
@@ -152,11 +150,62 @@ func TestLeadWorldNeedsEverySourceAcquired(t *testing.T) {
 		})
 	}
 	j := treeJob(t, prototypeCase{extra: map[string]string{"native/rates.c": ratesSource}}.tree())
-	j.Snapshot.Manifest.Entries = append(j.Snapshot.Manifest.Entries, source.Entry{Path: "third_party/zlib", Kind: "submodule", ExcludedReason: "submodule_not_acquired"})
+	j.Snapshot.Manifest.Entries = append(j.Snapshot.Manifest.Entries, source.Entry{Path: "native/.ssh/agent.c", Kind: "file", ExcludedReason: "credential_directory"})
 	s := leadStage(t, j)
 	window, anchor := leadWindow(t, s, "native/app.c", "return rate(", 0)
 	if l := resolveOne(t, s, record.LeadNeedDefinition, "rate", window, anchor); !l.Resolved() || len(l.Targets) != 1 || l.Targets[0].Path != "native/rates.h" {
-		t.Fatalf("lead %+v, want the prototype alone beside a submodule", l)
+		t.Fatalf("lead %+v, want the prototype alone beside a source left out for credentials", l)
+	}
+}
+
+// What the snapshot did not acquire is outside the closed world: a
+// submodule (another repository, as a dependency is), a link it did not
+// follow and a special file, each named like a source of the language.
+// Beside them a JavaScript and a Python method bind and a C prototype
+// reaches its one definition.
+func TestLeadWorldLeavesOutWhatTheSnapshotDidNotAcquire(t *testing.T) {
+	unacquired := func(kind, reason string, paths ...string) []source.Entry {
+		var out []source.Entry
+		for _, p := range paths {
+			out = append(out, source.Entry{Path: p, Kind: kind, ExcludedReason: reason})
+		}
+		return out
+	}
+	for _, c := range []struct {
+		name  string
+		extra []source.Entry
+	}{
+		{"a submodule", unacquired("submodule", "submodule_not_acquired", "third_party/zlib")},
+		{"links", unacquired("symlink", "link_not_followed", "app/linked.ts", "app/linked.py", "native/linked.c")},
+		{"special files", unacquired("special", "special_file_not_copied", "app/pipe.js", "app/pipe.py", "native/pipe.c")},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			tree := prototypeCase{extra: map[string]string{"native/rates.c": ratesSource, "app/job.ts": tsJob, "app/job.py": pyJob}}.tree()
+			j := treeJob(t, tree)
+			j.Snapshot.Manifest.Entries = append(j.Snapshot.Manifest.Entries, c.extra...)
+			s := leadStage(t, j)
+			for _, m := range []struct {
+				path, line string
+				end        int
+			}{{"app/job.ts", "return this.helper(x)", 4}, {"app/job.py", "return self.helper(x)", 3}} {
+				window, anchor := leadWindow(t, s, m.path, m.line, 0)
+				if l := resolveOne(t, s, record.LeadNeedDefinition, "helper", window, anchor); !l.Resolved() || len(l.Targets) != 1 || l.Targets[0].Path != m.path ||
+					l.Targets[0].Start != 2 || l.Targets[0].End != m.end {
+					t.Fatalf("lead %+v, want %s 2-%d", l, m.path, m.end)
+				}
+			}
+			window, anchor := leadWindow(t, s, "native/app.c", "return rate(", 0)
+			l := resolveOne(t, s, record.LeadNeedDefinition, "rate", window, anchor)
+			want := []record.LeadTarget{{Path: "native/rates.c", Start: 3, End: 5}, {Path: "native/rates.h", Start: 4, End: 4, Partial: true}}
+			if !l.Resolved() || len(l.Targets) != len(want) {
+				t.Fatalf("lead %+v, want the definition and the prototype", l)
+			}
+			for k, w := range want {
+				if g := l.Targets[k]; g.Path != w.Path || g.Start != w.Start || g.End != w.End || g.Partial != w.Partial {
+					t.Fatalf("target %d %+v, want %+v", k, g, w)
+				}
+			}
+		})
 	}
 }
 
