@@ -10,6 +10,7 @@ import (
 	"github.com/jihoon22-lee/CODEYE/internal/domain"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/analysis"
 	"github.com/jihoon22-lee/CODEYE/internal/worker/review/record"
+	"github.com/jihoon22-lee/CODEYE/internal/worker/source"
 )
 
 const ratesHeader = "#ifndef RATES_H\n#define RATES_H\n\nint rate(int n);\n\n#endif\n"
@@ -230,6 +231,64 @@ func prototypeCases() []prototypeCase {
 
 // helloSource is a C source no lead of rate reaches.
 const helloSource = "int hello(void) {\n  return 0;\n}\n"
+
+// A header prototype reaches its one definition in a file the run may send
+// in a pull request and a path-scoped run as in a full one: the definition
+// is sent before the prototype, and the sources the run may not send (an
+// unchanged file, one outside the scope) are read for the check and never
+// sent.
+func TestNativeHeaderPrototypeReachesItsDefinitionInBoundedRuns(t *testing.T) {
+	tree := map[string]string{
+		"app/main.c":  "#include \"net.h\"\n\nint main(void) {\n  return net_send(1);\n}\n",
+		"app/net.h":   "int net_send(int n);\n",
+		"app/net.c":   "#include \"net.h\"\n\nint net_send(int n) {\n  return n;\n}\n",
+		"app/other.c": "#include \"net.h\"\n\nint other(void) {\n  return net_send(2);\n}\n",
+		"lib/util.c":  "int util(void) {\n  return net_send(3);\n}\n",
+	}
+	for _, c := range []struct {
+		name      string
+		configure func(j *analysis.Job)
+		unsent    []string
+	}{
+		{"a full run", func(*analysis.Job) {}, nil},
+		{"a pull request", func(j *analysis.Job) {
+			j.PullRequest = &domain.PullRequestJob{Changed: []string{"app/main.c", "app/net.h", "app/net.c"}}
+		}, []string{"app/other.c", "lib/util.c"}},
+		{"a path scope", func(j *analysis.Job) { j.Scope = domain.Scope{Kind: "paths", Paths: []string{"app"}} }, []string{"lib/util.c"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			j := treeJob(t, tree)
+			c.configure(&j)
+			s := leadStage(t, j)
+			window, anchor := leadWindow(t, s, "app/main.c", "return net_send(1);", 0)
+			r := s.newLeadResolver([]record.Excerpt{window})
+			read := map[string]bool{}
+			r.worldRead = func(e source.Entry) (string, bool, error) {
+				read[e.Path] = true
+				return s.worldBytes(e)
+			}
+			l, err := r.resolve(record.Lead{ID: "lead_1", Need: record.LeadNeedDefinition, Symbol: "net_send", EvidenceID: anchor.ID,
+				Suspicion: "호출한 함수가 오류를 돌려주는지 확인해야 한다."}, anchor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []record.LeadTarget{{Path: "app/net.c", Start: 3, End: 5}, {Path: "app/net.h", Start: 1, End: 1, Partial: true}}
+			if !l.Resolved() || len(l.Targets) != len(want) {
+				t.Fatalf("lead %+v", l)
+			}
+			for k, w := range want {
+				if g := l.Targets[k]; g.Path != w.Path || g.Start != w.Start || g.End != w.End || g.Partial != w.Partial {
+					t.Fatalf("target %d %+v, want %+v", k, g, w)
+				}
+			}
+			for _, p := range c.unsent {
+				if r.blocked(p) == "" || !read[p] {
+					t.Fatalf("%s: blocked %q, read %v; want a source the run may not send, read for the check", p, r.blocked(p), read[p])
+				}
+			}
+		})
+	}
+}
 
 // The one-definition check reads the sources the lead may not send too
 // (outside the scope, outside a pull request's changed files): a second
