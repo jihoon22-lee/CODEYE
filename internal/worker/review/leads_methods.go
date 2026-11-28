@@ -210,8 +210,9 @@ func (r *leadResolver) classCall(scan *leadScan, p string, tokens []callToken, b
 	} else if !scriptModuleClass(tokens, at, python) {
 		return leadHit{}, false, "", nil
 	}
-	// Neither file may copy members into an object, and no source of the
-	// language may write a member of the name or patch a class.
+	// Neither file may copy or define members on anything but a fresh
+	// object, and no source of the language may write a member of the name
+	// or patch a class.
 	lang := "python"
 	if !python {
 		lang = "javascript"
@@ -709,17 +710,61 @@ func jsPatches(tokens []callToken) bool {
 	return false
 }
 
-// jsAssigns reports a call of Object.assign, Object.defineProperty or
-// defineProperties, or Reflect's defineProperty or set, on anything: a
-// class's own members may change through one.
+// jsAssigns reports a call of Object's or Reflect's assign,
+// defineProperty, defineProperties, set or setPrototypeOf on anything but a
+// fresh object (jsFreshArgument): a class's own members may change through
+// one.
 func jsAssigns(tokens []callToken) bool {
 	for i, t := range tokens {
 		if t.name && !t.quoted && tokenIs(tokens, i+1, "(") && tokenIs(tokens, i-1, ".") && (tokenIs(tokens, i-2, "Object") || tokenIs(tokens, i-2, "Reflect")) &&
-			slices.Contains([]string{"assign", "defineProperty", "defineProperties", "set", "setPrototypeOf"}, t.text) {
+			slices.Contains([]string{"assign", "defineProperty", "defineProperties", "set", "setPrototypeOf"}, t.text) && !jsFreshArgument(tokens, i+1) {
 			return true
 		}
 	}
 	return false
+}
+
+// jsFreshArgument reports a call opening at open whose whole first argument
+// makes a new object: an object or array literal, or new X(...) (X a name
+// or a dotted one, with type arguments in TypeScript). Members copied or
+// defined there change no class.
+func jsFreshArgument(tokens []callToken, open int) bool {
+	from, end := open+1, jsFirstArgumentEnd(tokens, open)
+	switch {
+	case from >= end:
+		return false
+	case tokenIs(tokens, from, "{"), tokenIs(tokens, from, "["):
+		return tokens[from].close == end-1
+	case !tokenIs(tokens, from, "new"):
+		return false
+	}
+	k := from + 1
+	for tokenName(tokens, k) && !tokens[k].quoted && tokenIs(tokens, k+1, ".") {
+		k += 2
+	}
+	if !tokenName(tokens, k) || tokens[k].quoted {
+		return false
+	}
+	k++
+	if tokenIs(tokens, k, "<") {
+		if k = typeArguments(tokens, k); k < 0 {
+			return false
+		}
+	}
+	return k == end || tokenIs(tokens, k, "(") && tokens[k].close == end-1
+}
+
+// jsFirstArgumentEnd is the token after the first argument of the call
+// opening at open: its "," or the call's ")".
+func jsFirstArgumentEnd(tokens []callToken, open int) int {
+	end := open + 1
+	for end < tokens[open].close && !(tokenIs(tokens, end, ",") && tokens[end].parent == open) {
+		if tokens[end].close > end {
+			end = tokens[end].close
+		}
+		end++
+	}
+	return end
 }
 
 // jsStringKey reports a computed member "[...]" opening at open whose key
@@ -731,14 +776,7 @@ func jsStringKey(tokens []callToken, open int) bool {
 // jsPatchTarget reports a call opening at open whose first argument is
 // this or ends in a prototype (X.prototype, this.constructor.prototype).
 func jsPatchTarget(tokens []callToken, open int) bool {
-	end := open + 1
-	for end < tokens[open].close && !(tokenIs(tokens, end, ",") && tokens[end].parent == open) {
-		if tokens[end].close > end {
-			end = tokens[end].close
-		}
-		end++
-	}
-	last := end - 1
+	last := jsFirstArgumentEnd(tokens, open) - 1
 	return last == open+1 && tokenIs(tokens, last, "this") || last > open+1 && tokenIs(tokens, last, "prototype") && tokenIs(tokens, last-1, ".")
 }
 

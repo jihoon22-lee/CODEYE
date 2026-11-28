@@ -68,6 +68,10 @@ func methodCases() []bindCase {
 			".github/scripts/release.js": "console.log('release');\n", "examples/demo.ts": "export class Demo {\n  show() {\n    return 1;\n  }\n}\n"},
 			path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", target: "app/job.ts", first: first, last: last},
 
+		{name: "a static method beside merges into fresh objects", tree: map[string]string{"app/job.ts": tsStaticJob +
+			"\nexport function merged(a: object, b: object) {\n  return [Object.assign({}, a, b), Object.assign([], a), Object.assign(new Set<number>(), a), Object.defineProperty(new Map(), 'size', {})];\n}\n"},
+			path: "app/job.ts", line: "return Job.helper(x)", symbol: "helper", target: "app/job.ts", first: "static helper(x: number) {", last: "// helper end"},
+
 		{name: "a TypeScript private method beside a JavaScript subclass's override", tree: map[string]string{"app/job.ts": tsPrivateJob,
 			"app/fast.js": "import { Job } from './job.js';\n\nexport class FastJob extends Job {\n  helper(x) {\n    return x;\n  }\n}\n"},
 			path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
@@ -76,6 +80,17 @@ func methodCases() []bindCase {
 			path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
 		{name: "a static method assigned in another module", tree: map[string]string{"app/job.ts": tsStaticJob, "app/patch.ts": "import { Job } from './job.js';\n\nJob.helper = (x: number) => x;\n"},
 			path: "app/job.ts", line: "return Job.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "a static method beside a merge into its class", tree: map[string]string{"app/job.ts": tsStaticJob + "\nObject.assign(Job, overrides);\n"},
+			path: "app/job.ts", line: "return Job.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "a static method beside a merge into a member of a new object", tree: map[string]string{"app/job.ts": tsStaticJob + "\nObject.assign(new Registry().target, overrides);\n"},
+			path: "app/job.ts", line: "return Job.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "a static method beside a merge into an element of a new array", tree: map[string]string{"app/job.ts": tsStaticJob + "\nObject.assign([Job][0], overrides);\n"},
+			path: "app/job.ts", line: "return Job.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "a static method beside a merge into this in a static method", tree: map[string]string{"app/job.js": "export class Job {\n  static configure(options) {\n    Object.assign(this, options);\n  }\n\n  static helper(x) {\n    return x + 1;\n  }\n}\n\nexport function run(x) {\n  return Job.helper(x);\n}\n"},
+			path: "app/job.js", line: "return Job.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "a static method of an imported class beside a property defined on another object in its file", tree: map[string]string{"app/run.ts": "import { Job } from './job.js';\n\nexport function run(x: number) {\n  return Job.helper(x);\n}\n",
+			"app/job.ts": "export class Job {\n  static helper(x: number) {\n    return x + 1;\n  }\n}\n\nObject.defineProperty(registry, 'job', { value: Job });\n"},
+			path: "app/run.ts", line: "return Job.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
 		{name: "a subclass's override", tree: map[string]string{"app/job.ts": tsJob,
 			"app/fast.ts": "import { Job } from './job.js';\n\nexport class FastJob extends Job {\n  helper(x: number) {\n    return x;\n  }\n}\n"},
 			path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
