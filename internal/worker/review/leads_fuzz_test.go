@@ -332,6 +332,18 @@ func checkLeadFileReaders(t testing.TB, f leadFile) {
 		tokens := leadTokens(f.path, f.text)
 		checkLeadTokens(t, f.text, tokens)
 		python, typeScript := lang == "python", typeScriptPath(f.path)
+		// The closed world reads for a class's patch only the sources holding a
+		// word of one.
+		patches, words := jsPatches, jsPatchWords
+		var blocks []pyBlock
+		if python {
+			patches, words, blocks = pyPatches, pyPatchWords, pythonBlocks(tokens)
+		} else {
+			jsAssigns(tokens)
+		}
+		if patches(tokens) && !slices.ContainsFunc(words, func(w string) bool { return holdsWord(f.text, w) }) {
+			t.Fatalf("%s patches a class without a word of a patch", f.path)
+		}
 		var imports []scriptBinding
 		if python {
 			imports = pythonImports(tokens)
@@ -342,6 +354,11 @@ func checkLeadFileReaders(t testing.TB, f leadFile) {
 			span("import binding", b.token, b.token, len(tokens))
 		}
 		for _, name := range leadTokenNames(tokens, 16) {
+			if python {
+				pyMemberSites(tokens, blocks, name)
+			} else {
+				jsMemberSites(tokens, name)
+			}
 			s := scriptScopesOf(tokens, name, python, typeScript, imports)
 			s.moduleBindings()
 			for _, o := range s.occurrences {

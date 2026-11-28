@@ -223,10 +223,9 @@ func TestLeadWorldWordSearch(t *testing.T) {
 		{"x0rate", "rate", true},
 		{"$rate é rateé", "rate", true},
 		{"obj['helper'] = f", "helper", true},
-		{"this[k] = v", "this[", true},
-		{"isthis[k]", "this[", false},
-		{"Object.assignment", "Object.assign", false},
-		{"Reflect.set(o, k, v)", "Reflect.", true},
+		{"Base.prototype[k] = f", "prototype", true},
+		{"prototypes", "prototype", false},
+		{"x['__proto__'] = y", "__proto__", true},
 		{"", "rate", false},
 	} {
 		if got := holdsWord(c.text, c.word); got != c.holds {

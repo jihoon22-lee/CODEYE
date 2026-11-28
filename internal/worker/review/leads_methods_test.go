@@ -25,20 +25,27 @@ const (
 // or imports (JavaScript static, Python staticmethod or classmethod) bind to
 // their class's declaration, whatever other classes declare. An ordinary
 // method binds when its class declares the name once, as a method, and no
-// source of the language writes a member of the name, patches classes
-// otherwise or declares a member of the name in another class: sources
-// outside the scope, in a directory the review does not read (.github) or
-// on a secondary path are read for this and do not stop it. this must be
-// the instance of a method of the class, through arrow functions only (not
-// a nested function, a static method, an object's method or a field's
+// source of the language writes a member of the name through any receiver,
+// patches a class or declares a member of the name in another class:
+// sources outside the scope, in a directory the review does not read
+// (.github) or on a secondary path are read for this and do not stop it. An
+// instance's own members of computed names (this[k] = ..., Object.assign(this,
+// ...), setattr(self, k, v), an update of self.__dict__) do not stop it: the
+// resolver follows the declaration, as an editor does. this must be the
+// instance of a method of the class, through arrow functions only (not a
+// nested function, a static method, an object's method or a field's
 // initializer); self the first parameter of a plain method, bound nowhere
 // else (a nested function's closure keeps it). A subclass's override, an
-// instance or class assignment, an annotation (a dataclass field), setattr
-// with a computed name, a constructor parameter property, a getter beside
-// the method, Object.assign onto a prototype or a same-named method in
-// another class is ambiguous; a getter or property alone, a field, a
-// decorated method, an inherited method and a receiver that is not the
-// instance resolve nothing; a withheld source leaves the lead unanswered.
+// instance or class assignment, an annotation (a dataclass field), a write
+// of the name through an attribute dictionary, a constructor parameter
+// property, a getter beside the method, a prototype's patch (Object.assign
+// onto one, a computed member of one, its replacement, setPrototypeOf),
+// setattr with a computed name on anything but the instance (a class, cls,
+// type(self), a receiver it cannot tell) or a same-named method in another
+// class is ambiguous; a getter or property alone, a field, a decorated
+// method, an inherited method and a receiver that is not the instance
+// resolve nothing; a withheld source holding the name or a word of a
+// class's patch leaves the lead unanswered.
 func TestMethodLeadsBindInAClosedWorld(t *testing.T) {
 	runBindCases(t, methodCases())
 }
@@ -86,6 +93,11 @@ func methodCases() []bindCase {
 			path: "app/job.ts", line: "return Job.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
 		{name: "a static method beside a merge into an element of a new array", tree: map[string]string{"app/job.ts": tsStaticJob + "\nObject.assign([Job][0], overrides);\n"},
 			path: "app/job.ts", line: "return Job.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "a static method beside a computed member of this written in its class", tree: map[string]string{"app/job.js": "export class Job {\n  static configure(options) {\n    for (const k in options) {\n      this[k] = options[k];\n    }\n  }\n\n  static helper(x) {\n    return x + 1;\n  }\n}\n\nexport function run(x) {\n  return Job.helper(x);\n}\n"},
+			path: "app/job.js", line: "return Job.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "a static method beside a computed member of this written in another module", tree: map[string]string{"app/job.ts": tsStaticJob,
+			"app/options.js": "export class Options {\n  constructor(o) {\n    for (const k in o) {\n      this[k] = o[k];\n    }\n  }\n}\n"},
+			path: "app/job.ts", line: "return Job.helper(x)", symbol: "helper", target: "app/job.ts", first: "static helper(x: number) {", last: "// helper end"},
 		{name: "a static method beside a merge into this in a static method", tree: map[string]string{"app/job.js": "export class Job {\n  static configure(options) {\n    Object.assign(this, options);\n  }\n\n  static helper(x) {\n    return x + 1;\n  }\n}\n\nexport function run(x) {\n  return Job.helper(x);\n}\n"},
 			path: "app/job.js", line: "return Job.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
 		{name: "a static method of an imported class beside a property defined on another object in its file", tree: map[string]string{"app/run.ts": "import { Job } from './job.js';\n\nexport function run(x: number) {\n  return Job.helper(x);\n}\n",
@@ -134,16 +146,34 @@ func methodCases() []bindCase {
 		{name: "a string-keyed assignment through another receiver", tree: map[string]string{"app/job.ts": tsJob,
 			"app/wire.js": "export function wire(job) {\n  job['helper'] = (x) => x;\n}\n"},
 			path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
-		{name: "Object.assign onto this in the class", tree: map[string]string{"app/job.js": "export class Job {\n  constructor(options) {\n    Object.assign(this, options);\n  }\n\n  helper(x) {\n    return x + 1;\n  }\n\n  run(x) {\n    return this.helper(x);\n  }\n}\n"},
-			path: "app/job.js", line: "return this.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
-		{name: "Object.defineProperty onto this in a base class", tree: map[string]string{"app/job.ts": tsJob,
+		{name: "Object.assign onto this in the class", tree: map[string]string{"app/job.js": "export class Job {\n  constructor(options) {\n    Object.assign(this, options);\n  }\n\n  helper(x) {\n    return x + 1;\n  } // helper end\n\n  run(x) {\n    return this.helper(x);\n  }\n}\n"},
+			path: "app/job.js", line: "return this.helper(x)", symbol: "helper", target: "app/job.js", first: "helper(x) {", last: "// helper end"},
+		{name: "a computed member of this assigned in the class", tree: map[string]string{"app/job.js": "export class Job {\n  constructor(options) {\n    for (const key of Object.keys(options)) {\n      this[key] = options[key];\n    }\n  }\n\n  helper(x) {\n    return x + 1;\n  } // helper end\n\n  run(x) {\n    return this.helper(x);\n  }\n}\n"},
+			path: "app/job.js", line: "return this.helper(x)", symbol: "helper", target: "app/job.js", first: "helper(x) {", last: "// helper end"},
+		{name: "Object.defineProperty with a computed name onto this in a base class", tree: map[string]string{"app/job.ts": tsJob,
 			"app/base.js": "export class Base {\n  constructor(name, f) {\n    Object.defineProperty(this, name, { value: f });\n  }\n}\n"},
-			path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+			path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", target: "app/job.ts", first: first, last: last},
 		{name: "a computed member of this assigned in a base class", tree: map[string]string{"app/job.ts": tsJob,
 			"app/base.js": "export class Base {\n  constructor(options) {\n    for (const k of Object.keys(options)) {\n      this[k] = options[k];\n    }\n  }\n}\n"},
+			path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", target: "app/job.ts", first: first, last: last},
+		{name: "a withheld source that merges into an instance", tree: map[string]string{"app/job.ts": tsJob, "app/options.js": "export class Options {\n  constructor(o) {\n    Object.assign(this, o);\n  }\n}\n"},
+			withheld: []string{"app/options.js"}, path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", target: "app/job.ts", first: first, last: last},
+		{name: "Object.assign onto a base class's prototype", tree: map[string]string{"app/job.ts": tsJob, "app/mixin.js": "import { Base } from './base.js';\n\nObject.assign(Base.prototype, mixin);\n"},
 			path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
-		{name: "Object.assign onto another class's prototype", tree: map[string]string{"app/job.ts": tsJob, "app/mixin.js": "import { Other } from './other.js';\n\nObject.assign(Other.prototype, extras);\n"},
+		{name: "a computed member of a prototype assigned", tree: map[string]string{"app/job.ts": tsJob,
+			"app/mixin.js": "export function mix(Base, methods) {\n  for (const k of Object.keys(methods)) {\n    Base.prototype[k] = methods[k];\n  }\n}\n"},
 			path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "a prototype replaced", tree: map[string]string{"app/job.ts": tsJob, "app/legacy.js": "export function Legacy() {}\n\nLegacy.prototype = { run() { return 1; } };\n"},
+			path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "a prototype set", tree: map[string]string{"app/job.ts": tsJob, "app/wire.js": "export function wire(job, other) {\n  Object.setPrototypeOf(job, other);\n}\n"},
+			path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "Object.defineProperty of the name onto this", tree: map[string]string{"app/job.ts": tsJob,
+			"app/base.js": "export class Base {\n  constructor(f) {\n    Object.defineProperty(this, 'helper', { value: f });\n  }\n}\n"},
+			path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "Object.assign of the name onto this", tree: map[string]string{"app/job.ts": tsJob, "app/base.js": "export class Base {\n  constructor(helper) {\n    Object.assign(this, { helper });\n  }\n}\n"},
+			path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "a withheld source that may patch a prototype", tree: map[string]string{"app/job.ts": tsJob, "app/mixin.js": "Object.assign(Base.prototype, mixin);\n"},
+			withheld: []string{"app/mixin.js"}, path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", reason: record.LeadWithheld},
 		{name: "a delete of the method from the prototype", tree: map[string]string{"app/job.ts": tsJob, "app/patch.js": "import { Job } from './job.js';\n\ndelete Job.prototype.helper;\n"},
 			path: "app/job.ts", line: "return this.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
 		{name: "a field of the name beside the method", tree: map[string]string{"app/job.js": "export class Job {\n  helper = (x) => x;\n\n  helper(x) {\n    return x + 1;\n  }\n\n  run(x) {\n    return this.helper(x);\n  }\n}\n"},
@@ -215,12 +245,46 @@ func methodCases() []bindCase {
 			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
 		{name: "a delete of the method from the class", tree: map[string]string{"app/job.py": pyJob, "app/patch.py": "from .job import Job\n\ndel Job.helper\n"},
 			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
-		{name: "setattr with a computed name in the class", tree: map[string]string{"app/job.py": "class Job:\n    def __init__(self, **options):\n        for k, v in options.items():\n            setattr(self, k, v)\n\n    def helper(self, x):\n        return x + 1\n\n    def run(self, x):\n        return self.helper(x)\n"},
-			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "setattr with a computed name on self in the class", tree: map[string]string{"app/job.py": "class Job:\n    def __init__(self, **options):\n        for k, v in options.items():\n            setattr(self, k, v)\n\n    def helper(self, x):\n        return x + 1  # helper end\n\n    def run(self, x):\n        return self.helper(x)\n"},
+			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", target: "app/job.py", first: "def helper(self, x):", last: "# helper end"},
 		{name: "an update of the instance's __dict__ in a base class", tree: map[string]string{"app/job.py": pyJob, "app/base.py": "class Base:\n    def __init__(self, **options):\n        self.__dict__.update(options)\n"},
+			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", target: "app/job.py", first: "def helper(self, x):", last: "# helper end"},
+		{name: "object.__setattr__ with a computed name on self", tree: map[string]string{"app/job.py": pyJob, "app/base.py": "class Base:\n    def __init__(self, name, f):\n        object.__setattr__(self, name, f)\n"},
+			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", target: "app/job.py", first: "def helper(self, x):", last: "# helper end"},
+		{name: "super().__setattr__ with a computed name in a base class", tree: map[string]string{"app/job.py": pyJob,
+			"app/base.py": "class Frozen:\n    def __setattr__(self, name, value):\n        if getattr(self, '_frozen', False):\n            raise AttributeError(name)\n        super().__setattr__(name, value)\n"},
+			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", target: "app/job.py", first: "def helper(self, x):", last: "# helper end"},
+		{name: "a withheld Python source that updates an instance's __dict__", tree: map[string]string{"app/job.py": pyJob, "app/options.py": "class Options:\n    def __init__(self, **o):\n        self.__dict__.update(o)\n"},
+			withheld: []string{"app/options.py"}, path: "app/job.py", line: "return self.helper(x)", symbol: "helper", target: "app/job.py", first: "def helper(self, x):", last: "# helper end"},
+		{name: "setattr with a computed name on cls", tree: map[string]string{"app/job.py": pyJob, "app/register.py": "def register(cls):\n    for name, f in HOOKS.items():\n        setattr(cls, name, f)\n    return cls\n"},
 			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
-		{name: "object.__setattr__ with a computed name", tree: map[string]string{"app/job.py": pyJob, "app/base.py": "class Base:\n    def __init__(self, name, f):\n        object.__setattr__(self, name, f)\n"},
+		{name: "setattr with a computed name on type(self)", tree: map[string]string{"app/job.py": pyJob, "app/base.py": "class Base:\n    def install(self, name, f):\n        setattr(type(self), name, f)\n"},
 			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "setattr with a computed name on a receiver it cannot tell", tree: map[string]string{"app/job.py": pyJob, "app/util.py": "def assign(target, name, value):\n    setattr(target, name, value)\n"},
+			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "setattr with a computed name on a classmethod's first parameter named self", tree: map[string]string{"app/job.py": pyJob,
+			"app/base.py": "class Base:\n    @classmethod\n    def configure(self, **options):\n        for k, v in options.items():\n            setattr(self, k, v)\n"},
+			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "setattr with a computed name on a function's parameter named self", tree: map[string]string{"app/job.py": pyJob, "app/init.py": "def init(self, **options):\n    for k, v in options.items():\n        setattr(self, k, v)\n"},
+			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "setattr with a computed name on an attribute of self", tree: map[string]string{"app/job.py": pyJob, "app/base.py": "class Base:\n    def __init__(self, **options):\n        for k, v in options.items():\n            setattr(self.settings, k, v)\n"},
+			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "super().__setattr__ with a computed name in a classmethod", tree: map[string]string{"app/job.py": pyJob, "app/base.py": "class Base:\n    @classmethod\n    def configure(cls, name, value):\n        super().__setattr__(name, value)\n"},
+			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "object.__setattr__ with a computed name on a receiver it cannot tell", tree: map[string]string{"app/job.py": pyJob, "app/util.py": "def force(target, name, value):\n    object.__setattr__(target, name, value)\n"},
+			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "type.__setattr__ with a computed name", tree: map[string]string{"app/job.py": pyJob, "app/meta.py": "def install(cls, name, f):\n    type.__setattr__(cls, name, f)\n"},
+			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "an item of the name in an instance's __dict__", tree: map[string]string{"app/job.py": pyJob, "app/patch.py": "def patch(job):\n    job.__dict__['helper'] = abs\n"},
+			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "the name as a keyword of an update of vars", tree: map[string]string{"app/job.py": pyJob, "app/patch.py": "def patch(job):\n    vars(job).update(helper=abs)\n"},
+			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "the name as a key of an update of __dict__", tree: map[string]string{"app/job.py": pyJob, "app/patch.py": "def patch(job):\n    job.__dict__.update({'helper': abs})\n"},
+			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "a setdefault of the name in __dict__", tree: map[string]string{"app/job.py": pyJob, "app/patch.py": "def patch(job):\n    job.__dict__.setdefault('helper', abs)\n"},
+			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
+		{name: "a withheld Python source that may set class attributes", tree: map[string]string{"app/job.py": pyJob, "app/register.py": "def register(cls):\n    setattr(cls, NAME, impl)\n    return cls\n"},
+			withheld: []string{"app/register.py"}, path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadWithheld},
 		{name: "object.__setattr__ of the name", tree: map[string]string{"app/job.py": pyJob, "app/patch.py": "def patch(job):\n    object.__setattr__(job, 'helper', abs)\n"},
 			path: "app/job.py", line: "return self.helper(x)", symbol: "helper", reason: record.LeadAmbiguous},
 		{name: "an inherited Python method", tree: map[string]string{"app/job.py": "class Base:\n    def helper(self, x):\n        return x\n\n\nclass Job(Base):\n    def run(self, x):\n        return self.helper(x)\n"},

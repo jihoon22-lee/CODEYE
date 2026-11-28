@@ -22,7 +22,7 @@ import (
 // there is a hit resolve refuses with the file's own reason.
 //
 // A plain search for the name as a whole word (and, for a method, the words
-// of code that may patch classes) rules out most sources before any is
+// of code that may patch a class) rules out most sources before any is
 // tokenized (holdsWord). A
 // source the review withholds (by the secrets screen, its path or its
 // content) is searched too but never tokenized or sent: holding the name,
@@ -310,7 +310,7 @@ func (w *leadWorld) nativeDefinitions(p, name string) ([]nativeDecl, bool) {
 // whose body (JavaScript, its "{") or block (Python, its name token) is
 // owner in the anchor's file p the only member of the name an instance may
 // have: "" when it does, else lead_ambiguous (a write of a member of the
-// name, a source that may patch classes otherwise, or in a source whose
+// name, a source that may patch a class, or in a source whose
 // declarations count a member of the name another class declares; with
 // owner -1 every one counts), lead_definition_not_found (a source holding
 // the name or a patching word the reader cannot tokenize) or the reason
@@ -380,9 +380,8 @@ func (w *leadWorld) tokens(p string) []callToken {
 	return tokens
 }
 
-// patching reports a source of lang that may give classes members no
-// member of a name shows (jsPatches, pyPatches); false ok when it cannot be
-// tokenized.
+// patching reports a source of lang that may patch a class (jsPatches,
+// pyPatches); false ok when it cannot be tokenized.
 func (w *leadWorld) patching(lang, p string) (patches, ok bool) {
 	if v, seen := w.patches[p]; seen {
 		return v, true

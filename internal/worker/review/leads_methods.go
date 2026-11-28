@@ -19,8 +19,11 @@ import (
 // Python a staticmethod or classmethod). An ordinary method (this.m,
 // self.m) binds in a closed world only (leadWorld.methodAnswer): its class
 // body declares the name once, as a method; no source of the language
-// writes a member of the name or may patch classes otherwise; and no other
-// class declares a member of the name. The receiver must be the instance:
+// writes a member of the name through any receiver or patches a class
+// (jsPatches, pyPatches); and no other class declares a member of the name.
+// An instance's own members of computed names (this[k] = ..., setattr(self,
+// k, v)) may shadow it at run time; the resolver follows the declaration
+// there, as an editor does. The receiver must be the instance:
 // in JavaScript this in a method of the class, through arrow functions only;
 // in Python self as the first parameter of a plain method directly in the
 // class body, bound nowhere else. A method the class does not declare (an
@@ -211,7 +214,8 @@ func (r *leadResolver) classCall(scan *leadScan, p string, tokens []callToken, b
 		return leadHit{}, false, "", nil
 	}
 	// Neither file may copy or define members on anything but a fresh
-	// object, and no source of the language may write a member of the name
+	// object or write a computed member of this (the class in a static
+	// member), and no source of the language may write a member of the name
 	// or patch a class.
 	lang := "python"
 	if !python {
@@ -592,7 +596,7 @@ func jsMemberSites(tokens []callToken, name string) (owners []int, writes bool) 
 		case t.name && !t.quoted && t.text == name:
 			switch {
 			case tokenIs(tokens, i-1, "."):
-				writes = writes || assignsAfter(tokens, i) || increments(tokens, i) || jsTarget(tokens, i) || jsDeleted(tokens, i)
+				writes = writes || jsWritten(tokens, i)
 			case tokenIs(tokens, i-1, "#"):
 				// A private name: no other class's member.
 			case inClass(p):
@@ -604,7 +608,7 @@ func jsMemberSites(tokens []callToken, name string) (owners []int, writes bool) 
 			}
 		case t.quoted && t.text == name:
 			switch {
-			case tokenIs(tokens, i-1, "[") && tokenIs(tokens, i+1, "]") && (assignsAfter(tokens, i+1) || increments(tokens, i+1) || jsTarget(tokens, i+1) || jsDeleted(tokens, i+1)):
+			case tokenIs(tokens, i-1, "[") && tokenIs(tokens, i+1, "]") && jsWritten(tokens, i+1):
 				writes = true
 			case inClass(p) && memberPosition(tokens, i, p):
 				owners = append(owners, p)
@@ -618,6 +622,13 @@ func jsMemberSites(tokens []callToken, name string) (owners []int, writes bool) 
 		}
 	}
 	return owners, writes
+}
+
+// jsWritten reports a member expression ending at token k (a name after
+// "." or the "]" of a key) that is assigned or updated, a target of a
+// destructuring assignment or a for head, or deleted.
+func jsWritten(tokens []callToken, k int) bool {
+	return assignsAfter(tokens, k) || increments(tokens, k) || jsTarget(tokens, k) || jsDeleted(tokens, k)
 }
 
 // jsTarget reports a member expression ending at token k that is the target
@@ -678,15 +689,19 @@ func jsReflected(tokens []callToken, i int) bool {
 }
 
 // jsPatchWords are the words of a JavaScript or TypeScript source that may
-// patch classes (jsPatches): a source holding one is read for it.
-var jsPatchWords = []string{"prototype", "__proto__", "defineProperty", "defineProperties", "setPrototypeOf", "Object.assign", "Reflect.", "this["}
+// patch a class (jsPatches): a source holding none does not.
+var jsPatchWords = []string{"prototype", "__proto__", "setPrototypeOf"}
 
-// jsPatches reports a JavaScript or TypeScript source that may give
-// classes or instances members no member of a name shows: Object.assign,
-// Object.defineProperty or defineProperties, Reflect.defineProperty or
-// Reflect.set on this or a prototype; setPrototypeOf; an assignment to a
-// prototype, or to a computed member of one or of this whose key is no
-// string; __proto__.
+// jsPatches reports a JavaScript or TypeScript source that may patch a
+// class so that no member of a name shows what runs: an assignment to a
+// prototype (X.prototype = ...); a write of a computed member of one whose
+// key is no string (X.prototype[k] = ..., delete X.prototype[k]);
+// Object.assign, Object.defineProperty or defineProperties,
+// Reflect.defineProperty or Reflect.set on a prototype (X.prototype,
+// this.constructor.prototype); setPrototypeOf; __proto__. An instance's own
+// members of computed names (this[k] = ..., Object.assign(this, ...)) may
+// shadow a method too; the resolver follows the declaration there, as an
+// editor does.
 func jsPatches(tokens []callToken) bool {
 	for i, t := range tokens {
 		switch {
@@ -697,12 +712,10 @@ func jsPatches(tokens []callToken) bool {
 		case t.text == "setPrototypeOf":
 			return true
 		case t.text == "prototype" && tokenIs(tokens, i-1, "."):
-			if assignsAfter(tokens, i) || tokenIs(tokens, i+1, "[") && !jsStringKey(tokens, i+1) && assignsAfter(tokens, tokens[i+1].close) {
+			if assignsAfter(tokens, i) || tokenIs(tokens, i+1, "[") && !jsStringKey(tokens, i+1) && jsWritten(tokens, tokens[i+1].close) {
 				return true
 			}
-		case t.text == "this" && tokenIs(tokens, i+1, "[") && !jsStringKey(tokens, i+1) && (assignsAfter(tokens, tokens[i+1].close) || jsTarget(tokens, tokens[i+1].close)):
-			return true
-		case tokenIs(tokens, i+1, "(") && tokenIs(tokens, i-1, ".") && jsPatchTarget(tokens, i+1) &&
+		case tokenIs(tokens, i+1, "(") && tokenIs(tokens, i-1, ".") && jsPrototypeArgument(tokens, i+1) &&
 			(t.text == "assign" && tokenIs(tokens, i-2, "Object") || t.text == "defineProperty" || t.text == "defineProperties" || t.text == "set" && tokenIs(tokens, i-2, "Reflect")):
 			return true
 		}
@@ -712,12 +725,17 @@ func jsPatches(tokens []callToken) bool {
 
 // jsAssigns reports a call of Object's or Reflect's assign,
 // defineProperty, defineProperties, set or setPrototypeOf on anything but a
-// fresh object (jsFreshArgument): a class's own members may change through
-// one.
+// fresh object (jsFreshArgument), or a write of a computed member of this
+// whose key is no string: in a static member this is the class, so a
+// class's own members may change through either.
 func jsAssigns(tokens []callToken) bool {
 	for i, t := range tokens {
-		if t.name && !t.quoted && tokenIs(tokens, i+1, "(") && tokenIs(tokens, i-1, ".") && (tokenIs(tokens, i-2, "Object") || tokenIs(tokens, i-2, "Reflect")) &&
-			slices.Contains([]string{"assign", "defineProperty", "defineProperties", "set", "setPrototypeOf"}, t.text) && !jsFreshArgument(tokens, i+1) {
+		switch {
+		case !t.name || t.quoted:
+		case t.text == "this" && tokenIs(tokens, i+1, "[") && !jsStringKey(tokens, i+1) && jsWritten(tokens, tokens[i+1].close):
+			return true
+		case tokenIs(tokens, i+1, "(") && tokenIs(tokens, i-1, ".") && (tokenIs(tokens, i-2, "Object") || tokenIs(tokens, i-2, "Reflect")) &&
+			slices.Contains([]string{"assign", "defineProperty", "defineProperties", "set", "setPrototypeOf"}, t.text) && !jsFreshArgument(tokens, i+1):
 			return true
 		}
 	}
@@ -773,11 +791,11 @@ func jsStringKey(tokens []callToken, open int) bool {
 	return tokens[open].close == open+2 && tokens[open+1].quoted
 }
 
-// jsPatchTarget reports a call opening at open whose first argument is
-// this or ends in a prototype (X.prototype, this.constructor.prototype).
-func jsPatchTarget(tokens []callToken, open int) bool {
+// jsPrototypeArgument reports a call opening at open whose first argument
+// ends in a prototype (X.prototype, this.constructor.prototype).
+func jsPrototypeArgument(tokens []callToken, open int) bool {
 	last := jsFirstArgumentEnd(tokens, open) - 1
-	return last == open+1 && tokenIs(tokens, last, "this") || last > open+1 && tokenIs(tokens, last, "prototype") && tokenIs(tokens, last-1, ".")
+	return last > open+1 && tokenIs(tokens, last, "prototype") && tokenIs(tokens, last-1, ".")
 }
 
 // pySelfClass is the class block whose instance self (token at) is: the one
@@ -785,7 +803,11 @@ func jsPatchTarget(tokens []callToken, open int) bool {
 // in that class's body, the def neither a staticmethod nor a classmethod;
 // -1 when self is something else.
 func pySelfClass(tokens []callToken, blocks []pyBlock, at int) int {
-	s := scriptScopesOf(tokens, "self", true, false, nil)
+	return pySelfClassOf(tokens, blocks, scriptScopesOf(tokens, "self", true, false, nil), at)
+}
+
+// pySelfClassOf is pySelfClass with s the scopes of self in the file.
+func pySelfClassOf(tokens []callToken, blocks []pyBlock, s scriptScopes, at int) int {
 	var around []scriptOccurrence
 	for _, o := range s.occurrences {
 		if o.kind == occBinding && (o.module || o.from <= at && at <= o.to) {
@@ -801,19 +823,54 @@ func pySelfClass(tokens []callToken, blocks []pyBlock, at int) int {
 		return -1
 	}
 	def := slices.IndexFunc(blocks, func(b pyBlock) bool { return b.kind == "def" && b.name == open-1 })
-	if def < 0 {
+	if !pyPlainMethod(tokens, blocks, def) {
 		return -1
+	}
+	return innermostBlock(blocks, blocks[def].first, false)
+}
+
+// pyPlainMethod reports a def block directly in a class body that is
+// neither a staticmethod nor a classmethod.
+func pyPlainMethod(tokens []callToken, blocks []pyBlock, def int) bool {
+	if def < 0 || blocks[def].kind != "def" {
+		return false
 	}
 	cls := innermostBlock(blocks, blocks[def].first, false)
 	if cls < 0 || blocks[cls].kind != "class" {
-		return -1
+		return false
 	}
 	for _, d := range pyDecorators(tokens, blocks[def]) {
 		if d == "staticmethod" || d == "classmethod" {
-			return -1
+			return false
 		}
 	}
-	return cls
+	return true
+}
+
+// pySelves tells which receivers of one Python source are an instance, the
+// scopes of self read once.
+type pySelves struct {
+	tokens []callToken
+	scopes scriptScopes
+}
+
+func newPySelves(tokens []callToken) *pySelves {
+	return &pySelves{tokens: tokens, scopes: scriptScopesOf(tokens, "self", true, false, nil)}
+}
+
+// instance reports a receiver ending at token at that is the instance of a
+// class: self as the first parameter of a plain method (pySelfClass), or
+// super() directly in a plain method.
+func (p *pySelves) instance(at int) bool {
+	tokens, blocks := p.tokens, p.scopes.blocks
+	switch {
+	case tokenIs(tokens, at, "self"):
+		return !tokenIs(tokens, at-1, ".") && pySelfClassOf(tokens, blocks, p.scopes, at) >= 0
+	case tokenIs(tokens, at, ")"):
+		open := tokens[at].parent
+		return tokenIs(tokens, open-1, "super") && !tokenIs(tokens, open-2, ".") && pyPlainMethod(tokens, blocks, innermostBlock(blocks, open-1, false))
+	}
+	return false
 }
 
 // pyDecorators are the names of the decorators of block b (the last part
@@ -872,8 +929,10 @@ func pyClassMethod(tokens []callToken, blocks []pyBlock, cls int, name string, s
 // alone, an import, a nested class, a loop target). writes reports an
 // assignment, deletion, setattr or delattr of an attribute of the name
 // (x.m = ..., x.m += ..., a, x.m = ..., for x.m in, del x.m, setattr(x,
-// "m", v), object.__setattr__(x, "m", v)) or a definition the reader cannot
-// follow (exec, eval, a three-argument type()).
+// "m", v), object.__setattr__(x, "m", v)), a key or keyword of the name
+// written to an attribute dictionary (pyDictWrite: x.__dict__["m"] = v,
+// vars(x).update(m=v)) or a definition the reader cannot follow (exec,
+// eval, a three-argument type()).
 func pyMemberSites(tokens []callToken, blocks []pyBlock, name string) (owners []int, writes bool) {
 	class := func(i int) int {
 		if b := innermostBlock(blocks, i, false); b >= 0 && blocks[b].kind == "class" {
@@ -892,12 +951,15 @@ func pyMemberSites(tokens []callToken, blocks []pyBlock, name string) (owners []
 	for i, t := range tokens {
 		switch {
 		case t.quoted:
-			if t.text == name && pyCallArgument(tokens, i, "setattr", "delattr", "__setattr__", "__delattr__", "type") {
+			if t.text == name && (pyCallArgument(tokens, i, "setattr", "delattr", "__setattr__", "__delattr__", "type") || pyDictWrite(tokens, i)) {
 				writes = true
 			}
 		case !t.name:
 		case t.text == name && tokenIs(tokens, i-1, "."):
 			writes = writes || assignsAfter(tokens, i) || pyTargetAttribute(tokens, i)
+		case t.text == name && tokenIs(tokens, i+1, "=") && !tokenIs(tokens, i+2, "=") && pyDictWrite(tokens, i):
+			// A keyword argument (vars(x).update(m=v)).
+			writes = true
 		case t.text == name && statementStart(tokens, i) && tokenIs(tokens, i+1, ":") && !slices.ContainsFunc(s.occurrences, func(o scriptOccurrence) bool { return o.at == i && o.kind == occBinding }):
 			// An annotation alone (name: T) declares a dataclass's field.
 			if c := class(i); c >= 0 {
@@ -910,6 +972,36 @@ func pyMemberSites(tokens []callToken, blocks []pyBlock, name string) (owners []
 		}
 	}
 	return owners, writes
+}
+
+// pyDictWrite reports a token inside a key of an attribute dictionary
+// (x.__dict__[...], vars(x)[...]) or inside the arguments of its update,
+// setdefault or __setitem__: a string or keyword of a name there may write
+// an attribute of the name. It errs towards a write.
+func pyDictWrite(tokens []callToken, i int) bool {
+	for p := tokens[i].parent; p >= 0; p = tokens[p].parent {
+		switch {
+		case tokenIs(tokens, p, "[") && pyAttributeDict(tokens, p-1):
+			return true
+		case tokenIs(tokens, p, "(") && tokenIs(tokens, p-2, ".") && (tokenIs(tokens, p-1, "update") || tokenIs(tokens, p-1, "setdefault") || tokenIs(tokens, p-1, "__setitem__")) &&
+			pyAttributeDict(tokens, p-3):
+			return true
+		}
+	}
+	return false
+}
+
+// pyAttributeDict reports an expression ending at token k that is an
+// object's attribute dictionary: x.__dict__ or vars(x).
+func pyAttributeDict(tokens []callToken, k int) bool {
+	switch {
+	case tokenIs(tokens, k, "__dict__"):
+		return tokenIs(tokens, k-1, ".")
+	case tokenIs(tokens, k, ")"):
+		open := tokens[k].parent
+		return tokenIs(tokens, open-1, "vars") && !tokenIs(tokens, open-2, ".")
+	}
+	return false
 }
 
 // pyTargetAttribute reports an attribute ending at token i that a
@@ -970,41 +1062,54 @@ func pyArguments(tokens []callToken, open int) int {
 	return n
 }
 
-// pyPatchWords are the words of a Python source that may patch classes
-// (pyPatches): a source holding one is read for it.
-var pyPatchWords = []string{"setattr", "delattr", "__setattr__", "__delattr__", "__dict__", "__getattribute__", "__class__", "metaclass"}
+// pyPatchWords are the words of a Python source that may patch a class
+// (pyPatches): a source holding none does not.
+var pyPatchWords = []string{"setattr", "delattr", "__setattr__", "__delattr__", "__getattribute__", "__class__", "metaclass"}
 
-// pyPatches reports a Python source that may give classes or instances
-// attributes no attribute of a name shows: setattr or delattr (or a call of
-// __setattr__ or __delattr__) with a name that is no string (or not
-// called), a write through __dict__ (update, setdefault, an item or the
-// attribute assigned), a class's __getattribute__, an assignment to
-// __class__, a metaclass other than abc's ABCMeta.
+// pyPatches reports a Python source that may patch a class so that no
+// attribute of a name shows what runs: setattr or delattr, or a call of
+// __setattr__ or __delattr__ (object.__setattr__(x, k, v),
+// type.__setattr__(C, k, v), x.__setattr__(k, v)), that names no string
+// (or is not called) on anything but an instance (pySelves.instance); a
+// class's __getattribute__; an assignment to __class__; a metaclass other
+// than abc's ABCMeta. An instance's own attributes of computed names
+// (setattr(self, k, v), self.__dict__.update(...)) may shadow a method too;
+// the resolver follows the declaration there, as an editor does. A class's
+// __dict__ cannot be written, so no write through one patches a class.
 func pyPatches(tokens []callToken) bool {
+	var selves *pySelves
+	instance := func(at int) bool {
+		if selves == nil {
+			selves = newPySelves(tokens)
+		}
+		return selves.instance(at)
+	}
 	for i, t := range tokens {
 		if !t.name || t.quoted {
 			continue
 		}
 		switch t.text {
 		case "setattr", "delattr":
-			if !tokenIs(tokens, i+1, "(") || pyArguments(tokens, i+1) < 2 || !pyStringArgument(tokens, i+1, 1) {
-				return true
-			}
-		case "__dict__":
-			switch {
-			case assignsAfter(tokens, i),
-				tokenIs(tokens, i+1, ".") && (tokenIs(tokens, i+2, "update") || tokenIs(tokens, i+2, "setdefault") || tokenIs(tokens, i+2, "__setitem__")),
-				tokenIs(tokens, i+1, "[") && (assignsAfter(tokens, tokens[i+1].close) || pyTargetAttribute(tokens, tokens[i+1].close)):
+			// setattr(x, name, v) sets x's.
+			if pyComputedName(tokens, i+1, 1) && !(pyOneTokenArgument(tokens, i+1) && instance(i+2)) {
 				return true
 			}
 		case "__setattr__", "__delattr__":
-			// object.__setattr__(x, name, v) names it second, x.__setattr__(name, v)
-			// first; its def patches nothing by itself.
-			at := 0
-			if tokenIs(tokens, i-1, ".") && (tokenIs(tokens, i-2, "object") || tokenIs(tokens, i-2, "type")) {
-				at = 1
-			}
-			if !tokenIs(tokens, i-1, "def") && (!tokenIs(tokens, i+1, "(") || pyArguments(tokens, i+1) <= at || !pyStringArgument(tokens, i+1, at)) {
+			switch {
+			case tokenIs(tokens, i-1, "def"):
+				// Its def patches nothing by itself.
+			case tokenIs(tokens, i-1, ".") && tokenIs(tokens, i-2, "object") && !tokenIs(tokens, i-3, "."):
+				// object.__setattr__(x, name, v) sets x's.
+				if pyComputedName(tokens, i+1, 1) && !(pyOneTokenArgument(tokens, i+1) && instance(i+2)) {
+					return true
+				}
+			case tokenIs(tokens, i-1, "."):
+				// x.__setattr__(name, v) sets x's; type.__setattr__(C, name, v)
+				// a class's.
+				if pyComputedName(tokens, i+1, 0) && !instance(i-2) {
+					return true
+				}
+			case pyComputedName(tokens, i+1, 0):
 				return true
 			}
 		case "__getattribute__":
@@ -1023,6 +1128,19 @@ func pyPatches(tokens []callToken) bool {
 		}
 	}
 	return false
+}
+
+// pyComputedName reports a call of setattr's kind, whose "(" would be token
+// open and whose argument n names the attribute, that may name any: it is
+// not called, has no argument n, or argument n is no one string.
+func pyComputedName(tokens []callToken, open, n int) bool {
+	return !tokenIs(tokens, open, "(") || pyArguments(tokens, open) <= n || !pyStringArgument(tokens, open, n)
+}
+
+// pyOneTokenArgument reports a call opening at open whose first argument is
+// one token.
+func pyOneTokenArgument(tokens []callToken, open int) bool {
+	return tokenIs(tokens, open, "(") && open+1 < tokens[open].close && (open+2 == tokens[open].close || tokenIs(tokens, open+2, ","))
 }
 
 // pyStringArgument reports a call opening at open whose argument n (from 0)
