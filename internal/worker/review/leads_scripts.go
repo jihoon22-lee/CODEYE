@@ -82,7 +82,7 @@ func scriptScopesOf(tokens []callToken, name string, python, typeScript bool, im
 		s.blocks = pythonBlocks(tokens)
 		s.occurrences = pythonOccurrences(tokens, name, s.blocks, imports)
 	} else {
-		s.occurrences = javascriptOccurrences(tokens, name, imports)
+		s.occurrences = javascriptOccurrences(tokens, name, imports, typeScript)
 	}
 	return s
 }
@@ -360,7 +360,7 @@ var pythonKeywords = leadNames(`and as assert async await del elif else except f
 
 // javascriptOccurrences classifies the occurrences of name in JavaScript or
 // TypeScript tokens.
-func javascriptOccurrences(tokens []callToken, name string, imports []scriptBinding) []scriptOccurrence {
+func javascriptOccurrences(tokens []callToken, name string, imports []scriptBinding, typeScript bool) []scriptOccurrence {
 	bound := map[int]bool{}
 	types := map[int]bool{}
 	for _, b := range imports {
@@ -402,7 +402,7 @@ func javascriptOccurrences(tokens []callToken, name string, imports []scriptBind
 			o.kind, o.decl = javascriptPosition(tokens, i)
 		}
 		if o.kind == occBinding && !o.module {
-			o.from, o.to, o.module = javascriptScope(tokens, i, o.decl)
+			o.from, o.to, o.module = javascriptScope(tokens, i, o.decl, typeScript)
 		}
 		out = append(out, o)
 	}
@@ -747,11 +747,15 @@ func functionBody(tokens []callToken, close int) int {
 // arrowEnd is the last token of an arrow function whose "=>" ends at
 // token arrow (the ">"): its block body, or its expression up to the
 // enclosing group's end, a "," or ";" at its level, or at the top level the
-// line break where the expression ends (scriptLineGoesOn). Where a later
-// line may go on with the expression or not, open reports an end the
-// reader is not sure of; wide reads such a line as going on (a scope that
-// may be too wide, never too narrow).
-func arrowEnd(tokens []callToken, arrow int, wide bool) (last int, open bool) {
+// line break where the expression ends (scriptLineGoesOn). In TypeScript a
+// "," inside type arguments (f<A, B>(...)) ends nothing: a "<...>" list
+// typeArguments reads is skipped, and where a "(" does not follow it (a
+// template or comparisons may) the end is one the reader is not sure of;
+// past a "<" it cannot read to its end, no "," ends the expression and the
+// end is not sure either. Where a later line may go on with the expression
+// or not, open reports an end the reader is not sure of; wide reads such a
+// line as going on (a scope that may be too wide, never too narrow).
+func arrowEnd(tokens []callToken, arrow int, wide, typeScript bool) (last int, open bool) {
 	k := arrow + 1
 	if tokenIs(tokens, k, "{") {
 		return tokens[k].close, false
@@ -761,15 +765,16 @@ func arrowEnd(tokens []callToken, arrow int, wide bool) (last int, open bool) {
 	}
 	depth := tokens[k].depth
 	last = arrow
+	unsure, commas := false, true
 	for m := k; m < len(tokens); m++ {
 		t := tokens[m]
-		if t.depth < depth || t.depth == depth && (tokenIs(tokens, m, ",") || tokenIs(tokens, m, ";")) {
+		if t.depth < depth || t.depth == depth && (commas && tokenIs(tokens, m, ",") || tokenIs(tokens, m, ";")) {
 			break
 		}
 		if depth == 0 && m > k && t.line > tokens[last].endLine {
 			switch scriptLineGoesOn(tokens, last, m) {
 			case lineEnds:
-				return last, false
+				return last, unsure
 			case lineUnsure:
 				if !wide {
 					return last, true
@@ -777,12 +782,28 @@ func arrowEnd(tokens []callToken, arrow int, wide bool) (last int, open bool) {
 			}
 		}
 		last = m
-		if t.close > m {
+		switch {
+		case t.close > m:
 			m = t.close
+			last = m
+		case typeScript && commas && tokenIs(tokens, m, "<"):
+			after := typeArguments(tokens, m)
+			if after == typeArgumentsUnread {
+				unsure, commas = true, false
+			}
+			if after < 0 {
+				break
+			}
+			for c := m + 1; c < after; c++ {
+				if tokenIs(tokens, c, ",") && tokens[c].depth == depth && !tokenIs(tokens, after, "(") {
+					unsure = true
+				}
+			}
+			m = after - 1
 			last = m
 		}
 	}
-	return last, false
+	return last, unsure
 }
 
 // What a line break does to an expression (scriptLineGoesOn).
@@ -866,7 +887,7 @@ func operandEnds(tokens []callToken, k int) bool {
 // function declaration's in a block (sloppy code hoists it there); a
 // parameter's function; a named function or class expression's own body
 // (never the module).
-func javascriptScope(tokens []callToken, i int, decl string) (from, to int, module bool) {
+func javascriptScope(tokens []callToken, i int, decl string, typeScript bool) (from, to int, module bool) {
 	block := func(k int) (int, int, bool) {
 		for p := tokens[k].parent; p >= 0; p = tokens[p].parent {
 			if tokenIs(tokens, p, "{") {
@@ -894,7 +915,7 @@ func javascriptScope(tokens []callToken, i int, decl string) (from, to int, modu
 		return top, max(tokens[top].close, top), false
 	}
 	arrow := func(from, arrow int) (int, int, bool) {
-		last, _ := arrowEnd(tokens, arrow, true)
+		last, _ := arrowEnd(tokens, arrow, true, typeScript)
 		return from, last, false
 	}
 	switch decl {
@@ -1062,7 +1083,7 @@ type scriptDeclaration struct {
 // generics and return annotations read), or const, let or var name =
 // function, arrow or async arrow; ok false for anything else (a class, a
 // value, a call result) or a bodiless signature.
-func jsFunctionDeclaration(tokens []callToken, at int) (scriptDeclaration, bool) {
+func jsFunctionDeclaration(tokens []callToken, at int, typeScript bool) (scriptDeclaration, bool) {
 	first := at - 1
 	var body, last int
 	open := false
@@ -1129,7 +1150,7 @@ func jsFunctionDeclaration(tokens []callToken, at int) (scriptDeclaration, bool)
 				return scriptDeclaration{}, false
 			}
 			body = arrow + 1
-			last, open = arrowEnd(tokens, arrow, false)
+			last, open = arrowEnd(tokens, arrow, false, typeScript)
 		}
 	default:
 		return scriptDeclaration{}, false
@@ -1275,12 +1296,25 @@ func scriptCall(tokens []callToken, i int, python, typeScript bool) bool {
 	return python || !methodName(tokens, i)
 }
 
+// maxTypeArguments bounds the tokens typeArguments reads, a bracket group
+// counting as one: callers read a "<" at every occurrence of a name or in
+// every arrow function's expression.
+const maxTypeArguments = 200
+
+// typeArgumentsUnread is what typeArguments gives for a list that goes on
+// past maxTypeArguments.
+const typeArgumentsUnread = -2
+
 // typeArguments is the token after a TypeScript type argument list opening
 // with "<" at k, -1 when the tokens there read as no type arguments (a
-// comparison, a shift, a logical operator).
+// comparison, a shift, a logical operator), typeArgumentsUnread when the
+// list goes on past maxTypeArguments.
 func typeArguments(tokens []callToken, k int) int {
 	depth := 0
-	for ; k < len(tokens); k++ {
+	for steps := 0; k < len(tokens); k++ {
+		if steps++; steps > maxTypeArguments {
+			return typeArgumentsUnread
+		}
 		t := tokens[k]
 		switch {
 		case tokenIs(tokens, k, "<"):
@@ -1398,7 +1432,7 @@ func (r *leadResolver) scriptDefinitions(scan *leadScan, anchor record.Excerpt, 
 		case python && b.decl == "def":
 			d, found = pythonFunctionDeclaration(tokens, s.blocks, b.at)
 		case !python:
-			d, found = jsFunctionDeclaration(tokens, b.at)
+			d, found = jsFunctionDeclaration(tokens, b.at, typeScript)
 		}
 		if !found {
 			locals++
@@ -1626,7 +1660,7 @@ func scriptExported(tokens []callToken, name string, python, typeScript bool) sc
 	if !exported && !exportedDeclaration(tokens, b.at) {
 		return scriptExport{}
 	}
-	d, found := jsFunctionDeclaration(tokens, b.at)
+	d, found := jsFunctionDeclaration(tokens, b.at, typeScript)
 	return scriptExport{decl: d, found: found, refused: !found}
 }
 

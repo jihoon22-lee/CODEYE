@@ -372,7 +372,7 @@ func checkLeadFileReaders(t testing.TB, f leadFile) {
 				}
 				bodiless(tokens, o.at)
 				exportedDeclaration(tokens, o.at)
-				if d, ok := jsFunctionDeclaration(tokens, o.at); ok {
+				if d, ok := jsFunctionDeclaration(tokens, o.at, typeScript); ok {
 					declaration(d)
 				}
 			}
