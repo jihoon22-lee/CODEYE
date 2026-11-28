@@ -569,8 +569,8 @@ func jsMethodDeclaration(tokens []callToken, m jsMethod) scriptDeclaration {
 // that may be the name at a member's place, and a TypeScript constructor
 // parameter property of the name. writes reports an assignment or update
 // of a member of the name (.m =, .m += , ++x.m, x["m"] =, a target of a
-// destructuring assignment or a for head) or a key of the name in what a
-// call of Object or Reflect copies or defines. It errs towards a site: the
+// destructuring assignment or a for head, delete x.m) or a key of the name
+// in what a call of Object or Reflect copies or defines. It errs towards a site: the
 // check refuses on one.
 func jsMemberSites(tokens []callToken, name string) (owners []int, writes bool) {
 	classes := map[int]bool{}
@@ -591,7 +591,7 @@ func jsMemberSites(tokens []callToken, name string) (owners []int, writes bool) 
 		case t.name && !t.quoted && t.text == name:
 			switch {
 			case tokenIs(tokens, i-1, "."):
-				writes = writes || assignsAfter(tokens, i) || increments(tokens, i) || jsTarget(tokens, i)
+				writes = writes || assignsAfter(tokens, i) || increments(tokens, i) || jsTarget(tokens, i) || jsDeleted(tokens, i)
 			case tokenIs(tokens, i-1, "#"):
 				// A private name: no other class's member.
 			case inClass(p):
@@ -603,7 +603,7 @@ func jsMemberSites(tokens []callToken, name string) (owners []int, writes bool) 
 			}
 		case t.quoted && t.text == name:
 			switch {
-			case tokenIs(tokens, i-1, "[") && tokenIs(tokens, i+1, "]") && (assignsAfter(tokens, i+1) || increments(tokens, i+1) || jsTarget(tokens, i+1)):
+			case tokenIs(tokens, i-1, "[") && tokenIs(tokens, i+1, "]") && (assignsAfter(tokens, i+1) || increments(tokens, i+1) || jsTarget(tokens, i+1) || jsDeleted(tokens, i+1)):
 				writes = true
 			case inClass(p) && memberPosition(tokens, i, p):
 				owners = append(owners, p)
@@ -634,6 +634,33 @@ func jsTarget(tokens []callToken, k int) bool {
 	}
 	owner, ok := patternOwner(tokens, p)
 	return ok && owner == ""
+}
+
+// jsDeleted reports a member expression ending at token k (a name after
+// "." or the "]" of a key) that delete removes: delete stands before the
+// chain of names, this, calls and keys joined by "." that ends there.
+func jsDeleted(tokens []callToken, k int) bool {
+	at := k
+	for {
+		if tokenIs(tokens, at, "]") || tokenIs(tokens, at, ")") {
+			open := tokens[at].parent
+			if open < 0 {
+				return false
+			}
+			at = open
+			if tokenIs(tokens, open-1, "]") || tokenIs(tokens, open-1, ")") || tokenName(tokens, open-1) && !tokenIs(tokens, open-1, "delete") {
+				// A call's callee or a key's object.
+				at = open - 1
+				continue
+			}
+			break
+		}
+		if !tokenIs(tokens, at-1, ".") {
+			break
+		}
+		at -= 2
+	}
+	return tokenIs(tokens, at-1, "delete")
 }
 
 // jsReflected reports a token inside the arguments of a call of Object's or
@@ -807,8 +834,8 @@ func pyClassMethod(tokens []callToken, blocks []pyBlock, cls int, name string, s
 // alone, an import, a nested class, a loop target). writes reports an
 // assignment, deletion, setattr or delattr of an attribute of the name
 // (x.m = ..., x.m += ..., a, x.m = ..., for x.m in, del x.m, setattr(x,
-// "m", v)) or a definition the reader cannot follow (exec, eval, a
-// three-argument type()).
+// "m", v), object.__setattr__(x, "m", v)) or a definition the reader cannot
+// follow (exec, eval, a three-argument type()).
 func pyMemberSites(tokens []callToken, blocks []pyBlock, name string) (owners []int, writes bool) {
 	class := func(i int) int {
 		if b := innermostBlock(blocks, i, false); b >= 0 && blocks[b].kind == "class" {
@@ -827,7 +854,7 @@ func pyMemberSites(tokens []callToken, blocks []pyBlock, name string) (owners []
 	for i, t := range tokens {
 		switch {
 		case t.quoted:
-			if t.text == name && pyCallArgument(tokens, i, "setattr", "delattr", "type") {
+			if t.text == name && pyCallArgument(tokens, i, "setattr", "delattr", "__setattr__", "__delattr__", "type") {
 				writes = true
 			}
 		case !t.name:
@@ -907,14 +934,14 @@ func pyArguments(tokens []callToken, open int) int {
 
 // pyPatchWords are the words of a Python source that may patch classes
 // (pyPatches): a source holding one is read for it.
-var pyPatchWords = []string{"setattr", "delattr", "__dict__", "__getattribute__", "__class__", "metaclass"}
+var pyPatchWords = []string{"setattr", "delattr", "__setattr__", "__delattr__", "__dict__", "__getattribute__", "__class__", "metaclass"}
 
 // pyPatches reports a Python source that may give classes or instances
-// attributes no attribute of a name shows: setattr or delattr with a name
-// that is no string (or not called), a write through __dict__ (update,
-// setdefault, an item or the attribute assigned), a class's
-// __getattribute__, an assignment to __class__, a metaclass other than
-// abc's ABCMeta.
+// attributes no attribute of a name shows: setattr or delattr (or a call of
+// __setattr__ or __delattr__) with a name that is no string (or not
+// called), a write through __dict__ (update, setdefault, an item or the
+// attribute assigned), a class's __getattribute__, an assignment to
+// __class__, a metaclass other than abc's ABCMeta.
 func pyPatches(tokens []callToken) bool {
 	for i, t := range tokens {
 		if !t.name || t.quoted {
@@ -930,6 +957,16 @@ func pyPatches(tokens []callToken) bool {
 			case assignsAfter(tokens, i),
 				tokenIs(tokens, i+1, ".") && (tokenIs(tokens, i+2, "update") || tokenIs(tokens, i+2, "setdefault") || tokenIs(tokens, i+2, "__setitem__")),
 				tokenIs(tokens, i+1, "[") && (assignsAfter(tokens, tokens[i+1].close) || pyTargetAttribute(tokens, tokens[i+1].close)):
+				return true
+			}
+		case "__setattr__", "__delattr__":
+			// object.__setattr__(x, name, v) names it second, x.__setattr__(name, v)
+			// first; its def patches nothing by itself.
+			at := 0
+			if tokenIs(tokens, i-1, ".") && (tokenIs(tokens, i-2, "object") || tokenIs(tokens, i-2, "type")) {
+				at = 1
+			}
+			if !tokenIs(tokens, i-1, "def") && (!tokenIs(tokens, i+1, "(") || pyArguments(tokens, i+1) <= at || !pyStringArgument(tokens, i+1, at)) {
 				return true
 			}
 		case "__getattribute__":
